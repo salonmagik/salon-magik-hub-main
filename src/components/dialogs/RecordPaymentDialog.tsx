@@ -75,7 +75,7 @@ export function RecordPaymentDialog({
     try {
       const { error } = await supabase.from("transactions").insert({
         tenant_id: currentTenant.id,
-        customer_id: formData.customerId || null,
+        customer_id: formData.customerId && formData.customerId !== "_none" ? formData.customerId : null,
         appointment_id: appointmentId || null,
         amount: parseFloat(formData.amount),
         method: formData.method,
@@ -135,9 +135,9 @@ export function RecordPaymentDialog({
                 <SelectTrigger>
                   <SelectValue placeholder={customersLoading ? "Loading..." : "Select customer (optional)"} />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No customer</SelectItem>
-                  {customers.map((customer) => (
+              <SelectContent>
+                <SelectItem value="_none">No customer</SelectItem>
+                {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.full_name}
                     </SelectItem>

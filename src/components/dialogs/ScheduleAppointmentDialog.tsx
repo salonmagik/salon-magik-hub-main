@@ -105,7 +105,7 @@ export function ScheduleAppointmentDialog({
       scheduledStart,
       scheduledEnd,
       locationId: defaultLocation.id,
-      staffId: formData.staffId || undefined,
+      staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
     });
 
@@ -258,9 +258,9 @@ export function ScheduleAppointmentDialog({
                 <SelectTrigger>
                   <SelectValue placeholder={staffLoading ? "Loading..." : "No staff assigned"} />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">No staff assigned</SelectItem>
-                  {staff.map((member) => (
+              <SelectContent>
+                <SelectItem value="_none">No staff assigned</SelectItem>
+                {staff.map((member) => (
                     <SelectItem key={member.userId} value={member.userId}>
                       {member.profile?.full_name || "Unknown"} ({member.role})
                     </SelectItem>
