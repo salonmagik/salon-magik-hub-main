@@ -26,9 +26,10 @@ import {
   ReportsPage,
   MessagingPage,
   JournalPage,
-  StaffPage,
   HelpPage,
 } from "./pages/salon/PlaceholderPages";
+import StaffPage from "./pages/salon/StaffPage";
+import CalendarPage from "./pages/salon/CalendarPage";
 
 // Other pages
 import NotFound from "./pages/NotFound";
@@ -146,6 +147,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <StaffPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/calendar"
+              element={
+                <ProtectedRoute>
+                  <CalendarPage />
                 </ProtectedRoute>
               }
             />

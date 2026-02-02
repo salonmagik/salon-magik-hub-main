@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
   Calendar,
+  CalendarDays,
   Scissors,
   Users,
   CreditCard,
@@ -45,6 +46,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/salon" },
   { label: "Appointments", icon: Calendar, path: "/salon/appointments" },
+  { label: "Calendar", icon: CalendarDays, path: "/salon/calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers" },
   { label: "Products & Services", icon: Scissors, path: "/salon/services" },
   { label: "Payments", icon: CreditCard, path: "/salon/payments" },
