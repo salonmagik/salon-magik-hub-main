@@ -48,13 +48,7 @@ export function JournalPage() {
   return <PlaceholderPage title="Journal" description="View audit logs and activity history" />;
 }
 
-export function StaffPage() {
-  return <PlaceholderPage title="Staff" description="Manage staff members and their permissions" />;
-}
-
-export function SettingsPage() {
-  return <PlaceholderPage title="Settings" description="Configure your salon settings" />;
-}
+// StaffPage, SettingsPage moved to dedicated files
 
 export function HelpPage() {
   return <PlaceholderPage title="Help" description="Get help and support" />;

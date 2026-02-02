@@ -1,0 +1,246 @@
+import { useState } from "react";
+import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { UserPlus, Users, Shield, Mail, MoreHorizontal } from "lucide-react";
+import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
+import { useStaff, type StaffMember } from "@/hooks/useStaff";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const roleLabels: Record<StaffMember["role"], string> = {
+  owner: "Owner",
+  manager: "Manager",
+  supervisor: "Supervisor",
+  receptionist: "Receptionist",
+  staff: "Staff",
+};
+
+const roleVariants: Record<StaffMember["role"], "default" | "secondary" | "outline"> = {
+  owner: "default",
+  manager: "secondary",
+  supervisor: "secondary",
+  receptionist: "outline",
+  staff: "outline",
+};
+
+function getInitials(name: string | undefined): string {
+  if (!name) return "?";
+  const parts = name.trim().split(" ");
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+export default function StaffPage() {
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const { staff, isLoading, refetch } = useStaff();
+  const { user } = useAuth();
+
+  const currentUserIsOwner = staff.some(
+    (s) => s.userId === user?.id && s.role === "owner"
+  );
+
+  return (
+    <SalonSidebar>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Staff</h1>
+            <p className="text-muted-foreground">
+              Manage your team members and their permissions
+            </p>
+          </div>
+          <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
+            <UserPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">Invite Staff</span>
+            <span className="sm:hidden">Invite</span>
+          </Button>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Staff
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" />
+                <span className="text-2xl font-bold">
+                  {isLoading ? "..." : staff.length}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Owners
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-primary" />
+                <span className="text-2xl font-bold">
+                  {isLoading ? "..." : staff.filter((s) => s.role === "owner").length}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Managers
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <span className="text-2xl font-bold">
+                {isLoading ? "..." : staff.filter((s) => s.role === "manager").length}
+              </span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Staff
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <span className="text-2xl font-bold">
+                {isLoading
+                  ? "..."
+                  : staff.filter((s) => !["owner", "manager"].includes(s.role)).length}
+              </span>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Staff Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Team Members</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <Skeleton className="w-10 h-10 rounded-full" />
+                    <div className="space-y-2 flex-1">
+                      <Skeleton className="h-4 w-[200px]" />
+                      <Skeleton className="h-3 w-[150px]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : staff.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <Users className="w-12 h-12 text-muted-foreground mb-4" />
+                <h3 className="font-medium mb-1">No team members yet</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Invite staff members to help manage your salon
+                </p>
+                <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
+                  <UserPlus className="w-4 h-4" />
+                  Invite Staff
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="hidden sm:table-cell">Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {staff.map((member) => (
+                      <TableRow key={member.userId}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="w-9 h-9">
+                              <AvatarImage src={member.profile?.avatar_url || undefined} />
+                              <AvatarFallback className="text-xs">
+                                {getInitials(member.profile?.full_name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">
+                                {member.profile?.full_name || "Unknown"}
+                              </p>
+                              <p className="text-xs text-muted-foreground sm:hidden truncate">
+                                {member.profile?.phone || "No phone"}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="truncate text-sm">—</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={roleVariants[member.role]}>
+                            {roleLabels[member.role]}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {currentUserIsOwner && member.role !== "owner" && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem>Change Role</DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive">
+                                  Remove from Team
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <InviteStaffDialog
+        open={inviteDialogOpen}
+        onOpenChange={setInviteDialogOpen}
+        onSuccess={refetch}
+      />
+    </SalonSidebar>
+  );
+}
