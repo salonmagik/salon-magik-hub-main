@@ -187,27 +187,28 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
             </div>
 
             {/* Date, Time, Duration Row */}
-            {/* <div className="grid grid-cols-1 sm:grid-cols-3 gap-4"> */}
-            <div className="space-y-2">
-              <Label>
-                Date <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
-                min={new Date().toISOString().split("T")[0]}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>
-                Start time <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="time"
-                value={formData.startTime}
-                onChange={(e) => setFormData((prev) => ({ ...prev, startTime: e.target.value }))}
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>
+                  Date <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
+                  min={new Date().toISOString().split("T")[0]}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Start time <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="time"
+                  value={formData.startTime}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, startTime: e.target.value }))}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Duration (mins)</Label>
@@ -219,7 +220,6 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 step="15"
               />
             </div>
-            {/* </div> */}
 
             {/* Staff Row */}
             <div className="space-y-2">
