@@ -1,13 +1,33 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, User, Phone } from "lucide-react";
+import { Mail, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthInput } from "@/components/auth/AuthInput";
+import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@/components/ui/checkbox";
+
+// Password strength validation
+const validatePasswordStrength = (password: string): string | null => {
+  if (password.length < 8) {
+    return "Password must be at least 8 characters";
+  }
+  if (!/[a-zA-Z]/.test(password)) {
+    return "Password must contain at least one letter";
+  }
+  if (!/[0-9]/.test(password)) {
+    return "Password must contain at least one number";
+  }
+  // Check for simple sequences
+  const simplePatterns = ["12345678", "abcdefgh", "qwertyui", "password", "11111111", "00000000"];
+  if (simplePatterns.some(pattern => password.toLowerCase().includes(pattern))) {
+    return "Password is too simple";
+  }
+  return null;
+};
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -42,8 +62,11 @@ export default function SignupPage() {
     
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
+    } else {
+      const strengthError = validatePasswordStrength(formData.password);
+      if (strengthError) {
+        newErrors.password = strengthError;
+      }
     }
     
     if (formData.password !== formData.confirmPassword) {
@@ -200,16 +223,18 @@ export default function SignupPage() {
           disabled={isLoading}
         />
 
-        <AuthInput
+        <AuthPhoneInput
           label="Phone number"
-          type="tel"
-          name="phone"
-          placeholder="Enter your phone number"
-          icon={<Phone size={18} />}
           value={formData.phone}
-          onChange={handleChange}
+          onChange={(value) => {
+            setFormData((prev) => ({ ...prev, phone: value }));
+            if (errors.phone) {
+              setErrors((prev) => ({ ...prev, phone: "" }));
+            }
+          }}
           error={errors.phone}
           disabled={isLoading}
+          defaultCountry="NG"
         />
 
         <AuthInput
