@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker, dateToString, stringToDate } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { User, Plus, Check, Loader2 } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
@@ -192,23 +194,23 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 <Label>
                   Date <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  type="date"
-                  className="h-10 text-sm"
-                  value={formData.date}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
-                  min={new Date().toISOString().split("T")[0]}
+                <DatePicker
+                  value={stringToDate(formData.date)}
+                  onChange={(date) => setFormData((prev) => ({ ...prev, date: dateToString(date) }))}
+                  minDate={new Date()}
+                  placeholder="Select date"
+                  disabled={isSubmitting}
                 />
               </div>
               <div className="space-y-2">
                 <Label>
                   Start time <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  type="time"
-                  className="h-10 text-sm"
+                <TimePicker
                   value={formData.startTime}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, startTime: e.target.value }))}
+                  onChange={(time) => setFormData((prev) => ({ ...prev, startTime: time }))}
+                  placeholder="Select time"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
