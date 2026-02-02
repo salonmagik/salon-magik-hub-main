@@ -19,10 +19,11 @@ import {
   Plus,
   Search,
   Clock,
-  MapPin,
   MoreHorizontal,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
+import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
+import { AddProductDialog } from "@/components/dialogs/AddProductDialog";
 
 // Sample data
 const services = [
@@ -85,10 +86,15 @@ const formatCurrency = (amount: number, currency: string) => {
   return `${symbols[currency] || ""}${amount.toLocaleString()}`;
 };
 
+type TabValue = "all" | "services" | "packages" | "products";
+
 export default function ServicesPage() {
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [locationFilter, setLocationFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState<TabValue>("all");
 
   const allItems = [...services, ...packages, ...products];
 
@@ -103,6 +109,38 @@ export default function ServicesPage() {
     return matchesSearch && matchesLocation;
   });
 
+  const handleAddClick = () => {
+    switch (activeTab) {
+      case "services":
+        setServiceDialogOpen(true);
+        break;
+      case "packages":
+        setPackageDialogOpen(true);
+        break;
+      case "products":
+        setProductDialogOpen(true);
+        break;
+      default:
+        // "all" tab - don't open any dialog
+        break;
+    }
+  };
+
+  const getAddButtonLabel = () => {
+    switch (activeTab) {
+      case "services":
+        return "Add Service";
+      case "packages":
+        return "Add Package";
+      case "products":
+        return "Add Product";
+      default:
+        return null;
+    }
+  };
+
+  const addButtonLabel = getAddButtonLabel();
+
   return (
     <SalonSidebar>
       <div className="space-y-6">
@@ -114,14 +152,16 @@ export default function ServicesPage() {
               Manage your service catalog, packages, and products.
             </p>
           </div>
-          <Button onClick={() => setServiceDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add New
-          </Button>
+          {addButtonLabel && (
+            <Button onClick={handleAddClick}>
+              <Plus className="w-4 h-4 mr-2" />
+              {addButtonLabel}
+            </Button>
+          )}
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="all">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="services" className="flex items-center gap-2">
@@ -215,10 +255,18 @@ export default function ServicesPage() {
         </Tabs>
       </div>
 
-      {/* Add Service Dialog */}
+      {/* Dialogs */}
       <AddServiceDialog
         open={serviceDialogOpen}
         onOpenChange={setServiceDialogOpen}
+      />
+      <AddPackageDialog
+        open={packageDialogOpen}
+        onOpenChange={setPackageDialogOpen}
+      />
+      <AddProductDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
       />
     </SalonSidebar>
   );
