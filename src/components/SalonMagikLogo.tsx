@@ -5,6 +5,7 @@ interface SalonMagikLogoProps {
   className?: string;
   size?: "sm" | "md" | "lg";
   showText?: boolean;
+  variant?: "default" | "white";
 }
 
 const sizes = {
@@ -16,20 +17,32 @@ const sizes = {
 export function SalonMagikLogo({ 
   className, 
   size = "md", 
-  showText = true 
+  showText = true,
+  variant = "default"
 }: SalonMagikLogoProps) {
   const { icon, container, text } = sizes[size];
+  const isWhite = variant === "white";
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <div 
-        className="flex items-center justify-center bg-primary rounded-lg"
+        className={cn(
+          "flex items-center justify-center rounded-lg",
+          isWhite ? "bg-white/20" : "bg-primary"
+        )}
         style={{ width: container, height: container }}
       >
-        <Scissors className="text-primary-foreground" size={icon} />
+        <Scissors 
+          className={isWhite ? "text-white" : "text-primary-foreground"} 
+          size={icon} 
+        />
       </div>
       {showText && (
-        <span className={cn("font-semibold tracking-tight", text)}>
+        <span className={cn(
+          "font-semibold tracking-tight",
+          text,
+          isWhite ? "text-white" : "text-foreground"
+        )}>
           Salon Magik
         </span>
       )}
