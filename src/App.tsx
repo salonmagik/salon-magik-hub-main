@@ -3,24 +3,29 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 
+// Onboarding
+import OnboardingPage from "./pages/onboarding/OnboardingPage";
+
 // Salon pages
 import SalonDashboard from "./pages/salon/SalonDashboard";
 import AppointmentsPage from "./pages/salon/AppointmentsPage";
+import CustomersPage from "./pages/salon/CustomersPage";
+import ServicesPage from "./pages/salon/ServicesPage";
+import SettingsPage from "./pages/salon/SettingsPage";
 import {
-  CustomersPage,
-  ServicesPage,
   PaymentsPage,
   ReportsPage,
   MessagingPage,
   JournalPage,
   StaffPage,
-  SettingsPage,
   HelpPage,
 } from "./pages/salon/PlaceholderPages";
 
@@ -35,40 +40,143 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* Redirect root to login */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+        <AuthProvider>
+          <Routes>
+            {/* Redirect root to login */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Auth Routes */}
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            {/* Public Auth Routes - redirect if already logged in */}
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <LoginPage />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/signup"
+              element={
+                <PublicOnlyRoute>
+                  <SignupPage />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-          {/* Salon Platform Routes */}
-          <Route path="/salon" element={<SalonDashboard />} />
-          <Route path="/salon/appointments" element={<AppointmentsPage />} />
-          <Route path="/salon/customers" element={<CustomersPage />} />
-          <Route path="/salon/services" element={<ServicesPage />} />
-          <Route path="/salon/payments" element={<PaymentsPage />} />
-          <Route path="/salon/reports" element={<ReportsPage />} />
-          <Route path="/salon/messaging" element={<MessagingPage />} />
-          <Route path="/salon/journal" element={<JournalPage />} />
-          <Route path="/salon/staff" element={<StaffPage />} />
-          <Route path="/salon/settings" element={<SettingsPage />} />
-          <Route path="/salon/help" element={<HelpPage />} />
+            {/* Onboarding - requires auth but NOT onboarding completion */}
+            <Route
+              path="/onboarding"
+              element={
+                <OnboardingRoute>
+                  <OnboardingPage />
+                </OnboardingRoute>
+              }
+            />
 
-          {/* Booking Platform Routes (placeholder) */}
-          <Route path="/booking/*" element={<NotFound />} />
+            {/* Protected Salon Platform Routes */}
+            <Route
+              path="/salon"
+              element={
+                <ProtectedRoute>
+                  <SalonDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/appointments"
+              element={
+                <ProtectedRoute>
+                  <AppointmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/customers"
+              element={
+                <ProtectedRoute>
+                  <CustomersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/services"
+              element={
+                <ProtectedRoute>
+                  <ServicesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/payments"
+              element={
+                <ProtectedRoute>
+                  <PaymentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/reports"
+              element={
+                <ProtectedRoute>
+                  <ReportsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/messaging"
+              element={
+                <ProtectedRoute>
+                  <MessagingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/journal"
+              element={
+                <ProtectedRoute>
+                  <JournalPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/staff"
+              element={
+                <ProtectedRoute>
+                  <StaffPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/settings"
+              element={
+                <ProtectedRoute>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/help"
+              element={
+                <ProtectedRoute>
+                  <HelpPage />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Client Portal Routes (placeholder) */}
-          <Route path="/client/*" element={<NotFound />} />
+            {/* Booking Platform Routes (public) */}
+            <Route path="/b/:slug/*" element={<NotFound />} />
 
-          {/* BackOffice Routes (placeholder) */}
-          <Route path="/backoffice/*" element={<NotFound />} />
+            {/* Client Portal Routes */}
+            <Route path="/client/*" element={<NotFound />} />
 
-          {/* 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* BackOffice Routes */}
+            <Route path="/backoffice/*" element={<NotFound />} />
+
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
