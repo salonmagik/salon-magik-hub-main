@@ -1,25 +1,37 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/components/auth/AuthLayout";
-import { AuthCard } from "@/components/auth/AuthCard";
 import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+
+type LoginMode = "email" | "phone";
+type PhoneStep = "phone" | "otp";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [loginMode, setLoginMode] = useState<LoginMode>("email");
+  
+  // Email login state
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; phone?: string; otp?: string }>({});
+  
+  // Phone login state
+  const [phone, setPhone] = useState("");
+  const [phoneStep, setPhoneStep] = useState<PhoneStep>("phone");
+  const [otp, setOtp] = useState("");
 
-  const validateForm = () => {
+  const validateEmailForm = () => {
     const newErrors: { email?: string; password?: string } = {};
     
     if (!email) {
@@ -36,10 +48,34 @@ export default function LoginPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const validatePhoneForm = () => {
+    const newErrors: { phone?: string } = {};
+    
+    if (!phone) {
+      newErrors.phone = "Phone number is required";
+    } else if (!/^\+?[1-9]\d{6,14}$/.test(phone.replace(/\s/g, ""))) {
+      newErrors.phone = "Please enter a valid phone number with country code";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateOtpForm = () => {
+    const newErrors: { otp?: string } = {};
+    
+    if (!otp || otp.length !== 6) {
+      newErrors.otp = "Please enter the 6-digit code";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    if (!validateEmailForm()) return;
     
     setIsLoading(true);
     
@@ -52,6 +88,82 @@ export default function LoginPage() {
       if (error) {
         toast({
           title: "Login failed",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Welcome back!",
+          description: "You have successfully signed in.",
+        });
+        navigate("/salon");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validatePhoneForm()) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedPhone.replace(/\s/g, ""),
+      });
+      
+      if (error) {
+        toast({
+          title: "Failed to send code",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Code sent!",
+          description: "Please check your phone for the verification code.",
+        });
+        setPhoneStep("otp");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateOtpForm()) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+      const { error } = await supabase.auth.verifyOtp({
+        phone: formattedPhone.replace(/\s/g, ""),
+        token: otp,
+        type: "sms",
+      });
+      
+      if (error) {
+        toast({
+          title: "Verification failed",
           description: error.message,
           variant: "destructive",
         });
@@ -101,6 +213,12 @@ export default function LoginPage() {
     }
   };
 
+  const resetPhoneFlow = () => {
+    setPhoneStep("phone");
+    setOtp("");
+    setErrors({});
+  };
+
   return (
     <AuthLayout 
       title="Welcome back"
@@ -135,58 +253,140 @@ export default function LoginPage() {
         Continue with Google
       </AuthButton>
 
-      <AuthDivider text="Or sign in with email" />
+      <AuthDivider text="Or sign in with" />
 
-      {/* Login Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <AuthInput
-          label="Email address"
-          type="email"
-          placeholder="Enter your email"
-          icon={<Mail size={18} />}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          error={errors.email}
-          disabled={isLoading}
-        />
+      {/* Login Mode Tabs */}
+      <Tabs value={loginMode} onValueChange={(v) => { setLoginMode(v as LoginMode); setErrors({}); resetPhoneFlow(); }} className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="email" className="gap-2">
+            <Mail size={16} />
+            Email
+          </TabsTrigger>
+          <TabsTrigger value="phone" className="gap-2">
+            <Phone size={16} />
+            Phone
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
-        <AuthInput
-          label="Password"
-          type="password"
-          placeholder="Enter your password"
-          icon={<Lock size={18} />}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          error={errors.password}
-          disabled={isLoading}
-        />
+      {/* Email Login Form */}
+      {loginMode === "email" && (
+        <form onSubmit={handleEmailSubmit} className="space-y-4 mt-4">
+          <AuthInput
+            label="Email address"
+            type="email"
+            placeholder="Enter your email"
+            icon={<Mail size={18} />}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={errors.email}
+            disabled={isLoading}
+          />
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="remember"
-              checked={rememberMe}
-              onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-            />
-            <label
-              htmlFor="remember"
-              className="text-sm text-muted-foreground cursor-pointer"
+          <AuthInput
+            label="Password"
+            type="password"
+            placeholder="Enter your password"
+            icon={<Lock size={18} />}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={errors.password}
+            disabled={isLoading}
+          />
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+              />
+              <label
+                htmlFor="remember"
+                className="text-sm text-muted-foreground cursor-pointer"
+              >
+                Remember me
+              </label>
+            </div>
+            <Link
+              to="/forgot-password"
+              className="text-sm text-primary hover:underline"
             >
-              Remember me
-            </label>
+              Forgot your password?
+            </Link>
           </div>
-          <Link
-            to="/forgot-password"
-            className="text-sm text-primary hover:underline"
-          >
-            Forgot your password?
-          </Link>
-        </div>
 
-        <AuthButton type="submit" isLoading={isLoading}>
-          Sign in
-        </AuthButton>
-      </form>
+          <AuthButton type="submit" isLoading={isLoading}>
+            Sign in
+          </AuthButton>
+        </form>
+      )}
+
+      {/* Phone Login Form */}
+      {loginMode === "phone" && phoneStep === "phone" && (
+        <form onSubmit={handlePhoneSubmit} className="space-y-4 mt-4">
+          <AuthInput
+            label="Phone number"
+            type="tel"
+            placeholder="+1 234 567 8900"
+            icon={<Phone size={18} />}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            error={errors.phone}
+            disabled={isLoading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Include your country code (e.g., +1 for US, +44 for UK)
+          </p>
+
+          <AuthButton type="submit" isLoading={isLoading}>
+            Send verification code
+          </AuthButton>
+        </form>
+      )}
+
+      {/* OTP Verification Form */}
+      {loginMode === "phone" && phoneStep === "otp" && (
+        <form onSubmit={handleOtpSubmit} className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">
+              Enter the 6-digit code sent to {phone}
+            </label>
+            <div className="flex justify-center">
+              <InputOTP
+                value={otp}
+                onChange={setOtp}
+                maxLength={6}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            {errors.otp && (
+              <p className="text-sm text-destructive text-center">{errors.otp}</p>
+            )}
+          </div>
+
+          <AuthButton type="submit" isLoading={isLoading}>
+            Verify & Sign in
+          </AuthButton>
+
+          <button
+            type="button"
+            onClick={resetPhoneFlow}
+            className="w-full text-sm text-muted-foreground hover:text-foreground"
+          >
+            Use a different phone number
+          </button>
+        </form>
+      )}
 
       {/* Sign Up Link */}
       <p className="mt-6 text-center text-sm text-muted-foreground">
