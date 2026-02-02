@@ -1,128 +1,147 @@
 
-# Custom Date & Time Pickers for iOS Compatibility
+# Calendar & Date Input Improvements
 
-## Problem Summary
-
-Native HTML5 `<input type="date">` and `<input type="time">` elements on iOS Safari have inherent styling limitations that cannot be fully overridden with CSS. Despite applying `h-10` and `text-sm` classes, iOS renders these inputs with larger heights and inconsistent widths due to its native picker UI controls.
-
-## Solution
-
-Replace native date and time inputs with custom Shadcn-based components that provide complete styling control across all devices:
-
-1. **Date Picker**: Use a Button + Popover + Calendar (already exists in the project)
-2. **Time Picker**: Create a simple time dropdown using Select component
-
-This approach ensures pixel-perfect control over height, width, and visual consistency on iPhone and all other devices.
+## Overview
+This plan addresses two key issues:
+1. Date input text spilling out of the button on small screens
+2. Calendar views need better mobile UX with wider columns, horizontal scrolling, click-to-view details, and hover summaries
 
 ---
 
-## Files to Create
+## Issue 1: Date Picker Text Overflow
 
-### 1. `src/components/ui/date-picker.tsx`
+### Problem
+The DatePicker button displays dates in `PPP` format (e.g., "February 2, 2026") which can overflow on narrow mobile screens, causing text to spill outside the button.
 
-A reusable date picker component using:
-- `Button` as the trigger (styled to match input fields)
-- `Popover` + `PopoverContent` to contain the calendar
-- `Calendar` component with `pointer-events-auto` for dialog compatibility
-- Uses `date-fns` for formatting (already installed)
+### Solution
+Add CSS text containment properties to prevent overflow:
+- `overflow-hidden` to clip overflowing content
+- `text-overflow: ellipsis` to show `...` when truncated  
+- `whitespace-nowrap` to prevent text wrapping
+- Use a shorter date format for display (e.g., `MMM d, yyyy` = "Feb 2, 2026")
 
-### 2. `src/components/ui/time-picker.tsx`
-
-A reusable time picker component using:
-- `Select` component with time slot options (every 15 or 30 minutes)
-- Generate options from 00:00 to 23:45
-- Returns value in "HH:mm" format for compatibility with existing logic
-
----
-
-## Files to Modify
-
-### 1. `src/components/dialogs/ScheduleAppointmentDialog.tsx`
-
-Replace native inputs with custom pickers:
-- Change `<Input type="date">` to `<DatePicker>`
-- Change `<Input type="time">` to `<TimePicker>`
-- Keep the same grid layout and labels
-- Maintain the form state logic (Date stored as string, Time stored as "HH:mm")
-
-### 2. `src/components/dialogs/AppointmentActionsDialog.tsx`
-
-Apply the same changes for the reschedule section:
-- Replace `<Input type="date">` with `<DatePicker>`
-- Replace `<Input type="time">` with `<TimePicker>`
-
-### 3. `src/components/dialogs/AddCustomerDialog.tsx`
-
-Replace the Date of Birth native input with `<DatePicker>`:
-- Remove the Calendar icon overlay (now built into the component)
-- Allow past dates for DOB
-
-### 4. `src/pages/salon/AppointmentsPage.tsx`
-
-Replace the filter date input with `<DatePicker>` for consistency across the app.
-
-### 5. `src/components/ui/calendar.tsx`
-
-Add `pointer-events-auto` to ensure the calendar is clickable inside dialogs (per Shadcn best practice).
+### File Changes
+**`src/components/ui/date-picker.tsx`**
+- Change format from `PPP` (February 2nd, 2026) to `MMM d, yyyy` (Feb 2, 2026)
+- Add `truncate` class to the button text content
+- Ensure button has proper flex/min-width constraints
 
 ---
 
-## Technical Implementation Details
+## Issue 2: Calendar Mobile Enhancements
 
-### DatePicker Component API
+### Requirements
+1. Wider day columns with horizontal scrolling on mobile
+2. Click on appointment items to show details dialog
+3. Hover on appointment items shows summary tooltip with "view more" CTA
+4. Apply to Day, Week, and Month views
 
+### Solution Architecture
+
+#### A. Horizontal Scrolling with Fixed-Width Columns
+- Wrap calendar grids in a scroll container
+- Set minimum widths per column:
+  - **Day View**: No change needed (already full-width)
+  - **Week View**: Each day column gets `min-w-[140px]` (total 980px minimum, scrollable)
+  - **Month View**: Each day cell gets `min-w-[100px]` (total 700px minimum, scrollable)
+- Parent container uses `overflow-x-auto` to enable horizontal scroll
+
+#### B. Appointment Details Dialog
+- Create a new `AppointmentDetailsDialog` component for viewing appointment info
+- State management: `selectedAppointment` and `detailsDialogOpen`
+- Shows: Customer name, phone, services, scheduled time, status, notes
+- Includes a "Go to Appointment" button to navigate to the Appointments page
+
+#### C. Hover Summary with Tooltip
+- Use the existing `HoverCard` component from Radix UI
+- On hover (desktop only), show a compact summary:
+  - Customer name
+  - Service name
+  - Start time
+  - Status badge
+  - Underlined "View more" CTA that opens the details dialog
+- On mobile, only click interaction is available (no hover)
+
+### File Changes
+
+**New: `src/components/dialogs/AppointmentDetailsDialog.tsx`**
+- Read-only dialog showing full appointment information
+- Props: `open`, `onOpenChange`, `appointment: CalendarAppointment`
+- Displays:
+  - Customer name and phone
+  - Service(s) and duration
+  - Scheduled date/time
+  - Status with color badge
+  - Notes (if any)
+- Footer with "Close" and "Go to Appointments" buttons
+
+**Updated: `src/pages/salon/CalendarPage.tsx`**
+- Import the new `AppointmentDetailsDialog`
+- Add state for `selectedAppointment` and `detailsDialogOpen`
+- Update `AppointmentBlock` component to:
+  - Accept `onClick` handler
+  - Wrap content in `HoverCard` for hover tooltip
+  - Show summary card on hover with "View more" link
+- Update `DayView` to pass click handler to AppointmentBlock
+- Update `WeekView`:
+  - Change grid container to have scrollable wrapper with `min-w-[980px]`
+  - Pass click handler to AppointmentBlock
+- Update `MonthView`:
+  - Change grid container to have scrollable wrapper with `min-w-[700px]`  
+  - Pass click handler to appointment items
+  - Add hover cards to month view items
+
+---
+
+## Technical Details
+
+### AppointmentBlock Component Changes
 ```text
-interface DatePickerProps {
-  value?: Date;
-  onChange: (date: Date | undefined) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  minDate?: Date;         // For "no past dates" use case
-  maxDate?: Date;         // For "no future dates" use case (DOB)
-  className?: string;
-}
+Current: Simple div with appointment info
+New: 
+  - Wrapped in HoverCard for desktop hover
+  - onClick handler to open details dialog
+  - cursor-pointer for clickable indication
 ```
 
-### TimePicker Component API
-
+### Week View Grid Structure
 ```text
-interface TimePickerProps {
-  value?: string;          // "HH:mm" format
-  onChange: (time: string) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  step?: number;           // Minutes between options (default 15)
-  className?: string;
-}
+Current: grid-cols-7 (7 equal columns, shrinks on mobile)
+New:
+  <div className="overflow-x-auto">
+    <div className="min-w-[980px] grid grid-cols-7">
+      {/* Day columns with min-w-[140px] each */}
+    </div>
+  </div>
 ```
 
-### Form State Handling
+### Month View Grid Structure
+```text
+Current: grid-cols-7 (7 equal columns, squished on mobile)
+New:
+  <div className="overflow-x-auto">
+    <div className="min-w-[700px]">
+      {/* Header and weeks grid with min-w-[100px] cells */}
+    </div>
+  </div>
+```
 
-The existing form data stores:
-- `date` as `"YYYY-MM-DD"` string
-- `startTime` as `"HH:mm"` string
-
-The new components will:
-- **DatePicker**: Convert between `Date` objects and `"YYYY-MM-DD"` strings
-- **TimePicker**: Work directly with `"HH:mm"` strings (no conversion needed)
+### HoverCard Content
+```text
+- Customer: {name}
+- Service: {service_name}
+- Time: {formatted_time}
+- Status: {badge}
+- [View more] (underlined link)
+```
 
 ---
 
-## Visual Consistency
-
-Both custom pickers will use:
-- `h-10` height to match other form inputs
-- Same border, background, focus ring styles as the Input component
-- Calendar icon for date picker, Clock icon for time picker
-- Consistent text sizing (`text-sm`)
-
----
-
-## Expected Outcome
-
-After implementation:
-- Date and Time fields will have exact `40px` height on all devices including iPhone
-- Width will respect the grid layout without overflow
-- Visual appearance will match other form fields perfectly
-- The calendar/time dropdowns will work smoothly inside dialogs
-- No more iOS Safari rendering quirks
+## Implementation Order
+1. Fix DatePicker text overflow
+2. Create AppointmentDetailsDialog component
+3. Update AppointmentBlock with click handler and HoverCard
+4. Update WeekView with horizontal scroll and min-widths
+5. Update MonthView with horizontal scroll and min-widths
+6. Update DayView (minimal changes, mainly click handling)
+7. Add dialog state management to CalendarPage
