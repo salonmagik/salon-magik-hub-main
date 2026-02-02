@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useState } from "react";
 import { format, parse } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 
@@ -30,7 +30,7 @@ export function DatePicker({
   maxDate,
   className,
 }: DatePickerProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = useState(false);
 
   const handleSelect = (date: Date | undefined) => {
     onChange(date);

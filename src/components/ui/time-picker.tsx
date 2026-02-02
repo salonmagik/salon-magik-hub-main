@@ -1,4 +1,4 @@
-import * as React from "react";
+import { useMemo } from "react";
 import { Clock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -46,7 +46,7 @@ export function TimePicker({
   step = 15,
   className,
 }: TimePickerProps) {
-  const timeSlots = React.useMemo(() => generateTimeSlots(step), [step]);
+  const timeSlots = useMemo(() => generateTimeSlots(step), [step]);
 
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
