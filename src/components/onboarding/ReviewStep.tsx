@@ -82,7 +82,7 @@ export function ReviewStep({
             <User className="w-4 h-4 text-primary" />
             Your Profile
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
             <div>
               <span className="text-muted-foreground">Role:</span>{" "}
               <span className="font-medium">{ROLE_NAMES[role]}</span>
@@ -111,7 +111,7 @@ export function ReviewStep({
               <Users className="w-4 h-4" />
               Owner Invitation
             </div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Name:</span>{" "}
                 <span className="font-medium">{ownerInvite.name}</span>
@@ -145,7 +145,7 @@ export function ReviewStep({
             <Building2 className="w-4 h-4 text-primary" />
             Business Details
           </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
             <div>
               <span className="text-muted-foreground">Name:</span>{" "}
               <span className="font-medium">{business.name}</span>

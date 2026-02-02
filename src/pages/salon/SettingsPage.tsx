@@ -69,9 +69,45 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <div className="flex gap-6">
-          {/* Settings Navigation */}
-          <div className="w-64 flex-shrink-0">
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Settings Navigation - Mobile Dropdown */}
+          <div className="lg:hidden">
+            <Select value={activeTab} onValueChange={setActiveTab}>
+              <SelectTrigger className="w-full">
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const tab = settingsTabs.find((t) => t.id === activeTab);
+                    if (tab) {
+                      const Icon = tab.icon;
+                      return (
+                        <>
+                          <Icon className="w-4 h-4" />
+                          {tab.label}
+                        </>
+                      );
+                    }
+                    return <SelectValue />;
+                  })()}
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {settingsTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <SelectItem key={tab.id} value={tab.id}>
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-4 h-4" />
+                        {tab.label}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Settings Navigation - Desktop Sidebar */}
+          <div className="hidden lg:block w-64 flex-shrink-0">
             <nav className="space-y-1">
               {settingsTabs.map((tab) => {
                 const Icon = tab.icon;
@@ -116,7 +152,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Salon & Owner Name */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Salon Name</Label>
                       <Input
@@ -138,7 +174,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Email & Phone */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Email</Label>
                       <div className="relative">
@@ -184,7 +220,7 @@ export default function SettingsPage() {
                   </div>
 
                   {/* City & Country */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>City</Label>
                       <Input

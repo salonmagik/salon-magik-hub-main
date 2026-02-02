@@ -237,7 +237,7 @@ export function LocationsStep({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Name</Label>
                   <Input
@@ -295,7 +295,7 @@ export function LocationsStep({
 
               {!config.sameHours && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs">Opens</Label>
                       <Select
