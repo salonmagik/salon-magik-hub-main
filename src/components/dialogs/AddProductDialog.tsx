@@ -115,7 +115,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
           </div>
 
           {/* Price & Stock Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
                 Price <span className="text-destructive">*</span>
@@ -186,16 +186,17 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             />
           </div>
 
-          <DialogFooter className="pt-4">
+          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2" disabled={isSubmitting}>
+            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Add Product
             </Button>

@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Scissors, Clock, DollarSign, Palette, Loader2 } from "lucide-react";
+import { Scissors, Clock, DollarSign, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServices } from "@/hooks/useServices";
 
@@ -46,16 +46,6 @@ const paymentOptions = [
   },
 ];
 
-const colorOptions = [
-  "#604DD9",
-  "#2563EB",
-  "#16A34A",
-  "#DC2626",
-  "#F59E0B",
-  "#EC4899",
-  "#8B5CF6",
-  "#06B6D4",
-];
 
 export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDialogProps) {
   const { createService, categories } = useServices();
@@ -68,7 +58,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     duration: "60",
     paymentOption: "full",
     buffer: "15",
-    color: "#604DD9",
     description: "",
   });
 
@@ -95,7 +84,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
           duration: "60",
           paymentOption: "full",
           buffer: "15",
-          color: "#604DD9",
           description: "",
         });
         onOpenChange(false);
@@ -123,7 +111,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           {/* Name & Category Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
                 Service Name <span className="text-destructive">*</span>
@@ -162,7 +150,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
           </div>
 
           {/* Price, Currency, Duration Row */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>
                 Price <span className="text-destructive">*</span>
@@ -232,7 +220,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               onValueChange={(v) =>
                 setFormData((prev) => ({ ...prev, paymentOption: v }))
               }
-              className="grid grid-cols-3 gap-3 mt-2"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2"
             >
               {paymentOptions.map((option) => (
                 <label
@@ -256,53 +244,17 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             </RadioGroup>
           </div>
 
-          {/* Buffer & Color Row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Buffer (minutes)</Label>
-              <Input
-                type="number"
-                value={formData.buffer}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, buffer: e.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Color</Label>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-10 h-10 rounded-lg border"
-                  style={{ backgroundColor: formData.color }}
-                />
-                <div className="flex gap-1 flex-wrap">
-                  {colorOptions.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={cn(
-                        "w-6 h-6 rounded-md transition-all",
-                        formData.color === color && "ring-2 ring-offset-2 ring-primary"
-                      )}
-                      style={{ backgroundColor: color }}
-                      onClick={() =>
-                        setFormData((prev) => ({ ...prev, color }))
-                      }
-                    />
-                  ))}
-                </div>
-                <div className="relative flex-1">
-                  <Palette className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    className="pl-9"
-                    value={formData.color}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, color: e.target.value }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
+          {/* Buffer */}
+          <div className="space-y-2">
+            <Label>Buffer (minutes)</Label>
+            <Input
+              type="number"
+              className="max-w-32"
+              value={formData.buffer}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, buffer: e.target.value }))
+              }
+            />
           </div>
 
           {/* Description */}
@@ -318,16 +270,17 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             />
           </div>
 
-          <DialogFooter className="pt-4">
+          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Create service
             </Button>
