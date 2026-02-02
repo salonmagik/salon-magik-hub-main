@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthInput } from "@/components/auth/AuthInput";
+import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,8 +54,8 @@ export default function LoginPage() {
     
     if (!phone) {
       newErrors.phone = "Phone number is required";
-    } else if (!/^\+?[1-9]\d{6,14}$/.test(phone.replace(/\s/g, ""))) {
-      newErrors.phone = "Please enter a valid phone number with country code";
+    } else if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+      newErrors.phone = "Please enter a valid phone number";
     }
     
     setErrors(newErrors);
@@ -117,9 +118,9 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
-      const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+      // Phone is already in E.164 format from PhoneInput
       const { error } = await supabase.auth.signInWithOtp({
-        phone: formattedPhone.replace(/\s/g, ""),
+        phone,
       });
       
       if (error) {
@@ -154,9 +155,9 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
-      const formattedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+      // Phone is already in E.164 format from PhoneInput
       const { error } = await supabase.auth.verifyOtp({
-        phone: formattedPhone.replace(/\s/g, ""),
+        phone,
         token: otp,
         type: "sms",
       });
@@ -325,19 +326,14 @@ export default function LoginPage() {
       {/* Phone Login Form */}
       {loginMode === "phone" && phoneStep === "phone" && (
         <form onSubmit={handlePhoneSubmit} className="space-y-4 mt-4">
-          <AuthInput
+          <AuthPhoneInput
             label="Phone number"
-            type="tel"
-            placeholder="+1 234 567 8900"
-            icon={<Phone size={18} />}
+            placeholder="812 345 6789"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={setPhone}
             error={errors.phone}
             disabled={isLoading}
           />
-          <p className="text-xs text-muted-foreground">
-            Include your country code (e.g., +1 for US, +44 for UK)
-          </p>
 
           <AuthButton type="submit" isLoading={isLoading}>
             Send verification code
