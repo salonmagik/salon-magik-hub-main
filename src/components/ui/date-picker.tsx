@@ -1,0 +1,87 @@
+import * as React from "react";
+import { format, parse } from "date-fns";
+import { CalendarIcon } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+export interface DatePickerProps {
+  value?: Date;
+  onChange: (date: Date | undefined) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  minDate?: Date;
+  maxDate?: Date;
+  className?: string;
+}
+
+export function DatePicker({
+  value,
+  onChange,
+  placeholder = "Pick a date",
+  disabled = false,
+  minDate,
+  maxDate,
+  className,
+}: DatePickerProps) {
+  const [open, setOpen] = React.useState(false);
+
+  const handleSelect = (date: Date | undefined) => {
+    onChange(date);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          disabled={disabled}
+          className={cn(
+            "h-10 w-full justify-start text-left font-normal",
+            !value && "text-muted-foreground",
+            className
+          )}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {value ? format(value, "PPP") : <span>{placeholder}</span>}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={value}
+          onSelect={handleSelect}
+          disabled={(date) => {
+            if (minDate && date < minDate) return true;
+            if (maxDate && date > maxDate) return true;
+            return false;
+          }}
+          initialFocus
+          className="pointer-events-auto"
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Helper functions for string conversion
+export function dateToString(date: Date | undefined): string {
+  if (!date) return "";
+  return format(date, "yyyy-MM-dd");
+}
+
+export function stringToDate(dateString: string): Date | undefined {
+  if (!dateString) return undefined;
+  try {
+    return parse(dateString, "yyyy-MM-dd", new Date());
+  } catch {
+    return undefined;
+  }
+}

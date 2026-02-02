@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -25,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DatePicker, dateToString, stringToDate } from "@/components/ui/date-picker";
 import {
   Calendar,
   Clock,
@@ -37,6 +37,7 @@ import {
   MoreHorizontal,
   AlertCircle,
   RotateCcw,
+  UserPlus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,7 +46,6 @@ import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
 import type { Enums } from "@/integrations/supabase/types";
-import { UserPlus } from "lucide-react";
 
 type AppointmentStatus = Enums<"appointment_status">;
 
@@ -228,13 +228,12 @@ export default function AppointmentsPage() {
           })}
         </div>
 
-        {/* Filters Row */}
         <div className="flex flex-wrap items-center gap-4">
-          <Input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="w-auto"
+          <DatePicker
+            value={stringToDate(dateFilter)}
+            onChange={(date) => setDateFilter(dateToString(date) || new Date().toISOString().split("T")[0])}
+            placeholder="Filter by date"
+            className="w-auto min-w-[180px]"
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[180px]">

@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Mail, Phone, MapPin, Tag, Calendar, Save, Loader2 } from "lucide-react";
+import { DatePicker, dateToString, stringToDate } from "@/components/ui/date-picker";
+import { User, Mail, Phone, MapPin, Tag, Save, Loader2 } from "lucide-react";
 import { useCustomers } from "@/hooks/useCustomers";
 
 interface AddCustomerDialogProps {
@@ -213,20 +214,17 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Date of Birth</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  className="pl-9 h-10"
-                  value={formData.dateOfBirth}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      dateOfBirth: e.target.value,
-                    }))
-                  }
-                />
-              </div>
+              <DatePicker
+                value={stringToDate(formData.dateOfBirth)}
+                onChange={(date) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    dateOfBirth: dateToString(date),
+                  }))
+                }
+                maxDate={new Date()}
+                placeholder="Select date"
+              />
             </div>
             <div className="space-y-2">
               <Label>Tags</Label>

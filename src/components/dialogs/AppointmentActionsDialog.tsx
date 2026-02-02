@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker, dateToString, stringToDate } from "@/components/ui/date-picker";
+import { TimePicker } from "@/components/ui/time-picker";
 import { AlertTriangle, Calendar, Pause, X } from "lucide-react";
 import type { AppointmentWithDetails } from "@/hooks/useAppointments";
 
@@ -159,25 +161,23 @@ export function AppointmentActionsDialog({
                   <Label>
                     New Date <span className="text-destructive">*</span>
                   </Label>
-                  <Input
-                    type="date"
-                    className="h-10 text-sm"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    min={new Date().toISOString().split("T")[0]}
-                    required
+                  <DatePicker
+                    value={stringToDate(newDate)}
+                    onChange={(date) => setNewDate(dateToString(date))}
+                    minDate={new Date()}
+                    placeholder="Select date"
+                    disabled={isSubmitting}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>
                     New Time <span className="text-destructive">*</span>
                   </Label>
-                  <Input
-                    type="time"
-                    className="h-10 text-sm"
+                  <TimePicker
                     value={newTime}
-                    onChange={(e) => setNewTime(e.target.value)}
-                    required
+                    onChange={setNewTime}
+                    placeholder="Select time"
+                    disabled={isSubmitting}
                   />
                 </div>
               </div>
