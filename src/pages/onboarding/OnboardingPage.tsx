@@ -5,180 +5,235 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ArrowRight, Building2, MapPin, Clock, Loader2, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Check } from "lucide-react";
 
-type OnboardingStep = "business" | "location" | "hours" | "complete";
+import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
+import { ProfileStep, type ProfileInfo } from "@/components/onboarding/ProfileStep";
+import { OwnerInviteStep, type OwnerInviteInfo } from "@/components/onboarding/OwnerInviteStep";
+import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanStep";
+import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
+import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
+import { ReviewStep } from "@/components/onboarding/ReviewStep";
 
-interface BusinessInfo {
-  name: string;
-  country: string;
-  currency: string;
-}
-
-interface LocationInfo {
-  name: string;
-  city: string;
-  address: string;
-  timezone: string;
-}
-
-interface HoursInfo {
-  openingTime: string;
-  closingTime: string;
-  openingDays: string[];
-}
-
-const COUNTRIES = [
-  { code: "NG", name: "Nigeria", currency: "NGN", timezone: "Africa/Lagos" },
-  { code: "GH", name: "Ghana", currency: "GHS", timezone: "Africa/Accra" },
-  { code: "US", name: "United States", currency: "USD", timezone: "America/New_York" },
-  { code: "GB", name: "United Kingdom", currency: "GBP", timezone: "Europe/London" },
-  { code: "KE", name: "Kenya", currency: "KES", timezone: "Africa/Nairobi" },
-  { code: "ZA", name: "South Africa", currency: "ZAR", timezone: "Africa/Johannesburg" },
-];
-
-const DAYS_OF_WEEK = [
-  { id: "monday", label: "Mon" },
-  { id: "tuesday", label: "Tue" },
-  { id: "wednesday", label: "Wed" },
-  { id: "thursday", label: "Thu" },
-  { id: "friday", label: "Fri" },
-  { id: "saturday", label: "Sat" },
-  { id: "sunday", label: "Sun" },
-];
-
-const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
-  const hour = i.toString().padStart(2, "0");
-  return { value: `${hour}:00:00`, label: `${hour}:00` };
-});
+type OnboardingStep = "role" | "profile" | "owner-invite" | "plan" | "business" | "locations" | "review" | "complete";
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, refreshTenants } = useAuth();
-  const [step, setStep] = useState<OnboardingStep>("business");
+  const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Step data
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  
+  const [profileInfo, setProfileInfo] = useState<ProfileInfo>({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    useSignInEmail: false,
+    useSignInPhone: false,
+  });
+
+  const [ownerInvite, setOwnerInvite] = useState<OwnerInviteInfo>({
+    name: "",
+    email: "",
+    phone: "",
+  });
+
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
 
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
     name: "",
     country: "",
     currency: "",
-  });
-
-  const [locationInfo, setLocationInfo] = useState<LocationInfo>({
-    name: "Main Location",
     city: "",
     address: "",
     timezone: "",
-  });
-
-  const [hoursInfo, setHoursInfo] = useState<HoursInfo>({
     openingTime: "09:00:00",
     closingTime: "18:00:00",
     openingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
   });
 
-  const stepProgress = {
-    business: 33,
-    location: 66,
-    hours: 100,
-    complete: 100,
+  const [locationsConfig, setLocationsConfig] = useState<LocationsConfig>({
+    sameCountry: true,
+    sameName: true,
+    sameHours: true,
+    locations: [],
+  });
+
+  // Determine step flow based on role and plan
+  const isOwner = selectedRole === "owner";
+  const isChain = selectedPlan === "chain";
+
+  const getStepFlow = (): OnboardingStep[] => {
+    const flow: OnboardingStep[] = ["role", "profile"];
+    if (!isOwner) flow.push("owner-invite");
+    flow.push("plan", "business");
+    if (isChain) flow.push("locations");
+    flow.push("review");
+    return flow;
   };
 
-  const handleCountryChange = (countryCode: string) => {
-    const country = COUNTRIES.find((c) => c.code === countryCode);
-    if (country) {
-      setBusinessInfo((prev) => ({
-        ...prev,
-        country: countryCode,
-        currency: country.currency,
-      }));
-      setLocationInfo((prev) => ({
-        ...prev,
-        timezone: country.timezone,
-      }));
+  const stepFlow = getStepFlow();
+  const currentStepIndex = stepFlow.indexOf(step);
+  const totalSteps = stepFlow.length;
+  const progress = step === "complete" ? 100 : ((currentStepIndex + 1) / totalSteps) * 100;
+
+  const canProceed = (): boolean => {
+    switch (step) {
+      case "role":
+        return selectedRole !== null;
+      case "profile":
+        return profileInfo.firstName.trim() !== "" && 
+               profileInfo.lastName.trim() !== "" && 
+               profileInfo.email.trim() !== "";
+      case "owner-invite":
+        return ownerInvite.name.trim() !== "" && ownerInvite.email.trim() !== "";
+      case "plan":
+        return selectedPlan !== null;
+      case "business":
+        return businessInfo.name.trim() !== "" && 
+               businessInfo.country !== "" && 
+               businessInfo.city.trim() !== "" &&
+               businessInfo.openingDays.length > 0;
+      case "locations":
+        return locationsConfig.locations.length > 0 && 
+               locationsConfig.locations.every((loc) => loc.city.trim() !== "");
+      case "review":
+        return true;
+      default:
+        return false;
     }
   };
 
-  const toggleDay = (day: string) => {
-    setHoursInfo((prev) => ({
-      ...prev,
-      openingDays: prev.openingDays.includes(day)
-        ? prev.openingDays.filter((d) => d !== day)
-        : [...prev.openingDays, day],
-    }));
+  const nextStep = () => {
+    const currentIndex = stepFlow.indexOf(step);
+    if (currentIndex < stepFlow.length - 1) {
+      const next = stepFlow[currentIndex + 1];
+      
+      // Initialize locations when entering locations step
+      if (next === "locations" && locationsConfig.locations.length === 0) {
+        const initialLocation: LocationInfo = {
+          id: crypto.randomUUID(),
+          name: locationsConfig.sameName ? businessInfo.name : "",
+          city: businessInfo.city,
+          address: businessInfo.address,
+          country: businessInfo.country,
+          timezone: businessInfo.timezone,
+          openingTime: businessInfo.openingTime,
+          closingTime: businessInfo.closingTime,
+          openingDays: businessInfo.openingDays,
+          isDefault: true,
+        };
+        setLocationsConfig((prev) => ({ ...prev, locations: [initialLocation] }));
+      }
+      
+      setStep(next);
+    } else {
+      handleSubmit();
+    }
+  };
+
+  const prevStep = () => {
+    const currentIndex = stepFlow.indexOf(step);
+    if (currentIndex > 0) {
+      setStep(stepFlow[currentIndex - 1]);
+    }
   };
 
   const handleSubmit = async () => {
-    if (!user) return;
+    if (!user || !selectedRole || !selectedPlan) return;
 
     setIsLoading(true);
 
     try {
-      // NOTE:
-      // Tenants are linked to users via user_roles. During onboarding, we must create the tenant
-      // *before* the role row exists. If we request a RETURNING representation (via .select()),
-      // RLS SELECT policies can block returning the inserted row and surface as an INSERT RLS error.
-      // To avoid that, we generate the tenant id client-side and insert with returning: "minimal".
-
       const tenantId = crypto.randomUUID();
 
-      // 1. Create the tenant (no SELECT/RETURNING)
-      // Supabase returns the inserted row only when you chain `.select()`.
+      // 1. Create the tenant
       const { error: tenantError } = await supabase.from("tenants").insert({
         id: tenantId,
         name: businessInfo.name,
         country: businessInfo.country,
         currency: businessInfo.currency,
-        timezone: locationInfo.timezone,
+        timezone: businessInfo.timezone,
+        plan: selectedPlan,
         subscription_status: "trialing",
-        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days
+        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
       if (tenantError) throw tenantError;
 
-      // 2. Create the user's role as owner
+      // 2. Create the user's role
       const { error: roleError } = await supabase.from("user_roles").insert({
         user_id: user.id,
         tenant_id: tenantId,
-        role: "owner",
+        role: selectedRole,
       });
 
       if (roleError) throw roleError;
 
-      // 3. Create the default location
-      const selectedCountry = COUNTRIES.find((c) => c.code === businessInfo.country);
-      const { error: locationError } = await supabase.from("locations").insert({
-        tenant_id: tenantId,
-        name: locationInfo.name,
-        city: locationInfo.city,
-        address: locationInfo.address || null,
-        country: selectedCountry?.name || businessInfo.country,
-        timezone: locationInfo.timezone,
-        opening_time: hoursInfo.openingTime,
-        closing_time: hoursInfo.closingTime,
-        opening_days: hoursInfo.openingDays,
-        is_default: true,
-      });
+      // 3. Update user profile
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          full_name: `${profileInfo.firstName} ${profileInfo.lastName}`,
+          phone: profileInfo.phone || null,
+        })
+        .eq("user_id", user.id);
 
-      if (locationError) throw locationError;
+      if (profileError) console.error("Profile update error:", profileError);
 
-      // 4. Create communication credits for the tenant
+      // 4. Create locations
+      if (isChain && locationsConfig.locations.length > 0) {
+        const locationInserts = locationsConfig.locations.map((loc) => ({
+          tenant_id: tenantId,
+          name: loc.name || businessInfo.name,
+          city: loc.city,
+          address: loc.address || null,
+          country: loc.country || businessInfo.country,
+          timezone: loc.timezone || businessInfo.timezone,
+          opening_time: loc.openingTime,
+          closing_time: loc.closingTime,
+          opening_days: loc.openingDays,
+          is_default: loc.isDefault,
+        }));
+
+        const { error: locationsError } = await supabase.from("locations").insert(locationInserts);
+        if (locationsError) throw locationsError;
+      } else {
+        // Single location for Solo/Studio
+        const { error: locationError } = await supabase.from("locations").insert({
+          tenant_id: tenantId,
+          name: "Main Location",
+          city: businessInfo.city,
+          address: businessInfo.address || null,
+          country: businessInfo.country,
+          timezone: businessInfo.timezone,
+          opening_time: businessInfo.openingTime,
+          closing_time: businessInfo.closingTime,
+          opening_days: businessInfo.openingDays,
+          is_default: true,
+        });
+
+        if (locationError) throw locationError;
+      }
+
+      // 5. Create communication credits
       const { error: creditsError } = await supabase.from("communication_credits").insert({
         tenant_id: tenantId,
-        balance: 30,
-        free_monthly_allocation: 30,
+        balance: selectedPlan === "chain" ? 500 : selectedPlan === "studio" ? 100 : 30,
+        free_monthly_allocation: selectedPlan === "chain" ? 500 : selectedPlan === "studio" ? 100 : 30,
       });
 
       if (creditsError) throw creditsError;
 
-      // Refresh tenants in auth context
+      // 6. TODO: Handle owner invitation for non-owners
+      // This would trigger an email/SMS to the owner
+
       await refreshTenants();
 
       setStep("complete");
@@ -188,7 +243,6 @@ export default function OnboardingPage() {
         description: "Your salon has been set up successfully.",
       });
 
-      // Navigate to salon dashboard after a brief delay
       setTimeout(() => {
         navigate("/salon");
       }, 2000);
@@ -204,36 +258,12 @@ export default function OnboardingPage() {
     }
   };
 
-  const canProceed = () => {
-    switch (step) {
-      case "business":
-        return businessInfo.name.trim() && businessInfo.country;
-      case "location":
-        return locationInfo.city.trim();
-      case "hours":
-        return hoursInfo.openingDays.length > 0;
-      default:
-        return false;
-    }
-  };
-
-  const nextStep = () => {
-    if (step === "business") setStep("location");
-    else if (step === "location") setStep("hours");
-    else if (step === "hours") handleSubmit();
-  };
-
-  const prevStep = () => {
-    if (step === "location") setStep("business");
-    else if (step === "hours") setStep("location");
-  };
-
   if (step === "complete") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-6">
-          <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mx-auto">
-            <Check className="w-10 h-10 text-success" />
+          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+            <Check className="w-10 h-10 text-green-600" />
           </div>
           <div>
             <h1 className="text-2xl font-semibold mb-2">You're all set!</h1>
@@ -253,190 +283,80 @@ export default function OnboardingPage() {
           <div className="flex items-center justify-between mb-6">
             <SalonMagikLogo size="md" />
             <span className="text-sm text-muted-foreground">
-              Step {step === "business" ? 1 : step === "location" ? 2 : 3} of 3
+              Step {currentStepIndex + 1} of {totalSteps}
             </span>
           </div>
-          <Progress value={stepProgress[step]} className="h-2" />
+          <Progress value={progress} className="h-2" />
         </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-lg">
+          {step === "role" && (
+            <RoleStep
+              selectedRole={selectedRole}
+              onRoleSelect={setSelectedRole}
+            />
+          )}
+
+          {step === "profile" && (
+            <ProfileStep
+              profileInfo={profileInfo}
+              signInEmail={user?.email || null}
+              signInPhone={user?.phone || null}
+              onChange={setProfileInfo}
+            />
+          )}
+
+          {step === "owner-invite" && (
+            <OwnerInviteStep
+              ownerInfo={ownerInvite}
+              onChange={setOwnerInvite}
+            />
+          )}
+
+          {step === "plan" && (
+            <PlanStep
+              selectedPlan={selectedPlan}
+              onPlanSelect={setSelectedPlan}
+            />
+          )}
+
           {step === "business" && (
-            <>
-              <CardHeader>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                  <Building2 className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle>Tell us about your business</CardTitle>
-                <CardDescription>
-                  Let's get started with some basic information about your salon.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="businessName">Business name *</Label>
-                  <Input
-                    id="businessName"
-                    placeholder="e.g., Glamour Hair Studio"
-                    value={businessInfo.name}
-                    onChange={(e) => setBusinessInfo((prev) => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country">Country *</Label>
-                  <Select value={businessInfo.country} onValueChange={handleCountryChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select your country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COUNTRIES.map((country) => (
-                        <SelectItem key={country.code} value={country.code}>
-                          {country.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {businessInfo.currency && (
-                  <p className="text-sm text-muted-foreground">
-                    Currency: <span className="font-medium">{businessInfo.currency}</span>
-                  </p>
-                )}
-              </CardContent>
-            </>
+            <BusinessStep
+              businessInfo={businessInfo}
+              onChange={setBusinessInfo}
+            />
           )}
 
-          {step === "location" && (
-            <>
-              <CardHeader>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                  <MapPin className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle>Where is your salon located?</CardTitle>
-                <CardDescription>
-                  Add your primary location. You can add more locations later.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="locationName">Location name</Label>
-                  <Input
-                    id="locationName"
-                    placeholder="e.g., Main Branch"
-                    value={locationInfo.name}
-                    onChange={(e) => setLocationInfo((prev) => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city">City *</Label>
-                  <Input
-                    id="city"
-                    placeholder="e.g., Lagos"
-                    value={locationInfo.city}
-                    onChange={(e) => setLocationInfo((prev) => ({ ...prev, city: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="address">Street address (optional)</Label>
-                  <Input
-                    id="address"
-                    placeholder="e.g., 123 Victoria Island"
-                    value={locationInfo.address}
-                    onChange={(e) => setLocationInfo((prev) => ({ ...prev, address: e.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <Input
-                    id="timezone"
-                    value={locationInfo.timezone}
-                    disabled
-                    className="bg-muted"
-                  />
-                </div>
-              </CardContent>
-            </>
+          {step === "locations" && (
+            <LocationsStep
+              config={locationsConfig}
+              businessName={businessInfo.name}
+              defaultCountry={businessInfo.country}
+              defaultTimezone={businessInfo.timezone}
+              defaultOpeningTime={businessInfo.openingTime}
+              defaultClosingTime={businessInfo.closingTime}
+              defaultOpeningDays={businessInfo.openingDays}
+              onChange={setLocationsConfig}
+            />
           )}
 
-          {step === "hours" && (
-            <>
-              <CardHeader>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-                  <Clock className="w-6 h-6 text-primary" />
-                </div>
-                <CardTitle>Set your business hours</CardTitle>
-                <CardDescription>
-                  When is your salon open for appointments?
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Opening time</Label>
-                    <Select
-                      value={hoursInfo.openingTime}
-                      onValueChange={(v) => setHoursInfo((prev) => ({ ...prev, openingTime: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIME_OPTIONS.map((time) => (
-                          <SelectItem key={time.value} value={time.value}>
-                            {time.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Closing time</Label>
-                    <Select
-                      value={hoursInfo.closingTime}
-                      onValueChange={(v) => setHoursInfo((prev) => ({ ...prev, closingTime: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIME_OPTIONS.map((time) => (
-                          <SelectItem key={time.value} value={time.value}>
-                            {time.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label>Days open *</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {DAYS_OF_WEEK.map((day) => (
-                      <button
-                        key={day.id}
-                        type="button"
-                        onClick={() => toggleDay(day.id)}
-                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                          hoursInfo.openingDays.includes(day.id)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background border-input hover:bg-muted"
-                        }`}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </>
+          {step === "review" && (
+            <ReviewStep
+              role={selectedRole!}
+              profile={profileInfo}
+              ownerInvite={isOwner ? null : ownerInvite}
+              plan={selectedPlan!}
+              business={businessInfo}
+              locations={isChain ? locationsConfig : null}
+            />
           )}
 
           {/* Navigation */}
           <div className="flex items-center justify-between p-6 pt-0">
-            {step !== "business" ? (
+            {currentStepIndex > 0 ? (
               <Button variant="ghost" onClick={prevStep} disabled={isLoading}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back
@@ -450,7 +370,7 @@ export default function OnboardingPage() {
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Setting up...
                 </>
-              ) : step === "hours" ? (
+              ) : step === "review" ? (
                 "Complete Setup"
               ) : (
                 <>
