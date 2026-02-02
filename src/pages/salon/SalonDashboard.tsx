@@ -1,53 +1,63 @@
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Users, DollarSign, TrendingUp, Clock, AlertCircle } from "lucide-react";
+import { Calendar, Users, DollarSign, TrendingUp, Clock, AlertCircle, Check, X } from "lucide-react";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { useAuth } from "@/hooks/useAuth";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
-const stats = [
-  {
-    title: "Today's Appointments",
-    value: "8",
-    change: "+2 from yesterday",
-    icon: Calendar,
-    trend: "up",
-  },
-  {
-    title: "Total Customers",
-    value: "124",
-    change: "+12 this month",
-    icon: Users,
-    trend: "up",
-  },
-  {
-    title: "Revenue Today",
-    value: "$580",
-    change: "+15% vs avg",
-    icon: DollarSign,
-    trend: "up",
-  },
-  {
-    title: "Avg Service Time",
-    value: "45m",
-    change: "On target",
-    icon: Clock,
-    trend: "neutral",
-  },
-];
-
-const upcomingAppointments = [
-  { time: "09:00 AM", customer: "Sarah Johnson", service: "Hair Cut & Style", status: "confirmed" },
-  { time: "10:30 AM", customer: "Mike Chen", service: "Beard Trim", status: "confirmed" },
-  { time: "11:00 AM", customer: "Emily Davis", service: "Color Treatment", status: "pending" },
-  { time: "02:00 PM", customer: "Alex Turner", service: "Full Service", status: "confirmed" },
-];
+const statusStyles: Record<string, { bg: string; text: string }> = {
+  scheduled: { bg: "bg-muted", text: "text-muted-foreground" },
+  started: { bg: "bg-primary/10", text: "text-primary" },
+  paused: { bg: "bg-warning-bg", text: "text-warning-foreground" },
+  completed: { bg: "bg-success/10", text: "text-success" },
+  cancelled: { bg: "bg-destructive/10", text: "text-destructive" },
+};
 
 export default function SalonDashboard() {
+  const { currentTenant, profile } = useAuth();
+  const { stats, upcomingAppointments, isLoading } = useDashboardStats();
+
+  const statCards = [
+    {
+      title: "Today's Appointments",
+      value: stats.todayAppointments.toString(),
+      change: `${stats.confirmedCount} scheduled`,
+      icon: Calendar,
+      trend: "up",
+    },
+    {
+      title: "Total Customers",
+      value: stats.totalCustomers.toString(),
+      change: "All time",
+      icon: Users,
+      trend: "up",
+    },
+    {
+      title: "Revenue Today",
+      value: `${currentTenant?.currency || "USD"} ${stats.revenueToday.toFixed(2)}`,
+      change: `${stats.completedCount} completed`,
+      icon: DollarSign,
+      trend: stats.revenueToday > 0 ? "up" : "neutral",
+    },
+    {
+      title: "Cancelled / No-show",
+      value: stats.cancelledCount.toString(),
+      change: "Today",
+      icon: X,
+      trend: stats.cancelledCount === 0 ? "neutral" : "down",
+    },
+  ];
+
   return (
     <SalonSidebar>
       <div className="space-y-6">
         {/* Page Header */}
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back! Here's what's happening today.</p>
+          <p className="text-muted-foreground">
+            Welcome back{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}! Here's what's happening today.
+          </p>
         </div>
 
         {/* Onboarding Checklist Card */}
@@ -78,28 +88,38 @@ export default function SalonDashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <Card key={stat.title}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">{stat.title}</p>
-                      <p className="text-2xl font-semibold mt-1">{stat.value}</p>
-                      <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                        {stat.trend === "up" && <TrendingUp className="w-3 h-3 text-success" />}
-                        {stat.change}
-                      </p>
-                    </div>
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Icon className="w-5 h-5 text-primary" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {isLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-8 w-16 mb-1" />
+                    <Skeleton className="h-3 w-20" />
+                  </CardContent>
+                </Card>
+              ))
+            : statCards.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <Card key={stat.title}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">{stat.title}</p>
+                          <p className="text-2xl font-semibold mt-1">{stat.value}</p>
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            {stat.trend === "up" && <TrendingUp className="w-3 h-3 text-success" />}
+                            {stat.change}
+                          </p>
+                        </div>
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Icon className="w-5 h-5 text-primary" />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
         </div>
 
         {/* Upcoming Appointments */}
@@ -108,31 +128,49 @@ export default function SalonDashboard() {
             <CardTitle className="text-lg font-medium">Today's Appointments</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {upcomingAppointments.map((apt, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 rounded-lg bg-surface hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm font-medium text-primary">{apt.time}</div>
-                    <div>
-                      <p className="font-medium">{apt.customer}</p>
-                      <p className="text-sm text-muted-foreground">{apt.service}</p>
+            {isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-4 w-16" />
+                      <div>
+                        <Skeleton className="h-4 w-24 mb-1" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
                     </div>
+                    <Skeleton className="h-6 w-16" />
                   </div>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      apt.status === "confirmed"
-                        ? "bg-success/10 text-success"
-                        : "bg-warning-bg text-warning-foreground"
-                    }`}
+                ))}
+              </div>
+            ) : upcomingAppointments.length === 0 ? (
+              <div className="text-center py-8">
+                <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground">No appointments scheduled for today</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingAppointments.map((apt) => (
+                  <div
+                    key={apt.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-surface hover:bg-muted/50 transition-colors"
                   >
-                    {apt.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm font-medium text-primary">{apt.time}</div>
+                      <div>
+                        <p className="font-medium">{apt.customer}</p>
+                        <p className="text-sm text-muted-foreground">{apt.service}</p>
+                      </div>
+                    </div>
+                    <Badge
+                      className={`${statusStyles[apt.status]?.bg || "bg-muted"} ${statusStyles[apt.status]?.text || "text-muted-foreground"} capitalize`}
+                    >
+                      {apt.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

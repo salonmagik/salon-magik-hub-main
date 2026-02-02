@@ -17,14 +17,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Mail, Phone, MapPin, Tag, Calendar, Save } from "lucide-react";
+import { User, Mail, Phone, MapPin, Tag, Calendar, Save, Loader2 } from "lucide-react";
+import { useCustomers } from "@/hooks/useCustomers";
 
 interface AddCustomerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
-export function AddCustomerDialog({ open, onOpenChange }: AddCustomerDialogProps) {
+export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomerDialogProps) {
+  const { createCustomer } = useCustomers();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -39,10 +43,39 @@ export function AddCustomerDialog({ open, onOpenChange }: AddCustomerDialogProps
     notes: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save customer
-    onOpenChange(false);
+    setIsSubmitting(true);
+
+    try {
+      const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+      const result = await createCustomer({
+        fullName,
+        phone: formData.phone || undefined,
+        email: formData.email || undefined,
+        notes: formData.notes || undefined,
+      });
+
+      if (result) {
+        setFormData({
+          firstName: "",
+          lastName: "",
+          email: "",
+          phone: "",
+          status: "active",
+          gender: "prefer-not",
+          dateOfBirth: "",
+          tags: "",
+          address: "",
+          city: "",
+          notes: "",
+        });
+        onOpenChange(false);
+        onSuccess?.();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -257,11 +290,12 @@ export function AddCustomerDialog({ open, onOpenChange }: AddCustomerDialogProps
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2">
-              <Save className="w-4 h-4" />
+            <Button type="submit" className="gap-2" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Add Customer
             </Button>
           </DialogFooter>

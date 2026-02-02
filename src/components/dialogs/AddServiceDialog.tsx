@@ -18,12 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Scissors, Clock, DollarSign, Palette } from "lucide-react";
+import { Scissors, Clock, DollarSign, Palette, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useServices } from "@/hooks/useServices";
 
 interface AddServiceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
 const paymentOptions = [
@@ -55,7 +57,9 @@ const colorOptions = [
   "#06B6D4",
 ];
 
-export function AddServiceDialog({ open, onOpenChange }: AddServiceDialogProps) {
+export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDialogProps) {
+  const { createService, categories } = useServices();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     category: "",
@@ -68,10 +72,38 @@ export function AddServiceDialog({ open, onOpenChange }: AddServiceDialogProps) 
     description: "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Save service
-    onOpenChange(false);
+    setIsSubmitting(true);
+
+    try {
+      const result = await createService({
+        name: formData.name,
+        price: parseFloat(formData.price),
+        durationMinutes: parseInt(formData.duration),
+        description: formData.description || undefined,
+        categoryId: formData.category || undefined,
+        depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
+      });
+
+      if (result) {
+        setFormData({
+          name: "",
+          category: "",
+          price: "",
+          currency: "GHS",
+          duration: "60",
+          paymentOption: "full",
+          buffer: "15",
+          color: "#604DD9",
+          description: "",
+        });
+        onOpenChange(false);
+        onSuccess?.();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -291,10 +323,14 @@ export function AddServiceDialog({ open, onOpenChange }: AddServiceDialogProps) 
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit">Create service</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Create service
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
