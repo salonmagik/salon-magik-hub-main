@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointment_attachments: {
+        Row: {
+          appointment_id: string
+          created_at: string
+          created_by_id: string | null
+          file_name: string
+          file_type: string
+          file_url: string
+          id: string
+          is_drawing: boolean
+          tenant_id: string
+        }
+        Insert: {
+          appointment_id: string
+          created_at?: string
+          created_by_id?: string | null
+          file_name: string
+          file_type: string
+          file_url: string
+          id?: string
+          is_drawing?: boolean
+          tenant_id: string
+        }
+        Update: {
+          appointment_id?: string
+          created_at?: string
+          created_by_id?: string | null
+          file_name?: string
+          file_type?: string
+          file_url?: string
+          id?: string
+          is_drawing?: boolean
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_attachments_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_attachments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointment_pauses: {
         Row: {
           appointment_id: string

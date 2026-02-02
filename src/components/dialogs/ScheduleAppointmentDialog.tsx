@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -20,6 +19,7 @@ import {
 import { User, Plus, Check, Loader2 } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
+import { AppointmentNotesInput } from "@/components/notes/AppointmentNotesInput";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
@@ -39,6 +39,13 @@ export function ScheduleAppointmentDialog({
 }: ScheduleAppointmentDialogProps) {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
+  const [noteAttachments, setNoteAttachments] = useState<Array<{
+    id: string;
+    fileName: string;
+    fileType: string;
+    dataUrl: string;
+    isDrawing: boolean;
+  }>>([]);
   const [formData, setFormData] = useState({
     customerId: "",
     serviceId: "",
@@ -67,6 +74,7 @@ export function ScheduleAppointmentDialog({
         staffId: "",
         notes: "",
       });
+      setNoteAttachments([]);
     }
   }, [open]);
 
@@ -269,18 +277,14 @@ export function ScheduleAppointmentDialog({
               </Select>
             </div>
 
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                placeholder="Add any special instructions or reminders..."
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                rows={3}
-              />
-            </div>
+            {/* Notes with Attachments/Drawing */}
+            <AppointmentNotesInput
+              value={formData.notes}
+              onChange={(notes) => setFormData((prev) => ({ ...prev, notes }))}
+              attachments={noteAttachments}
+              onAttachmentsChange={setNoteAttachments}
+              disabled={isSubmitting}
+            />
 
             <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
