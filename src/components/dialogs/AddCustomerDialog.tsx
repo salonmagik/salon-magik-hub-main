@@ -95,7 +95,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           {/* Name Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
                 First Name <span className="text-destructive">*</span>
@@ -133,7 +133,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           </div>
 
           {/* Email & Phone Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Email</Label>
               <div className="relative">
@@ -169,7 +169,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           </div>
 
           {/* Status & Gender Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Status</Label>
               <Select
@@ -210,7 +210,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           </div>
 
           {/* DOB & Tags Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Date of Birth</Label>
               <div className="relative">
@@ -245,7 +245,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           </div>
 
           {/* Address & City Row */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Address</Label>
               <div className="relative">
@@ -285,16 +285,17 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
             />
           </div>
 
-          <DialogFooter className="pt-4">
+          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2" disabled={isSubmitting}>
+            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Add Customer
             </Button>

@@ -128,7 +128,7 @@ export function ScheduleAppointmentDialog({
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
             {/* Customer & Service Row */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>
                   Customer <span className="text-destructive">*</span>
@@ -205,7 +205,7 @@ export function ScheduleAppointmentDialog({
             </div>
 
             {/* Date, Time, Duration Row */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>
                   Date <span className="text-destructive">*</span>
@@ -282,28 +282,30 @@ export function ScheduleAppointmentDialog({
               />
             </div>
 
-            <DialogFooter className="flex items-center justify-between pt-4 border-t">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Check className="w-4 h-4 text-success" />
-                <span>
+            <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
+              <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
+                <Check className="w-4 h-4 text-success flex-shrink-0" />
+                <span className="whitespace-nowrap">
                   Client notifications will be sent automatically.
                 </span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => onOpenChange(false)}
                   disabled={isSubmitting}
+                  className="flex-1 sm:flex-initial"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   disabled={isSubmitting || !formData.customerId || !formData.serviceId}
+                  className="flex-1 sm:flex-initial"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Save appointment
+                  Save
                 </Button>
               </div>
             </DialogFooter>

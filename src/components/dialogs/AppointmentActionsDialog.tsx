@@ -154,7 +154,7 @@ export function AppointmentActionsDialog({
           {/* Date/time inputs for reschedule */}
           {actionType === "reschedule" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>
                     New Date <span className="text-destructive">*</span>
@@ -200,12 +200,13 @@ export function AppointmentActionsDialog({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
@@ -213,6 +214,7 @@ export function AppointmentActionsDialog({
               type="submit"
               variant={actionType === "cancel" ? "destructive" : "default"}
               disabled={isSubmitting}
+              className="w-full sm:w-auto"
             >
               {isSubmitting ? "Processing..." : actionType === "cancel" ? "Cancel Appointment" : "Confirm"}
             </Button>
