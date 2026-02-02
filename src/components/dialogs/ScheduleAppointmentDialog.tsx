@@ -186,14 +186,15 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
               </div>
             </div>
 
-            {/* Date, Time, Duration Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Date & Time Row - 2 columns even on mobile for compact sizing */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>
                   Date <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   type="date"
+                  className="h-10 text-sm"
                   value={formData.date}
                   onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
                   min={new Date().toISOString().split("T")[0]}
@@ -205,15 +206,19 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 </Label>
                 <Input
                   type="time"
+                  className="h-10 text-sm"
                   value={formData.startTime}
                   onChange={(e) => setFormData((prev) => ({ ...prev, startTime: e.target.value }))}
                 />
               </div>
             </div>
+
+            {/* Duration - Separate section */}
             <div className="space-y-2">
               <Label>Duration (mins)</Label>
               <Input
                 type="number"
+                className="h-10 text-sm"
                 value={formData.duration}
                 onChange={(e) => setFormData((prev) => ({ ...prev, duration: e.target.value }))}
                 min="15"

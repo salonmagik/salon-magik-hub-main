@@ -154,13 +154,14 @@ export function AppointmentActionsDialog({
           {/* Date/time inputs for reschedule */}
           {actionType === "reschedule" && (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>
                     New Date <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     type="date"
+                    className="h-10 text-sm"
                     value={newDate}
                     onChange={(e) => setNewDate(e.target.value)}
                     min={new Date().toISOString().split("T")[0]}
@@ -173,6 +174,7 @@ export function AppointmentActionsDialog({
                   </Label>
                   <Input
                     type="time"
+                    className="h-10 text-sm"
                     value={newTime}
                     onChange={(e) => setNewTime(e.target.value)}
                     required
@@ -183,6 +185,7 @@ export function AppointmentActionsDialog({
                 <Label>Duration (minutes)</Label>
                 <Input
                   type="number"
+                  className="h-10 text-sm"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                   min="15"
