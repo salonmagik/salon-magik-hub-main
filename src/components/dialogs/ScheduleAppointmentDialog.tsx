@@ -1,21 +1,9 @@
 import { useState, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Plus, Check, Loader2 } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
@@ -32,20 +20,18 @@ interface ScheduleAppointmentDialogProps {
   onSuccess?: () => void;
 }
 
-export function ScheduleAppointmentDialog({
-  open,
-  onOpenChange,
-  onSuccess,
-}: ScheduleAppointmentDialogProps) {
+export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: ScheduleAppointmentDialogProps) {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
-  const [noteAttachments, setNoteAttachments] = useState<Array<{
-    id: string;
-    fileName: string;
-    fileType: string;
-    dataUrl: string;
-    isDrawing: boolean;
-  }>>([]);
+  const [noteAttachments, setNoteAttachments] = useState<
+    Array<{
+      id: string;
+      fileName: string;
+      fileType: string;
+      dataUrl: string;
+      isDrawing: boolean;
+    }>
+  >([]);
   const [formData, setFormData] = useState({
     customerId: "",
     serviceId: "",
@@ -144,9 +130,7 @@ export function ScheduleAppointmentDialog({
                 <div className="flex gap-2">
                   <Select
                     value={formData.customerId}
-                    onValueChange={(v) =>
-                      setFormData((prev) => ({ ...prev, customerId: v }))
-                    }
+                    onValueChange={(v) => setFormData((prev) => ({ ...prev, customerId: v }))}
                     disabled={customersLoading}
                   >
                     <SelectTrigger className="flex-1">
@@ -161,12 +145,7 @@ export function ScheduleAppointmentDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button
-                    type="button"
-                    onClick={() => setCustomerDialogOpen(true)}
-                    className="gap-1"
-                    size="icon"
-                  >
+                  <Button type="button" onClick={() => setCustomerDialogOpen(true)} className="gap-1" size="icon">
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
@@ -200,12 +179,7 @@ export function ScheduleAppointmentDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button
-                    type="button"
-                    onClick={() => setServiceDialogOpen(true)}
-                    className="gap-1"
-                    size="icon"
-                  >
+                  <Button type="button" onClick={() => setServiceDialogOpen(true)} className="gap-1" size="icon">
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
@@ -213,7 +187,7 @@ export function ScheduleAppointmentDialog({
             </div>
 
             {/* Date, Time, Duration Row */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-1 gap-4">
               <div className="space-y-2">
                 <Label>
                   Date <span className="text-destructive">*</span>
@@ -221,37 +195,28 @@ export function ScheduleAppointmentDialog({
                 <Input
                   type="date"
                   value={formData.date}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, date: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, date: e.target.value }))}
                   min={new Date().toISOString().split("T")[0]}
-                  className="h-10 text-sm"
                 />
               </div>
               <div className="space-y-2">
                 <Label>
-                  Time <span className="text-destructive">*</span>
+                  Start time <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   type="time"
                   value={formData.startTime}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, startTime: e.target.value }))
-                  }
-                  className="h-10 text-sm"
+                  onChange={(e) => setFormData((prev) => ({ ...prev, startTime: e.target.value }))}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Duration</Label>
+                <Label>Duration (mins)</Label>
                 <Input
                   type="number"
                   value={formData.duration}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, duration: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, duration: e.target.value }))}
                   min="15"
                   step="15"
-                  className="h-10 text-sm"
                 />
               </div>
             </div>
@@ -261,17 +226,15 @@ export function ScheduleAppointmentDialog({
               <Label>Assigned staff</Label>
               <Select
                 value={formData.staffId}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({ ...prev, staffId: v }))
-                }
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, staffId: v }))}
                 disabled={staffLoading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={staffLoading ? "Loading..." : "No staff assigned"} />
                 </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">No staff assigned</SelectItem>
-                {staff.map((member) => (
+                <SelectContent>
+                  <SelectItem value="_none">No staff assigned</SelectItem>
+                  {staff.map((member) => (
                     <SelectItem key={member.userId} value={member.userId}>
                       {member.profile?.full_name || "Unknown"} ({member.role})
                     </SelectItem>
@@ -292,9 +255,7 @@ export function ScheduleAppointmentDialog({
             <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
                 <Check className="w-4 h-4 text-success flex-shrink-0" />
-                <span className="whitespace-nowrap">
-                  Client notifications will be sent automatically.
-                </span>
+                <span className="whitespace-nowrap">Client notifications will be sent automatically.</span>
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
                 <Button
@@ -306,8 +267,8 @@ export function ScheduleAppointmentDialog({
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isSubmitting || !formData.customerId || !formData.serviceId}
                   className="flex-1 sm:flex-initial"
                 >
@@ -326,11 +287,7 @@ export function ScheduleAppointmentDialog({
         onOpenChange={setCustomerDialogOpen}
         onSuccess={handleCustomerCreated}
       />
-      <AddServiceDialog
-        open={serviceDialogOpen}
-        onOpenChange={setServiceDialogOpen}
-        onSuccess={handleServiceCreated}
-      />
+      <AddServiceDialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen} onSuccess={handleServiceCreated} />
     </>
   );
 }
