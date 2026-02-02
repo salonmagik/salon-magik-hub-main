@@ -330,6 +330,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 {/* Quick Create Button */}
                 <Button
                   variant="outline"
+                  size="icon"
+                  className="sm:hidden"
+                  onClick={() => setQuickCreateOpen(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
                   size="sm"
                   className="hidden sm:flex items-center gap-2"
                   onClick={() => setQuickCreateOpen(true)}

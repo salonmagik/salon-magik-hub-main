@@ -41,9 +41,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointmentDialog";
+import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
 import type { Enums } from "@/integrations/supabase/types";
+import { UserPlus } from "lucide-react";
 
 type AppointmentStatus = Enums<"appointment_status">;
 
@@ -58,6 +60,7 @@ const statusBadgeStyles: Record<string, { bg: string; text: string }> = {
 
 export default function AppointmentsPage() {
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
@@ -180,17 +183,25 @@ export default function AppointmentsPage() {
     <SalonSidebar>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Appointments</h1>
             <p className="text-muted-foreground">
               Manage upcoming bookings and stay on top of today's schedule.
             </p>
           </div>
-          <Button onClick={() => setAppointmentDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            New appointment
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setWalkInDialogOpen(true)}>
+              <UserPlus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Walk-in</span>
+              <span className="sm:hidden">Walk-in</span>
+            </Button>
+            <Button onClick={() => setAppointmentDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Schedule</span>
+              <span className="sm:hidden">Schedule</span>
+            </Button>
+          </div>
         </div>
 
         {/* Status Cards */}
@@ -388,6 +399,13 @@ export default function AppointmentsPage() {
       <ScheduleAppointmentDialog
         open={appointmentDialogOpen}
         onOpenChange={setAppointmentDialogOpen}
+        onSuccess={refetch}
+      />
+
+      {/* Walk-in Dialog */}
+      <WalkInDialog
+        open={walkInDialogOpen}
+        onOpenChange={setWalkInDialogOpen}
         onSuccess={refetch}
       />
 
