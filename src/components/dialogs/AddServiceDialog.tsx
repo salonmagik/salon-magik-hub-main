@@ -1,22 +1,10 @@
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Scissors, Clock, DollarSign, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,7 +33,6 @@ const paymentOptions = [
     description: "Let customers choose full or deposit.",
   },
 ];
-
 
 export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDialogProps) {
   const { createService, categories } = useServices();
@@ -103,9 +90,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
           </div>
           <div>
             <DialogTitle className="text-xl">Add Service</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Create a new service offering
-            </p>
+            <p className="text-sm text-muted-foreground">Create a new service offering</p>
           </div>
         </DialogHeader>
 
@@ -119,9 +104,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               <Input
                 placeholder="e.g. Haircut & Style"
                 value={formData.name}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 required
               />
             </div>
@@ -131,9 +114,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               </Label>
               <Select
                 value={formData.category}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({ ...prev, category: v }))
-                }
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, category: v }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a category" />
@@ -156,29 +137,23 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                 Price <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
                 <Input
                   type="number"
                   placeholder="0.00"
                   className="pl-9 pr-12"
                   value={formData.price}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, price: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                   required
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                  GHS
-                </span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">GHS</span>
               </div>
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
               <Select
                 value={formData.currency}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({ ...prev, currency: v }))
-                }
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, currency: v }))}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -200,9 +175,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                   type="number"
                   className="pl-9"
                   value={formData.duration}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, duration: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, duration: e.target.value }))}
                   required
                 />
               </div>
@@ -212,14 +185,10 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
           {/* Payment Options */}
           <div className="space-y-2">
             <Label>Payment options</Label>
-            <p className="text-xs text-muted-foreground">
-              Choose whether customers pay in full or a deposit online.
-            </p>
+            <p className="text-xs text-muted-foreground">Choose whether customers pay in full or a deposit online.</p>
             <RadioGroup
               value={formData.paymentOption}
-              onValueChange={(v) =>
-                setFormData((prev) => ({ ...prev, paymentOption: v }))
-              }
+              onValueChange={(v) => setFormData((prev) => ({ ...prev, paymentOption: v }))}
               className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2"
             >
               {paymentOptions.map((option) => (
@@ -229,16 +198,14 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                     "flex flex-col items-start p-3 rounded-lg border cursor-pointer transition-all",
                     formData.paymentOption === option.value
                       ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
+                      : "border-border hover:border-primary/50",
                   )}
                 >
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value={option.value} />
                     <span className="text-sm font-medium">{option.label}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 ml-6">
-                    {option.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 ml-6">{option.description}</p>
                 </label>
               ))}
             </RadioGroup>
@@ -251,9 +218,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               type="number"
               className="max-w-32"
               value={formData.buffer}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, buffer: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, buffer: e.target.value }))}
             />
           </div>
 
@@ -263,9 +228,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             <Textarea
               placeholder="Outline what this service includes."
               value={formData.description}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, description: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
             />
           </div>

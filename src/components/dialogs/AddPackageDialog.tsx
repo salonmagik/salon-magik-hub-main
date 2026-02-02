@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,10 +37,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
   });
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
-  const originalPrice = selectedServices.reduce(
-    (sum, s) => sum + s.price * s.quantity,
-    0
-  );
+  const originalPrice = selectedServices.reduce((sum, s) => sum + s.price * s.quantity, 0);
 
   const resetForm = () => {
     setFormData({
@@ -71,11 +62,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
 
   const updateQuantity = (serviceId: string, delta: number) => {
     setSelectedServices((prev) =>
-      prev.map((s) =>
-        s.serviceId === serviceId
-          ? { ...s, quantity: Math.max(1, s.quantity + delta) }
-          : s
-      )
+      prev.map((s) => (s.serviceId === serviceId ? { ...s, quantity: Math.max(1, s.quantity + delta) } : s)),
     );
   };
 
@@ -145,9 +132,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
           </div>
           <div>
             <DialogTitle className="text-xl">Create Package</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Bundle services together at a special price
-            </p>
+            <p className="text-sm text-muted-foreground">Bundle services together at a special price</p>
           </div>
         </DialogHeader>
 
@@ -160,9 +145,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
             <Input
               placeholder="e.g. Wedding Day Package"
               value={formData.name}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, name: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
               required
             />
           </div>
@@ -190,14 +173,11 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
                         key={service.id}
                         className={cn(
                           "flex items-center justify-between p-2 rounded-lg border transition-colors",
-                          selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50"
+                          selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50",
                         )}
                       >
                         <div className="flex items-center gap-3">
-                          <Checkbox
-                            checked={!!selected}
-                            onCheckedChange={() => toggleService(service)}
-                          />
+                          <Checkbox checked={!!selected} onCheckedChange={() => toggleService(service)} />
                           <div>
                             <p className="font-medium text-sm">{service.name}</p>
                             <p className="text-xs text-muted-foreground">
@@ -216,9 +196,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
                             >
                               <Minus className="w-3 h-3" />
                             </Button>
-                            <span className="w-8 text-center text-sm font-medium">
-                              {selected.quantity}
-                            </span>
+                            <span className="w-8 text-center text-sm font-medium">{selected.quantity}</span>
                             <Button
                               type="button"
                               variant="outline"
@@ -242,26 +220,20 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Original Value</Label>
-              <Input
-                value={`$${originalPrice.toFixed(2)}`}
-                disabled
-                className="bg-muted"
-              />
+              <Input value={`$${originalPrice.toFixed(2)}`} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
               <Label>
                 Package Price <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
                 <Input
                   type="number"
                   placeholder="0.00"
                   className="pl-9"
                   value={formData.price}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, price: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                   required
                   min="0"
                   step="0.01"
@@ -282,9 +254,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
             <Textarea
               placeholder="Describe what's included in this package..."
               value={formData.description}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, description: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={2}
             />
           </div>
@@ -299,7 +269,11 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || selectedServices.length === 0}>
+            <Button
+              type="submit"
+              className="gap-2 w-full sm:w-auto"
+              disabled={isSubmitting || selectedServices.length === 0}
+            >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Create Package
             </Button>

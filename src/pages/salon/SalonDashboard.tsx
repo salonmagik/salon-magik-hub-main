@@ -1,6 +1,6 @@
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Users, DollarSign, TrendingUp, Clock, AlertCircle, Check, X } from "lucide-react";
+import { Calendar, Users, Coins, TrendingUp, Clock, AlertCircle, Check, X } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,7 +37,7 @@ export default function SalonDashboard() {
       title: "Revenue Today",
       value: `${currentTenant?.currency || "USD"} ${stats.revenueToday.toFixed(2)}`,
       change: `${stats.completedCount} completed`,
-      icon: DollarSign,
+      icon: Coins,
       trend: stats.revenueToday > 0 ? "up" : "neutral",
     },
     {
@@ -56,7 +56,8 @@ export default function SalonDashboard() {
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}! Here's what's happening today.
+            Welcome back{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}! Here's what's happening
+            today.
           </p>
         </div>
 
@@ -78,7 +79,9 @@ export default function SalonDashboard() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="text-xs bg-success/10 text-success px-2 py-1 rounded">✓ Add services</span>
                   <span className="text-xs bg-success/10 text-success px-2 py-1 rounded">✓ Add products</span>
-                  <span className="text-xs bg-warning-bg text-warning-foreground px-2 py-1 rounded">○ Configure payments</span>
+                  <span className="text-xs bg-warning-bg text-warning-foreground px-2 py-1 rounded">
+                    ○ Configure payments
+                  </span>
                   <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">○ Enable booking</span>
                 </div>
               </div>

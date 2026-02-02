@@ -1,22 +1,10 @@
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Package, DollarSign, Hash, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,7 +39,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
       return;
@@ -92,9 +80,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
           </div>
           <div>
             <DialogTitle className="text-xl">Add Product</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Add a new product to your inventory
-            </p>
+            <p className="text-sm text-muted-foreground">Add a new product to your inventory</p>
           </div>
         </DialogHeader>
 
@@ -107,9 +93,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             <Input
               placeholder="e.g. Shampoo, Hair Oil"
               value={formData.name}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, name: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
               required
             />
           </div>
@@ -121,15 +105,13 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
                 Price <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
                 <Input
                   type="number"
                   placeholder="0.00"
                   className="pl-9"
                   value={formData.price}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, price: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                   required
                   min="0"
                   step="0.01"
@@ -144,9 +126,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
                   type="number"
                   className="pl-9"
                   value={formData.stockQuantity}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, stockQuantity: e.target.value }))
-                  }
+                  onChange={(e) => setFormData((prev) => ({ ...prev, stockQuantity: e.target.value }))}
                   min="0"
                 />
               </div>
@@ -156,12 +136,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
           {/* Status */}
           <div className="space-y-2">
             <Label>Status</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(v) =>
-                setFormData((prev) => ({ ...prev, status: v }))
-              }
-            >
+            <Select value={formData.status} onValueChange={(v) => setFormData((prev) => ({ ...prev, status: v }))}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -179,9 +154,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             <Textarea
               placeholder="Describe the product..."
               value={formData.description}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, description: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
             />
           </div>

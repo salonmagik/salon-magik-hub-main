@@ -1,22 +1,10 @@
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CreditCard, DollarSign, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,7 +44,7 @@ export function RecordPaymentDialog({
   const [formData, setFormData] = useState({
     customerId: propCustomerId || "",
     amount: defaultAmount?.toString() || "",
-    method: "cash" as typeof paymentMethods[number]["value"],
+    method: "cash" as (typeof paymentMethods)[number]["value"],
     type: "payment",
     reference: "",
     notes: "",
@@ -114,9 +102,7 @@ export function RecordPaymentDialog({
           </div>
           <div>
             <DialogTitle className="text-xl">Record Payment</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Log a payment transaction
-            </p>
+            <p className="text-sm text-muted-foreground">Log a payment transaction</p>
           </div>
         </DialogHeader>
 
@@ -127,17 +113,15 @@ export function RecordPaymentDialog({
               <Label>Customer</Label>
               <Select
                 value={formData.customerId}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({ ...prev, customerId: v }))
-                }
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, customerId: v }))}
                 disabled={customersLoading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={customersLoading ? "Loading..." : "Select customer (optional)"} />
                 </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">No customer</SelectItem>
-                {customers.map((customer) => (
+                <SelectContent>
+                  <SelectItem value="_none">No customer</SelectItem>
+                  {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.full_name}
                     </SelectItem>
@@ -153,15 +137,13 @@ export function RecordPaymentDialog({
               Amount <span className="text-destructive">*</span>
             </Label>
             <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
               <Input
                 type="number"
                 placeholder="0.00"
                 className="pl-9 text-lg font-semibold"
                 value={formData.amount}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, amount: e.target.value }))
-                }
+                onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
                 required
                 min="0"
                 step="0.01"
@@ -174,9 +156,7 @@ export function RecordPaymentDialog({
             <Label>Payment Method</Label>
             <RadioGroup
               value={formData.method}
-              onValueChange={(v) =>
-                setFormData((prev) => ({ ...prev, method: v as typeof formData.method }))
-              }
+              onValueChange={(v) => setFormData((prev) => ({ ...prev, method: v as typeof formData.method }))}
               className="grid grid-cols-3 gap-2"
             >
               {paymentMethods.map((method) => (
@@ -186,7 +166,7 @@ export function RecordPaymentDialog({
                     "flex items-center justify-center p-2 rounded-lg border cursor-pointer transition-all text-sm",
                     formData.method === method.value
                       ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
+                      : "border-border hover:border-primary/50",
                   )}
                 >
                   <RadioGroupItem value={method.value} className="sr-only" />
@@ -202,9 +182,7 @@ export function RecordPaymentDialog({
             <Input
               placeholder="Transaction ID or receipt number"
               value={formData.reference}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, reference: e.target.value }))
-              }
+              onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
             />
           </div>
 
