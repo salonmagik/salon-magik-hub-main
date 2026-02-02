@@ -121,26 +121,32 @@ export default function OnboardingPage() {
     setIsLoading(true);
 
     try {
-      // 1. Create the tenant
-      const { data: tenant, error: tenantError } = await supabase
-        .from("tenants")
-        .insert({
-          name: businessInfo.name,
-          country: businessInfo.country,
-          currency: businessInfo.currency,
-          timezone: locationInfo.timezone,
-          subscription_status: "trialing",
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days
-        })
-        .select()
-        .single();
+      // NOTE:
+      // Tenants are linked to users via user_roles. During onboarding, we must create the tenant
+      // *before* the role row exists. If we request a RETURNING representation (via .select()),
+      // RLS SELECT policies can block returning the inserted row and surface as an INSERT RLS error.
+      // To avoid that, we generate the tenant id client-side and insert with returning: "minimal".
+
+      const tenantId = crypto.randomUUID();
+
+      // 1. Create the tenant (no SELECT/RETURNING)
+      // Supabase returns the inserted row only when you chain `.select()`.
+      const { error: tenantError } = await supabase.from("tenants").insert({
+        id: tenantId,
+        name: businessInfo.name,
+        country: businessInfo.country,
+        currency: businessInfo.currency,
+        timezone: locationInfo.timezone,
+        subscription_status: "trialing",
+        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days
+      });
 
       if (tenantError) throw tenantError;
 
       // 2. Create the user's role as owner
       const { error: roleError } = await supabase.from("user_roles").insert({
         user_id: user.id,
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         role: "owner",
       });
 
@@ -149,7 +155,7 @@ export default function OnboardingPage() {
       // 3. Create the default location
       const selectedCountry = COUNTRIES.find((c) => c.code === businessInfo.country);
       const { error: locationError } = await supabase.from("locations").insert({
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         name: locationInfo.name,
         city: locationInfo.city,
         address: locationInfo.address || null,
@@ -165,7 +171,7 @@ export default function OnboardingPage() {
 
       // 4. Create communication credits for the tenant
       const { error: creditsError } = await supabase.from("communication_credits").insert({
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         balance: 30,
         free_monthly_allocation: 30,
       });
