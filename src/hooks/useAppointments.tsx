@@ -99,12 +99,13 @@ export function useAppointmentActions() {
   const createAppointment = async (data: {
     customerId: string;
     services: { serviceId: string; serviceName: string; price: number; duration: number }[];
-    scheduledStart: string;
-    scheduledEnd: string;
+    scheduledStart?: string;
+    scheduledEnd?: string;
     locationId: string;
     staffId?: string;
     notes?: string;
     isWalkIn?: boolean;
+    isUnscheduled?: boolean;
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -114,6 +115,13 @@ export function useAppointmentActions() {
     setIsSubmitting(true);
     try {
       const totalAmount = data.services.reduce((sum, s) => sum + s.price, 0);
+      const isUnscheduled = data.isUnscheduled || false;
+      const isWalkIn = data.isWalkIn || false;
+
+      // For walk-ins without scheduling, start immediately
+      const now = new Date().toISOString();
+      const scheduledStart = isUnscheduled ? null : (data.scheduledStart || now);
+      const scheduledEnd = isUnscheduled ? null : (data.scheduledEnd || now);
 
       // Create appointment
       const { data: appointment, error: aptError } = await supabase
@@ -123,11 +131,13 @@ export function useAppointmentActions() {
           customer_id: data.customerId,
           location_id: data.locationId,
           assigned_staff_id: data.staffId || null,
-          scheduled_start: data.scheduledStart,
-          scheduled_end: data.scheduledEnd,
+          scheduled_start: scheduledStart,
+          scheduled_end: scheduledEnd,
           notes: data.notes || null,
-          is_walk_in: data.isWalkIn || false,
-          status: "scheduled",
+          is_walk_in: isWalkIn,
+          is_unscheduled: isUnscheduled,
+          status: isUnscheduled ? "started" : "scheduled",
+          actual_start: isUnscheduled ? now : null,
           total_amount: totalAmount,
           created_by_id: user?.id || null,
         })
