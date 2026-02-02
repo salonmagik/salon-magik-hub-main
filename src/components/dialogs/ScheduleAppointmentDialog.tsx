@@ -213,7 +213,7 @@ export function ScheduleAppointmentDialog({
             </div>
 
             {/* Date, Time, Duration Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label>
                   Date <span className="text-destructive">*</span>
@@ -225,11 +225,12 @@ export function ScheduleAppointmentDialog({
                     setFormData((prev) => ({ ...prev, date: e.target.value }))
                   }
                   min={new Date().toISOString().split("T")[0]}
+                  className="h-10 text-sm"
                 />
               </div>
               <div className="space-y-2">
                 <Label>
-                  Start time <span className="text-destructive">*</span>
+                  Time <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   type="time"
@@ -237,10 +238,11 @@ export function ScheduleAppointmentDialog({
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, startTime: e.target.value }))
                   }
+                  className="h-10 text-sm"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Duration (mins)</Label>
+                <Label>Duration</Label>
                 <Input
                   type="number"
                   value={formData.duration}
@@ -249,6 +251,7 @@ export function ScheduleAppointmentDialog({
                   }
                   min="15"
                   step="15"
+                  className="h-10 text-sm"
                 />
               </div>
             </div>
