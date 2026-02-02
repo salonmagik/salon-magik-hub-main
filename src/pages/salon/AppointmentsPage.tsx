@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -20,9 +19,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Calendar,
   Clock,
-  Search,
   Plus,
   Play,
   Pause,
@@ -30,56 +35,146 @@ import {
   X,
   RefreshCw,
   MoreHorizontal,
-  Users,
   AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointmentDialog";
+import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
+import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
+import type { Enums } from "@/integrations/supabase/types";
 
-// Status cards data
-const statusCards = [
-  { label: "Total today", count: 1, icon: Calendar, color: "text-primary", bgColor: "bg-primary/10" },
-  { label: "Confirmed", count: 1, icon: Check, color: "text-success", bgColor: "bg-success/10" },
-  { label: "Completed", count: 0, icon: Clock, color: "text-muted-foreground", bgColor: "bg-muted" },
-  { label: "Cancelled / No show", count: 0, icon: AlertCircle, color: "text-destructive", bgColor: "bg-destructive/10" },
-];
-
-// Sample appointments data
-const appointments = [
-  {
-    id: "APT-001",
-    date: "2026-02-02",
-    startTime: "17:00",
-    endTime: "18:00",
-    customer: { name: "Darling Customers", phone: "+233256611702", isNew: false },
-    service: "Full body waxing",
-    staff: "Agatha Ambrose",
-    status: "confirmed",
-    payment: "deposit_paid",
-    notes: null,
-  },
-];
+type AppointmentStatus = Enums<"appointment_status">;
 
 const statusBadgeStyles: Record<string, { bg: string; text: string }> = {
   scheduled: { bg: "bg-muted", text: "text-muted-foreground" },
-  confirmed: { bg: "bg-success/10", text: "text-success" },
   started: { bg: "bg-primary/10", text: "text-primary" },
   paused: { bg: "bg-warning-bg", text: "text-warning-foreground" },
   completed: { bg: "bg-success/10", text: "text-success" },
   cancelled: { bg: "bg-destructive/10", text: "text-destructive" },
-};
-
-const paymentLabels: Record<string, string> = {
-  unpaid: "Unpaid",
-  deposit_paid: "Deposit Paid",
-  fully_paid: "Fully Paid",
-  pay_at_salon: "Pay at Salon",
+  rescheduled: { bg: "bg-muted", text: "text-muted-foreground" },
 };
 
 export default function AppointmentsPage() {
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
+  
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split("T")[0]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const { appointments, isLoading, refetch } = useAppointments({
+    date: dateFilter,
+    status: statusFilter as AppointmentStatus | "all",
+  });
+
+  const {
+    isSubmitting,
+    startAppointment,
+    pauseAppointment,
+    resumeAppointment,
+    completeAppointment,
+    cancelAppointment,
+    rescheduleAppointment,
+  } = useAppointmentActions();
+
+  // Calculate status counts
+  const statusCounts = useMemo(() => {
+    const counts = {
+      total: appointments.length,
+      scheduled: 0,
+      started: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+    appointments.forEach((apt) => {
+      if (apt.status === "scheduled") counts.scheduled++;
+      else if (apt.status === "started" || apt.status === "paused") counts.started++;
+      else if (apt.status === "completed") counts.completed++;
+      else if (apt.status === "cancelled") counts.cancelled++;
+    });
+    return counts;
+  }, [appointments]);
+
+  const statusCards = [
+    { label: "Total today", count: statusCounts.total, icon: Calendar, color: "text-primary", bgColor: "bg-primary/10" },
+    { label: "Scheduled", count: statusCounts.scheduled, icon: Clock, color: "text-muted-foreground", bgColor: "bg-muted" },
+    { label: "In Progress", count: statusCounts.started, icon: Play, color: "text-primary", bgColor: "bg-primary/10" },
+    { label: "Completed", count: statusCounts.completed, icon: Check, color: "text-success", bgColor: "bg-success/10" },
+    { label: "Cancelled", count: statusCounts.cancelled, icon: AlertCircle, color: "text-destructive", bgColor: "bg-destructive/10" },
+  ];
+
+  const handleAction = async (action: string, appointment: AppointmentWithDetails) => {
+    setSelectedAppointment(appointment);
+    
+    switch (action) {
+      case "start":
+        await startAppointment(appointment.id);
+        refetch();
+        break;
+      case "resume":
+        await resumeAppointment(appointment.id);
+        refetch();
+        break;
+      case "complete":
+        await completeAppointment(appointment.id);
+        refetch();
+        break;
+      case "pause":
+        setActionType("pause");
+        setActionDialogOpen(true);
+        break;
+      case "cancel":
+        setActionType("cancel");
+        setActionDialogOpen(true);
+        break;
+      case "reschedule":
+        setActionType("reschedule");
+        setActionDialogOpen(true);
+        break;
+    }
+  };
+
+  const handleActionConfirm = async (data: { reason?: string; newStart?: string; newEnd?: string }) => {
+    if (!selectedAppointment) return;
+
+    if (actionType === "pause" && data.reason) {
+      await pauseAppointment(selectedAppointment.id, data.reason);
+    } else if (actionType === "cancel" && data.reason) {
+      await cancelAppointment(selectedAppointment.id, data.reason);
+    } else if (actionType === "reschedule" && data.newStart && data.newEnd) {
+      await rescheduleAppointment(selectedAppointment.id, data.newStart, data.newEnd);
+    }
+
+    setActionDialogOpen(false);
+    setActionType(null);
+    setSelectedAppointment(null);
+    refetch();
+  };
+
+  const formatTime = (dateString: string | null) => {
+    if (!dateString) return "—";
+    return new Date(dateString).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const getAvailableActions = (status: AppointmentStatus) => {
+    switch (status) {
+      case "scheduled":
+        return ["start", "reschedule", "cancel"];
+      case "started":
+        return ["pause", "complete", "cancel"];
+      case "paused":
+        return ["resume", "complete", "cancel"];
+      default:
+        return [];
+    }
+  };
 
   return (
     <SalonSidebar>
@@ -99,7 +194,7 @@ export default function AppointmentsPage() {
         </div>
 
         {/* Status Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {statusCards.map((card) => {
             const Icon = card.icon;
             return (
@@ -107,7 +202,11 @@ export default function AppointmentsPage() {
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{card.label}</p>
-                    <p className="text-2xl font-semibold mt-1">{card.count}</p>
+                    {isLoading ? (
+                      <Skeleton className="h-8 w-8 mt-1" />
+                    ) : (
+                      <p className="text-2xl font-semibold mt-1">{card.count}</p>
+                    )}
                   </div>
                   <div className={`p-2 rounded-lg ${card.bgColor}`}>
                     <Icon className={`w-5 h-5 ${card.color}`} />
@@ -132,15 +231,16 @@ export default function AppointmentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
               <SelectItem value="scheduled">Scheduled</SelectItem>
+              <SelectItem value="started">In Progress</SelectItem>
+              <SelectItem value="paused">Paused</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex-1" />
-          <Button variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
@@ -153,16 +253,26 @@ export default function AppointmentsPage() {
                 <TableHead>Time</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Service</TableHead>
-                <TableHead>Staff</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Notes</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {appointments.length === 0 ? (
+              {isLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                    <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+                  </TableRow>
+                ))
+              ) : appointments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12">
+                  <TableCell colSpan={6} className="text-center py-12">
                     <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">No appointments found</p>
                     <p className="text-sm text-muted-foreground">
@@ -171,89 +281,123 @@ export default function AppointmentsPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                appointments.map((apt) => (
-                  <TableRow key={apt.id} className="hover:bg-muted/50">
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">
-                          {apt.startTime} — {apt.endTime}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{apt.date}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{apt.customer.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {apt.customer.phone}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{apt.service}</TableCell>
-                    <TableCell>{apt.staff}</TableCell>
-                    <TableCell>
-                      <Badge
-                        className={`${statusBadgeStyles[apt.status].bg} ${statusBadgeStyles[apt.status].text} capitalize`}
-                      >
-                        {apt.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {apt.notes ? (
-                        <span className="text-sm">{apt.notes}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Select defaultValue={apt.status}>
-                          <SelectTrigger className="h-8 w-[120px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="confirmed">Confirmed</SelectItem>
-                            <SelectItem value="started">Started</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                appointments.map((apt) => {
+                  const actions = getAvailableActions(apt.status);
+                  return (
+                    <TableRow key={apt.id} className="hover:bg-muted/50">
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">
+                            {formatTime(apt.scheduled_start)} — {formatTime(apt.scheduled_end)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {apt.scheduled_start ? new Date(apt.scheduled_start).toLocaleDateString() : "—"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{apt.customer?.full_name || "Unknown"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {apt.customer?.phone || "No phone"}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {apt.services.length > 0 
+                          ? apt.services.map(s => s.service_name).join(", ")
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={`${statusBadgeStyles[apt.status]?.bg || "bg-muted"} ${statusBadgeStyles[apt.status]?.text || "text-muted-foreground"} capitalize`}
+                        >
+                          {apt.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {apt.notes ? (
+                          <span className="text-sm truncate max-w-[120px] block">{apt.notes}</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {actions.length > 0 && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isSubmitting}>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {actions.includes("start") && (
+                                <DropdownMenuItem onClick={() => handleAction("start", apt)}>
+                                  <Play className="w-4 h-4 mr-2" />
+                                  Start
+                                </DropdownMenuItem>
+                              )}
+                              {actions.includes("resume") && (
+                                <DropdownMenuItem onClick={() => handleAction("resume", apt)}>
+                                  <Play className="w-4 h-4 mr-2" />
+                                  Resume
+                                </DropdownMenuItem>
+                              )}
+                              {actions.includes("pause") && (
+                                <DropdownMenuItem onClick={() => handleAction("pause", apt)}>
+                                  <Pause className="w-4 h-4 mr-2" />
+                                  Pause
+                                </DropdownMenuItem>
+                              )}
+                              {actions.includes("complete") && (
+                                <DropdownMenuItem onClick={() => handleAction("complete", apt)}>
+                                  <Check className="w-4 h-4 mr-2" />
+                                  Complete
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              {actions.includes("reschedule") && (
+                                <DropdownMenuItem onClick={() => handleAction("reschedule", apt)}>
+                                  <RotateCcw className="w-4 h-4 mr-2" />
+                                  Reschedule
+                                </DropdownMenuItem>
+                              )}
+                              {actions.includes("cancel") && (
+                                <DropdownMenuItem 
+                                  onClick={() => handleAction("cancel", apt)}
+                                  className="text-destructive"
+                                >
+                                  <X className="w-4 h-4 mr-2" />
+                                  Cancel
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </Card>
-
-        {/* Tabs for Scheduled / Unscheduled */}
-        <Tabs defaultValue="scheduled">
-          <TabsList>
-            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-            <TabsTrigger value="unscheduled">Unscheduled</TabsTrigger>
-          </TabsList>
-          <TabsContent value="unscheduled" className="mt-4">
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
-                <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No unscheduled appointments</p>
-                <p className="text-sm">
-                  Prepaid services and gifted items will appear here
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
       </div>
 
       {/* Schedule Appointment Dialog */}
       <ScheduleAppointmentDialog
         open={appointmentDialogOpen}
         onOpenChange={setAppointmentDialogOpen}
+        onSuccess={refetch}
+      />
+
+      {/* Action Dialogs */}
+      <AppointmentActionsDialog
+        open={actionDialogOpen}
+        onOpenChange={setActionDialogOpen}
+        actionType={actionType}
+        appointment={selectedAppointment}
+        onConfirm={handleActionConfirm}
       />
     </SalonSidebar>
   );
