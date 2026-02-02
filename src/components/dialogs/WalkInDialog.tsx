@@ -9,7 +9,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Users, Plus, Loader2, Check } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { AppointmentNotesInput } from "@/components/notes/AppointmentNotesInput";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
@@ -43,6 +43,13 @@ interface SelectedService {
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [noteAttachments, setNoteAttachments] = useState<Array<{
+    id: string;
+    fileName: string;
+    fileType: string;
+    dataUrl: string;
+    isDrawing: boolean;
+  }>>([]);
   const [formData, setFormData] = useState({
     customerId: "",
     staffId: "",
@@ -65,6 +72,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
         notes: "",
       });
       setSelectedServices([]);
+      setNoteAttachments([]);
     }
   }, [open]);
 
@@ -263,18 +271,15 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
               </Select>
             </div>
 
-            {/* Notes */}
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                placeholder="Any special instructions..."
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                rows={2}
-              />
-            </div>
+            {/* Notes with Attachments/Drawing */}
+            <AppointmentNotesInput
+              value={formData.notes}
+              onChange={(notes) => setFormData((prev) => ({ ...prev, notes }))}
+              attachments={noteAttachments}
+              onAttachmentsChange={setNoteAttachments}
+              rows={2}
+              disabled={isSubmitting}
+            />
 
             <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
