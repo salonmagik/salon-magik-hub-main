@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
+import { InactivityGuard } from "@/components/session/InactivityGuard";
 import {
   Tooltip,
   TooltipContent,
@@ -269,107 +270,109 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         closeMobile: () => setIsMobileOpen(false),
       }}
     >
-      <div className="min-h-screen flex bg-surface">
-        {/* Mobile Overlay */}
-        {isMobileOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-            onClick={() => setIsMobileOpen(false)}
-          />
-        )}
-
-        {/* Sidebar - Mobile */}
-        <aside
-          className={cn(
-            "fixed inset-y-0 left-0 z-50 w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
-            isMobileOpen ? "translate-x-0" : "-translate-x-full"
-          )}
-        >
-          {sidebarContent}
-        </aside>
-
-        {/* Sidebar - Desktop */}
-        <aside
-          className={cn(
-            "hidden lg:flex flex-col bg-primary relative transition-all duration-300",
-            isExpanded ? "w-64" : "w-[72px]"
-          )}
-        >
-          {sidebarContent}
-
-          {/* Collapse Toggle */}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="absolute -right-3 top-20 w-6 h-6 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
-          >
-            <ChevronLeft
-              className={cn(
-                "w-4 h-4 transition-transform text-primary",
-                !isExpanded && "rotate-180"
-              )}
+      <InactivityGuard>
+        <div className="min-h-screen flex bg-surface">
+          {/* Mobile Overlay */}
+          {isMobileOpen && (
+            <div
+              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              onClick={() => setIsMobileOpen(false)}
             />
-          </button>
-        </aside>
+          )}
 
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
-          {/* Top Bar */}
-          <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6">
+          {/* Sidebar - Mobile */}
+          <aside
+            className={cn(
+              "fixed inset-y-0 left-0 z-50 w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
+              isMobileOpen ? "translate-x-0" : "-translate-x-full"
+            )}
+          >
+            {sidebarContent}
+          </aside>
+
+          {/* Sidebar - Desktop */}
+          <aside
+            className={cn(
+              "hidden lg:flex flex-col bg-primary relative transition-all duration-300",
+              isExpanded ? "w-64" : "w-[72px]"
+            )}
+          >
+            {sidebarContent}
+
+            {/* Collapse Toggle */}
             <button
-              onClick={() => setIsMobileOpen(true)}
-              className="p-2 hover:bg-muted rounded-lg lg:hidden"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="absolute -right-3 top-20 w-6 h-6 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
             >
-              <Menu className="w-5 h-5" />
+              <ChevronLeft
+                className={cn(
+                  "w-4 h-4 transition-transform text-primary",
+                  !isExpanded && "rotate-180"
+                )}
+              />
             </button>
+          </aside>
 
-            <div className="flex-1" />
-
-            <div className="flex items-center gap-2">
-              {/* Quick Create Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden sm:flex items-center gap-2"
-                onClick={() => setQuickCreateOpen(true)}
+          {/* Main Content */}
+          <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+            {/* Top Bar */}
+            <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6">
+              <button
+                onClick={() => setIsMobileOpen(true)}
+                className="p-2 hover:bg-muted rounded-lg lg:hidden"
               >
-                <Plus className="w-4 h-4" />
-                <span className="hidden md:inline">Quick Create</span>
-                <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-                  <span className="text-xs">⌘</span>N
-                </kbd>
-              </Button>
+                <Menu className="w-5 h-5" />
+              </button>
 
-              {/* Notifications */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative"
-                onClick={() => setNotificationsOpen(true)}
-              >
-                <Bell className="w-5 h-5" />
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                  2
-                </span>
-              </Button>
-            </div>
-          </header>
+              <div className="flex-1" />
 
-          {/* Page Content */}
-          <div className="flex-1 overflow-auto p-4 lg:p-6">{children}</div>
-        </main>
-      </div>
+              <div className="flex items-center gap-2">
+                {/* Quick Create Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:flex items-center gap-2"
+                  onClick={() => setQuickCreateOpen(true)}
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden md:inline">Quick Create</span>
+                  <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+                    <span className="text-xs">⌘</span>N
+                  </kbd>
+                </Button>
 
-      {/* Quick Create Dialog */}
-      <QuickCreateDialog
-        open={quickCreateOpen}
-        onOpenChange={setQuickCreateOpen}
-      />
+                {/* Notifications */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative"
+                  onClick={() => setNotificationsOpen(true)}
+                >
+                  <Bell className="w-5 h-5" />
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+                    2
+                  </span>
+                </Button>
+              </div>
+            </header>
 
-      {/* Notifications Panel */}
-      <NotificationsPanel
-        open={notificationsOpen}
-        onOpenChange={setNotificationsOpen}
-      />
+            {/* Page Content */}
+            <div className="flex-1 overflow-auto p-4 lg:p-6">{children}</div>
+          </main>
+        </div>
+
+        {/* Quick Create Dialog */}
+        <QuickCreateDialog
+          open={quickCreateOpen}
+          onOpenChange={setQuickCreateOpen}
+        />
+
+        {/* Notifications Panel */}
+        <NotificationsPanel
+          open={notificationsOpen}
+          onOpenChange={setNotificationsOpen}
+        />
+      </InactivityGuard>
     </SidebarContext.Provider>
   );
 }
