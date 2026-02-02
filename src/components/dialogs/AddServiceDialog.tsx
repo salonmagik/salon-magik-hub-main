@@ -48,6 +48,19 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     description: "",
   });
 
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      category: "",
+      price: "",
+      currency: "GHS",
+      duration: "60",
+      paymentOption: "full",
+      buffer: "15",
+      description: "",
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -58,21 +71,12 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         price: parseFloat(formData.price),
         durationMinutes: parseInt(formData.duration),
         description: formData.description || undefined,
-        categoryId: formData.category || undefined,
+        categoryId: formData.category || undefined, // Only pass if a real category is selected
         depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
       });
 
       if (result) {
-        setFormData({
-          name: "",
-          category: "",
-          price: "",
-          currency: "GHS",
-          duration: "60",
-          paymentOption: "full",
-          buffer: "15",
-          description: "",
-        });
+        resetForm();
         onOpenChange(false);
         onSuccess?.();
       }
@@ -83,7 +87,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Scissors className="w-5 h-5 text-primary" />
@@ -109,22 +113,21 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               />
             </div>
             <div className="space-y-2">
-              <Label>
-                Category <span className="text-destructive">*</span>
-              </Label>
+              <Label>Category</Label>
               <Select
                 value={formData.category}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, category: v }))}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, category: v === "none" ? "" : v }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
+                  <SelectValue placeholder="Select a category (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hair">Hair</SelectItem>
-                  <SelectItem value="color">Color</SelectItem>
-                  <SelectItem value="styling">Styling</SelectItem>
-                  <SelectItem value="nails">Nails</SelectItem>
-                  <SelectItem value="skin">Skin</SelectItem>
+                  <SelectItem value="none">No category</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
