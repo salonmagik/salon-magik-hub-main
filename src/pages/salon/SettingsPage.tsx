@@ -757,9 +757,24 @@ export default function SettingsPage() {
                   Allow customers to choose to pay when they arrive
                 </p>
               </div>
-              <Badge variant="outline" className="text-success">
-                {currentTenant?.pay_at_salon_enabled ? "Enabled" : "Disabled"}
-              </Badge>
+              <Switch
+                checked={currentTenant?.pay_at_salon_enabled || false}
+                onCheckedChange={async (checked) => {
+                  if (!currentTenant?.id) return;
+                  try {
+                    const { error } = await supabase
+                      .from("tenants")
+                      .update({ pay_at_salon_enabled: checked })
+                      .eq("id", currentTenant.id);
+                    if (error) throw error;
+                    await refreshTenants();
+                    toast({ title: "Saved", description: `Pay at Salon ${checked ? "enabled" : "disabled"}` });
+                  } catch (err) {
+                    console.error("Error updating pay at salon:", err);
+                    toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                  }
+                }}
+              />
             </div>
 
             <div className="flex items-center justify-between py-2">
