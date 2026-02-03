@@ -80,19 +80,21 @@ export default function CustomersPage() {
     <SalonSidebar>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between sm:justify-normal">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Customers</h1>
             <p className="text-muted-foreground">Manage customer relationships and celebrate key moments.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2">
             <Button variant="outline">
               <Upload className="w-4 h-4 mr-2" />
-              Import
+              <span className="hidden sm:inline">Import</span>
+              <span className="sm:hidden">Import</span>
             </Button>
             <Button onClick={() => setCustomerDialogOpen(true)}>
               <UserPlus className="w-4 h-4 mr-2" />
-              Add Customer
+              <span className="hidden sm:inline">Add Customer</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </div>
         </div>

@@ -140,6 +140,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
       isWalkIn: true,
       isUnscheduled: startImmediate, // Only unscheduled if starting immediately
       scheduledStart: scheduledStart?.toISOString(),
+      attachments: noteAttachments.length > 0 ? noteAttachments : undefined,
     });
 
     if (result) {
