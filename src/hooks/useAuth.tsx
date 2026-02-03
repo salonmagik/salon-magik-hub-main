@@ -198,13 +198,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!state.user) return;
     const { tenants, roles } = await fetchTenantsAndRoles(state.user.id);
     const currentTenant = tenants.find((t) => t.id === state.currentTenant?.id) || tenants[0] || null;
-    setState((prev) => ({
-      ...prev,
-      tenants,
-      roles,
-      currentTenant,
-      hasCompletedOnboarding: tenants.length > 0,
-    }));
+    // Use setTimeout to defer state update, preventing UI blocking
+    setTimeout(() => {
+      setState((prev) => ({
+        ...prev,
+        tenants,
+        roles,
+        currentTenant,
+        hasCompletedOnboarding: tenants.length > 0,
+      }));
+    }, 0);
   };
 
   return (
