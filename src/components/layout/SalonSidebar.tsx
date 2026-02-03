@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
+import { SubscriptionBanner } from "@/components/layout/SubscriptionBanner";
 import {
   Tooltip,
   TooltipContent,
@@ -201,7 +202,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       </div>
 
       {/* Plan Badge */}
-      <div className="px-4 mb-4">
+      <div className="px-4 mb-2">
         <div
           className={cn(
             "bg-white/10 rounded-lg py-1.5 px-3 text-xs font-medium flex items-center gap-2 text-white",
@@ -212,6 +213,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {(isExpanded || isMobileOpen) && <span>Free</span>}
         </div>
       </div>
+
+      {/* Subscription Banner (only when expanded) */}
+      {(isExpanded || isMobileOpen) && <SubscriptionBanner />}
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-1">

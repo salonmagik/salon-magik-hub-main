@@ -24,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DatePicker, dateToString, stringToDate } from "@/components/ui/date-picker";
 import {
   Calendar,
@@ -38,6 +39,7 @@ import {
   AlertCircle,
   RotateCcw,
   UserPlus,
+  User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,6 +47,8 @@ import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointm
 import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
+import { useTodayAppointmentCount } from "@/hooks/useTodayAppointmentCount";
+import { useAuth } from "@/hooks/useAuth";
 import type { Enums } from "@/integrations/supabase/types";
 
 type AppointmentStatus = Enums<"appointment_status">;
@@ -59,18 +63,25 @@ const statusBadgeStyles: Record<string, { bg: string; text: string }> = {
 };
 
 export default function AppointmentsPage() {
+  const { roles, currentTenant } = useAuth();
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
   
+  const [activeTab, setActiveTab] = useState<"scheduled" | "unscheduled">("scheduled");
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split("T")[0]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  // Fetch today's count independently (ONLY TODAY, not affected by filters)
+  const { count: todayCount, isLoading: todayLoading } = useTodayAppointmentCount();
+
+  // Fetch appointments based on active tab
   const { appointments, isLoading, refetch } = useAppointments({
     date: dateFilter,
     status: statusFilter as AppointmentStatus | "all",
+    isUnscheduled: activeTab === "unscheduled",
   });
 
   const {
@@ -83,31 +94,16 @@ export default function AppointmentsPage() {
     rescheduleAppointment,
   } = useAppointmentActions();
 
-  // Calculate status counts
-  const statusCounts = useMemo(() => {
-    const counts = {
-      total: appointments.length,
-      scheduled: 0,
-      started: 0,
-      completed: 0,
-      cancelled: 0,
-    };
-    appointments.forEach((apt) => {
-      if (apt.status === "scheduled") counts.scheduled++;
-      else if (apt.status === "started" || apt.status === "paused") counts.started++;
-      else if (apt.status === "completed") counts.completed++;
-      else if (apt.status === "cancelled") counts.cancelled++;
-    });
-    return counts;
-  }, [appointments]);
+  // Get user's role for the current tenant
+  const userRole = useMemo(() => {
+    if (!currentTenant?.id || !roles.length) return null;
+    const role = roles.find((r) => r.tenant_id === currentTenant.id);
+    return role?.role || null;
+  }, [roles, currentTenant?.id]);
 
-  const statusCards = [
-    { label: "Total today", count: statusCounts.total, icon: Calendar, color: "text-primary", bgColor: "bg-primary/10" },
-    { label: "Scheduled", count: statusCounts.scheduled, icon: Clock, color: "text-muted-foreground", bgColor: "bg-muted" },
-    { label: "In Progress", count: statusCounts.started, icon: Play, color: "text-primary", bgColor: "bg-primary/10" },
-    { label: "Completed", count: statusCounts.completed, icon: Check, color: "text-success", bgColor: "bg-success/10" },
-    { label: "Cancelled", count: statusCounts.cancelled, icon: AlertCircle, color: "text-destructive", bgColor: "bg-destructive/10" },
-  ];
+  // Check if user can perform certain actions (Staff has limited permissions)
+  const canCancelReschedule = userRole && userRole !== "staff";
+  const canViewCustomerProfile = userRole && userRole !== "staff";
 
   const handleAction = async (action: string, appointment: AppointmentWithDetails) => {
     setSelectedAppointment(appointment);
@@ -167,16 +163,22 @@ export default function AppointmentsPage() {
   };
 
   const getAvailableActions = (status: AppointmentStatus) => {
+    const actions: string[] = [];
     switch (status) {
       case "scheduled":
-        return ["start", "reschedule", "cancel"];
+        actions.push("start");
+        if (canCancelReschedule) actions.push("reschedule", "cancel");
+        break;
       case "started":
-        return ["pause", "complete", "cancel"];
+        actions.push("pause", "complete");
+        if (canCancelReschedule) actions.push("cancel");
+        break;
       case "paused":
-        return ["resume", "complete", "cancel"];
-      default:
-        return [];
+        actions.push("resume", "complete");
+        if (canCancelReschedule) actions.push("cancel");
+        break;
     }
+    return actions;
   };
 
   return (
@@ -204,30 +206,37 @@ export default function AppointmentsPage() {
           </div>
         </div>
 
-        {/* Status Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          {statusCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <Card key={card.label} className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{card.label}</p>
-                    {isLoading ? (
-                      <Skeleton className="h-8 w-8 mt-1" />
-                    ) : (
-                      <p className="text-2xl font-semibold mt-1">{card.count}</p>
-                    )}
-                  </div>
-                  <div className={`p-2 rounded-lg ${card.bgColor}`}>
-                    <Icon className={`w-5 h-5 ${card.color}`} />
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        {/* Tabs: Scheduled vs Unscheduled */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "scheduled" | "unscheduled")}>
+          <TabsList className="grid w-full max-w-xs grid-cols-2">
+            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+            <TabsTrigger value="unscheduled">Unscheduled</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
+        {/* Today's Count Card - ONLY TODAY, independent of filters */}
+        <Card className="bg-primary/5 border-primary/20">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Calendar className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Today's Appointments</p>
+                {todayLoading ? (
+                  <Skeleton className="h-7 w-12" />
+                ) : (
+                  <p className="text-2xl font-semibold">{todayCount}</p>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {appointments.length} rows displayed
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Filters */}
         <div className="flex flex-wrap items-center gap-4">
           <DatePicker
             value={stringToDate(dateFilter)}
@@ -284,9 +293,15 @@ export default function AppointmentsPage() {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-12">
                     <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No appointments found</p>
+                    <p className="text-muted-foreground">
+                      {activeTab === "unscheduled" 
+                        ? "No unscheduled bookings awaiting confirmation"
+                        : "No appointments found"}
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Create a new appointment to get started
+                      {activeTab === "unscheduled"
+                        ? "Unscheduled bookings will appear here when customers book online"
+                        : "Create a new appointment to get started"}
                     </p>
                   </TableCell>
                 </TableRow>
@@ -298,7 +313,9 @@ export default function AppointmentsPage() {
                       <TableCell>
                         <div>
                           <p className="font-medium">
-                            {formatTime(apt.scheduled_start)} — {formatTime(apt.scheduled_end)}
+                            {apt.scheduled_start 
+                              ? `${formatTime(apt.scheduled_start)} — ${formatTime(apt.scheduled_end)}`
+                              : "Unscheduled"}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {apt.scheduled_start ? new Date(apt.scheduled_start).toLocaleDateString() : "—"}
@@ -333,7 +350,7 @@ export default function AppointmentsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {actions.length > 0 && (
+                        {(actions.length > 0 || canViewCustomerProfile) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isSubmitting}>
@@ -365,7 +382,18 @@ export default function AppointmentsPage() {
                                   Complete
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator />
+                              {canViewCustomerProfile && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem>
+                                    <User className="w-4 h-4 mr-2" />
+                                    View Customer Profile
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {(actions.includes("reschedule") || actions.includes("cancel")) && (
+                                <DropdownMenuSeparator />
+                              )}
                               {actions.includes("reschedule") && (
                                 <DropdownMenuItem onClick={() => handleAction("reschedule", apt)}>
                                   <RotateCcw className="w-4 h-4 mr-2" />

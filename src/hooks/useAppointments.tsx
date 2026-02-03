@@ -19,6 +19,7 @@ interface UseAppointmentsOptions {
   date?: string;
   status?: AppointmentStatus | "all";
   locationId?: string;
+  isUnscheduled?: boolean;
 }
 
 export function useAppointments(options: UseAppointmentsOptions = {}) {
@@ -67,6 +68,11 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
         query = query.eq("location_id", options.locationId);
       }
 
+      // Apply unscheduled filter
+      if (options.isUnscheduled !== undefined) {
+        query = query.eq("is_unscheduled", options.isUnscheduled);
+      }
+
       const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
@@ -78,7 +84,7 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, options.date, options.status, options.locationId]);
+  }, [currentTenant?.id, options.date, options.status, options.locationId, options.isUnscheduled]);
 
   useEffect(() => {
     fetchAppointments();
