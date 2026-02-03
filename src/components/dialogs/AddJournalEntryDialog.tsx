@@ -430,12 +430,12 @@ export function AddJournalEntryDialog({
 
             <div className="space-y-2">
               <Label>Link to Customer (optional)</Label>
-              <Select value={customerId} onValueChange={setCustomerId}>
+              <Select value={customerId || "none"} onValueChange={(v) => setCustomerId(v === "none" ? "" : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select customer..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.full_name}
