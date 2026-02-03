@@ -100,6 +100,60 @@ export type Database = {
           },
         ]
       }
+      appointment_products: {
+        Row: {
+          appointment_id: string
+          created_at: string
+          fulfilled_at: string | null
+          fulfillment_status: string
+          id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          total_price: number
+          unit_price: number
+        }
+        Insert: {
+          appointment_id: string
+          created_at?: string
+          fulfilled_at?: string | null
+          fulfillment_status?: string
+          id?: string
+          product_id?: string | null
+          product_name: string
+          quantity?: number
+          total_price: number
+          unit_price: number
+        }
+        Update: {
+          appointment_id?: string
+          created_at?: string
+          fulfilled_at?: string | null
+          fulfillment_status?: string
+          id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          total_price?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_products_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointment_services: {
         Row: {
           appointment_id: string

@@ -1,7 +1,7 @@
 
 # Complete Implementation Plan: Salon Platform Enhancement
 
-**Last Updated:** Batch 1 - Core Appointments (In Progress)
+**Last Updated:** Batch 4 - Settings + UX (Completed)
 
 ## Recent Completions
 - ✅ Database migration: `is_gifted` column added to appointments
@@ -9,6 +9,15 @@
 - ✅ `ScheduleAppointmentDialog.tsx` - Multi-service selection + auto-duration
 - ✅ `useAppointments.tsx` - Added `isGifted` and `filterByBookingDate` filters  
 - ✅ `AppointmentsPage.tsx` - Tab-specific stats cards, multi-service display, row click, gifted filter
+- ✅ Database migration: `appointment_products` table created with RLS
+- ✅ `useAppointmentProducts.tsx` hook - CRUD for appointment products
+- ✅ `useProductFulfillment.tsx` hook - Fulfillment queries and stats
+- ✅ `ProductFulfillmentTab.tsx` - Sub-tab for product order tracking
+- ✅ `ServicesPage.tsx` - Products tab now has Inventory/Fulfillment sub-tabs
+- ✅ `AppointmentDetailsDialog.tsx` - Enhanced with products section, gifted toggle, payment summary
+- ✅ `SettingsPage.tsx` - Settings persistence fix (refreshTenants called after save)
+- ✅ DOB Calendar already implemented with year/month dropdowns
+- ✅ Customer Notes tab already implemented in CustomerDetailDialog
 
 ---
 
@@ -585,19 +594,19 @@ CHECK (channel IN ('email', 'sms', 'whatsapp'));
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1 | Appointments Tab View | ⏳ Pending |
-| 1 | Multi-service in ScheduleDialog | ⏳ Pending |
-| 1.5 | Appointment Details Modal | ⏳ Pending |
+| 1 | Appointments Tab View | ✅ Done |
+| 1 | Multi-service in ScheduleDialog | ✅ Done |
+| 1.5 | Appointment Details Modal | ✅ Done |
 | 2 | Catalog Multi-Select | ⏳ Pending |
-| 2.5 | Product Fulfillment Tab | ⏳ Pending |
+| 2.5 | Product Fulfillment Tab | ✅ Done |
 | 3 | Confirmation Modals | ⏳ Pending |
 | 4 | Maker-Checker Refunds | ✅ Done |
-| 5 | Settings Completion | 🔄 In Progress |
+| 5 | Settings Completion | ✅ Done |
 | 6 | Trial Banners | ✅ Done |
 | 7 | Dashboard Restructure | 🔄 In Progress |
 | 8 | Walk-In Buffer | ✅ Done |
-| 9 | DOB Calendar | ⏳ Pending |
-| 10 | Customer Notes | ⏳ Pending |
+| 9 | DOB Calendar | ✅ Done |
+| 10 | Customer Notes | ✅ Done |
 | 11 | Appointment Actions | 🔄 In Progress |
 | 12 | Notifications Navigation | ⏳ Pending |
 | 13 | Journal Fix | ✅ Done |

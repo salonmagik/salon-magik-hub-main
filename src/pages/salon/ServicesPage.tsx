@@ -14,11 +14,13 @@ import {
   Plus,
   Search,
   Clock,
+  Truck,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
 import { AddProductDialog } from "@/components/dialogs/AddProductDialog";
 import { AddVoucherDialog } from "@/components/dialogs/AddVoucherDialog";
+import { ProductFulfillmentTab } from "@/components/catalog/ProductFulfillmentTab";
 import { useServices } from "@/hooks/useServices";
 import { usePackages } from "@/hooks/usePackages";
 import { useProducts } from "@/hooks/useProducts";
@@ -27,6 +29,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 
 type TabValue = "all" | "services" | "packages" | "products" | "vouchers";
+type ProductSubTab = "inventory" | "fulfillment";
 
 export default function ServicesPage() {
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
@@ -35,6 +38,7 @@ export default function ServicesPage() {
   const [voucherDialogOpen, setVoucherDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
+  const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
 
   const { currentTenant } = useAuth();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
@@ -277,36 +281,55 @@ export default function ServicesPage() {
                   )}
                 </TabsContent>
 
-                {/* Products Tab */}
+                {/* Products Tab - with Sub-tabs */}
                 <TabsContent value="products" className="mt-0">
-                  {products.length === 0 ? (
-                    <EmptyState message="No products yet. Add items to sell." />
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {products
-                        .filter(
-                          (p) =>
-                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
-                        )
-                        .map((p) => (
-                          <ItemCard
-                            key={p.id}
-                            item={{
-                              id: p.id,
-                              type: "product",
-                              name: p.name,
-                              description: p.description || "",
-                              price: Number(p.price),
-                              stock: p.stock_quantity,
-                              images: p.image_urls || [],
-                            }}
-                            currency={currency}
-                            formatCurrency={formatCurrency}
-                          />
-                        ))}
-                    </div>
-                  )}
+                  <Tabs value={productSubTab} onValueChange={(v) => setProductSubTab(v as ProductSubTab)}>
+                    <TabsList className="mb-4">
+                      <TabsTrigger value="inventory" className="flex items-center gap-2">
+                        <ShoppingBag className="w-4 h-4" />
+                        Inventory
+                      </TabsTrigger>
+                      <TabsTrigger value="fulfillment" className="flex items-center gap-2">
+                        <Truck className="w-4 h-4" />
+                        Fulfillment
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="inventory" className="mt-0">
+                      {products.length === 0 ? (
+                        <EmptyState message="No products yet. Add items to sell." />
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {products
+                            .filter(
+                              (p) =>
+                                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                            )
+                            .map((p) => (
+                              <ItemCard
+                                key={p.id}
+                                item={{
+                                  id: p.id,
+                                  type: "product",
+                                  name: p.name,
+                                  description: p.description || "",
+                                  price: Number(p.price),
+                                  stock: p.stock_quantity,
+                                  images: p.image_urls || [],
+                                }}
+                                currency={currency}
+                                formatCurrency={formatCurrency}
+                              />
+                            ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="fulfillment" className="mt-0">
+                      <ProductFulfillmentTab />
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
 
                 {/* Vouchers Tab */}
