@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,81 +13,195 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
-  History,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
   Search,
   Filter,
-  ChevronDown,
-  ChevronRight,
-  User,
-  Calendar,
-  CreditCard,
-  Package,
-  Users,
-  Settings,
   Plus,
-  Edit,
-  Trash2,
-  Eye,
+  MoreHorizontal,
+  Download,
+  Check,
+  X,
+  Link2,
+  Link2Off,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
-import { useAuditLogs } from "@/hooks/useAuditLogs";
+import { useJournal, JournalDirection, JournalCategory, JournalStatus, PaymentMethod } from "@/hooks/useJournal";
+import { useAuth } from "@/hooks/useAuth";
+import { AddJournalEntryDialog } from "@/components/dialogs/AddJournalEntryDialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
-const entityIcons: Record<string, any> = {
-  appointment: Calendar,
-  customer: Users,
-  service: Package,
-  transaction: CreditCard,
-  staff: User,
-  settings: Settings,
+const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  pos: "POS",
+  transfer: "Transfer",
+  mobile_money: "MoMo",
+  card: "Card",
+  purse: "Credit",
 };
 
-const actionStyles: Record<string, { bg: string; text: string; icon: any }> = {
-  create: { bg: "bg-success/10", text: "text-success", icon: Plus },
-  update: { bg: "bg-primary/10", text: "text-primary", icon: Edit },
-  delete: { bg: "bg-destructive/10", text: "text-destructive", icon: Trash2 },
-  view: { bg: "bg-muted", text: "text-muted-foreground", icon: Eye },
+const CATEGORY_LABELS: Record<JournalCategory, string> = {
+  service_payment: "Service",
+  product_sale: "Product",
+  expense: "Expense",
+  other: "Other",
+};
+
+const STATUS_STYLES: Record<JournalStatus, { bg: string; text: string }> = {
+  active: { bg: "bg-success/10", text: "text-success" },
+  pending_approval: { bg: "bg-warning/10", text: "text-warning" },
+  rejected: { bg: "bg-destructive/10", text: "text-destructive" },
+  reversed: { bg: "bg-muted", text: "text-muted-foreground" },
 };
 
 export default function JournalPage() {
+  const { currentTenant } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [entityFilter, setEntityFilter] = useState("all");
-  const [actionFilter, setActionFilter] = useState("all");
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [directionFilter, setDirectionFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
 
-  const { logs, entityTypes, actionTypes, isLoading, hasMore, loadMore } = useAuditLogs({
-    entityType: entityFilter !== "all" ? entityFilter : undefined,
-    action: actionFilter !== "all" ? actionFilter : undefined,
+  const { 
+    entries, 
+    stats, 
+    isLoading, 
+    hasMore, 
+    loadMore,
+    approveEntry,
+    rejectEntry,
+    reverseEntry,
+    deleteEntry,
+  } = useJournal({
+    direction: directionFilter !== "all" ? directionFilter as JournalDirection : undefined,
+    category: categoryFilter !== "all" ? categoryFilter as JournalCategory : undefined,
+    status: statusFilter !== "all" ? statusFilter as JournalStatus : undefined,
+    paymentMethod: paymentMethodFilter !== "all" ? paymentMethodFilter as PaymentMethod : undefined,
+    search: searchQuery || undefined,
   });
 
-  const filteredLogs = logs.filter((log) => {
-    if (!searchQuery) return true;
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      log.entity_type.toLowerCase().includes(searchLower) ||
-      log.action.toLowerCase().includes(searchLower) ||
-      log.entity_id?.toLowerCase().includes(searchLower)
-    );
-  });
+  const currency = currentTenant?.currency || "USD";
 
-  const toggleExpand = (id: string) => {
-    setExpandedLogId(expandedLogId === id ? null : id);
+  const handleExport = () => {
+    const csvContent = [
+      ["Date", "Direction", "Amount", "Category", "Payment Method", "Description", "Customer", "Status"].join(","),
+      ...entries.map((entry) => [
+        format(new Date(entry.occurred_at), "yyyy-MM-dd HH:mm"),
+        entry.direction,
+        entry.amount,
+        entry.category,
+        entry.payment_method,
+        `"${entry.description || ""}"`,
+        entry.customer?.full_name || "",
+        entry.status,
+      ].join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `journal-export-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
   };
 
   return (
     <SalonSidebar>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-semibold">Journal</h1>
-          <p className="text-muted-foreground">
-            View the complete audit trail of all actions in your salon.
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Journal</h1>
+            <p className="text-muted-foreground">
+              Track cash, POS, and transfer transactions
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+            <Button onClick={() => setAddDialogOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Entry
+            </Button>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-success">
+                <TrendingUp className="w-4 h-4" />
+                <span className="text-sm font-medium">Inflow</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">
+                {currency} {stats.totalInflow.toLocaleString()}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-destructive">
+                <TrendingDown className="w-4 h-4" />
+                <span className="text-sm font-medium">Outflow</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">
+                {currency} {stats.totalOutflow.toLocaleString()}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-4 h-4" />
+                <span className="text-sm font-medium">Net</span>
+              </div>
+              <p className={cn("text-2xl font-bold mt-1", stats.netAmount >= 0 ? "text-success" : "text-destructive")}>
+                {currency} {stats.netAmount.toLocaleString()}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Link2Off className="w-4 h-4" />
+                <span className="text-sm font-medium">Unlinked</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">{stats.unlinkedCount}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-warning">
+                <Clock className="w-4 h-4" />
+                <span className="text-sm font-medium">Pending</span>
+              </div>
+              <p className="text-2xl font-bold mt-1">{stats.pendingApprovalCount}</p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Filters */}
@@ -97,174 +211,195 @@ export default function JournalPage() {
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search logs..."
+                  placeholder="Search entries..."
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select value={entityFilter} onValueChange={setEntityFilter}>
-                <SelectTrigger className="w-[150px]">
+              <Select value={directionFilter} onValueChange={setDirectionFilter}>
+                <SelectTrigger className="w-[130px]">
                   <Filter className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Entity" />
+                  <SelectValue placeholder="Direction" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Entities</SelectItem>
-                  {entityTypes.map((type) => (
-                    <SelectItem key={type} value={type} className="capitalize">
-                      {type.replace(/_/g, " ")}
-                    </SelectItem>
+                  <SelectItem value="all">All Directions</SelectItem>
+                  <SelectItem value="inflow">Inflow</SelectItem>
+                  <SelectItem value="outflow">Outflow</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={actionFilter} onValueChange={setActionFilter}>
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Action" />
+              <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Method" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Actions</SelectItem>
-                  {actionTypes.map((action) => (
-                    <SelectItem key={action} value={action} className="capitalize">
-                      {action}
-                    </SelectItem>
+                  <SelectItem value="all">All Methods</SelectItem>
+                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="reversed">Reversed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </CardContent>
         </Card>
 
-        {/* Audit Logs */}
+        {/* Entries Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <History className="w-5 h-5" />
-              Activity Log
-            </CardTitle>
-            <CardDescription>
-              {filteredLogs.length} entries found
-            </CardDescription>
+            <CardTitle className="text-lg">Transactions</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-4">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-center gap-4 p-3 rounded-lg bg-surface">
-                    <Skeleton className="w-10 h-10 rounded-full" />
+                  <div key={i} className="flex items-center gap-4">
+                    <Skeleton className="w-8 h-8 rounded-full" />
                     <div className="flex-1">
                       <Skeleton className="h-4 w-48 mb-2" />
                       <Skeleton className="h-3 w-32" />
                     </div>
-                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-6 w-20" />
                   </div>
                 ))}
               </div>
-            ) : filteredLogs.length === 0 ? (
+            ) : entries.length === 0 ? (
               <div className="text-center py-12">
-                <History className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No activity logs found</p>
+                <Wallet className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground">No journal entries found</p>
+                <Button variant="link" onClick={() => setAddDialogOpen(true)}>
+                  Add your first entry
+                </Button>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredLogs.map((log) => {
-                  const EntityIcon = entityIcons[log.entity_type] || Settings;
-                  const actionStyle = actionStyles[log.action] || actionStyles.view;
-                  const ActionIcon = actionStyle.icon;
-                  const isExpanded = expandedLogId === log.id;
-                  const hasDetails = log.before_json || log.after_json || log.metadata;
-
-                  return (
-                    <Collapsible
-                      key={log.id}
-                      open={isExpanded}
-                      onOpenChange={() => hasDetails && toggleExpand(log.id)}
-                    >
-                      <div
-                        className={cn(
-                          "p-3 rounded-lg bg-surface transition-colors",
-                          hasDetails && "hover:bg-muted/50 cursor-pointer"
-                        )}
-                      >
-                        <CollapsibleTrigger asChild disabled={!hasDetails}>
-                          <div className="flex items-center gap-4">
-                            {/* Entity Icon */}
-                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                              <EntityIcon className="w-5 h-5 text-muted-foreground" />
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Method</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {entries.map((entry) => {
+                      const statusStyle = STATUS_STYLES[entry.status];
+                      return (
+                        <TableRow key={entry.id}>
+                          <TableCell className="whitespace-nowrap">
+                            {format(new Date(entry.occurred_at), "MMM d, h:mm a")}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {entry.direction === "inflow" ? (
+                                <ArrowDownLeft className="w-4 h-4 text-success flex-shrink-0" />
+                              ) : (
+                                <ArrowUpRight className="w-4 h-4 text-destructive flex-shrink-0" />
+                              )}
+                              <span className="truncate max-w-[200px]">
+                                {entry.description || entry.parsed_summary || "No description"}
+                              </span>
                             </div>
-
-                            {/* Details */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Badge className={cn("text-xs", actionStyle.bg, actionStyle.text)}>
-                                  <ActionIcon className="w-3 h-3 mr-1" />
-                                  {log.action}
-                                </Badge>
-                                <span className="font-medium capitalize">
-                                  {log.entity_type.replace(/_/g, " ")}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {CATEGORY_LABELS[entry.category]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{PAYMENT_METHOD_LABELS[entry.payment_method]}</TableCell>
+                          <TableCell>
+                            {entry.customer ? (
+                              <div className="flex items-center gap-1">
+                                <Link2 className="w-3 h-3 text-muted-foreground" />
+                                <span className="truncate max-w-[100px]">
+                                  {entry.customer.full_name}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                <span>{format(new Date(log.created_at), "MMM d, yyyy h:mm a")}</span>
-                                {log.entity_id && (
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            <span className={entry.direction === "inflow" ? "text-success" : "text-destructive"}>
+                              {entry.direction === "inflow" ? "+" : "-"}
+                              {currency} {Number(entry.amount).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={cn("text-xs", statusStyle.bg, statusStyle.text)}>
+                              {entry.status.replace("_", " ")}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {entry.status === "pending_approval" && (
                                   <>
-                                    <span>•</span>
-                                    <span className="truncate font-mono text-xs">
-                                      {log.entity_id.slice(0, 8)}...
-                                    </span>
+                                    <DropdownMenuItem onClick={() => approveEntry(entry.id)}>
+                                      <Check className="w-4 h-4 mr-2" />
+                                      Approve
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => rejectEntry(entry.id, "Rejected by manager")}>
+                                      <X className="w-4 h-4 mr-2" />
+                                      Reject
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
                                   </>
                                 )}
-                              </div>
-                            </div>
-
-                            {/* Expand Icon */}
-                            {hasDetails && (
-                              <div className="flex-shrink-0">
-                                {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                ) : (
-                                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                {entry.status === "active" && (
+                                  <DropdownMenuItem onClick={() => reverseEntry(entry.id)}>
+                                    <AlertCircle className="w-4 h-4 mr-2" />
+                                    Reverse
+                                  </DropdownMenuItem>
                                 )}
-                              </div>
-                            )}
-                          </div>
-                        </CollapsibleTrigger>
+                                <DropdownMenuItem 
+                                  onClick={() => deleteEntry(entry.id)}
+                                  className="text-destructive"
+                                >
+                                  <X className="w-4 h-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
 
-                        <CollapsibleContent>
-                          {hasDetails && (
-                            <div className="mt-4 pt-4 border-t space-y-4">
-                              {log.before_json && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-2">Before:</p>
-                                  <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto">
-                                    {JSON.stringify(log.before_json, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                              {log.after_json && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-2">After:</p>
-                                  <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto">
-                                    {JSON.stringify(log.after_json, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                              {log.metadata && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-2">Metadata:</p>
-                                  <pre className="text-xs bg-muted p-3 rounded-lg overflow-x-auto">
-                                    {JSON.stringify(log.metadata, null, 2)}
-                                  </pre>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </CollapsibleContent>
-                      </div>
-                    </Collapsible>
-                  );
-                })}
-
-                {/* Load More */}
                 {hasMore && (
                   <div className="text-center pt-4">
                     <Button variant="outline" onClick={loadMore}>
@@ -272,11 +407,16 @@ export default function JournalPage() {
                     </Button>
                   </div>
                 )}
-              </div>
+              </>
             )}
           </CardContent>
         </Card>
       </div>
+
+      <AddJournalEntryDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+      />
     </SalonSidebar>
   );
 }
