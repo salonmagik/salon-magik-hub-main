@@ -21,9 +21,10 @@ interface BusinessStepProps {
   onChange: (info: BusinessInfo) => void;
 }
 
+// Ghana first as primary launch market
 const COUNTRIES = [
-  { code: "NG", name: "Nigeria", currency: "NGN", timezone: "Africa/Lagos" },
   { code: "GH", name: "Ghana", currency: "GHS", timezone: "Africa/Accra" },
+  { code: "NG", name: "Nigeria", currency: "NGN", timezone: "Africa/Lagos" },
   { code: "US", name: "United States", currency: "USD", timezone: "America/New_York" },
   { code: "GB", name: "United Kingdom", currency: "GBP", timezone: "Europe/London" },
   { code: "KE", name: "Kenya", currency: "KES", timezone: "Africa/Nairobi" },

@@ -10,14 +10,14 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Loader2, Check } from "lucide-react";
 
 import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
-import { ProfileStep, type ProfileInfo } from "@/components/onboarding/ProfileStep";
 import { OwnerInviteStep, type OwnerInviteInfo } from "@/components/onboarding/OwnerInviteStep";
 import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanStep";
 import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
+import { getCurrencyForCountry, type Currency } from "@/lib/pricing";
 
-type OnboardingStep = "role" | "profile" | "owner-invite" | "plan" | "business" | "locations" | "review" | "complete";
+type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -28,15 +28,6 @@ export default function OnboardingPage() {
 
   // Step data
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
-  
-  const [profileInfo, setProfileInfo] = useState<ProfileInfo>({
-    firstName: "",
-    lastName: "",
-    phone: "",
-    email: "",
-    useSignInEmail: false,
-    useSignInPhone: false,
-  });
 
   const [ownerInvite, setOwnerInvite] = useState<OwnerInviteInfo>({
     name: "",
@@ -65,14 +56,25 @@ export default function OnboardingPage() {
     locations: [],
   });
 
+  // Get user info from auth metadata (collected during signup)
+  const firstName = user?.user_metadata?.first_name || "";
+  const lastName = user?.user_metadata?.last_name || "";
+  const email = user?.email || "";
+  const phone = user?.user_metadata?.phone || "";
+
   // Determine step flow based on role and plan
   const isOwner = selectedRole === "owner";
   const isChain = selectedPlan === "chain";
 
+  // Get currency based on selected country
+  const currency: Currency = businessInfo.country 
+    ? getCurrencyForCountry(businessInfo.country) 
+    : "USD";
+
   const getStepFlow = (): OnboardingStep[] => {
-    const flow: OnboardingStep[] = ["role", "profile"];
+    const flow: OnboardingStep[] = ["role"];
     if (!isOwner) flow.push("owner-invite");
-    flow.push("plan", "business");
+    flow.push("business", "plan");
     if (isChain) flow.push("locations");
     flow.push("review");
     return flow;
@@ -87,19 +89,15 @@ export default function OnboardingPage() {
     switch (step) {
       case "role":
         return selectedRole !== null;
-      case "profile":
-        return profileInfo.firstName.trim() !== "" && 
-               profileInfo.lastName.trim() !== "" && 
-               profileInfo.email.trim() !== "";
       case "owner-invite":
         return ownerInvite.name.trim() !== "" && ownerInvite.email.trim() !== "";
-      case "plan":
-        return selectedPlan !== null;
       case "business":
         return businessInfo.name.trim() !== "" && 
                businessInfo.country !== "" && 
                businessInfo.city.trim() !== "" &&
                businessInfo.openingDays.length > 0;
+      case "plan":
+        return selectedPlan !== null;
       case "locations":
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
@@ -176,12 +174,12 @@ export default function OnboardingPage() {
 
       if (roleError) throw roleError;
 
-      // 3. Update user profile
+      // 3. Update user profile with auth metadata
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
-          full_name: `${profileInfo.firstName} ${profileInfo.lastName}`,
-          phone: profileInfo.phone || null,
+          full_name: `${firstName} ${lastName}`.trim() || "User",
+          phone: phone || null,
         })
         .eq("user_id", user.id);
 
@@ -231,8 +229,26 @@ export default function OnboardingPage() {
 
       if (creditsError) throw creditsError;
 
-      // 6. TODO: Handle owner invitation for non-owners
-      // This would trigger an email/SMS to the owner
+      // 6. Send owner invitation for non-owners
+      if (!isOwner && ownerInvite.email) {
+        try {
+          await supabase.functions.invoke("send-staff-invitation", {
+            body: {
+              firstName: ownerInvite.name.split(" ")[0] || ownerInvite.name,
+              lastName: ownerInvite.name.split(" ").slice(1).join(" ") || "",
+              email: ownerInvite.email,
+              phone: ownerInvite.phone || null,
+              role: "owner",
+              tenantId: tenantId,
+              tenantName: businessInfo.name,
+              invitedByName: `${firstName} ${lastName}`.trim(),
+            },
+          });
+        } catch (inviteError) {
+          console.error("Owner invitation error:", inviteError);
+          // Don't block onboarding if invitation fails
+        }
+      }
 
       await refreshTenants();
 
@@ -275,6 +291,16 @@ export default function OnboardingPage() {
     );
   }
 
+  // Create profile info for ReviewStep (using auth data)
+  const profileInfo = {
+    firstName,
+    lastName,
+    phone,
+    email,
+    useSignInEmail: true,
+    useSignInPhone: !!phone,
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -300,15 +326,6 @@ export default function OnboardingPage() {
             />
           )}
 
-          {step === "profile" && (
-            <ProfileStep
-              profileInfo={profileInfo}
-              signInEmail={user?.email || null}
-              signInPhone={user?.phone || null}
-              onChange={setProfileInfo}
-            />
-          )}
-
           {step === "owner-invite" && (
             <OwnerInviteStep
               ownerInfo={ownerInvite}
@@ -316,17 +333,18 @@ export default function OnboardingPage() {
             />
           )}
 
-          {step === "plan" && (
-            <PlanStep
-              selectedPlan={selectedPlan}
-              onPlanSelect={setSelectedPlan}
-            />
-          )}
-
           {step === "business" && (
             <BusinessStep
               businessInfo={businessInfo}
               onChange={setBusinessInfo}
+            />
+          )}
+
+          {step === "plan" && (
+            <PlanStep
+              selectedPlan={selectedPlan}
+              onPlanSelect={setSelectedPlan}
+              currency={currency}
             />
           )}
 

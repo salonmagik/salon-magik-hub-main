@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -9,32 +9,15 @@ import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@/components/ui/checkbox";
-
-// Password strength validation
-const validatePasswordStrength = (password: string): string | null => {
-  if (password.length < 8) {
-    return "Password must be at least 8 characters";
-  }
-  if (!/[a-zA-Z]/.test(password)) {
-    return "Password must contain at least one letter";
-  }
-  if (!/[0-9]/.test(password)) {
-    return "Password must contain at least one number";
-  }
-  // Check for simple sequences
-  const simplePatterns = ["12345678", "abcdefgh", "qwertyui", "password", "11111111", "00000000"];
-  if (simplePatterns.some(pattern => password.toLowerCase().includes(pattern))) {
-    return "Password is too simple";
-  }
-  return null;
-};
+import { isValidPassword } from "@/lib/form-utils";
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     phone: "",
     password: "",
@@ -43,40 +26,60 @@ export default function SignupPage() {
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Compute form validity for button state
+  const isFormValid = useMemo(() => {
+    const passwordValidation = isValidPassword(formData.password);
+    return (
+      formData.firstName.trim() !== "" &&
+      formData.lastName.trim() !== "" &&
+      formData.email.trim() !== "" &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) &&
+      formData.phone.trim() !== "" &&
+      formData.password.length >= 8 &&
+      passwordValidation.valid &&
+      formData.password === formData.confirmPassword &&
+      acceptTerms
+    );
+  }, [formData, acceptTerms]);
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = "Full name is required";
+
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = "First name is required";
     }
-    
+
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = "Last name is required";
+    }
+
     if (!formData.email) {
       newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email";
     }
-    
+
     if (!formData.phone.trim()) {
       newErrors.phone = "Phone number is required";
     }
-    
+
     if (!formData.password) {
       newErrors.password = "Password is required";
     } else {
-      const strengthError = validatePasswordStrength(formData.password);
-      if (strengthError) {
-        newErrors.password = strengthError;
+      const passwordValidation = isValidPassword(formData.password);
+      if (!passwordValidation.valid) {
+        newErrors.password = passwordValidation.error || "Invalid password";
       }
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match";
     }
-    
+
     if (!acceptTerms) {
       newErrors.terms = "You must accept the terms and conditions";
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -91,11 +94,11 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
-    
+
     try {
       const { error } = await supabase.auth.signUp({
         email: formData.email,
@@ -103,12 +106,14 @@ export default function SignupPage() {
         options: {
           emailRedirectTo: `${window.location.origin}/salon`,
           data: {
-            full_name: formData.fullName,
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            full_name: `${formData.firstName} ${formData.lastName}`,
             phone: formData.phone,
           },
         },
       });
-      
+
       if (error) {
         toast({
           title: "Signup failed",
@@ -118,7 +123,8 @@ export default function SignupPage() {
       } else {
         toast({
           title: "Check your email",
-          description: "We've sent you a confirmation link. Please verify your email to continue.",
+          description:
+            "We've sent you a confirmation link. Please verify your email to continue.",
         });
         navigate("/login");
       }
@@ -142,7 +148,7 @@ export default function SignupPage() {
           redirectTo: `${window.location.origin}/onboarding`,
         },
       });
-      
+
       if (error) {
         toast({
           title: "Google sign-in failed",
@@ -162,7 +168,7 @@ export default function SignupPage() {
   };
 
   return (
-    <AuthLayout 
+    <AuthLayout
       title="Create your account"
       subtitle="Start your 14-day free trial. No credit card required."
     >
@@ -199,17 +205,31 @@ export default function SignupPage() {
 
       {/* Signup Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <AuthInput
-          label="Full name"
-          type="text"
-          name="fullName"
-          placeholder="Enter your full name"
-          icon={<User size={18} />}
-          value={formData.fullName}
-          onChange={handleChange}
-          error={errors.fullName}
-          disabled={isLoading}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <AuthInput
+            label="First name"
+            type="text"
+            name="firstName"
+            placeholder="John"
+            icon={<User size={18} />}
+            value={formData.firstName}
+            onChange={handleChange}
+            error={errors.firstName}
+            disabled={isLoading}
+          />
+
+          <AuthInput
+            label="Last name"
+            type="text"
+            name="lastName"
+            placeholder="Doe"
+            icon={<User size={18} />}
+            value={formData.lastName}
+            onChange={handleChange}
+            error={errors.lastName}
+            disabled={isLoading}
+          />
+        </div>
 
         <AuthInput
           label="Email address"
@@ -234,7 +254,7 @@ export default function SignupPage() {
           }}
           error={errors.phone}
           disabled={isLoading}
-          defaultCountry="NG"
+          defaultCountry="GH"
         />
 
         <AuthInput
@@ -288,7 +308,11 @@ export default function SignupPage() {
           )}
         </div>
 
-        <AuthButton type="submit" isLoading={isLoading}>
+        <AuthButton
+          type="submit"
+          isLoading={isLoading}
+          disabled={!isFormValid || isLoading}
+        >
           Create account
         </AuthButton>
       </form>
