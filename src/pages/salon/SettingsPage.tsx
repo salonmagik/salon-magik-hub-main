@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ import {
   Bell,
   Shield,
   Zap,
-  Link,
   Upload,
   Mail,
   Phone,
@@ -36,7 +35,8 @@ import {
   Copy,
   Check,
   CheckCircle,
-  ExternalLink,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -54,7 +54,6 @@ const settingsTabs = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "roles", label: "Roles & Permissions", icon: Shield },
   { id: "subscription", label: "Subscription", icon: Zap },
-  { id: "integrations", label: "Integrations", icon: Link },
 ];
 
 const weekDays = [
@@ -132,7 +131,12 @@ export default function SettingsPage() {
   });
 
   const [copiedUrl, setCopiedUrl] = useState(false);
-
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [bannerUrls, setBannerUrls] = useState<string[]>([]);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
   // Load data from tenant and location
   useEffect(() => {
     if (currentTenant) {
@@ -150,6 +154,8 @@ export default function SettingsPage() {
         defaultDepositPercentage: Number(currentTenant.default_deposit_percentage) || 0,
         bookingStatusMessage: currentTenant.booking_status_message || "",
       });
+      setLogoUrl(currentTenant.logo_url || null);
+      setBannerUrls(currentTenant.banner_urls || []);
     }
     if (profile) {
       setProfileData((prev) => ({
@@ -207,6 +213,129 @@ export default function SettingsPage() {
   };
 
   const { refreshTenants } = useAuth();
+
+  const handleLogoUpload = async (file: File) => {
+    if (!currentTenant?.id) return;
+    
+    // Validate file type and size
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Error", description: "Please upload a JPG, PNG, or WebP image", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Error", description: "File size must be under 2MB", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const filePath = `${currentTenant.id}/logo.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("salon-branding")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("salon-branding")
+        .getPublicUrl(filePath);
+
+      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      const { error: updateError } = await supabase
+        .from("tenants")
+        .update({ logo_url: publicUrl })
+        .eq("id", currentTenant.id);
+
+      if (updateError) throw updateError;
+
+      setLogoUrl(publicUrl);
+      await refreshTenants();
+      toast({ title: "Success", description: "Logo uploaded successfully" });
+    } catch (err) {
+      console.error("Error uploading logo:", err);
+      toast({ title: "Error", description: "Failed to upload logo", variant: "destructive" });
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleBannerUpload = async (file: File) => {
+    if (!currentTenant?.id) return;
+    if (bannerUrls.length >= 2) {
+      toast({ title: "Error", description: "Maximum 2 banners allowed", variant: "destructive" });
+      return;
+    }
+
+    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      toast({ title: "Error", description: "Please upload a JPG, PNG, or WebP image", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Error", description: "File size must be under 5MB", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingBanner(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const filePath = `${currentTenant.id}/banner-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("salon-branding")
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("salon-branding")
+        .getPublicUrl(filePath);
+
+      const newBannerUrls = [...bannerUrls, urlData.publicUrl];
+
+      const { error: updateError } = await supabase
+        .from("tenants")
+        .update({ banner_urls: newBannerUrls })
+        .eq("id", currentTenant.id);
+
+      if (updateError) throw updateError;
+
+      setBannerUrls(newBannerUrls);
+      await refreshTenants();
+      toast({ title: "Success", description: "Banner uploaded successfully" });
+    } catch (err) {
+      console.error("Error uploading banner:", err);
+      toast({ title: "Error", description: "Failed to upload banner", variant: "destructive" });
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  const handleRemoveBanner = async (index: number) => {
+    if (!currentTenant?.id) return;
+
+    try {
+      const newBannerUrls = bannerUrls.filter((_, i) => i !== index);
+
+      const { error } = await supabase
+        .from("tenants")
+        .update({ banner_urls: newBannerUrls })
+        .eq("id", currentTenant.id);
+
+      if (error) throw error;
+
+      setBannerUrls(newBannerUrls);
+      await refreshTenants();
+      toast({ title: "Success", description: "Banner removed" });
+    } catch (err) {
+      console.error("Error removing banner:", err);
+      toast({ title: "Error", description: "Failed to remove banner", variant: "destructive" });
+    }
+  };
 
   const handleProfileSave = async () => {
     if (!currentTenant?.id) return;
@@ -320,16 +449,38 @@ export default function SettingsPage() {
       <CardContent className="p-6 space-y-6">
         {/* Logo Upload */}
         <div className="flex items-center gap-6">
-          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center border-2 border-dashed border-border">
-            <Building2 className="w-8 h-8 text-muted-foreground" />
+          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center border-2 border-dashed border-border overflow-hidden">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Salon logo" className="w-full h-full object-cover" />
+            ) : (
+              <Building2 className="w-8 h-8 text-muted-foreground" />
+            )}
           </div>
           <div>
-            <Button variant="outline">
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Logo
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleLogoUpload(file);
+              }}
+            />
+            <Button 
+              variant="outline" 
+              onClick={() => logoInputRef.current?.click()}
+              disabled={isUploadingLogo}
+            >
+              {isUploadingLogo ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              {logoUrl ? "Change Logo" : "Upload Logo"}
             </Button>
             <p className="text-xs text-muted-foreground mt-1">
-              JPG, PNG up to 2MB
+              JPG, PNG or WebP up to 2MB
             </p>
           </div>
         </div>
@@ -738,6 +889,61 @@ export default function SettingsPage() {
           />
         </div>
 
+        {/* Booking Page Banners */}
+        <div className="space-y-3">
+          <div>
+            <Label>Booking Page Banners</Label>
+            <p className="text-xs text-muted-foreground mt-1">
+              Add up to 2 images to personalize your booking page
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {bannerUrls.map((url, index) => (
+              <div key={index} className="relative group">
+                <div className="w-32 h-20 rounded-lg overflow-hidden border bg-muted">
+                  <img src={url} alt={`Banner ${index + 1}`} className="w-full h-full object-cover" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveBanner(index)}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {bannerUrls.length < 2 && (
+              <div>
+                <input
+                  ref={bannerInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleBannerUpload(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => bannerInputRef.current?.click()}
+                  disabled={isUploadingBanner}
+                  className="w-32 h-20 rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  {isUploadingBanner ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <ImageIcon className="w-5 h-5" />
+                      <span className="text-xs">Add banner</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Save Button */}
         <div className="flex justify-end pt-4 border-t">
           <Button onClick={handleBookingSave} disabled={isSaving}>
@@ -1089,7 +1295,6 @@ export default function SettingsPage() {
             {activeTab === "notifications" && renderNotificationsTab()}
             {activeTab === "roles" && renderRolesTab()}
             {activeTab === "subscription" && renderSubscriptionTab()}
-            {activeTab === "integrations" && renderPlaceholderTab()}
           </div>
         </div>
       </div>

@@ -6,10 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Scissors, Clock, Loader2 } from "lucide-react";
+import { Scissors, Clock, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServices } from "@/hooks/useServices";
+import { useAuth } from "@/hooks/useAuth";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
+import { AddCategoryDialog } from "./AddCategoryDialog";
+import { getCurrencySymbol } from "@/lib/currency";
 
 interface AddServiceDialogProps {
   open: boolean;
@@ -36,13 +39,16 @@ const paymentOptions = [
 ];
 
 export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDialogProps) {
-  const { createService, categories } = useServices();
+  const { currentTenant } = useAuth();
+  const { createService, createCategory, categories } = useServices();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
+  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const [formData, setFormData] = useState({
     name: "",
     category: "",
     price: "",
-    currency: "GHS",
+    currency: currentTenant?.currency || "USD",
     duration: "60",
     paymentOption: "full",
     buffer: "15",
@@ -55,7 +61,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       name: "",
       category: "",
       price: "",
-      currency: "GHS",
+      currency: currentTenant?.currency || "USD",
       duration: "60",
       paymentOption: "full",
       buffer: "15",
@@ -90,6 +96,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader className="flex flex-row items-center gap-3">
@@ -125,13 +132,27 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                 <SelectTrigger>
                   <SelectValue placeholder="Select a category (optional)" />
                 </SelectTrigger>
-                <SelectContent>
+              <SelectContent>
                   <SelectItem value="none">No category</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
                     </SelectItem>
                   ))}
+                  <div className="border-t mt-1 pt-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setAddCategoryOpen(true);
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-primary hover:bg-accent rounded-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add new category
+                    </button>
+                  </div>
                 </SelectContent>
               </Select>
             </div>
@@ -153,7 +174,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                   onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                   required
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">GHS</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
               </div>
             </div>
             <div className="space-y-2">
@@ -269,5 +290,15 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         </form>
       </DialogContent>
     </Dialog>
+
+    <AddCategoryDialog
+      open={addCategoryOpen}
+      onOpenChange={setAddCategoryOpen}
+      onSubmit={async (data) => {
+        const result = await createCategory(data);
+        return !!result;
+      }}
+    />
+  </>
   );
 }

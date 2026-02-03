@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
+import { getCurrencySymbol } from "@/lib/currency";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -19,6 +20,7 @@ interface AddProductDialogProps {
 
 export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
   const { currentTenant } = useAuth();
+  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -106,7 +108,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
-                Price <span className="text-destructive">*</span>
+                Price ({currencySymbol}) <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
                 {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
