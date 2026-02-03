@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Eraser, Undo, Download, Trash2 } from "lucide-react";
+import { Eraser, Undo, Download } from "lucide-react";
 
 interface DrawingCanvasProps {
   onSave: (dataUrl: string) => void;
@@ -19,9 +19,12 @@ export function DrawingCanvas({
   const [isDrawing, setIsDrawing] = useState(false);
   const [history, setHistory] = useState<ImageData[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const isInitialized = useRef(false);
 
-  // Initialize canvas
+  // Initialize canvas only once
   useEffect(() => {
+    if (isInitialized.current) return;
+    
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -42,6 +45,7 @@ export function DrawingCanvas({
     const initialState = ctx.getImageData(0, 0, width, height);
     setHistory([initialState]);
     setHistoryIndex(0);
+    isInitialized.current = true;
   }, [width, height]);
 
   const saveToHistory = useCallback(() => {
@@ -52,7 +56,10 @@ export function DrawingCanvas({
     if (!ctx) return;
 
     const imageData = ctx.getImageData(0, 0, width, height);
-    setHistory((prev) => [...prev.slice(0, historyIndex + 1), imageData]);
+    setHistory((prev) => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      return [...newHistory, imageData];
+    });
     setHistoryIndex((prev) => prev + 1);
   }, [width, height, historyIndex]);
 
