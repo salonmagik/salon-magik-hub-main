@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 interface AddJournalEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
   prefillData?: {
     direction?: JournalDirection;
     category?: JournalCategory;
@@ -83,6 +84,7 @@ const CATEGORY_LABELS: Record<JournalCategory, string> = {
 export function AddJournalEntryDialog({
   open,
   onOpenChange,
+  onSuccess,
   prefillData,
 }: AddJournalEntryDialogProps) {
   const { currentTenant } = useAuth();
@@ -219,7 +221,7 @@ export function AddJournalEntryDialog({
 
     setIsSubmitting(true);
     try {
-      await createEntry({
+      const result = await createEntry({
         direction,
         payment_method: paymentMethod,
         amount: parseFloat(amount),
@@ -238,6 +240,9 @@ export function AddJournalEntryDialog({
           total_price: item.total_price || 0,
         })) : undefined,
       });
+      if (result) {
+        onSuccess?.();
+      }
       onOpenChange(false);
     } finally {
       setIsSubmitting(false);

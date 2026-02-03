@@ -93,6 +93,7 @@ export default function JournalPage() {
     rejectEntry,
     reverseEntry,
     deleteEntry,
+    refetch,
   } = useJournal({
     direction: directionFilter !== "all" ? directionFilter as JournalDirection : undefined,
     category: categoryFilter !== "all" ? categoryFilter as JournalCategory : undefined,
@@ -416,6 +417,7 @@ export default function JournalPage() {
       <AddJournalEntryDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
+        onSuccess={refetch}
       />
     </SalonSidebar>
   );
