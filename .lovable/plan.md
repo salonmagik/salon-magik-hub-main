@@ -1,466 +1,104 @@
 
-# Comprehensive Salon Platform Completion Plan
+## Goal
+Stop the “Maximum update depth exceeded” crash that happens **on page load** (especially on `/salon/appointments`) and eliminate the related **“Function components cannot be given refs”** warnings.
 
-## Overview
-This plan covers the completion of all remaining salon platform modules as defined in the PRD. The implementation will follow a logical dependency order, ensuring database schema changes are made first, followed by hooks, then UI components.
+## What the evidence points to
+1. You confirmed the crash happens **on page load** (before interacting with Walk-in / Draw).
+2. Your console warnings consistently mention:
+   - `AlertDialogContent` (from `src/components/ui/alert-dialog.tsx`)
+   - `InactivityGuard` (from `src/components/session/InactivityGuard.tsx`)
+3. The runtime error stack includes `setRef` and `Array.map` inside Radix’s ref-composition utilities, which is a classic signature of:
+   - A ref callback being re-created repeatedly, causing Radix to re-run a `setState` inside a ref handler, which triggers another render, which triggers the ref again, etc.
 
----
+Given the warnings and the fact this happens on page load, the most likely trigger is the **two AlertDialogs rendered on every page** inside `InactivityGuard` (which is mounted by `SalonSidebar` around all salon pages).
 
-## Phase 1: Database Schema Updates
+## Root causes to address
+### A) AlertDialog components mount even when “closed”
+`InactivityGuard` always renders both `<AlertDialog ...>` trees, even when `showWarning` and `showLogout` are false. Depending on Radix/React behavior, parts of the dialog subtree can still mount/measure/compose refs, which can trigger the ref loop.
 
-### 1.1 Add Image Support for Catalog Items
-Add `image_urls` column (text array, max 2 images) to services, packages, and products tables.
+### B) `InactivityGuard` re-renders extremely frequently
+Right now, the activity listeners can call `setLastActivity(Date.now())` on mousemove/click/etc (even if guarded by `showWarning/showLogout`), which can cause rapid re-renders. This doesn’t directly create “maximum update depth” by itself, but it can amplify any ref-related loop and makes debugging harder.
 
-```sql
--- Add image_urls to services
-ALTER TABLE services ADD COLUMN image_urls text[] DEFAULT '{}';
-
--- Add image_urls to packages
-ALTER TABLE packages ADD COLUMN image_urls text[] DEFAULT '{}';
-
--- Add image_urls to products
-ALTER TABLE products ADD COLUMN image_urls text[] DEFAULT '{}';
-```
-
-### 1.2 Add Vouchers Table (Gift Cards)
-```sql
-CREATE TABLE vouchers (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id),
-  code text NOT NULL UNIQUE,
-  amount numeric NOT NULL,
-  balance numeric NOT NULL DEFAULT 0,
-  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'redeemed', 'expired', 'cancelled')),
-  purchased_by_customer_id uuid REFERENCES customers(id),
-  redeemed_by_customer_id uuid REFERENCES customers(id),
-  expires_at timestamp with time zone,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
--- Add RLS
-ALTER TABLE vouchers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read tenant vouchers" ON vouchers FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-CREATE POLICY "Users can create vouchers" ON vouchers FOR INSERT WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-CREATE POLICY "Users can update vouchers" ON vouchers FOR UPDATE USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-```
-
-### 1.3 Add Staff Invitations Table
-```sql
-CREATE TABLE staff_invitations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id),
-  email text NOT NULL,
-  first_name text NOT NULL,
-  last_name text NOT NULL,
-  role app_role NOT NULL DEFAULT 'staff',
-  token text NOT NULL UNIQUE,
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired', 'cancelled')),
-  invited_by_id uuid,
-  accepted_at timestamp with time zone,
-  expires_at timestamp with time zone NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
-ALTER TABLE staff_invitations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read tenant invitations" ON staff_invitations FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-CREATE POLICY "Users can create invitations" ON staff_invitations FOR INSERT WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-CREATE POLICY "Users can update invitations" ON staff_invitations FOR UPDATE USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-```
-
-### 1.4 Add Notifications Table
-```sql
-CREATE TABLE notifications (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id),
-  user_id uuid,
-  type text NOT NULL CHECK (type IN ('appointment', 'payment', 'customer', 'system', 'staff')),
-  title text NOT NULL,
-  description text NOT NULL,
-  read boolean NOT NULL DEFAULT false,
-  urgent boolean NOT NULL DEFAULT false,
-  entity_type text,
-  entity_id uuid,
-  created_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
-ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read tenant notifications" ON notifications FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-CREATE POLICY "Users can update notifications" ON notifications FOR UPDATE USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-```
-
-### 1.5 Add Email Templates Table
-```sql
-CREATE TABLE email_templates (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id),
-  template_type text NOT NULL CHECK (template_type IN (
-    'appointment_confirmation', 'appointment_reminder', 'appointment_cancelled',
-    'booking_confirmation', 'payment_receipt', 'refund_confirmation',
-    'staff_invitation', 'welcome'
-  )),
-  subject text NOT NULL,
-  body_html text NOT NULL,
-  is_active boolean NOT NULL DEFAULT true,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  UNIQUE(tenant_id, template_type)
-);
-
-ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read tenant templates" ON email_templates FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-CREATE POLICY "Users can manage templates" ON email_templates FOR ALL USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-```
-
-### 1.6 Add Notification Settings Table
-```sql
-CREATE TABLE notification_settings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id uuid NOT NULL REFERENCES tenants(id) UNIQUE,
-  email_appointment_reminders boolean NOT NULL DEFAULT true,
-  sms_appointment_reminders boolean NOT NULL DEFAULT false,
-  email_new_bookings boolean NOT NULL DEFAULT true,
-  email_cancellations boolean NOT NULL DEFAULT true,
-  email_daily_digest boolean NOT NULL DEFAULT false,
-  reminder_hours_before integer NOT NULL DEFAULT 24,
-  created_at timestamp with time zone NOT NULL DEFAULT now(),
-  updated_at timestamp with time zone NOT NULL DEFAULT now()
-);
-
-ALTER TABLE notification_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage tenant notification settings" ON notification_settings FOR ALL USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
-```
+### C) `AlertDialog` wrapper likely has a ref-forwarding mismatch in practice
+Even though `src/components/ui/alert-dialog.tsx` uses `forwardRef`, the runtime warning indicates some component in that render path is still receiving a `ref` but is not ref-forwarding the way Radix expects. We should harden this file to match the stable shadcn/radix patterns.
 
 ---
 
-## Phase 2: Products & Services Page Completion
+## Implementation plan (what I will change)
 
-### 2.1 Image Upload for Catalog Items
-- Create a new storage bucket `catalog-images` for service/product/package images
-- Update `AddServiceDialog.tsx`, `AddProductDialog.tsx`, `AddPackageDialog.tsx` to include:
-  - Image upload zone (max 2 images)
-  - Preview thumbnails with remove option
-  - Upload to Supabase Storage on submit
-- Update `ServicesPage.tsx` `ItemCard` component to display images
+### 1) Make `InactivityGuard` dialogs “mount only when needed”
+Change `InactivityGuard` so the dialogs are rendered only when they are actually visible.
 
-### 2.2 Vouchers Tab
-- Add "Vouchers" tab to ServicesPage tabs
-- Create `AddVoucherDialog.tsx` component for creating gift cards
-- Create `useVouchers.tsx` hook for CRUD operations
-- Display voucher cards with code, amount, status, expiry
+**Before (current):**
+- Dialog trees always rendered; `open` just toggles state.
 
-### 2.3 Fetch Real Data
-- Update ServicesPage to use `useServices` hook for real data
-- Create hooks for packages and products if not existing
-- Remove hardcoded sample data
+**After (planned):**
+- Render Warning dialog only when `showWarning === true`
+- Render Logout dialog only when `showLogout === true`
 
----
+This prevents any Radix dialog/ref machinery from running on initial page load when both are false.
 
-## Phase 3: Customers Page (Complete Implementation)
+**Behavior detail**
+- When `showWarning` flips true, the dialog mounts and shows.
+- When the dialog closes (outside click/escape/button), it calls `setShowWarning(false)` and unmounts.
 
-### 3.1 Real Data Integration
-- Update CustomersPage to use `useCustomers` hook
-- Fetch customer_purses data alongside customers
-- Display real stats cards (Total, VIP, New This Month, Inactive)
+### 2) Refactor inactivity tracking to avoid state updates on every activity event
+Replace `lastActivity` **state** with `lastActivityRef` (a `useRef`), so mousemove/keydown does not cause React re-renders.
 
-### 3.2 Customer Detail View
-- Create `CustomerDetailDialog.tsx` with tabs:
-  - Overview (contact info, notes)
-  - Appointments (history with status)
-  - Purse (balance, transaction history)
-  - Preferences (communication, birthday)
+Planned changes:
+- `const lastActivityRef = useRef(Date.now())`
+- Event handler updates `lastActivityRef.current = Date.now()` instead of `setLastActivity(...)`
+- The “check inactivity” interval reads from `lastActivityRef.current`
 
-### 3.3 Customer Purse Management
-- Create `useCustomerPurse.tsx` hook
-- Display purse balance on customer cards
-- Add "Top Up Purse" action in detail view
-- Show purse transaction history
+This makes the app stable/performance-friendly and removes a major “re-render pressure” source.
 
-### 3.4 Customer Status Management
-- Add ability to mark customers as VIP, blocked, inactive
-- Add status column to customers table if needed
-- Filter by status in list view
+### 3) Prevent repeated state setting once logout state is active
+Currently, once inactive time passes `logoutMs`, the “check inactivity” interval will keep running every second and can keep doing:
+- `setShowLogout(true)`
+- `setCountdown(60)`
 
----
+Even if React bails out on `setShowLogout(true)` (same value), `setCountdown(60)` can keep forcing renders and can conflict with the countdown-decrement effect.
 
-## Phase 4: Payments Page
+Planned logic:
+- When `showLogout` is already true, don’t re-trigger the “enter logout mode” logic.
+- Only initialize countdown to 60 **once** when transitioning into logout mode.
 
-### 4.1 Transactions List
-- Create `PaymentsPage.tsx` with tabs: All, Revenue, Refunds, Purse Topups
-- Create `useTransactions.tsx` hook to fetch from transactions table
-- Display transaction cards with amount, method, status, customer, date
+### 4) Harden `src/components/ui/alert-dialog.tsx` to eliminate ref warnings
+Even if conditional mounting fixes the crash, we also want to remove the underlying “refs” warning.
 
-### 4.2 Refund Management
-- Display pending refund requests from `refund_requests` table
-- Create `RefundRequestDialog.tsx` for initiating refunds
-- Create approval/rejection flow for managers
-- Track refund status through lifecycle
+I will:
+- Ensure every exported wrapper that Radix may ref (Overlay, Content, Action, Cancel) is `forwardRef` and passes `ref` to the Radix primitive consistently.
+- Align the structure with the already-working `src/components/ui/dialog.tsx` pattern (Portal → Overlay → Content with children rendered explicitly).
+- Confirm we are not accidentally passing refs to any non-ref component in this file.
 
-### 4.3 Payments Statistics
-- Stats cards: Today's Revenue, Pending Refunds, Purse Balance Total
-- Filter by date range
-- Export functionality (later phase)
+### 5) Verification steps (regression testing)
+After implementing:
+1. Hard refresh the app and load `/salon/appointments`:
+   - No blank screen
+   - No “Maximum update depth exceeded”
+   - No “Function components cannot be given refs” warning
+2. Navigate across several pages (Dashboard, Customers, Services, Appointments) to confirm stability.
+3. Force-test the dialogs by temporarily setting (locally in code) `warningMinutes`/`logoutMinutes` to very small numbers (e.g., 0.01 and 0.02) to verify:
+   - Warning dialog opens
+   - “Stay Logged In” closes it and resets timers
+   - Logout dialog opens and countdown decreases (and doesn’t reset back to 60 every second)
+4. Confirm opening Walk-in + Draw still works (to ensure the earlier DrawingCanvas fix remains good).
 
 ---
 
-## Phase 5: Reports Page
-
-### 5.1 Dashboard Reports
-- Create `ReportsPage.tsx` with sections:
-  - Revenue Overview (daily/weekly/monthly charts)
-  - Appointment Analytics (completion rates, cancellation trends)
-  - Customer Insights (new vs returning, top spenders)
-  - Service Performance (most booked, revenue by service)
-
-### 5.2 Data Hooks
-- Create `useReports.tsx` hook with aggregation queries
-- Calculate metrics from appointments, transactions, customers tables
-
-### 5.3 Charts Integration
-- Use Recharts for visualizations (already installed)
-- Line charts for revenue trends
-- Bar charts for service performance
-- Pie charts for payment method breakdown
+## Files that will be modified
+- `src/components/session/InactivityGuard.tsx`
+  - Conditional mount dialogs
+  - Replace lastActivity state with ref
+  - Fix interval logic to avoid repeated state resets
+  - Use stable callbacks for handlers
+- `src/components/ui/alert-dialog.tsx`
+  - Ref-forwarding hardening + structural alignment to proven dialog wrapper patterns
 
 ---
 
-## Phase 6: Messaging Page
+## Why this plan should work
+- The crash signature (setRef → dispatchSetState → nested updates) strongly suggests a ref-driven render loop.
+- The ref warning specifically calls out the AlertDialog path.
+- By **removing the dialog subtree from initial render** and **reducing re-render pressure**, we eliminate the conditions required for this loop to occur, and also fix the root ref warning so it does not return later.
 
-### 6.1 Communication Credits
-- Display current credit balance from `communication_credits` table
-- Create `useMessagingCredits.tsx` hook
-- Show free monthly allocation vs purchased credits
-- "Buy Credits" CTA (placeholder for payment integration)
-
-### 6.2 Message Templates
-- List configured email/SMS templates
-- Quick preview of template content
-- Edit template functionality
-
-### 6.3 Delivery History
-- Display sent messages with status (delivered, failed, pending)
-- Filter by type (SMS, Email) and date
-- Credit usage per message
-
----
-
-## Phase 7: Journal Page (Audit Logs)
-
-### 7.1 Audit Log Viewer
-- Create `JournalPage.tsx` displaying entries from `audit_logs` table
-- Create `useAuditLogs.tsx` hook with pagination
-- Display: timestamp, actor, action, entity type, entity name
-
-### 7.2 Filtering & Search
-- Filter by action type (create, update, delete)
-- Filter by entity type (appointment, customer, service, etc.)
-- Date range picker
-- Search by entity name
-
-### 7.3 Detail View
-- Click to expand showing before/after JSON diff
-- Highlight changed fields
-
----
-
-## Phase 8: Staff Page (Invitations)
-
-### 8.1 Staff Invitation Edge Function
-- Create `supabase/functions/invite-staff/index.ts`:
-  - Generate secure invitation token
-  - Create staff_invitation record
-  - Send invitation email via Resend/similar
-  - Return success/failure
-
-### 8.2 Invitation Flow
-- Update `InviteStaffDialog.tsx` to call edge function
-- Display pending invitations in Staff page
-- Resend / Cancel invitation actions
-
-### 8.3 Invitation Acceptance
-- Create `/accept-invitation/:token` route
-- Validate token, create user account, assign role
-- Redirect to onboarding or dashboard
-
----
-
-## Phase 9: Email Templates
-
-### 9.1 Templates Management Page
-- Add "Email Templates" tab/section in Settings or Messaging
-- Create `EmailTemplatesPage.tsx` component
-- List all template types with edit buttons
-
-### 9.2 Template Editor
-- Create `EditTemplateDialog.tsx` with:
-  - Subject line editor
-  - HTML body editor (simple WYSIWYG or textarea)
-  - Preview panel
-  - Available variables list ({{customer_name}}, {{appointment_date}}, etc.)
-
-### 9.3 Default Templates
-- Seed default templates for each type when tenant is created
-- Allow reset to default
-
----
-
-## Phase 10: Settings Page Completion
-
-### 10.1 Complete All Tabs
-Currently implemented: Profile, Hours, Notifications (partial)
-Need to implement:
-- **Booking Settings**: Online booking toggle, pay-at-salon toggle, deposit settings
-- **Payments**: Currency, payment methods, Stripe/Paystack integration status
-- **Roles & Permissions**: View permission matrix (read-only for now)
-- **Subscription**: Current plan, usage, upgrade CTA
-- **Integrations**: Connected services status
-
-### 10.2 Notification Settings Persistence
-- Save notification preferences to `notification_settings` table
-- Load on page mount
-
----
-
-## Phase 11: Help Module
-
-### 11.1 Help Page Content
-- Create `HelpPage.tsx` with sections:
-  - Getting Started guide
-  - FAQ accordion
-  - Contact Support form/link
-  - Documentation links
-  - Video tutorials placeholder
-
-### 11.2 In-App Help
-- Help tooltips on complex features
-- "?" icons linking to relevant documentation
-
----
-
-## Phase 12: Notifications System
-
-### 12.1 Real-Time Notifications
-- Update `NotificationsPanel.tsx` to fetch from `notifications` table
-- Subscribe to realtime updates for new notifications
-- Mark as read functionality
-
-### 12.2 Notification Creation
-- Add notification triggers for key events:
-  - New appointment booked
-  - Appointment cancelled
-  - Payment received
-  - New customer registered
-  - Staff invitation accepted
-
----
-
-## Phase 13: Dashboard Updates
-
-### 13.1 Dynamic Onboarding Checklist
-- Calculate actual completion status:
-  - Has at least one service
-  - Has at least one customer
-  - Has completed first appointment
-  - Has configured payments
-  - Has enabled online booking
-- Show/hide based on completion
-
-### 13.2 Enhanced Stats
-- Add week/month comparison indicators
-- Quick action buttons on cards
-
----
-
-## File Changes Summary
-
-### New Files to Create:
-```text
-src/pages/salon/PaymentsPage.tsx
-src/pages/salon/ReportsPage.tsx
-src/pages/salon/MessagingPage.tsx
-src/pages/salon/JournalPage.tsx
-src/pages/salon/HelpPage.tsx
-
-src/components/dialogs/AddVoucherDialog.tsx
-src/components/dialogs/CustomerDetailDialog.tsx
-src/components/dialogs/RefundRequestDialog.tsx
-src/components/dialogs/EditTemplateDialog.tsx
-
-src/hooks/useVouchers.tsx
-src/hooks/useTransactions.tsx
-src/hooks/useRefunds.tsx
-src/hooks/useReports.tsx
-src/hooks/useMessagingCredits.tsx
-src/hooks/useAuditLogs.tsx
-src/hooks/useNotifications.tsx
-src/hooks/useCustomerPurse.tsx
-src/hooks/useProducts.tsx
-src/hooks/usePackages.tsx
-src/hooks/useEmailTemplates.tsx
-src/hooks/useNotificationSettings.tsx
-
-supabase/functions/invite-staff/index.ts
-```
-
-### Files to Modify:
-```text
-src/pages/salon/ServicesPage.tsx (real data, images, vouchers tab)
-src/pages/salon/CustomersPage.tsx (real data, purse, detail view)
-src/pages/salon/StaffPage.tsx (pending invitations)
-src/pages/salon/SettingsPage.tsx (complete all tabs)
-src/pages/salon/SalonDashboard.tsx (dynamic checklist)
-src/pages/salon/PlaceholderPages.tsx (remove completed placeholders)
-
-src/components/dialogs/AddServiceDialog.tsx (image upload)
-src/components/dialogs/AddProductDialog.tsx (image upload)
-src/components/dialogs/AddPackageDialog.tsx (image upload)
-src/components/dialogs/InviteStaffDialog.tsx (call edge function)
-
-src/components/notifications/NotificationsPanel.tsx (real data)
-
-src/App.tsx (update routes)
-```
-
----
-
-## Implementation Order
-
-1. Database migrations (all schema changes)
-2. Create new hooks for data fetching
-3. Catalog images (storage bucket + dialog updates)
-4. Customers page with purse
-5. Payments page
-6. Reports page
-7. Messaging page with credits
-8. Journal page
-9. Staff invitations (edge function)
-10. Email templates
-11. Settings completion
-12. Help module
-13. Notifications system
-14. Dashboard updates
-
----
-
-## Technical Considerations
-
-### Storage Setup for Images
-- Create `catalog-images` bucket with public access
-- RLS policy: tenant members can upload to their tenant folder
-- Path pattern: `{tenant_id}/{type}/{item_id}/{filename}`
-
-### Edge Function for Invitations
-- Use Resend or similar for email delivery
-- Store RESEND_API_KEY as secret
-- Generate cryptographically secure tokens
-- Set 7-day expiry on invitations
-
-### Realtime Subscriptions
-- Enable realtime on notifications table
-- Subscribe to INSERT events for current tenant
-- Update notification bell badge count
-
-### Mobile Responsiveness
-- All new pages follow existing responsive patterns
-- Dialogs use `mx-4` on mobile, scrollable content
-- Tables convert to cards on small screens
