@@ -147,14 +147,15 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const Icon = item.icon;
 
     const content = (
-      <button
-        onClick={() => navigate(item.path)}
+      <Link
+        to={item.path}
         className={cn(
-          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
           active
             ? "bg-white/15 text-white"
             : "text-white/80 hover:bg-white/10 hover:text-white"
         )}
+        aria-label={item.label}
       >
         <Icon className="w-5 h-5 flex-shrink-0" />
         {(isExpanded || isMobileOpen) && (
@@ -165,7 +166,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             {item.badge}
           </Badge>
         )}
-      </button>
+      </Link>
     );
 
     if (!isExpanded && !isMobileOpen) {
@@ -220,7 +221,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       {(isExpanded || isMobileOpen) && <SubscriptionBanner />}
 
       {/* Main Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 space-y-1 relative z-10">
         {mainNavItems.map((item) => (
           <NavItemComponent key={item.path} item={item} />
         ))}
