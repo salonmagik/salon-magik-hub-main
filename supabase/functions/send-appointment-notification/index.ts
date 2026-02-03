@@ -232,7 +232,25 @@ const handler = async (req: Request): Promise<Response> => {
       reason ? "$1" : "");
 
     // Send email via Resend API directly
-    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+    const fromEmailEnv = Deno.env.get("RESEND_FROM_EMAIL");
+    
+    // Validate and use the from email - must be a valid email address
+    let fromEmail = "onboarding@resend.dev";
+    if (fromEmailEnv && fromEmailEnv.includes("@") && fromEmailEnv.includes(".")) {
+      fromEmail = fromEmailEnv.trim();
+    }
+    
+    // Sanitize tenant name - remove characters that could break email format
+    const sanitizedTenantName = (tenant?.name || "SalonMagik")
+      .replace(/[<>"\n\r]/g, "")
+      .trim();
+    
+    // Build the from address in proper format
+    const fromAddress = sanitizedTenantName 
+      ? `${sanitizedTenantName} <${fromEmail}>`
+      : fromEmail;
+    
+    console.log("Sending email with from address:", fromAddress);
     
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -241,7 +259,7 @@ const handler = async (req: Request): Promise<Response> => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: `${tenant?.name || "SalonMagik"} <${fromEmail}>`,
+        from: fromAddress,
         to: [customerEmail],
         subject: emailSubject,
         html: emailBody,
