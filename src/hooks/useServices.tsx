@@ -75,6 +75,7 @@ export function useServices() {
     depositRequired?: boolean;
     depositAmount?: number;
     depositPercentage?: number;
+    imageUrls?: string[];
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -94,6 +95,7 @@ export function useServices() {
           deposit_required: data.depositRequired || false,
           deposit_amount: data.depositAmount || null,
           deposit_percentage: data.depositPercentage || null,
+          image_urls: data.imageUrls || [],
         })
         .select()
         .single();

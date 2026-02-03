@@ -13,10 +13,13 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserPlus, Users, Shield, Mail, MoreHorizontal } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw } from "lucide-react";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
+import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useAuth } from "@/hooks/useAuth";
+import { format } from "date-fns";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,11 +55,14 @@ function getInitials(name: string | undefined): string {
 export default function StaffPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { staff, isLoading, refetch } = useStaff();
+  const { invitations, isLoading: invitationsLoading, refetch: refetchInvitations, cancelInvitation } = useStaffInvitations();
   const { user } = useAuth();
 
   const currentUserIsOwner = staff.some(
     (s) => s.userId === user?.id && s.role === "owner"
   );
+
+  const pendingInvitations = invitations.filter((i) => i.status === "pending");
 
   return (
     <SalonSidebar>
@@ -111,13 +117,16 @@ export default function StaffPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Managers
+                Pending Invites
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <span className="text-2xl font-bold">
-                {isLoading ? "..." : staff.filter((s) => s.role === "manager").length}
-              </span>
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-warning-foreground" />
+                <span className="text-2xl font-bold">
+                  {invitationsLoading ? "..." : pendingInvitations.length}
+                </span>
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -136,110 +145,206 @@ export default function StaffPage() {
           </Card>
         </div>
 
-        {/* Staff Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Team Members</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <Skeleton className="w-10 h-10 rounded-full" />
-                    <div className="space-y-2 flex-1">
-                      <Skeleton className="h-4 w-[200px]" />
-                      <Skeleton className="h-3 w-[150px]" />
-                    </div>
+        {/* Tabs for Staff and Invitations */}
+        <Tabs defaultValue="team">
+          <TabsList>
+            <TabsTrigger value="team">Team Members</TabsTrigger>
+            <TabsTrigger value="invitations" className="flex items-center gap-2">
+              Pending Invitations
+              {pendingInvitations.length > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5">
+                  {pendingInvitations.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Team Members Tab */}
+          <TabsContent value="team">
+            <Card>
+              <CardHeader>
+                <CardTitle>Team Members</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <Skeleton className="w-10 h-10 rounded-full" />
+                        <div className="space-y-2 flex-1">
+                          <Skeleton className="h-4 w-[200px]" />
+                          <Skeleton className="h-3 w-[150px]" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            ) : staff.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Users className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="font-medium mb-1">No team members yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Invite staff members to help manage your salon
-                </p>
-                <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
-                  <UserPlus className="w-4 h-4" />
-                  Invite Staff
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto -mx-4 sm:mx-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="hidden sm:table-cell">Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {staff.map((member) => (
-                      <TableRow key={member.userId}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="w-9 h-9">
-                              <AvatarImage src={member.profile?.avatar_url || undefined} />
-                              <AvatarFallback className="text-xs">
-                                {getInitials(member.profile?.full_name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <p className="font-medium truncate">
-                                {member.profile?.full_name || "Unknown"}
-                              </p>
-                              <p className="text-xs text-muted-foreground sm:hidden truncate">
-                                {member.profile?.phone || "No phone"}
-                              </p>
+                ) : staff.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Users className="w-12 h-12 text-muted-foreground mb-4" />
+                    <h3 className="font-medium mb-1">No team members yet</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Invite staff members to help manage your salon
+                    </p>
+                    <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
+                      <UserPlus className="w-4 h-4" />
+                      Invite Staff
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead className="hidden sm:table-cell">Email</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead className="w-[50px]"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {staff.map((member) => (
+                          <TableRow key={member.userId}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="w-9 h-9">
+                                  <AvatarImage src={member.profile?.avatar_url || undefined} />
+                                  <AvatarFallback className="text-xs">
+                                    {getInitials(member.profile?.full_name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                  <p className="font-medium truncate">
+                                    {member.profile?.full_name || "Unknown"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground sm:hidden truncate">
+                                    {member.profile?.phone || "No phone"}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <div className="flex items-center gap-2 text-muted-foreground">
+                                <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span className="truncate text-sm">—</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={roleVariants[member.role]}>
+                                {roleLabels[member.role]}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {currentUserIsOwner && member.role !== "owner" && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem>Change Role</DropdownMenuItem>
+                                    <DropdownMenuItem className="text-destructive">
+                                      Remove from Team
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Pending Invitations Tab */}
+          <TabsContent value="invitations">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Invitations</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {invitationsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="flex items-center gap-4">
+                        <Skeleton className="w-10 h-10 rounded-full" />
+                        <div className="space-y-2 flex-1">
+                          <Skeleton className="h-4 w-[200px]" />
+                          <Skeleton className="h-3 w-[150px]" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : pendingInvitations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Mail className="w-12 h-12 text-muted-foreground mb-4" />
+                    <h3 className="font-medium mb-1">No pending invitations</h3>
+                    <p className="text-sm text-muted-foreground">
+                      All invitations have been accepted or expired
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingInvitations.map((invitation) => (
+                      <div
+                        key={invitation.id}
+                        className="flex items-center justify-between p-4 rounded-lg border bg-muted/50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Mail className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {invitation.first_name} {invitation.last_name}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{invitation.email}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                {roleLabels[invitation.role]}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                Expires {format(new Date(invitation.expires_at), "MMM d, yyyy")}
+                              </span>
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                            <span className="truncate text-sm">—</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={roleVariants[member.role]}>
-                            {roleLabels[member.role]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {currentUserIsOwner && member.role !== "owner" && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem>Change Role</DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive">
-                                  Remove from Team
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </TableCell>
-                      </TableRow>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="sm" className="gap-1">
+                            <RefreshCw className="w-3 h-3" />
+                            Resend
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive gap-1"
+                            onClick={() => cancelInvitation(invitation.id)}
+                          >
+                            <X className="w-3 h-3" />
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <InviteStaffDialog
         open={inviteDialogOpen}
         onOpenChange={setInviteDialogOpen}
-        onSuccess={refetch}
+        onSuccess={() => {
+          refetch();
+          refetchInvitations();
+        }}
       />
     </SalonSidebar>
   );

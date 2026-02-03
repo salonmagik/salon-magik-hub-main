@@ -6,12 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Gift, DollarSign, Loader2, Save, Plus, Minus } from "lucide-react";
+import { Gift, Loader2, Save, Plus, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useServices } from "@/hooks/useServices";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 
 interface AddPackageDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
     name: "",
     price: "",
     description: "",
+    images: [] as string[],
   });
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
@@ -44,6 +46,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
       name: "",
       price: "",
       description: "",
+      images: [],
     });
     setSelectedServices([]);
   };
@@ -91,6 +94,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
           price: parseFloat(formData.price),
           original_price: originalPrice,
           description: formData.description || null,
+          image_urls: formData.images,
         })
         .select()
         .single();
@@ -256,6 +260,17 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={2}
+            />
+          </div>
+
+          {/* Images */}
+          <div className="space-y-2">
+            <Label>Images (Optional)</Label>
+            <ImageUploadZone
+              images={formData.images}
+              onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              maxImages={2}
+              disabled={isSubmitting}
             />
           </div>
 

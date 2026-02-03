@@ -5,108 +5,93 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Scissors,
   Package,
   ShoppingBag,
+  Gift,
   Plus,
   Search,
   Clock,
-  MoreHorizontal,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
 import { AddProductDialog } from "@/components/dialogs/AddProductDialog";
+import { AddVoucherDialog } from "@/components/dialogs/AddVoucherDialog";
+import { useServices } from "@/hooks/useServices";
+import { usePackages } from "@/hooks/usePackages";
+import { useProducts } from "@/hooks/useProducts";
+import { useVouchers } from "@/hooks/useVouchers";
+import { useAuth } from "@/hooks/useAuth";
+import { format } from "date-fns";
 
-// Sample data
-const services = [
-  {
-    id: "1",
-    type: "service",
-    name: "Full Color",
-    description: "Single-process color with blowout.",
-    price: 12000,
-    currency: "NGN",
-    duration: 90,
-    locations: ["lekki"],
-    category: "Color",
-  },
-  {
-    id: "2",
-    type: "service",
-    name: "Signature Cut",
-    description: "Precision cut with consultation.",
-    price: 4000,
-    currency: "NGN",
-    duration: 45,
-    locations: ["ikeja", "lekki"],
-    category: "Hair",
-  },
-];
-
-const packages = [
-  {
-    id: "3",
-    type: "package",
-    name: "Bridal Prep Package",
-    description: "Trial + day-of styling + lashes.",
-    price: 55000,
-    originalPrice: 65000,
-    currency: "NGN",
-    locations: ["ikeja"],
-  },
-];
-
-const products = [
-  {
-    id: "4",
-    type: "product",
-    name: "Hydrate Shampoo",
-    description: "Sulfate-free hydration shampoo.",
-    price: 3000,
-    currency: "NGN",
-    locations: ["ikeja", "lekki"],
-    fulfillment: "Pickup or delivery",
-  },
-];
-
-const formatCurrency = (amount: number, currency: string) => {
-  const symbols: Record<string, string> = {
-    NGN: "₦",
-    GHS: "₵",
-    USD: "$",
-  };
-  return `${symbols[currency] || ""}${amount.toLocaleString()}`;
-};
-
-type TabValue = "all" | "services" | "packages" | "products";
+type TabValue = "all" | "services" | "packages" | "products" | "vouchers";
 
 export default function ServicesPage() {
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [voucherDialogOpen, setVoucherDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [locationFilter, setLocationFilter] = useState("all");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
 
-  const allItems = [...services, ...packages, ...products];
+  const { currentTenant } = useAuth();
+  const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
+  const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
+  const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
+  const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
+
+  const currency = currentTenant?.currency || "USD";
+  const isLoading = servicesLoading || packagesLoading || productsLoading;
+
+  const formatCurrency = (amount: number) => {
+    const symbols: Record<string, string> = {
+      NGN: "₦",
+      GHS: "₵",
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+    };
+    return `${symbols[currency] || ""}${Number(amount).toLocaleString()}`;
+  };
+
+  // Build unified items list
+  const allItems = [
+    ...services.map((s) => ({
+      id: s.id,
+      type: "service" as const,
+      name: s.name,
+      description: s.description || "",
+      price: Number(s.price),
+      duration: s.duration_minutes,
+      images: s.image_urls || [],
+    })),
+    ...packages.map((p) => ({
+      id: p.id,
+      type: "package" as const,
+      name: p.name,
+      description: p.description || "",
+      price: Number(p.price),
+      originalPrice: p.original_price ? Number(p.original_price) : undefined,
+      images: p.image_urls || [],
+    })),
+    ...products.map((p) => ({
+      id: p.id,
+      type: "product" as const,
+      name: p.name,
+      description: p.description || "",
+      price: Number(p.price),
+      stock: p.stock_quantity,
+      images: p.image_urls || [],
+    })),
+  ];
 
   const filteredItems = allItems.filter((item) => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.description.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesLocation =
-      locationFilter === "all" || item.locations.includes(locationFilter);
-
-    return matchesSearch && matchesLocation;
+    return matchesSearch;
   });
 
   const handleAddClick = () => {
@@ -120,8 +105,10 @@ export default function ServicesPage() {
       case "products":
         setProductDialogOpen(true);
         break;
+      case "vouchers":
+        setVoucherDialogOpen(true);
+        break;
       default:
-        // "all" tab - don't open any dialog
         break;
     }
   };
@@ -134,6 +121,8 @@ export default function ServicesPage() {
         return "Add Package";
       case "products":
         return "Add Product";
+      case "vouchers":
+        return "Add Voucher";
       default:
         return null;
     }
@@ -149,7 +138,7 @@ export default function ServicesPage() {
           <div>
             <h1 className="text-2xl font-semibold">Products & Services</h1>
             <p className="text-muted-foreground">
-              Manage your service catalog, packages, and products.
+              Manage your service catalog, packages, products, and vouchers.
             </p>
           </div>
           {addButtonLabel && (
@@ -162,7 +151,7 @@ export default function ServicesPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="services" className="flex items-center gap-2">
               <Scissors className="w-4 h-4" />
@@ -176,81 +165,211 @@ export default function ServicesPage() {
               <ShoppingBag className="w-4 h-4" />
               Products
             </TabsTrigger>
+            <TabsTrigger value="vouchers" className="flex items-center gap-2">
+              <Gift className="w-4 h-4" />
+              Vouchers
+            </TabsTrigger>
           </TabsList>
 
           <div className="mt-6">
-            {/* Search & Filters */}
+            {/* Search */}
             <div className="flex flex-wrap items-center gap-4 mb-6">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search services, products, packages"
+                  placeholder="Search services, products, packages..."
                   className="pl-9"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select value={locationFilter} onValueChange={setLocationFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All locations" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All locations</SelectItem>
-                  <SelectItem value="ikeja">Ikeja</SelectItem>
-                  <SelectItem value="lekki">Lekki</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select defaultValue="name-asc">
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name-asc">Name A-Z</SelectItem>
-                  <SelectItem value="name-desc">Name Z-A</SelectItem>
-                  <SelectItem value="price-asc">Price low-high</SelectItem>
-                  <SelectItem value="price-desc">Price high-low</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
-            {/* Items Grid */}
-            <TabsContent value="all" className="mt-0">
+            {/* Loading State */}
+            {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredItems.map((item) => (
-                  <ItemCard key={item.id} item={item} />
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <Skeleton className="h-4 w-16 mb-2" />
+                      <Skeleton className="h-5 w-32 mb-1" />
+                      <Skeleton className="h-4 w-48" />
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
-            </TabsContent>
+            ) : (
+              <>
+                {/* All Tab */}
+                <TabsContent value="all" className="mt-0">
+                  {filteredItems.length === 0 ? (
+                    <EmptyState message="No items yet. Add services, products, or packages to get started." />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredItems.map((item) => (
+                        <ItemCard key={item.id} item={item} currency={currency} formatCurrency={formatCurrency} />
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
 
-            <TabsContent value="services" className="mt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {services
-                  .filter(
-                    (s) =>
-                      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      s.description.toLowerCase().includes(searchQuery.toLowerCase())
-                  )
-                  .map((item) => (
-                    <ItemCard key={item.id} item={item} />
-                  ))}
-              </div>
-            </TabsContent>
+                {/* Services Tab */}
+                <TabsContent value="services" className="mt-0">
+                  {services.length === 0 ? (
+                    <EmptyState message="No services yet. Add your first service." />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {services
+                        .filter(
+                          (s) =>
+                            s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                        )
+                        .map((s) => (
+                          <ItemCard
+                            key={s.id}
+                            item={{
+                              id: s.id,
+                              type: "service",
+                              name: s.name,
+                              description: s.description || "",
+                              price: Number(s.price),
+                              duration: s.duration_minutes,
+                              images: s.image_urls || [],
+                            }}
+                            currency={currency}
+                            formatCurrency={formatCurrency}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </TabsContent>
 
-            <TabsContent value="packages" className="mt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {packages.map((item) => (
-                  <ItemCard key={item.id} item={item} />
-                ))}
-              </div>
-            </TabsContent>
+                {/* Packages Tab */}
+                <TabsContent value="packages" className="mt-0">
+                  {packages.length === 0 ? (
+                    <EmptyState message="No packages yet. Bundle services together." />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {packages
+                        .filter(
+                          (p) =>
+                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                        )
+                        .map((p) => (
+                          <ItemCard
+                            key={p.id}
+                            item={{
+                              id: p.id,
+                              type: "package",
+                              name: p.name,
+                              description: p.description || "",
+                              price: Number(p.price),
+                              originalPrice: p.original_price ? Number(p.original_price) : undefined,
+                              images: p.image_urls || [],
+                            }}
+                            currency={currency}
+                            formatCurrency={formatCurrency}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </TabsContent>
 
-            <TabsContent value="products" className="mt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {products.map((item) => (
-                  <ItemCard key={item.id} item={item} />
-                ))}
-              </div>
-            </TabsContent>
+                {/* Products Tab */}
+                <TabsContent value="products" className="mt-0">
+                  {products.length === 0 ? (
+                    <EmptyState message="No products yet. Add items to sell." />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {products
+                        .filter(
+                          (p) =>
+                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                        )
+                        .map((p) => (
+                          <ItemCard
+                            key={p.id}
+                            item={{
+                              id: p.id,
+                              type: "product",
+                              name: p.name,
+                              description: p.description || "",
+                              price: Number(p.price),
+                              stock: p.stock_quantity,
+                              images: p.image_urls || [],
+                            }}
+                            currency={currency}
+                            formatCurrency={formatCurrency}
+                          />
+                        ))}
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Vouchers Tab */}
+                <TabsContent value="vouchers" className="mt-0">
+                  {vouchersLoading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {[1, 2].map((i) => (
+                        <Card key={i}>
+                          <CardContent className="p-4">
+                            <Skeleton className="h-5 w-24 mb-2" />
+                            <Skeleton className="h-4 w-16" />
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : vouchers.length === 0 ? (
+                    <EmptyState message="No vouchers yet. Create gift cards for customers." />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {vouchers.map((v) => (
+                        <Card key={v.id} className="hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="text-xs font-medium uppercase tracking-wider text-purple-600">
+                                  GIFT CARD
+                                </p>
+                                <h3 className="font-mono font-semibold mt-1 text-lg">{v.code}</h3>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Badge
+                                    variant="secondary"
+                                    className={
+                                      v.status === "active"
+                                        ? "bg-success/10 text-success"
+                                        : v.status === "redeemed"
+                                        ? "bg-muted text-muted-foreground"
+                                        : "bg-destructive/10 text-destructive"
+                                    }
+                                  >
+                                    {v.status}
+                                  </Badge>
+                                  {v.expires_at && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Expires {format(new Date(v.expires_at), "MMM d, yyyy")}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-semibold text-lg">{formatCurrency(Number(v.amount))}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Balance: {formatCurrency(Number(v.balance))}
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+              </>
+            )}
           </div>
         </Tabs>
       </div>
@@ -259,20 +378,57 @@ export default function ServicesPage() {
       <AddServiceDialog
         open={serviceDialogOpen}
         onOpenChange={setServiceDialogOpen}
+        onSuccess={refetchServices}
       />
       <AddPackageDialog
         open={packageDialogOpen}
         onOpenChange={setPackageDialogOpen}
+        onSuccess={refetchPackages}
       />
       <AddProductDialog
         open={productDialogOpen}
         onOpenChange={setProductDialogOpen}
+        onSuccess={refetchProducts}
+      />
+      <AddVoucherDialog
+        open={voucherDialogOpen}
+        onOpenChange={setVoucherDialogOpen}
+        onSuccess={refetchVouchers}
       />
     </SalonSidebar>
   );
 }
 
-function ItemCard({ item }: { item: any }) {
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="text-center py-12">
+      <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+      <p className="text-muted-foreground">{message}</p>
+    </div>
+  );
+}
+
+interface CatalogItem {
+  id: string;
+  type: "service" | "package" | "product";
+  name: string;
+  description: string;
+  price: number;
+  duration?: number;
+  originalPrice?: number;
+  stock?: number;
+  images?: string[];
+}
+
+function ItemCard({
+  item,
+  currency,
+  formatCurrency,
+}: {
+  item: CatalogItem;
+  currency: string;
+  formatCurrency: (amount: number) => string;
+}) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
     package: { label: "PACKAGE", color: "text-purple-600" },
@@ -284,53 +440,54 @@ function ItemCard({ item }: { item: any }) {
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
+        <div className="flex items-start gap-4">
+          {/* Image thumbnail */}
+          {item.images && item.images.length > 0 ? (
+            <img
+              src={item.images[0]}
+              alt={item.name}
+              className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+              {item.type === "service" && <Scissors className="w-6 h-6 text-muted-foreground" />}
+              {item.type === "package" && <Package className="w-6 h-6 text-muted-foreground" />}
+              {item.type === "product" && <ShoppingBag className="w-6 h-6 text-muted-foreground" />}
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
             <p className={`text-xs font-medium uppercase tracking-wider ${typeInfo.color}`}>
               {typeInfo.label}
             </p>
-            <h3 className="font-semibold mt-1">{item.name}</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {item.description}
+            <h3 className="font-semibold mt-1 truncate">{item.name}</h3>
+            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+              {item.description || "No description"}
             </p>
 
             <div className="flex flex-wrap items-center gap-2 mt-3">
-              {item.locations?.map((loc: string) => (
-                <Badge key={loc} variant="secondary" className="text-xs capitalize">
-                  {loc}
-                </Badge>
-              ))}
               {item.duration && (
                 <Badge variant="outline" className="text-xs">
                   <Clock className="w-3 h-3 mr-1" />
                   {item.duration} mins
                 </Badge>
               )}
-              {item.fulfillment && (
+              {item.stock !== undefined && (
                 <Badge variant="outline" className="text-xs">
-                  {item.fulfillment}
+                  {item.stock} in stock
                 </Badge>
               )}
             </div>
           </div>
 
           <div className="text-right flex-shrink-0 ml-4">
-            <p className="font-semibold text-lg">
-              {formatCurrency(item.price, item.currency)}
-            </p>
+            <p className="font-semibold text-lg">{formatCurrency(item.price)}</p>
             {item.originalPrice && (
               <p className="text-sm text-muted-foreground line-through">
-                {formatCurrency(item.originalPrice, item.currency)}
+                {formatCurrency(item.originalPrice)}
               </p>
             )}
           </div>
-        </div>
-
-        <div className="flex items-center justify-end mt-4 pt-4 border-t">
-          <Button variant="outline" size="sm">
-            <ShoppingBag className="w-4 h-4 mr-2" />
-            Add to cart
-          </Button>
         </div>
       </CardContent>
     </Card>

@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Scissors, Clock, DollarSign, Loader2 } from "lucide-react";
+import { Scissors, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useServices } from "@/hooks/useServices";
+import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 
 interface AddServiceDialogProps {
   open: boolean;
@@ -46,6 +47,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     paymentOption: "full",
     buffer: "15",
     description: "",
+    images: [] as string[],
   });
 
   const resetForm = () => {
@@ -58,6 +60,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       paymentOption: "full",
       buffer: "15",
       description: "",
+      images: [],
     });
   };
 
@@ -71,8 +74,9 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         price: parseFloat(formData.price),
         durationMinutes: parseInt(formData.duration),
         description: formData.description || undefined,
-        categoryId: formData.category || undefined, // Only pass if a real category is selected
+        categoryId: formData.category || undefined,
         depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
+        imageUrls: formData.images,
       });
 
       if (result) {
@@ -233,6 +237,17 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
+            />
+          </div>
+
+          {/* Images */}
+          <div className="space-y-2">
+            <Label>Images (Optional)</Label>
+            <ImageUploadZone
+              images={formData.images}
+              onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              maxImages={2}
+              disabled={isSubmitting}
             />
           </div>
 
