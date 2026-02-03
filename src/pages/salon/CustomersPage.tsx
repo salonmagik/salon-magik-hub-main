@@ -5,18 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Users,
-  Tag,
-  UserPlus,
-  Calendar,
-  Upload,
-  Search,
-  Mail,
-  Phone,
-  CreditCard,
-  MoreHorizontal,
-} from "lucide-react";
+import { Users, Tag, UserPlus, Calendar, Upload, Search, Mail, Phone, CreditCard, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
@@ -56,7 +45,13 @@ export default function CustomersPage() {
   const statusCards = [
     { label: "Total Customers", count: stats.total, icon: Users, color: "text-primary", bgColor: "bg-primary/10" },
     { label: "VIP Customers", count: stats.vip, icon: Tag, color: "text-purple-600", bgColor: "bg-purple-50" },
-    { label: "New This Month", count: stats.thisMonth, icon: UserPlus, color: "text-success", bgColor: "bg-success/10" },
+    {
+      label: "New This Month",
+      count: stats.thisMonth,
+      icon: UserPlus,
+      color: "text-success",
+      bgColor: "bg-success/10",
+    },
     { label: "Inactive", count: stats.inactive, icon: Calendar, color: "text-muted-foreground", bgColor: "bg-muted" },
   ];
 
@@ -75,9 +70,7 @@ export default function CustomersPage() {
         (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.phone || "").includes(searchQuery);
 
-      const matchesFilter =
-        activeFilter === "All" ||
-        customer.status.toLowerCase() === activeFilter.toLowerCase();
+      const matchesFilter = activeFilter === "All" || customer.status.toLowerCase() === activeFilter.toLowerCase();
 
       return matchesSearch && matchesFilter;
     });
@@ -87,12 +80,10 @@ export default function CustomersPage() {
     <SalonSidebar>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between sm:justify-normal">
           <div>
             <h1 className="text-2xl font-semibold">Customers</h1>
-            <p className="text-muted-foreground">
-              Manage customer relationships and celebrate key moments.
-            </p>
+            <p className="text-muted-foreground">Manage customer relationships and celebrate key moments.</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline">
@@ -208,8 +199,8 @@ export default function CustomersPage() {
                             customer.status === "active"
                               ? "bg-success/10 text-success"
                               : customer.status === "vip"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-muted text-muted-foreground"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-muted text-muted-foreground",
                           )}
                         >
                           {customer.status}
@@ -240,9 +231,7 @@ export default function CustomersPage() {
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {customer.visit_count} visits
-                          </span>
+                          <span className="text-muted-foreground">{customer.visit_count} visits</span>
                         </div>
                       </div>
                     </div>
@@ -288,11 +277,7 @@ export default function CustomersPage() {
       </div>
 
       {/* Add Customer Dialog */}
-      <AddCustomerDialog
-        open={customerDialogOpen}
-        onOpenChange={setCustomerDialogOpen}
-        onSuccess={refetch}
-      />
+      <AddCustomerDialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen} onSuccess={refetch} />
 
       {/* Customer Detail Dialog */}
       <CustomerDetailDialog
