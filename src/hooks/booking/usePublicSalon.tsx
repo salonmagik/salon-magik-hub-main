@@ -20,7 +20,9 @@ export type PublicTenant = Pick<
   | "booking_status_message"
   | "slot_capacity_default"
   | "pay_at_salon_enabled"
->;
+> & {
+  brand_color?: string | null;
+};
 
 export type PublicLocation = Pick<
   Tables<"locations">,
@@ -47,7 +49,7 @@ export function usePublicSalon(slug: string | undefined) {
           `id, name, slug, logo_url, banner_urls, currency, country, timezone,
            online_booking_enabled, auto_confirm_bookings, deposits_enabled,
            default_deposit_percentage, cancellation_grace_hours, booking_status_message,
-           slot_capacity_default, pay_at_salon_enabled`
+           slot_capacity_default, pay_at_salon_enabled, brand_color`
         )
         .eq("slug", slug)
         .eq("online_booking_enabled", true)

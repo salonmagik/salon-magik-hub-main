@@ -1391,6 +1391,7 @@ export type Database = {
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
           booking_status_message: string | null
+          brand_color: string | null
           cancellation_grace_hours: number | null
           country: string
           created_at: string
@@ -1418,6 +1419,7 @@ export type Database = {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           booking_status_message?: string | null
+          brand_color?: string | null
           cancellation_grace_hours?: number | null
           country: string
           created_at?: string
@@ -1445,6 +1447,7 @@ export type Database = {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           booking_status_message?: string | null
+          brand_color?: string | null
           cancellation_grace_hours?: number | null
           country?: string
           created_at?: string

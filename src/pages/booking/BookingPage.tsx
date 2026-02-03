@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import {
   usePublicSalon,
@@ -20,6 +20,19 @@ function BookingPageContent() {
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const isLoading = salonLoading || catalogLoading;
+
+  // Dynamic page title for SEO
+  useEffect(() => {
+    if (salon?.name) {
+      document.title = `Book at ${salon.name} | SalonMagik`;
+    } else {
+      document.title = "Book Appointment | SalonMagik";
+    }
+    
+    return () => {
+      document.title = "SalonMagik";
+    };
+  }, [salon?.name]);
 
   if (isLoading) {
     return (

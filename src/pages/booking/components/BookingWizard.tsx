@@ -192,11 +192,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           <DialogTitle>Book Appointment</DialogTitle>
         </DialogHeader>
 
-        {/* Steps Progress */}
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
+        {/* Steps Progress - Scrollable */}
+        <div className="overflow-x-auto">
+          <div className="flex items-center gap-3 px-6 py-4 min-w-max">
             {steps.map((s, i) => (
-              <div key={s.key} className="flex items-center">
+              <div key={s.key} className="flex items-center gap-3 shrink-0">
                 <div
                   className={`flex items-center gap-2 ${
                     step === s.key
@@ -207,7 +207,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   }`}
                 >
                   <div
-                    className={`h-8 w-8 rounded-full flex items-center justify-center border-2 ${
+                    className={`h-8 w-8 rounded-full flex items-center justify-center border-2 shrink-0 ${
                       step === s.key
                         ? "border-primary bg-primary text-primary-foreground"
                         : steps.findIndex((x) => x.key === step) > i
@@ -217,10 +217,10 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   >
                     {s.icon}
                   </div>
-                  <span className="hidden sm:inline text-sm font-medium">{s.label}</span>
+                  <span className="text-sm font-medium whitespace-nowrap">{s.label}</span>
                 </div>
                 {i < steps.length - 1 && (
-                  <div className="flex-1 h-px bg-muted mx-2 sm:mx-4" />
+                  <div className="w-8 h-px bg-muted shrink-0" />
                 )}
               </div>
             ))}

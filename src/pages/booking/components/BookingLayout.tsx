@@ -14,9 +14,13 @@ interface BookingLayoutProps {
 export function BookingLayout({ children, salon, onCartClick }: BookingLayoutProps) {
   const { getItemCount } = useBookingCart();
   const itemCount = getItemCount();
+  const brandColor = salon?.brand_color || "#2563EB";
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen bg-background"
+      style={{ "--brand-color": brandColor } as React.CSSProperties}
+    >
       {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
@@ -57,7 +61,7 @@ export function BookingLayout({ children, salon, onCartClick }: BookingLayoutPro
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">{children}</main>
+      <main className="container mx-auto px-4 py-6 max-w-5xl">{children}</main>
 
       {/* Footer */}
       <footer className="border-t py-6 mt-12">
