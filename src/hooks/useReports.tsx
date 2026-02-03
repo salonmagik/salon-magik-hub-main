@@ -10,10 +10,14 @@ export interface ReportStats {
   cancelledAppointments: number;
   newCustomers: number;
   returningCustomers: number;
-  averageTicket: number;
   topServices: { name: string; count: number; revenue: number }[];
   paymentMethodBreakdown: { method: string; amount: number; count: number }[];
   dailyRevenue: { date: string; revenue: number }[];
+  // Insights
+  busiestDay: string | null;
+  topService: string | null;
+  peakHour: string | null;
+  retentionRate: number | null;
 }
 
 export function useReports(period: "today" | "week" | "month" | "custom" = "month", customRange?: { start: Date; end: Date }) {
@@ -25,10 +29,13 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
     cancelledAppointments: 0,
     newCustomers: 0,
     returningCustomers: 0,
-    averageTicket: 0,
     topServices: [],
     paymentMethodBreakdown: [],
     dailyRevenue: [],
+    busiestDay: null,
+    topService: null,
+    peakHour: null,
+    retentionRate: null,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -100,7 +107,43 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         const cust = customerList.find((c) => c.id === a.customer_id);
         return cust && cust.visit_count > 1;
       }).length;
-      const averageTicket = completedAppointments > 0 ? totalRevenue / completedAppointments : 0;
+
+      // Insights calculations
+      let busiestDay: string | null = null;
+      let topServiceName: string | null = null;
+      let peakHour: string | null = null;
+      let retentionRate: number | null = null;
+
+      // Busiest day (requires >= 10 completed appointments)
+      if (completedAppointments >= 10) {
+        const dayCount: Record<string, number> = {};
+        aptList.filter((a) => a.status === "completed" && a.scheduled_start).forEach((apt) => {
+          const day = format(new Date(apt.scheduled_start!), "EEEE");
+          dayCount[day] = (dayCount[day] || 0) + 1;
+        });
+        const sortedDays = Object.entries(dayCount).sort((a, b) => b[1] - a[1]);
+        if (sortedDays.length > 0) {
+          busiestDay = sortedDays[0][0];
+        }
+      }
+
+      // Peak hour (requires >= 20 completed appointments)
+      if (completedAppointments >= 20) {
+        const hourCount: Record<string, number> = {};
+        aptList.filter((a) => a.status === "completed" && a.scheduled_start).forEach((apt) => {
+          const hour = format(new Date(apt.scheduled_start!), "h a");
+          hourCount[hour] = (hourCount[hour] || 0) + 1;
+        });
+        const sortedHours = Object.entries(hourCount).sort((a, b) => b[1] - a[1]);
+        if (sortedHours.length > 0) {
+          peakHour = sortedHours[0][0];
+        }
+      }
+
+      // Retention rate (requires >= 5 returning customers)
+      if (returningCustomers >= 5 && customerList.length > 0) {
+        retentionRate = Math.round((returningCustomers / customerList.length) * 100);
+      }
 
       // Top services
       const serviceCount: Record<string, { count: number; revenue: number }> = {};
@@ -117,6 +160,11 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         .map(([name, data]) => ({ name, ...data }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
+
+      // Set top service insight (requires >= 5 completed appointments)
+      if (completedAppointments >= 5 && topServices.length > 0) {
+        topServiceName = topServices[0].name;
+      }
 
       // Payment method breakdown
       const methodCount: Record<string, { amount: number; count: number }> = {};
@@ -155,10 +203,13 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         cancelledAppointments,
         newCustomers,
         returningCustomers,
-        averageTicket,
         topServices,
         paymentMethodBreakdown,
         dailyRevenue,
+        busiestDay,
+        topService: topServiceName,
+        peakHour,
+        retentionRate,
       });
     } catch (err) {
       console.error("Error fetching reports:", err);

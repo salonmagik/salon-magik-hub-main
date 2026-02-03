@@ -14,6 +14,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
   CreditCard,
   ArrowUpRight,
   ArrowDownLeft,
@@ -25,12 +34,16 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  Check,
+  X,
 } from "lucide-react";
 import { useTransactions } from "@/hooks/useTransactions";
-import { useRefunds } from "@/hooks/useRefunds";
+import { useRefunds, type RefundWithDetails } from "@/hooks/useRefunds";
 import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { RequestRefundDialog } from "@/components/dialogs/RequestRefundDialog";
+import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 
 const methodLabels: Record<string, string> = {
   card: "Card",
@@ -47,12 +60,26 @@ const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
   failed: { bg: "bg-destructive/10", text: "text-destructive", icon: XCircle },
 };
 
+const refundStatusStyles: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "bg-warning-bg", text: "text-warning-foreground" },
+  approved: { bg: "bg-success/10", text: "text-success" },
+  rejected: { bg: "bg-destructive/10", text: "text-destructive" },
+  completed: { bg: "bg-success/10", text: "text-success" },
+};
+
 export default function PaymentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  
   const { currentTenant } = useAuth();
-  const { transactions, stats, isLoading } = useTransactions();
-  const { pendingRefunds, isLoading: refundsLoading } = useRefunds();
+  const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
+  const { pendingRefunds, approvedRefunds, rejectedRefunds, isLoading: refundsLoading, refetch: refetchRefunds, approveRefund, rejectRefund } = useRefunds();
 
   const currency = currentTenant?.currency || "USD";
 
@@ -67,6 +94,21 @@ export default function PaymentsPage() {
     return `${symbols[currency] || currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
   };
 
+  const handleApprove = async () => {
+    if (!selectedRefund) return;
+    await approveRefund(selectedRefund.id);
+    setSelectedRefund(null);
+    setApproveDialogOpen(false);
+  };
+
+  const handleReject = async () => {
+    if (!selectedRefund || !rejectionReason.trim()) return;
+    await rejectRefund(selectedRefund.id, rejectionReason);
+    setSelectedRefund(null);
+    setRejectDialogOpen(false);
+    setRejectionReason("");
+  };
+
   const filteredTransactions = transactions.filter((txn) => {
     const matchesSearch =
       txn.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -76,6 +118,7 @@ export default function PaymentsPage() {
     if (activeTab === "revenue") return matchesSearch && txn.type === "payment";
     if (activeTab === "refunds") return matchesSearch && txn.type === "refund";
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
+    if (activeTab === "pending-refunds") return false; // Handled separately
 
     return matchesSearch;
   });
@@ -90,7 +133,7 @@ export default function PaymentsPage() {
     },
     {
       title: "Pending Refunds",
-      value: stats.pendingRefunds.toString(),
+      value: pendingRefunds.length.toString(),
       icon: AlertCircle,
       color: "text-warning-foreground",
       bgColor: "bg-warning-bg",
@@ -141,22 +184,60 @@ export default function PaymentsPage() {
           })}
         </div>
 
-        {/* Pending Refunds Alert */}
+        {/* Pending Refunds Section */}
         {pendingRefunds.length > 0 && (
           <Card className="border-warning bg-warning-bg/20">
-            <CardContent className="p-4 flex items-center gap-4">
-              <AlertCircle className="w-5 h-5 text-warning-foreground flex-shrink-0" />
-              <div className="flex-1">
-                <p className="font-medium">
-                  {pendingRefunds.length} refund request{pendingRefunds.length > 1 ? "s" : ""} pending approval
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Review and approve or reject refund requests
-                </p>
-              </div>
-              <Button variant="outline" size="sm">
-                Review
-              </Button>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-warning-foreground" />
+                Pending Refund Requests ({pendingRefunds.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {pendingRefunds.map((refund) => (
+                <div
+                  key={refund.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-background border"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{refund.customer?.full_name || "Unknown"}</p>
+                      <Badge className={cn("text-xs", refundStatusStyles[refund.status]?.bg, refundStatusStyles[refund.status]?.text)}>
+                        {refund.status}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {formatCurrency(Number(refund.amount))} • {refund.refund_type.replace("_", " ")}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                      Reason: {refund.reason}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setSelectedRefund(refund);
+                        setRejectDialogOpen(true);
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-success hover:bg-success/90"
+                      onClick={() => {
+                        setSelectedRefund(refund);
+                        setApproveDialogOpen(true);
+                      }}
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}
@@ -240,7 +321,13 @@ export default function PaymentsPage() {
                       return (
                         <div
                           key={txn.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-surface hover:bg-muted/50 transition-colors"
+                          className="flex items-center justify-between p-3 rounded-lg bg-surface hover:bg-muted/50 transition-colors cursor-pointer"
+                          onClick={() => {
+                            if (txn.type === "payment" && txn.customer_id) {
+                              setSelectedTransaction(txn);
+                              setRefundDialogOpen(true);
+                            }
+                          }}
                         >
                           <div className="flex items-center gap-4">
                             <div
@@ -284,6 +371,62 @@ export default function PaymentsPage() {
           </div>
         </Tabs>
       </div>
+
+      {/* Request Refund Dialog */}
+      <RequestRefundDialog
+        open={refundDialogOpen}
+        onOpenChange={setRefundDialogOpen}
+        transaction={selectedTransaction}
+        onSuccess={() => {
+          refetchRefunds();
+          refetchTransactions();
+        }}
+      />
+
+      {/* Approve Confirmation */}
+      <ConfirmActionDialog
+        open={approveDialogOpen}
+        onOpenChange={setApproveDialogOpen}
+        title="Approve Refund"
+        description={`Are you sure you want to approve this refund of ${selectedRefund ? formatCurrency(Number(selectedRefund.amount)) : ""}?`}
+        confirmLabel="Approve"
+        onConfirm={handleApprove}
+      />
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Refund</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please provide a reason for rejecting this refund request.
+            </p>
+            <div className="space-y-2">
+              <Label>Rejection Reason <span className="text-destructive">*</span></Label>
+              <Textarea
+                placeholder="Enter the reason for rejection..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={!rejectionReason.trim()}
+            >
+              Reject Refund
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SalonSidebar>
   );
 }
