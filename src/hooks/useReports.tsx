@@ -3,6 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, format } from "date-fns";
 
+export interface StaffPerformance {
+  userId: string;
+  name: string;
+  appointmentsCompleted: number;
+  revenue: number;
+  avgRating?: number;
+}
+
 export interface ReportStats {
   totalRevenue: number;
   totalAppointments: number;
@@ -13,6 +21,7 @@ export interface ReportStats {
   topServices: { name: string; count: number; revenue: number }[];
   paymentMethodBreakdown: { method: string; amount: number; count: number }[];
   dailyRevenue: { date: string; revenue: number }[];
+  staffPerformance: StaffPerformance[];
   // Insights
   busiestDay: string | null;
   topService: string | null;
@@ -32,6 +41,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
     topServices: [],
     paymentMethodBreakdown: [],
     dailyRevenue: [],
+    staffPerformance: [],
     busiestDay: null,
     topService: null,
     peakHour: null,
@@ -68,7 +78,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
     try {
       const { start, end } = getDateRange();
 
-      // Fetch appointments in range
+      // Fetch appointments in range with staff info
       const { data: appointments } = await supabase
         .from("appointments")
         .select("*, appointment_services(*)")
@@ -93,9 +103,16 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         .gte("created_at", start.toISOString())
         .lte("created_at", end.toISOString());
 
+      // Fetch profiles for staff names
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id, full_name");
+
       const aptList = appointments || [];
       const txnList = transactions || [];
       const customerList = customers || [];
+      const profileList = profiles || [];
+      const profileMap = new Map(profileList.map((p) => [p.user_id, p.full_name]));
 
       // Calculate stats
       const totalRevenue = txnList.filter((t) => t.type === "payment").reduce((sum, t) => sum + Number(t.amount), 0);
@@ -196,6 +213,26 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         });
       }
 
+      // Staff performance
+      const staffStats: Record<string, { appointmentsCompleted: number; revenue: number }> = {};
+      aptList.filter((a) => a.status === "completed" && a.assigned_staff_id).forEach((apt) => {
+        const staffId = apt.assigned_staff_id!;
+        if (!staffStats[staffId]) {
+          staffStats[staffId] = { appointmentsCompleted: 0, revenue: 0 };
+        }
+        staffStats[staffId].appointmentsCompleted++;
+        staffStats[staffId].revenue += Number(apt.total_amount || 0);
+      });
+
+      const staffPerformance: StaffPerformance[] = Object.entries(staffStats)
+        .map(([userId, data]) => ({
+          userId,
+          name: profileMap.get(userId) || "Unknown Staff",
+          ...data,
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+
       setStats({
         totalRevenue,
         totalAppointments,
@@ -206,6 +243,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         topServices,
         paymentMethodBreakdown,
         dailyRevenue,
+        staffPerformance,
         busiestDay,
         topService: topServiceName,
         peakHour,

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useMessagingCredits } from "@/hooks/useMessagingCredits";
 import { useEmailTemplates, templateTypeLabels, type TemplateType } from "@/hooks/useEmailTemplates";
+import { EditTemplateDialog } from "@/components/dialogs/EditTemplateDialog";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -31,8 +32,9 @@ const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
 
 export default function MessagingPage() {
   const [activeTab, setActiveTab] = useState("overview");
+  const [editingTemplate, setEditingTemplate] = useState<TemplateType | null>(null);
   const { credits, messageLogs, stats, isLoading } = useMessagingCredits();
-  const { templates, isLoading: templatesLoading } = useEmailTemplates();
+  const { templates, isLoading: templatesLoading, refetch: refetchTemplates } = useEmailTemplates();
 
   return (
     <SalonSidebar>
@@ -212,7 +214,7 @@ export default function MessagingPage() {
                                   Default
                                 </Badge>
                               )}
-                              <Button variant="outline" size="sm">
+                              <Button variant="outline" size="sm" onClick={() => setEditingTemplate(type)}>
                                 Edit
                               </Button>
                             </div>
@@ -307,6 +309,18 @@ export default function MessagingPage() {
             </TabsContent>
           </div>
         </Tabs>
+
+        {/* Template Edit Dialog */}
+        <EditTemplateDialog
+          open={!!editingTemplate}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingTemplate(null);
+              refetchTemplates();
+            }
+          }}
+          templateType={editingTemplate}
+        />
       </div>
     </SalonSidebar>
   );

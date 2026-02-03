@@ -12,6 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   TrendingUp,
   Users,
   Calendar,
@@ -21,9 +29,11 @@ import {
   BarChart3,
   ArrowUp,
   ArrowDown,
+  UserCheck,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "@/hooks/use-toast";
 import {
   LineChart,
   Line,
@@ -91,6 +101,25 @@ export default function ReportsPage() {
 
   const hasInsights = stats.busiestDay || stats.topService || stats.peakHour || stats.retentionRate;
 
+  const handleExportCSV = () => {
+    // Generate CSV for revenue data
+    const headers = ["Date", "Revenue"];
+    const rows = stats.dailyRevenue.map((d) => [d.date, d.revenue.toString()]);
+    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `revenue-report-${period}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    
+    toast({
+      title: "Export Complete",
+      description: "Revenue report downloaded successfully",
+    });
+  };
+
   return (
     <SalonSidebar>
       <div className="space-y-6">
@@ -113,7 +142,7 @@ export default function ReportsPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
               <Download className="w-4 h-4" />
               Export
             </Button>
@@ -354,6 +383,56 @@ export default function ReportsPage() {
                   <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Staff Performance */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-lg font-medium">Staff Performance</CardTitle>
+            <UserCheck className="w-4 h-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                ))}
+              </div>
+            ) : stats.staffPerformance.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <UserCheck className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p>No staff performance data available.</p>
+                <p className="text-xs mt-1">Assign staff to appointments to track performance.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Staff Member</TableHead>
+                    <TableHead className="text-right">Appointments</TableHead>
+                    <TableHead className="text-right">Revenue</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stats.staffPerformance.map((staff, index) => (
+                    <TableRow key={staff.userId}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {index === 0 && <Badge className="text-xs">Top</Badge>}
+                          {staff.name}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">{staff.appointmentsCompleted}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(staff.revenue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
           </CardContent>
         </Card>

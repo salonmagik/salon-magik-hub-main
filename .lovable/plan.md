@@ -1,7 +1,7 @@
 
 # Complete Implementation Plan: Salon Platform Enhancement
 
-**Last Updated:** Batch 4 - Settings + UX (Completed)
+**Last Updated:** Batch 6 - Reports (Completed)
 
 ## Recent Completions
 - ✅ Database migration: `is_gifted` column added to appointments
@@ -18,6 +18,11 @@
 - ✅ `SettingsPage.tsx` - Settings persistence fix (refreshTenants called after save)
 - ✅ DOB Calendar already implemented with year/month dropdowns
 - ✅ Customer Notes tab already implemented in CustomerDetailDialog
+- ✅ **Batch 5: Staff Invitation Edge Function** - `send-staff-invitation` edge function created
+- ✅ **Batch 5: Email Template Editing** - `EditTemplateDialog.tsx` created with variable helpers
+- ✅ **Batch 6: Staff Performance** - Added staff performance metrics to Reports
+- ✅ **Batch 6: Export Functionality** - CSV export for revenue data
+
 
 ---
 
