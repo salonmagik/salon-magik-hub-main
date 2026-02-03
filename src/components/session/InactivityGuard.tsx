@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -25,7 +25,7 @@ const ACTIVITY_EVENTS = [
   "scroll",
   "touchstart",
   "click",
-];
+] as const;
 
 export function InactivityGuard({
   children,
@@ -36,14 +36,17 @@ export function InactivityGuard({
   const [showWarning, setShowWarning] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const [countdown, setCountdown] = useState(60);
-  const [lastActivity, setLastActivity] = useState(Date.now());
+
+  // Use ref instead of state to avoid re-renders on every activity event
+  const lastActivityRef = useRef(Date.now());
 
   const warningMs = warningMinutes * 60 * 1000;
   const logoutMs = logoutMinutes * 60 * 1000;
 
   const resetTimer = useCallback(() => {
-    setLastActivity(Date.now());
+    lastActivityRef.current = Date.now();
     setShowWarning(false);
+    setShowLogout(false);
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -51,11 +54,12 @@ export function InactivityGuard({
     navigate("/login", { replace: true });
   }, [navigate]);
 
-  // Handle user activity
+  // Handle user activity - only update ref, no state changes
   useEffect(() => {
     const handleActivity = () => {
+      // Only track activity if dialogs are not showing
       if (!showWarning && !showLogout) {
-        setLastActivity(Date.now());
+        lastActivityRef.current = Date.now();
       }
     };
 
@@ -74,9 +78,15 @@ export function InactivityGuard({
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      const inactive = now - lastActivity;
+      const inactive = now - lastActivityRef.current;
+
+      // If already in logout mode, don't re-trigger
+      if (showLogout) {
+        return;
+      }
 
       if (inactive >= logoutMs) {
+        // Transition to logout mode - set countdown once
         setShowWarning(false);
         setShowLogout(true);
         setCountdown(60);
@@ -86,7 +96,7 @@ export function InactivityGuard({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [lastActivity, warningMs, logoutMs, showWarning]);
+  }, [warningMs, logoutMs, showWarning, showLogout]);
 
   // Countdown timer when logout modal is shown
   useEffect(() => {
@@ -105,74 +115,76 @@ export function InactivityGuard({
     return () => clearInterval(interval);
   }, [showLogout, handleLogout]);
 
-  const handleStayLoggedIn = () => {
+  const handleStayLoggedIn = useCallback(() => {
     resetTimer();
-    setShowWarning(false);
-  };
+  }, [resetTimer]);
+
+  const handleCancelLogout = useCallback(() => {
+    resetTimer();
+  }, [resetTimer]);
 
   return (
     <>
       {children}
 
-      {/* Warning Modal - 55 minutes */}
-      <AlertDialog open={showWarning} onOpenChange={setShowWarning}>
-        <AlertDialogContent className="sm:max-w-md">
-          <AlertDialogHeader>
-            <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
-              <Clock className="w-6 h-6 text-amber-600" />
-            </div>
-            <AlertDialogTitle className="text-center">
-              Session Expiring Soon
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-center">
-              You've been inactive for a while. For your security, you'll be
-              logged out in 5 minutes unless you continue using the app.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center">
-            <AlertDialogAction onClick={handleStayLoggedIn}>
-              Stay Logged In
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Logout Modal - 60 minutes with countdown */}
-      <AlertDialog open={showLogout} onOpenChange={() => {}}>
-        <AlertDialogContent className="sm:max-w-md">
-          <AlertDialogHeader>
-            <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
-              <AlertTriangle className="w-8 h-8 text-destructive" />
-            </div>
-            <AlertDialogTitle className="text-center">
-              Logging Out
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-center space-y-4">
-              <p>
-                For your security, you're being logged out due to inactivity.
-              </p>
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-4xl font-bold text-foreground tabular-nums">
-                  {countdown}
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  seconds remaining
-                </span>
+      {/* Warning Modal - only mount when needed */}
+      {showWarning && (
+        <AlertDialog open={true} onOpenChange={(open) => !open && setShowWarning(false)}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+                <Clock className="w-6 h-6 text-amber-600" />
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="sm:justify-center">
-            <AlertDialogAction
-              onClick={() => {
-                setShowLogout(false);
-                resetTimer();
-              }}
-            >
-              Cancel Logout
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              <AlertDialogTitle className="text-center">
+                Session Expiring Soon
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-center">
+                You've been inactive for a while. For your security, you'll be
+                logged out in 5 minutes unless you continue using the app.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="sm:justify-center">
+              <AlertDialogAction onClick={handleStayLoggedIn}>
+                Stay Logged In
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* Logout Modal - only mount when needed */}
+      {showLogout && (
+        <AlertDialog open={true} onOpenChange={() => {}}>
+          <AlertDialogContent className="sm:max-w-md">
+            <AlertDialogHeader>
+              <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+                <AlertTriangle className="w-8 h-8 text-destructive" />
+              </div>
+              <AlertDialogTitle className="text-center">
+                Logging Out
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-center space-y-4">
+                <p>
+                  For your security, you're being logged out due to inactivity.
+                </p>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-4xl font-bold text-foreground tabular-nums">
+                    {countdown}
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    seconds remaining
+                  </span>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="sm:justify-center">
+              <AlertDialogAction onClick={handleCancelLogout}>
+                Cancel Logout
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }
