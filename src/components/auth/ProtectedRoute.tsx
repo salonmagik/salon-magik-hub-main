@@ -1,4 +1,4 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireOnboarding = true }: ProtectedRouteProps) {
-  const { isLoading, isAuthenticated, hasCompletedOnboarding } = useAuth();
+  const { isLoading, isAuthenticated, hasCompletedOnboarding, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -24,6 +24,12 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  // Check if user needs to reset password (invited staff with temp password)
+  const requiresPasswordReset = user?.user_metadata?.requires_password_reset === true;
+  if (requiresPasswordReset && location.pathname !== "/reset-password") {
+    return <Navigate to="/reset-password?first_login=true" replace />;
   }
 
   // If onboarding is required but not completed, redirect to onboarding
