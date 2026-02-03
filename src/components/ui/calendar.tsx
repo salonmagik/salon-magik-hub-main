@@ -1,13 +1,88 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, CaptionProps, useNavigation } from "react-day-picker";
+import { format, setMonth, setYear } from "date-fns";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-export type CalendarProps = React.ComponentProps<typeof DayPicker>;
+export type CalendarProps = React.ComponentProps<typeof DayPicker> & {
+  showYearMonthDropdown?: boolean;
+  fromYear?: number;
+  toYear?: number;
+};
 
-function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+function CustomCaption({ displayMonth }: CaptionProps) {
+  const { goToMonth, currentMonth } = useNavigation();
+  
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 1920 + 1 }, (_, i) => 1920 + i).reverse();
+  const months = Array.from({ length: 12 }, (_, i) => i);
+
+  const handleMonthChange = (month: string) => {
+    const newDate = setMonth(currentMonth, parseInt(month));
+    goToMonth(newDate);
+  };
+
+  const handleYearChange = (year: string) => {
+    const newDate = setYear(currentMonth, parseInt(year));
+    goToMonth(newDate);
+  };
+
+  return (
+    <div className="flex justify-center gap-1 items-center">
+      <Select
+        value={displayMonth.getMonth().toString()}
+        onValueChange={handleMonthChange}
+      >
+        <SelectTrigger className="h-7 w-[110px] text-xs font-medium focus:ring-0">
+          <SelectValue>{format(displayMonth, "MMMM")}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-60">
+          {months.map((month) => (
+            <SelectItem key={month} value={month.toString()} className="text-xs">
+              {format(setMonth(new Date(), month), "MMMM")}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={displayMonth.getFullYear().toString()}
+        onValueChange={handleYearChange}
+      >
+        <SelectTrigger className="h-7 w-[80px] text-xs font-medium focus:ring-0">
+          <SelectValue>{displayMonth.getFullYear()}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-60">
+          {years.map((year) => (
+            <SelectItem key={year} value={year.toString()} className="text-xs">
+              {year}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function Calendar({
+  className,
+  classNames,
+  showOutsideDays = true,
+  showYearMonthDropdown = false,
+  fromYear = 1920,
+  toYear,
+  ...props
+}: CalendarProps) {
+  const captionComponent = showYearMonthDropdown ? CustomCaption : undefined;
+
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
@@ -16,7 +91,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
+        caption_label: showYearMonthDropdown ? "hidden" : "text-sm font-medium",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
@@ -44,6 +119,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
       components={{
         IconLeft: ({ ..._props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ..._props }) => <ChevronRight className="h-4 w-4" />,
+        ...(captionComponent && { Caption: captionComponent }),
       }}
       {...props}
     />

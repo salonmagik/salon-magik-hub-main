@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,10 +59,27 @@ const weekDays = [
 ];
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("profile");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
+  });
   const [isSaving, setIsSaving] = useState(false);
   const { currentTenant, profile } = useAuth();
   const { defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
+
+  // Sync tab with URL params
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && settingsTabs.some((t) => t.id === tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
 
   const [profileData, setProfileData] = useState({
     salonName: "",
@@ -518,7 +536,7 @@ export default function SettingsPage() {
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Settings Navigation - Mobile Dropdown */}
           <div className="lg:hidden">
-            <Select value={activeTab} onValueChange={setActiveTab}>
+            <Select value={activeTab} onValueChange={handleTabChange}>
               <SelectTrigger className="w-full">
                 <div className="flex items-center gap-2">
                   {(() => {
@@ -560,7 +578,7 @@ export default function SettingsPage() {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => handleTabChange(tab.id)}
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left text-sm font-medium transition-all",
                       activeTab === tab.id

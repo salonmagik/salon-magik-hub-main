@@ -19,6 +19,7 @@ export interface DatePickerProps {
   minDate?: Date;
   maxDate?: Date;
   className?: string;
+  showYearMonthDropdown?: boolean;
 }
 
 export function DatePicker({
@@ -29,6 +30,7 @@ export function DatePicker({
   minDate,
   maxDate,
   className,
+  showYearMonthDropdown = false,
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
 
@@ -65,6 +67,8 @@ export function DatePicker({
             if (maxDate && date > maxDate) return true;
             return false;
           }}
+          defaultMonth={value || maxDate}
+          showYearMonthDropdown={showYearMonthDropdown}
           initialFocus
           className="pointer-events-auto"
         />

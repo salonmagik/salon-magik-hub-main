@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   User,
   Mail,
@@ -20,14 +21,26 @@ import {
   Plus,
   ArrowUpRight,
   ArrowDownLeft,
+  FileText,
+  Pencil,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useCustomerPurse } from "@/hooks/useCustomerPurse";
 import { useAppointments } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Customer = Tables<"customers">;
+type AppointmentAttachment = Tables<"appointment_attachments">;
+
+interface AppointmentNote {
+  appointmentId: string;
+  appointmentDate: string | null;
+  note: string | null;
+  attachments: AppointmentAttachment[];
+}
 
 interface CustomerDetailDialogProps {
   open: boolean;
@@ -51,12 +64,60 @@ export function CustomerDetailDialog({
   const { purse, fetchPurseTransactions, isLoading: purseLoading } = useCustomerPurse(customer?.id || undefined);
   const { appointments, isLoading: appointmentsLoading } = useAppointments();
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [appointmentNotes, setAppointmentNotes] = useState<AppointmentNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+
+  const fetchAppointmentNotes = useCallback(async () => {
+    if (!customer?.id || !currentTenant?.id) return;
+
+    setNotesLoading(true);
+    try {
+      // Fetch appointments for this customer that have notes or attachments
+      const { data: customerAppts } = await supabase
+        .from("appointments")
+        .select("id, scheduled_start, notes")
+        .eq("customer_id", customer.id)
+        .eq("tenant_id", currentTenant.id)
+        .order("scheduled_start", { ascending: false });
+
+      if (!customerAppts?.length) {
+        setAppointmentNotes([]);
+        return;
+      }
+
+      const apptIds = customerAppts.map((a) => a.id);
+
+      // Fetch attachments for these appointments
+      const { data: attachments } = await supabase
+        .from("appointment_attachments")
+        .select("*")
+        .in("appointment_id", apptIds)
+        .order("created_at", { ascending: false });
+
+      // Group by appointment
+      const notes: AppointmentNote[] = customerAppts
+        .filter((apt) => apt.notes || attachments?.some((a) => a.appointment_id === apt.id))
+        .map((apt) => ({
+          appointmentId: apt.id,
+          appointmentDate: apt.scheduled_start,
+          note: apt.notes,
+          attachments: attachments?.filter((a) => a.appointment_id === apt.id) || [],
+        }));
+
+      setAppointmentNotes(notes);
+    } catch (err) {
+      console.error("Error fetching appointment notes:", err);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, [customer?.id, currentTenant?.id]);
 
   useEffect(() => {
     if (customer?.id && open) {
       fetchPurseTransactions().then(setTransactions);
+      fetchAppointmentNotes();
     }
-  }, [customer?.id, open]);
+  }, [customer?.id, open, fetchAppointmentNotes]);
 
   if (!customer) return null;
 
@@ -103,9 +164,10 @@ export function CustomerDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
+            <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="purse">Purse</TabsTrigger>
           </TabsList>
 
@@ -214,6 +276,73 @@ export function CustomerDetailDialog({
                   </Card>
                 ))}
               </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="notes" className="mt-4">
+            {notesLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            ) : appointmentNotes.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground">No notes from appointments yet</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[300px]">
+                <div className="space-y-4 pr-4">
+                  {appointmentNotes.map((note) => (
+                    <Card key={note.appointmentId}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                          <Calendar className="w-4 h-4" />
+                          <span>
+                            {note.appointmentDate
+                              ? format(new Date(note.appointmentDate), "MMM d, yyyy 'at' h:mm a")
+                              : "Unscheduled appointment"}
+                          </span>
+                        </div>
+                        
+                        {note.note && (
+                          <div className="flex gap-2 mb-3">
+                            <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <p className="text-sm">{note.note}</p>
+                          </div>
+                        )}
+                        
+                        {note.attachments.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground font-medium">Attachments</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {note.attachments.map((attachment) => (
+                                <a
+                                  key={attachment.id}
+                                  href={attachment.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                                >
+                                  {attachment.is_drawing ? (
+                                    <Pencil className="w-4 h-4 text-primary" />
+                                  ) : (
+                                    <ImageIcon className="w-4 h-4 text-primary" />
+                                  )}
+                                  <span className="text-xs truncate flex-1">
+                                    {attachment.file_name}
+                                  </span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
             )}
           </TabsContent>
 
