@@ -113,16 +113,9 @@ const faqs = [
 const resources = [
   {
     title: "Email Support",
-    description: "support@salonmagik.com",
+    description: "Get help via email",
     icon: Mail,
     link: "mailto:support@salonmagik.com",
-  },
-  {
-    title: "Live Chat",
-    description: "Chat with our support team",
-    icon: MessageCircle,
-    link: "#", // Will integrate with Tawk.to/Crisp
-    isChat: true,
   },
 ];
 
@@ -261,7 +254,7 @@ export default function HelpPage() {
             {/* Resources */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Resources</CardTitle>
+                <CardTitle className="text-lg">Contact Support</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {resources.map((resource, index) => {
@@ -270,13 +263,6 @@ export default function HelpPage() {
                     <a
                       key={index}
                       href={resource.link}
-                      onClick={(e) => {
-                        if ((resource as any).isChat) {
-                          e.preventDefault();
-                          // Placeholder for chat widget trigger
-                          alert("Live chat coming soon! Please email support@salonmagik.com");
-                        }
-                      }}
                       className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                     >
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -288,9 +274,7 @@ export default function HelpPage() {
                           {resource.description}
                         </p>
                       </div>
-                      {!(resource as any).isChat && (
-                        <ExternalLink className="w-4 h-4 text-muted-foreground" />
-                      )}
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
                     </a>
                   );
                 })}
@@ -300,12 +284,14 @@ export default function HelpPage() {
             {/* Contact */}
             <Card className="border-primary/20">
               <CardContent className="p-6 text-center">
-                <MessageCircle className="w-10 h-10 text-primary mx-auto mb-3" />
-                <h3 className="font-semibold mb-1">Still need help?</h3>
+                <Mail className="w-10 h-10 text-primary mx-auto mb-3" />
+                <h3 className="font-semibold mb-1">Need more help?</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Our support team is here to assist you
                 </p>
-                <Button className="w-full">Contact Support</Button>
+                <Button className="w-full" asChild>
+                  <a href="mailto:support@salonmagik.com">Email Support</a>
+                </Button>
               </CardContent>
             </Card>
 

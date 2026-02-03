@@ -11,6 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   User,
   Mail,
@@ -24,8 +27,12 @@ import {
   FileText,
   Pencil,
   Image as ImageIcon,
+  Receipt,
+  Search,
+  Filter,
+  X,
 } from "lucide-react";
-import { useCustomerPurse } from "@/hooks/useCustomerPurse";
+import { useCustomerPurse, type Transaction } from "@/hooks/useCustomerPurse";
 import { useAppointments } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,11 +68,19 @@ export function CustomerDetailDialog({
   customer,
 }: CustomerDetailDialogProps) {
   const { currentTenant } = useAuth();
-  const { purse, fetchPurseTransactions, isLoading: purseLoading } = useCustomerPurse(customer?.id || undefined);
+  const { purse, fetchPurseTransactions, fetchAllCustomerTransactions, isLoading: purseLoading } = useCustomerPurse(customer?.id || undefined);
   const { appointments, isLoading: appointmentsLoading } = useAppointments();
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [purseTransactions, setPurseTransactions] = useState<any[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [appointmentNotes, setAppointmentNotes] = useState<AppointmentNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
+  
+  // Transaction filters
+  const [txSearchQuery, setTxSearchQuery] = useState("");
+  const [txStartDate, setTxStartDate] = useState<Date | undefined>();
+  const [txEndDate, setTxEndDate] = useState<Date | undefined>();
+  const [showFilters, setShowFilters] = useState(false);
 
   const fetchAppointmentNotes = useCallback(async () => {
     if (!customer?.id || !currentTenant?.id) return;
@@ -112,12 +127,44 @@ export function CustomerDetailDialog({
     }
   }, [customer?.id, currentTenant?.id]);
 
+  const fetchTransactions = useCallback(async () => {
+    if (!customer?.id) return;
+    
+    setTransactionsLoading(true);
+    try {
+      const [purseData, allData] = await Promise.all([
+        fetchPurseTransactions(),
+        fetchAllCustomerTransactions({
+          startDate: txStartDate?.toISOString(),
+          endDate: txEndDate?.toISOString(),
+        }),
+      ]);
+      setPurseTransactions(purseData);
+      setAllTransactions(allData);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  }, [customer?.id, fetchPurseTransactions, fetchAllCustomerTransactions, txStartDate, txEndDate]);
+
   useEffect(() => {
     if (customer?.id && open) {
-      fetchPurseTransactions().then(setTransactions);
+      fetchTransactions();
       fetchAppointmentNotes();
     }
-  }, [customer?.id, open, fetchAppointmentNotes]);
+  }, [customer?.id, open, fetchTransactions, fetchAppointmentNotes]);
+
+  // Filter transactions by search query
+  const filteredTransactions = allTransactions.filter((tx) => {
+    if (!txSearchQuery) return true;
+    const query = txSearchQuery.toLowerCase();
+    return (
+      tx.type.toLowerCase().includes(query) ||
+      tx.method.toLowerCase().includes(query) ||
+      tx.status.toLowerCase().includes(query) ||
+      tx.appointment_id?.toLowerCase().includes(query) ||
+      tx.amount.toString().includes(query)
+    );
+  });
 
   if (!customer) return null;
 
@@ -164,10 +211,11 @@ export function CustomerDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
             <TabsTrigger value="purse">Purse</TabsTrigger>
           </TabsList>
 
@@ -346,6 +394,148 @@ export function CustomerDetailDialog({
             )}
           </TabsContent>
 
+          <TabsContent value="transactions" className="mt-4">
+            {/* Search and Filters */}
+            <div className="space-y-3 mb-4">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by type, method, status..."
+                    value={txSearchQuery}
+                    onChange={(e) => setTxSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={showFilters ? "bg-muted" : ""}
+                >
+                  <Filter className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {showFilters && (
+                <Card>
+                  <CardContent className="p-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Start Date</Label>
+                        <DatePicker
+                          value={txStartDate}
+                          onChange={setTxStartDate}
+                          placeholder="From"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">End Date</Label>
+                        <DatePicker
+                          value={txEndDate}
+                          onChange={setTxEndDate}
+                          placeholder="To"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setTxStartDate(undefined);
+                          setTxEndDate(undefined);
+                          setTxSearchQuery("");
+                        }}
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Clear Filters
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {transactionsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : filteredTransactions.length === 0 ? (
+              <div className="text-center py-8">
+                <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground">
+                  {txSearchQuery || txStartDate || txEndDate
+                    ? "No matching transactions found"
+                    : "No transactions yet"}
+                </p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[300px]">
+                <div className="space-y-2 pr-4">
+                  {filteredTransactions.map((tx) => (
+                    <Card key={tx.id}>
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`p-2 rounded-lg ${
+                                tx.type.includes("refund") || tx.type === "purse_topup"
+                                  ? "bg-success/10"
+                                  : "bg-primary/10"
+                              }`}
+                            >
+                              <Receipt className={`w-4 h-4 ${
+                                tx.type.includes("refund") || tx.type === "purse_topup"
+                                  ? "text-success"
+                                  : "text-primary"
+                              }`} />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm capitalize">
+                                {tx.type.replace(/_/g, " ")}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>{format(new Date(tx.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
+                                <span>•</span>
+                                <span className="capitalize">{tx.method.replace(/_/g, " ")}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">
+                              {currency} {Number(tx.amount).toFixed(2)}
+                            </p>
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs ${
+                                tx.status === "completed"
+                                  ? "bg-success/10 text-success"
+                                  : tx.status === "pending"
+                                  ? "bg-warning/10 text-warning"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {tx.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        {tx.appointment_id && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            <span className="font-medium">Booking: </span>
+                            <span className="font-mono">{tx.appointment_id.slice(0, 8)}...</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </TabsContent>
+
           <TabsContent value="purse" className="mt-4">
             <Card className="mb-4">
               <CardContent className="p-4 flex items-center justify-between">
@@ -368,14 +558,14 @@ export function CustomerDetailDialog({
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : transactions.length === 0 ? (
+            ) : purseTransactions.length === 0 ? (
               <div className="text-center py-8">
                 <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No transactions yet</p>
+                <p className="text-muted-foreground">No purse transactions yet</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {transactions.map((tx) => (
+                {purseTransactions.map((tx) => (
                   <Card key={tx.id}>
                     <CardContent className="p-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">

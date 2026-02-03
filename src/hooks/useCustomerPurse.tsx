@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { toast } from "@/hooks/use-toast";
+import type { Tables } from "@/integrations/supabase/types";
 
 export interface CustomerPurse {
   id: string;
@@ -10,6 +10,17 @@ export interface CustomerPurse {
   balance: number;
   created_at: string;
   updated_at: string;
+}
+
+export type Transaction = Tables<"transactions">;
+
+export interface TransactionFilters {
+  startDate?: string;
+  endDate?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  appointmentId?: string;
+  type?: string;
 }
 
 export function useCustomerPurse(customerId?: string) {
@@ -68,6 +79,55 @@ export function useCustomerPurse(customerId?: string) {
     }
   };
 
+  // Fetch all transactions for the customer with optional filters
+  const fetchAllCustomerTransactions = async (filters?: TransactionFilters): Promise<Transaction[]> => {
+    if (!currentTenant?.id || !customerId) return [];
+
+    try {
+      let query = supabase
+        .from("transactions")
+        .select("*")
+        .eq("tenant_id", currentTenant.id)
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false });
+
+      // Apply date filters
+      if (filters?.startDate) {
+        query = query.gte("created_at", filters.startDate);
+      }
+      if (filters?.endDate) {
+        query = query.lte("created_at", filters.endDate);
+      }
+
+      // Apply amount filters
+      if (filters?.minAmount !== undefined) {
+        query = query.gte("amount", filters.minAmount);
+      }
+      if (filters?.maxAmount !== undefined) {
+        query = query.lte("amount", filters.maxAmount);
+      }
+
+      // Apply appointment filter
+      if (filters?.appointmentId) {
+        query = query.eq("appointment_id", filters.appointmentId);
+      }
+
+      // Apply type filter
+      if (filters?.type) {
+        query = query.eq("type", filters.type);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      return (data as Transaction[]) || [];
+    } catch (err) {
+      console.error("Error fetching all customer transactions:", err);
+      return [];
+    }
+  };
+
   return {
     purse,
     balance: purse?.balance || 0,
@@ -75,6 +135,7 @@ export function useCustomerPurse(customerId?: string) {
     error,
     refetch: fetchPurse,
     fetchPurseTransactions,
+    fetchAllCustomerTransactions,
   };
 }
 

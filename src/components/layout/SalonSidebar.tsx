@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
+import { useNotifications } from "@/hooks/useNotifications";
 import { SubscriptionBanner } from "@/components/layout/SubscriptionBanner";
 import {
   Tooltip,
@@ -92,6 +93,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { unreadCount } = useNotifications();
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -363,9 +365,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                   onClick={() => setNotificationsOpen(true)}
                 >
                   <Bell className="w-5 h-5" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                    2
-                  </span>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
                 </Button>
               </div>
             </header>
