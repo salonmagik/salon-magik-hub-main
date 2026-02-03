@@ -2,3 +2,6 @@ project_id = "yueagxbvttykybkioywa"
 
 [functions.send-staff-invitation]
 verify_jwt = false
+
+[functions.send-appointment-notification]
+verify_jwt = false

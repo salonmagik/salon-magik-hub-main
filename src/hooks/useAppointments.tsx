@@ -118,6 +118,22 @@ export function useAppointmentActions() {
   const { currentTenant, user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Helper function to send appointment notification email
+  const sendAppointmentNotification = async (
+    appointmentId: string,
+    action: "scheduled" | "completed" | "cancelled" | "rescheduled",
+    additionalData?: { reason?: string; newDate?: string; newTime?: string }
+  ) => {
+    try {
+      await supabase.functions.invoke("send-appointment-notification", {
+        body: { appointmentId, action, ...additionalData },
+      });
+    } catch (error) {
+      console.error("Failed to send appointment notification:", error);
+      // Don't fail the main action - email is fire-and-forget
+    }
+  };
+
   const createAppointment = async (data: {
     customerId: string;
     services: { serviceId: string; serviceName: string; price: number; duration: number }[];
@@ -206,6 +222,10 @@ export function useAppointmentActions() {
       if (servicesError) throw servicesError;
 
       toast({ title: "Success", description: "Appointment created successfully" });
+      
+      // Send confirmation email (fire-and-forget)
+      sendAppointmentNotification(appointment.id, "scheduled");
+      
       return appointment;
     } catch (err) {
       console.error("Error creating appointment:", err);
@@ -335,11 +355,23 @@ export function useAppointmentActions() {
     }
   };
 
-  const completeAppointment = (appointmentId: string) => 
-    updateStatus(appointmentId, "completed");
+  const completeAppointment = async (appointmentId: string) => {
+    const success = await updateStatus(appointmentId, "completed");
+    if (success) {
+      // Send completion email (fire-and-forget)
+      sendAppointmentNotification(appointmentId, "completed");
+    }
+    return success;
+  };
 
-  const cancelAppointment = (appointmentId: string, reason: string) => 
-    updateStatus(appointmentId, "cancelled", { cancellation_reason: reason });
+  const cancelAppointment = async (appointmentId: string, reason: string) => {
+    const success = await updateStatus(appointmentId, "cancelled", { cancellation_reason: reason });
+    if (success) {
+      // Send cancellation email (fire-and-forget)
+      sendAppointmentNotification(appointmentId, "cancelled", { reason });
+    }
+    return success;
+  };
 
   const rescheduleAppointment = async (
     appointmentId: string, 
@@ -364,6 +396,21 @@ export function useAppointmentActions() {
       if (error) throw error;
 
       toast({ title: "Rescheduled", description: "Appointment has been rescheduled" });
+      
+      // Send reschedule email with new date/time
+      const newDate = new Date(newStart).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      const newTime = new Date(newStart).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+      sendAppointmentNotification(appointmentId, "rescheduled", { newDate, newTime });
+      
       return true;
     } catch (err) {
       console.error("Error rescheduling appointment:", err);
