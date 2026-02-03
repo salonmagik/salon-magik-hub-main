@@ -1,216 +1,234 @@
 
+# Implementation Plan: Payments Page Tabs, Settings Toggles & Functional Audit
 
-# Enhanced Batch 7: Complete Polish + Customer Improvements + Appointment Emails
-
-This final batch implements customer transaction tracking, fixes the notifications badge, adds selective appointment email notifications, and polishes the mobile experience.
-
----
-
-## Summary of All Requirements
-
-| Feature | Description |
-|---------|-------------|
-| Customer Transaction Tracker | Add "Transactions" tab to customer profile with filters |
-| Notifications Badge Bug | Fix hardcoded "2" - use real `unreadCount` |
-| **Appointment Emails (Selective)** | Send emails for booking, completion, cancellation, reschedule only |
-| Mobile Audit | Responsiveness verification |
-| Help Page Polish | Cleanup unnecessary links |
+This plan addresses all non-functional areas identified in the salon platform, making all features fully operational with real backend interactions.
 
 ---
 
-## Appointment Actions Requiring Email Notifications
+## Summary of Issues Found
 
-| Action | Email Template Type | Send Email? | Notes |
-|--------|---------------------|-------------|-------|
-| Scheduled (new booking) | `appointment_confirmation` | Yes | Customer confirmation |
-| Walk-in Created | `appointment_confirmation` | Yes | Same as scheduled |
-| Started | - | No | Track via client portal |
-| Paused | - | No | Track via client portal |
-| Resumed | - | No | Track via client portal |
-| Completed | `appointment_completed` | Yes | Thank you + receipt |
-| Cancelled | `appointment_cancelled` | Yes | Cancellation notice |
-| Rescheduled | `appointment_rescheduled` | Yes | New date/time info |
-
-**Rationale:** Started, paused, and resumed are real-time status changes that customers can monitor through their booking portal. Email notifications for these would be excessive and potentially confusing.
+| Issue | Location | Status |
+|-------|----------|--------|
+| Payments page tabs (All, Revenue, Refunds, Purse) - no dedicated TabsContent | `PaymentsPage.tsx` | Needs TabsContent structure |
+| "Require deposits for bookings" shows Badge not Toggle | `SettingsPage.tsx` line 787-789 | Convert to Switch |
+| Notifications settings - Save button disabled, doesn't save to backend | `SettingsPage.tsx` line 567 | Integrate `useNotificationSettings` hook |
+| Integrations tab shows "coming soon" | `SettingsPage.tsx` line 1027 | Placeholder (acceptable for now) |
+| Date range filter in Payments page is non-functional | `PaymentsPage.tsx` | Make filter work |
 
 ---
 
-## Phase 1: Appointment Email Edge Function
+## Phase 1: Payments Page - Define TabsContent for Each Tab
 
-Create a unified edge function that handles the 4 email-triggering actions.
+**Current Issue:** The tabs work by filtering `filteredTransactions` but there's no dedicated `TabsContent` component for each tab. The UI is functional but lacks proper tab structure.
 
-**Edge Function:** `send-appointment-notification`
+**Solution:** Restructure to use proper `TabsContent` components for cleaner organization and potentially add tab-specific features.
 
-**Accepted Actions:**
-- `scheduled` - New booking confirmation
-- `completed` - Thank you email with receipt summary
-- `cancelled` - Cancellation notice with reason
-- `rescheduled` - Updated date/time notification
+### Changes to `PaymentsPage.tsx`:
+1. Wrap content in proper `TabsContent` components
+2. Add specific empty states for each tab type
+3. Make date range filter functional
 
-**Request Payload:**
-```typescript
-{
-  appointmentId: string;
-  action: "scheduled" | "completed" | "cancelled" | "rescheduled";
-  additionalData?: {
-    reason?: string;      // For cancelled
-    newDate?: string;     // For rescheduled
-    newTime?: string;     // For rescheduled
+```tsx
+// Add state for date filter
+const [dateFilter, setDateFilter] = useState("all-time");
+
+// Compute date range based on filter
+const getDateRange = () => {
+  const now = new Date();
+  switch (dateFilter) {
+    case "today":
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return { start: today, end: now };
+    case "week":
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - 7);
+      return { start: weekStart, end: now };
+    case "month":
+      const monthStart = new Date();
+      monthStart.setMonth(monthStart.getMonth() - 1);
+      return { start: monthStart, end: now };
+    default:
+      return null;
   }
-}
+};
+
+// Apply date filtering
+const dateRange = getDateRange();
+const dateFilteredTransactions = transactions.filter((txn) => {
+  if (!dateRange) return true;
+  const txnDate = new Date(txn.created_at);
+  return txnDate >= dateRange.start && txnDate <= dateRange.end;
+});
+
+// Then filter by tab type
 ```
 
-**Template Variables:**
-| Variable | Description |
-|----------|-------------|
-| `{{customer_name}}` | Customer's full name |
-| `{{salon_name}}` | Tenant/business name |
-| `{{appointment_date}}` | Formatted date |
-| `{{appointment_time}}` | Formatted time |
-| `{{services}}` | Comma-separated service names |
-| `{{total_amount}}` | Total price |
-| `{{location}}` | Salon location |
-| `{{reason}}` | Cancellation reason |
-| `{{new_date}}` | New date (reschedule) |
-| `{{new_time}}` | New time (reschedule) |
+### Tab-Specific Empty States:
+- **All:** "No transactions found"
+- **Revenue:** "No payments recorded yet"
+- **Refunds:** "No refunds processed"
+- **Purse:** "No purse activity yet"
 
 ---
 
-## Phase 2: Integration with useAppointments Hook
+## Phase 2: Deposits Toggle in Settings
 
-Add email triggers to only the relevant actions:
+**Current Issue (line 780-790):**
+```tsx
+<div className="flex items-center justify-between py-2">
+  <div>
+    <p className="font-medium">Deposits</p>
+    <p className="text-sm text-muted-foreground">
+      Require deposits for bookings
+    </p>
+  </div>
+  <Badge variant="outline" className="text-success">
+    {currentTenant?.deposits_enabled ? "Enabled" : "Disabled"}
+  </Badge>
+</div>
+```
 
-| Function | Trigger Email? | Action Parameter |
-|----------|----------------|------------------|
-| `createAppointment()` | Yes | "scheduled" |
-| `startAppointment()` | No | - |
-| `pauseAppointment()` | No | - |
-| `resumeAppointment()` | No | - |
-| `completeAppointment()` | Yes | "completed" |
-| `cancelAppointment()` | Yes | "cancelled" + reason |
-| `rescheduleAppointment()` | Yes | "rescheduled" + new date/time |
+**Solution:** Replace Badge with Switch (like Pay at Salon toggle):
+```tsx
+<Switch
+  checked={currentTenant?.deposits_enabled || false}
+  onCheckedChange={async (checked) => {
+    if (!currentTenant?.id) return;
+    try {
+      const { error } = await supabase
+        .from("tenants")
+        .update({ deposits_enabled: checked })
+        .eq("id", currentTenant.id);
+      if (error) throw error;
+      await refreshTenants();
+      toast({ title: "Saved", description: `Deposits ${checked ? "enabled" : "disabled"}` });
+    } catch (err) {
+      console.error("Error updating deposits:", err);
+      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+    }
+  }}
+/>
+```
 
-**Helper function:**
-```typescript
-const sendAppointmentNotification = async (
-  appointmentId: string,
-  action: "scheduled" | "completed" | "cancelled" | "rescheduled",
-  additionalData?: Record<string, string>
-) => {
-  try {
-    await supabase.functions.invoke("send-appointment-notification", {
-      body: { appointmentId, action, ...additionalData },
+---
+
+## Phase 3: Make Notifications Settings Functional
+
+**Current Issues:**
+1. Settings page uses local `notificationSettings` state but doesn't load from or save to database
+2. Save button is `disabled` (line 567)
+3. `useNotificationSettings` hook exists but isn't used in SettingsPage
+
+**Solution:**
+
+### 3.1 Import and use the existing hook:
+```tsx
+import { useNotificationSettings } from "@/hooks/useNotificationSettings";
+
+// Inside component:
+const { 
+  settings: dbNotificationSettings, 
+  isLoading: notificationsLoading, 
+  isSaving: notificationsSaving, 
+  saveSettings: saveNotificationSettings 
+} = useNotificationSettings();
+```
+
+### 3.2 Initialize local state from hook data:
+```tsx
+// Sync local state with database on load
+useEffect(() => {
+  if (dbNotificationSettings) {
+    setNotificationSettings({
+      emailAppointmentReminders: dbNotificationSettings.email_appointment_reminders,
+      smsAppointmentReminders: dbNotificationSettings.sms_appointment_reminders,
+      emailNewBookings: dbNotificationSettings.email_new_bookings,
+      emailCancellations: dbNotificationSettings.email_cancellations,
+      emailDailyDigest: dbNotificationSettings.email_daily_digest,
     });
-  } catch (error) {
-    console.error("Failed to send notification:", error);
-    // Don't fail the main action
   }
+}, [dbNotificationSettings]);
+```
+
+### 3.3 Create save handler:
+```tsx
+const handleNotificationsSave = async () => {
+  await saveNotificationSettings({
+    email_appointment_reminders: notificationSettings.emailAppointmentReminders,
+    sms_appointment_reminders: notificationSettings.smsAppointmentReminders,
+    email_new_bookings: notificationSettings.emailNewBookings,
+    email_cancellations: notificationSettings.emailCancellations,
+    email_daily_digest: notificationSettings.emailDailyDigest,
+  });
+};
+```
+
+### 3.4 Update the Save button (line 566-571):
+```tsx
+<Button onClick={handleNotificationsSave} disabled={notificationsSaving}>
+  {notificationsSaving ? (
+    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+  ) : (
+    <Save className="w-4 h-4 mr-2" />
+  )}
+  Save preferences
+</Button>
+```
+
+---
+
+## Phase 4: Audit and Fix Other Non-Functional Areas
+
+### 4.1 Settings - Integrations Tab
+**Current:** Shows "This section is coming soon."
+**Decision:** Leave as placeholder - integrations (like Google Calendar, WhatsApp) are future roadmap items.
+
+### 4.2 Settings - Roles Tab
+**Current:** Display-only, says "Custom roles are not yet supported"
+**Decision:** Leave as display-only - role management is informational for now.
+
+### 4.3 Settings - Subscription "Upgrade Now" Button
+**Current:** Button exists but no action
+**Decision:** Leave as-is - Stripe subscription management is a separate feature.
+
+### 4.4 Payments Page Export Button
+**Current:** Export button exists but no functionality
+**Solution:** Implement CSV export like in Reports page:
+```tsx
+const handleExport = () => {
+  const csvContent = [
+    ["Date", "Customer", "Type", "Method", "Amount", "Status"],
+    ...filteredTransactions.map((txn) => [
+      format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
+      txn.customer?.full_name || "Guest",
+      txn.type,
+      txn.method,
+      Number(txn.amount).toFixed(2),
+      txn.status,
+    ]),
+  ]
+    .map((row) => row.join(","))
+    .join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `transactions-${format(new Date(), "yyyy-MM-dd")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 ```
 
 ---
 
-## Phase 3: Fix Notifications Badge
+## Files to Modify
 
-**Current Issue:** `SalonSidebar.tsx` line 366-367 has hardcoded "2" badge.
-
-**Solution:**
-1. Import `useNotifications` hook
-2. Use `unreadCount` from hook
-3. Only show badge when `unreadCount > 0`
-4. Display "9+" if count exceeds 9
-
----
-
-## Phase 4: Customer Transaction Tracker
-
-Add a "Transactions" tab to `CustomerDetailDialog.tsx`:
-
-**Features:**
-- Display all transactions for the customer
-- Filter by: Date range, Amount, Appointment reference
-- Columns: Date, Type, Amount, Method, Status, Appointment Link
-- Sort by date (newest first)
-
-**Hook Enhancement:**
-Add `fetchAllCustomerTransactions()` to `useCustomerPurse.tsx`
-
----
-
-## Phase 5: Mobile Audit + Help Page
-
-**Mobile Responsiveness:**
-- Verify tables use horizontal scroll
-- Touch targets meet 44px minimum
-- Dialogs fit on small screens
-
-**Help Page Cleanup:**
-- Remove placeholder documentation link
-- Remove placeholder video tutorials link
-- Keep email support option
-
----
-
-## Email Templates (Final List)
-
-### Appointment Confirmation (scheduled)
-```
-Subject: Appointment Confirmed at {{salon_name}}
-
-Hi {{customer_name}},
-Your appointment has been confirmed for {{appointment_date}} at {{appointment_time}}.
-Services: {{services}}
-Total: {{total_amount}}
-We look forward to seeing you!
-```
-
-### Appointment Completed
-```
-Subject: Thank you for visiting {{salon_name}}!
-
-Hi {{customer_name}},
-Your appointment has been completed.
-Services: {{services}}
-Total: {{total_amount}}
-We hope to see you again soon!
-```
-
-### Appointment Cancelled
-```
-Subject: Appointment Cancelled
-
-Hi {{customer_name}},
-Your appointment at {{salon_name}} has been cancelled.
-Reason: {{reason}}
-We hope to serve you again in the future.
-```
-
-### Appointment Rescheduled
-```
-Subject: Appointment Rescheduled
-
-Hi {{customer_name}},
-Your appointment has been rescheduled.
-New Date: {{new_date}}
-New Time: {{new_time}}
-Services: {{services}}
-See you then!
-```
-
----
-
-## Files Summary
-
-**Files to Create:**
-- `supabase/functions/send-appointment-notification/index.ts`
-
-**Files to Modify:**
-- `src/hooks/useAppointments.tsx` - Add email triggers for 4 actions
-- `src/components/layout/SalonSidebar.tsx` - Fix notifications badge
-- `src/components/dialogs/CustomerDetailDialog.tsx` - Add Transactions tab
-- `src/hooks/useCustomerPurse.tsx` - Add transaction fetching
-- `supabase/config.toml` - Register new edge function
-- `src/pages/salon/HelpPage.tsx` - Cleanup placeholders
+| File | Changes |
+|------|---------|
+| `src/pages/salon/PaymentsPage.tsx` | Add TabsContent structure, functional date filter, export functionality |
+| `src/pages/salon/SettingsPage.tsx` | Deposits toggle, notifications backend integration |
 
 ---
 
@@ -218,26 +236,25 @@ See you then!
 
 | Step | Task | Priority |
 |------|------|----------|
-| 1 | Create `send-appointment-notification` edge function | High |
-| 2 | Integrate notifications into 4 appointment actions | High |
-| 3 | Fix notifications badge in sidebar | High |
-| 4 | Add Transactions tab to CustomerDetailDialog | High |
-| 5 | Mobile responsiveness audit | Medium |
-| 6 | Help page cleanup | Low |
+| 1 | Convert Deposits setting to toggle | High |
+| 2 | Integrate useNotificationSettings into SettingsPage | High |
+| 3 | Make date range filter functional in PaymentsPage | Medium |
+| 4 | Add proper TabsContent structure to PaymentsPage | Medium |
+| 5 | Add CSV export to PaymentsPage | Medium |
 
 ---
 
-## Progress After This Batch
+## Technical Notes
 
-| Batch | Status |
-|-------|--------|
-| Batch 1: Core Appointments | Done |
-| Batch 2: Appointment Products | Done |
-| Batch 3: Product Fulfillment | Done |
-| Batch 4: Settings + UX | Done |
-| Batch 5: Backend (Staff Invites) | Done |
-| Batch 6: Reports + Export | Done |
-| **Batch 7: Polish + Enhancements** | This batch |
+### Notification Settings Database Mapping
 
-**After completion: 100% of implementation plan complete**
+| Local State Key | Database Column |
+|-----------------|-----------------|
+| `emailAppointmentReminders` | `email_appointment_reminders` |
+| `smsAppointmentReminders` | `sms_appointment_reminders` |
+| `emailNewBookings` | `email_new_bookings` |
+| `emailCancellations` | `email_cancellations` |
+| `emailDailyDigest` | `email_daily_digest` |
 
+### Date Filter Logic
+The date filter will use client-side filtering since transactions are already fetched. For large datasets, this could be moved to the `useTransactions` hook with server-side filtering.
