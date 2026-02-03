@@ -224,6 +224,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 }
                 maxDate={new Date()}
                 placeholder="Select date"
+                showYearMonthDropdown
               />
             </div>
             <div className="space-y-2">

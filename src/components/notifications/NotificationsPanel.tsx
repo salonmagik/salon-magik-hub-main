@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
@@ -50,6 +51,7 @@ const getIconColor = (type: Notification["type"]) => {
 };
 
 export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelProps) {
+  const navigate = useNavigate();
   const { notifications, isLoading, markAsRead, markAllAsRead, refetch } = useNotifications();
 
   useEffect(() => {
@@ -57,6 +59,11 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
       refetch();
     }
   }, [open, refetch]);
+
+  const handleViewSettings = () => {
+    onOpenChange(false);
+    navigate("/salon/settings?tab=notifications");
+  };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const urgentCount = notifications.filter((n) => n.urgent).length;
@@ -173,7 +180,7 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
           <p className="text-xs text-muted-foreground">
             Notifications are updated in real-time
           </p>
-          <Button variant="link" size="sm" className="text-primary p-0">
+          <Button variant="link" size="sm" className="text-primary p-0" onClick={handleViewSettings}>
             View Settings
           </Button>
         </div>
