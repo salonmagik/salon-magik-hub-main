@@ -130,6 +130,7 @@ export default function SettingsPage() {
     defaultDepositPercentage: 0,
     bookingStatusMessage: "",
     slotCapacityDefault: 1,
+    brandColor: "#2563EB",
   });
 
   const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
@@ -158,6 +159,7 @@ export default function SettingsPage() {
         defaultDepositPercentage: Number(currentTenant.default_deposit_percentage) || 0,
         bookingStatusMessage: currentTenant.booking_status_message || "",
         slotCapacityDefault: currentTenant.slot_capacity_default || 1,
+        brandColor: (currentTenant as any).brand_color || "#2563EB",
       });
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
@@ -424,6 +426,7 @@ export default function SettingsPage() {
           default_deposit_percentage: bookingSettings.defaultDepositPercentage,
           booking_status_message: bookingSettings.bookingStatusMessage || null,
           slot_capacity_default: bookingSettings.slotCapacityDefault,
+          brand_color: bookingSettings.brandColor,
         })
         .eq("id", currentTenant.id);
 
@@ -1043,6 +1046,43 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Brand Highlight Color */}
+        <div className="space-y-2">
+          <Label>Brand Highlight Color</Label>
+          <div className="flex items-center gap-3">
+            <Input
+              type="color"
+              value={bookingSettings.brandColor}
+              onChange={(e) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  brandColor: e.target.value,
+                }))
+              }
+              className="h-10 w-16 p-1 cursor-pointer"
+            />
+            <Input
+              type="text"
+              value={bookingSettings.brandColor}
+              onChange={(e) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  brandColor: e.target.value,
+                }))
+              }
+              placeholder="#2563EB"
+              className="w-28 font-mono text-sm"
+            />
+            <div
+              className="h-10 w-10 rounded-md border"
+              style={{ backgroundColor: bookingSettings.brandColor }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Used for buttons and accents on your booking page
+          </p>
         </div>
 
         {/* Save Button */}

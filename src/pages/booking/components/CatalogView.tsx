@@ -70,7 +70,7 @@ export function CatalogView({
 
           {/* Services Grid */}
           {filteredServices.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {filteredServices.map((service) => (
                 <ItemCard
                   key={service.id}
@@ -94,7 +94,7 @@ export function CatalogView({
 
         {hasPackages && (
           <TabsContent value="packages" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {packages.map((pkg) => (
                 <ItemCard
                   key={pkg.id}
@@ -114,7 +114,7 @@ export function CatalogView({
 
         {hasProducts && (
           <TabsContent value="products" className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {products.map((product) => (
                 <ItemCard
                   key={product.id}
