@@ -494,6 +494,142 @@ export type Database = {
           },
         ]
       }
+      journal_entries: {
+        Row: {
+          amount: number
+          appointment_id: string | null
+          approved_at: string | null
+          approved_by_id: string | null
+          category: Database["public"]["Enums"]["journal_category"]
+          created_at: string
+          created_by_id: string | null
+          currency: string
+          customer_id: string | null
+          description: string | null
+          direction: Database["public"]["Enums"]["journal_direction"]
+          id: string
+          occurred_at: string
+          parsed_summary: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          rejection_reason: string | null
+          status: Database["public"]["Enums"]["journal_status"]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          appointment_id?: string | null
+          approved_at?: string | null
+          approved_by_id?: string | null
+          category?: Database["public"]["Enums"]["journal_category"]
+          created_at?: string
+          created_by_id?: string | null
+          currency?: string
+          customer_id?: string | null
+          description?: string | null
+          direction: Database["public"]["Enums"]["journal_direction"]
+          id?: string
+          occurred_at?: string
+          parsed_summary?: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          rejection_reason?: string | null
+          status?: Database["public"]["Enums"]["journal_status"]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          approved_at?: string | null
+          approved_by_id?: string | null
+          category?: Database["public"]["Enums"]["journal_category"]
+          created_at?: string
+          created_by_id?: string | null
+          currency?: string
+          customer_id?: string | null
+          description?: string | null
+          direction?: Database["public"]["Enums"]["journal_direction"]
+          id?: string
+          occurred_at?: string
+          parsed_summary?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          rejection_reason?: string | null
+          status?: Database["public"]["Enums"]["journal_status"]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entries_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      journal_line_items: {
+        Row: {
+          created_at: string
+          id: string
+          journal_entry_id: string
+          product_id: string | null
+          product_name: string
+          quantity: number
+          total_price: number
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          journal_entry_id: string
+          product_id?: string | null
+          product_name: string
+          quantity?: number
+          total_price: number
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          journal_entry_id?: string
+          product_id?: string | null
+          product_name?: string
+          quantity?: number
+          total_price?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_line_items_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_line_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       locations: {
         Row: {
           address: string | null
@@ -1439,6 +1575,9 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "rescheduled"
+      journal_category: "service_payment" | "product_sale" | "expense" | "other"
+      journal_direction: "inflow" | "outflow"
+      journal_status: "active" | "pending_approval" | "rejected" | "reversed"
       location_availability: "open" | "closed" | "temporarily_unavailable"
       payment_method:
         | "card"
@@ -1600,6 +1739,9 @@ export const Constants = {
         "cancelled",
         "rescheduled",
       ],
+      journal_category: ["service_payment", "product_sale", "expense", "other"],
+      journal_direction: ["inflow", "outflow"],
+      journal_status: ["active", "pending_approval", "rejected", "reversed"],
       location_availability: ["open", "closed", "temporarily_unavailable"],
       payment_method: [
         "card",
