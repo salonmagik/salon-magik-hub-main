@@ -21,13 +21,11 @@ import AppointmentsPage from "./pages/salon/AppointmentsPage";
 import CustomersPage from "./pages/salon/CustomersPage";
 import ServicesPage from "./pages/salon/ServicesPage";
 import SettingsPage from "./pages/salon/SettingsPage";
-import {
-  PaymentsPage,
-  ReportsPage,
-  MessagingPage,
-  JournalPage,
-  HelpPage,
-} from "./pages/salon/PlaceholderPages";
+import PaymentsPage from "./pages/salon/PaymentsPage";
+import ReportsPage from "./pages/salon/ReportsPage";
+import MessagingPage from "./pages/salon/MessagingPage";
+import JournalPage from "./pages/salon/JournalPage";
+import HelpPage from "./pages/salon/HelpPage";
 import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
 

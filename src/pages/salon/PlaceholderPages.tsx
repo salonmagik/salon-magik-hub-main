@@ -1,3 +1,6 @@
+// Placeholder pages - most have been moved to dedicated files
+// This file is kept only for any remaining placeholder components
+
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 
 interface PlaceholderPageProps {
@@ -22,34 +25,4 @@ export function PlaceholderPage({ title, description }: PlaceholderPageProps) {
       </div>
     </SalonSidebar>
   );
-}
-
-export function CustomersPage() {
-  return <PlaceholderPage title="Customers" description="Manage your salon customers and their history" />;
-}
-
-export function ServicesPage() {
-  return <PlaceholderPage title="Products & Services" description="Manage your services, products, and packages" />;
-}
-
-export function PaymentsPage() {
-  return <PlaceholderPage title="Payments" description="View and manage payments, refunds, and wallet" />;
-}
-
-export function ReportsPage() {
-  return <PlaceholderPage title="Reports" description="View insights and analytics for your salon" />;
-}
-
-export function MessagingPage() {
-  return <PlaceholderPage title="Messaging" description="Manage communication credits and notifications" />;
-}
-
-export function JournalPage() {
-  return <PlaceholderPage title="Journal" description="View audit logs and activity history" />;
-}
-
-// StaffPage, SettingsPage moved to dedicated files
-
-export function HelpPage() {
-  return <PlaceholderPage title="Help" description="Get help and support" />;
 }
