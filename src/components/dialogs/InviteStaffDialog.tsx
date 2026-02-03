@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select";
 import { UserCog, Mail, User, Loader2, Send } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface InviteStaffDialogProps {
   open: boolean;
@@ -55,9 +56,25 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
     setIsSubmitting(true);
 
     try {
-      // TODO: Implement actual staff invitation via edge function
-      // For now, just show a success message
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await supabase.functions.invoke("send-staff-invitation", {
+        body: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          role: formData.role,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to send invitation");
+      }
 
       toast({
         title: "Invitation Sent",
@@ -66,11 +83,11 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
       resetForm();
       onOpenChange(false);
       onSuccess?.();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error inviting staff:", err);
       toast({
         title: "Error",
-        description: "Failed to send invitation",
+        description: err.message || "Failed to send invitation",
         variant: "destructive",
       });
     } finally {
