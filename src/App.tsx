@@ -30,6 +30,9 @@ import HelpPage from "./pages/salon/HelpPage";
 import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
 
+// Public Booking
+import BookingPage from "./pages/booking/BookingPage";
+
 // Other pages
 import NotFound from "./pages/NotFound";
 
@@ -175,8 +178,8 @@ const App = () => (
               }
             />
 
-            {/* Booking Platform Routes (public) */}
-            <Route path="/b/:slug/*" element={<NotFound />} />
+            {/* Public Booking Platform */}
+            <Route path="/b/:slug" element={<BookingPage />} />
 
             {/* Client Portal Routes */}
             <Route path="/client/*" element={<NotFound />} />
