@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import type { Tables } from "@/integrations/supabase/types";
@@ -57,8 +57,15 @@ export function useCustomerPurse(customerId?: string) {
     }
   }, [currentTenant?.id, customerId]);
 
+  // Auto-fetch purse when customerId or tenant changes
+  useEffect(() => {
+    if (customerId && currentTenant?.id) {
+      fetchPurse();
+    }
+  }, [customerId, currentTenant?.id, fetchPurse]);
+
   // Fetch purse transactions (from transactions table filtered by purse type)
-  const fetchPurseTransactions = async () => {
+  const fetchPurseTransactions = useCallback(async () => {
     if (!currentTenant?.id || !customerId) return [];
 
     try {
@@ -74,13 +81,16 @@ export function useCustomerPurse(customerId?: string) {
 
       return data || [];
     } catch (err) {
-      console.error("Error fetching purse transactions:", err);
+      console.error("Error fetching purse transactions:", {
+        message: err instanceof Error ? err.message : "Unknown error",
+        details: String(err),
+      });
       return [];
     }
-  };
+  }, [currentTenant?.id, customerId]);
 
   // Fetch all transactions for the customer with optional filters
-  const fetchAllCustomerTransactions = async (filters?: TransactionFilters): Promise<Transaction[]> => {
+  const fetchAllCustomerTransactions = useCallback(async (filters?: TransactionFilters): Promise<Transaction[]> => {
     if (!currentTenant?.id || !customerId) return [];
 
     try {
@@ -123,10 +133,13 @@ export function useCustomerPurse(customerId?: string) {
 
       return (data as Transaction[]) || [];
     } catch (err) {
-      console.error("Error fetching all customer transactions:", err);
+      console.error("Error fetching all customer transactions:", {
+        message: err instanceof Error ? err.message : "Unknown error",
+        details: String(err),
+      });
       return [];
     }
-  };
+  }, [currentTenant?.id, customerId]);
 
   return {
     purse,
@@ -169,6 +182,11 @@ export function useAllCustomerPurses() {
       setIsLoading(false);
     }
   }, [currentTenant?.id]);
+
+  // Auto-fetch purses when tenant changes
+  useEffect(() => {
+    fetchPurses();
+  }, [fetchPurses]);
 
   const totalBalance = purses.reduce((sum, p) => sum + Number(p.balance), 0);
 

@@ -128,7 +128,7 @@ export function CustomerDetailDialog({
   }, [customer?.id, currentTenant?.id]);
 
   const fetchTransactions = useCallback(async () => {
-    if (!customer?.id) return;
+    if (!customer?.id || !currentTenant?.id) return;
     
     setTransactionsLoading(true);
     try {
@@ -141,17 +141,27 @@ export function CustomerDetailDialog({
       ]);
       setPurseTransactions(purseData);
       setAllTransactions(allData);
+    } catch (err) {
+      console.error("Error loading transactions:", err);
     } finally {
       setTransactionsLoading(false);
     }
-  }, [customer?.id, fetchPurseTransactions, fetchAllCustomerTransactions, txStartDate, txEndDate]);
+  }, [customer?.id, currentTenant?.id, fetchPurseTransactions, fetchAllCustomerTransactions, txStartDate, txEndDate]);
 
+  // Fetch data when dialog opens with a customer
   useEffect(() => {
-    if (customer?.id && open) {
+    if (customer?.id && open && currentTenant?.id) {
       fetchTransactions();
       fetchAppointmentNotes();
     }
-  }, [customer?.id, open, fetchTransactions, fetchAppointmentNotes]);
+  }, [customer?.id, open, currentTenant?.id]);
+  
+  // Re-fetch when date filters change
+  useEffect(() => {
+    if (customer?.id && open && currentTenant?.id && (txStartDate || txEndDate)) {
+      fetchTransactions();
+    }
+  }, [txStartDate, txEndDate]);
 
   // Filter transactions by search query
   const filteredTransactions = allTransactions.filter((tx) => {
