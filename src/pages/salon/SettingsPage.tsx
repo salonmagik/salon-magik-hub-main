@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
+import { useNotificationSettings } from "@/hooks/useNotificationSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { differenceInDays, format } from "date-fns";
@@ -75,6 +76,12 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const { currentTenant, profile } = useAuth();
   const { defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
+  const { 
+    settings: dbNotificationSettings, 
+    isLoading: notificationsLoading, 
+    isSaving: notificationsSaving, 
+    saveSettings: saveNotificationSettings 
+  } = useNotificationSettings();
 
   // Sync tab with URL params
   useEffect(() => {
@@ -164,6 +171,29 @@ export default function SettingsPage() {
       });
     }
   }, [currentTenant, profile, defaultLocation]);
+
+  // Sync notification settings from database
+  useEffect(() => {
+    if (dbNotificationSettings) {
+      setNotificationSettings({
+        emailAppointmentReminders: dbNotificationSettings.email_appointment_reminders,
+        smsAppointmentReminders: dbNotificationSettings.sms_appointment_reminders,
+        emailNewBookings: dbNotificationSettings.email_new_bookings,
+        emailCancellations: dbNotificationSettings.email_cancellations,
+        emailDailyDigest: dbNotificationSettings.email_daily_digest,
+      });
+    }
+  }, [dbNotificationSettings]);
+
+  const handleNotificationsSave = async () => {
+    await saveNotificationSettings({
+      email_appointment_reminders: notificationSettings.emailAppointmentReminders,
+      sms_appointment_reminders: notificationSettings.smsAppointmentReminders,
+      email_new_bookings: notificationSettings.emailNewBookings,
+      email_cancellations: notificationSettings.emailCancellations,
+      email_daily_digest: notificationSettings.emailDailyDigest,
+    });
+  };
 
   const bookingUrl = currentTenant?.slug ? `${window.location.origin}/b/${currentTenant.slug}` : null;
 
@@ -564,8 +594,12 @@ export default function SettingsPage() {
 
         {/* Save Button */}
         <div className="flex justify-end pt-4 border-t">
-          <Button disabled>
-            <Save className="w-4 h-4 mr-2" />
+          <Button onClick={handleNotificationsSave} disabled={notificationsSaving}>
+            {notificationsSaving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
             Save preferences
           </Button>
         </div>
@@ -784,9 +818,24 @@ export default function SettingsPage() {
                   Require deposits for bookings
                 </p>
               </div>
-              <Badge variant="outline" className="text-success">
-                {currentTenant?.deposits_enabled ? "Enabled" : "Disabled"}
-              </Badge>
+              <Switch
+                checked={currentTenant?.deposits_enabled || false}
+                onCheckedChange={async (checked) => {
+                  if (!currentTenant?.id) return;
+                  try {
+                    const { error } = await supabase
+                      .from("tenants")
+                      .update({ deposits_enabled: checked })
+                      .eq("id", currentTenant.id);
+                    if (error) throw error;
+                    await refreshTenants();
+                    toast({ title: "Saved", description: `Deposits ${checked ? "enabled" : "disabled"}` });
+                  } catch (err) {
+                    console.error("Error updating deposits:", err);
+                    toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                  }
+                }}
+              />
             </div>
           </div>
 

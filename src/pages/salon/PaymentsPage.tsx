@@ -70,6 +70,7 @@ const refundStatusStyles: Record<string, { bg: string; text: string }> = {
 export default function PaymentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all-time");
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
@@ -109,19 +110,87 @@ export default function PaymentsPage() {
     setRejectionReason("");
   };
 
+  // Date range filtering
+  const getDateRange = () => {
+    const now = new Date();
+    switch (dateFilter) {
+      case "today":
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return { start: today, end: now };
+      case "week":
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 7);
+        return { start: weekStart, end: now };
+      case "month":
+        const monthStart = new Date();
+        monthStart.setMonth(monthStart.getMonth() - 1);
+        return { start: monthStart, end: now };
+      default:
+        return null;
+    }
+  };
+
   const filteredTransactions = transactions.filter((txn) => {
+    // Date filter
+    const dateRange = getDateRange();
+    if (dateRange) {
+      const txnDate = new Date(txn.created_at);
+      if (txnDate < dateRange.start || txnDate > dateRange.end) return false;
+    }
+
+    // Search filter
     const matchesSearch =
       txn.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       txn.id.toLowerCase().includes(searchQuery.toLowerCase());
 
+    // Tab filter
     if (activeTab === "all") return matchesSearch;
     if (activeTab === "revenue") return matchesSearch && txn.type === "payment";
     if (activeTab === "refunds") return matchesSearch && txn.type === "refund";
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
-    if (activeTab === "pending-refunds") return false; // Handled separately
 
     return matchesSearch;
   });
+
+  // CSV Export
+  const handleExport = () => {
+    const csvContent = [
+      ["Date", "Customer", "Type", "Method", "Amount", "Status"],
+      ...filteredTransactions.map((txn) => [
+        format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
+        txn.customer?.full_name || "Guest",
+        txn.type,
+        txn.method,
+        Number(txn.amount).toFixed(2),
+        txn.status,
+      ]),
+    ]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transactions-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Get empty state message based on active tab
+  const getEmptyStateMessage = () => {
+    switch (activeTab) {
+      case "revenue":
+        return "No payments recorded yet";
+      case "refunds":
+        return "No refunds processed";
+      case "purse":
+        return "No purse activity yet";
+      default:
+        return "No transactions found";
+    }
+  };
 
   const statCards = [
     {
@@ -158,7 +227,7 @@ export default function PaymentsPage() {
               Track transactions, manage refunds, and monitor customer balances.
             </p>
           </div>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" onClick={handleExport} disabled={filteredTransactions.length === 0}>
             <Download className="w-4 h-4" />
             Export
           </Button>
@@ -272,7 +341,7 @@ export default function PaymentsPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Select defaultValue="all-time">
+              <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="Date range" />
                 </SelectTrigger>
@@ -309,7 +378,7 @@ export default function PaymentsPage() {
                 ) : filteredTransactions.length === 0 ? (
                   <div className="text-center py-12">
                     <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-muted-foreground">No transactions found</p>
+                    <p className="text-muted-foreground">{getEmptyStateMessage()}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
