@@ -98,6 +98,9 @@ export function useJournal(filters?: JournalFilters, limit = 50) {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
 
+  // Serialize filters to prevent infinite loop from object reference changes
+  const filtersKey = JSON.stringify(filters || {});
+
   const fetchEntries = useCallback(async (pageNum = 0) => {
     if (!currentTenant?.id) {
       setEntries([]);
@@ -173,7 +176,7 @@ export function useJournal(filters?: JournalFilters, limit = 50) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, filters, limit]);
+  }, [currentTenant?.id, filtersKey, limit]);
 
   const fetchStats = useCallback(async () => {
     if (!currentTenant?.id) return;
@@ -188,7 +191,7 @@ export function useJournal(filters?: JournalFilters, limit = 50) {
 
       const entries = data || [];
       
-      const stats: JournalStats = {
+      const newStats: JournalStats = {
         totalInflow: entries
           .filter((e) => e.direction === "inflow" && e.status === "active")
           .reduce((sum, e) => sum + Number(e.amount), 0),
@@ -208,17 +211,19 @@ export function useJournal(filters?: JournalFilters, limit = 50) {
           .reduce((sum, e) => sum + Number(e.amount) * (e.direction === "inflow" ? 1 : -1), 0),
       };
       
-      stats.netAmount = stats.totalInflow - stats.totalOutflow;
-      setStats(stats);
+      newStats.netAmount = newStats.totalInflow - newStats.totalOutflow;
+      setStats(newStats);
     } catch (err) {
       console.error("Error fetching journal stats:", err);
     }
   }, [currentTenant?.id]);
 
+  // Fetch data only when tenant or filters change (using serialized key)
   useEffect(() => {
     fetchEntries(0);
     fetchStats();
-  }, [fetchEntries, fetchStats]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTenant?.id, filtersKey]);
 
   const loadMore = () => {
     if (hasMore && !isLoading) {
