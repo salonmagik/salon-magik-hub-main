@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from "react";
+import { useState, useEffect, createContext, useContext, ReactNode, useMemo } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -31,6 +31,7 @@ import { NotificationsPanel } from "@/components/notifications/NotificationsPane
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { useNotifications } from "@/hooks/useNotifications";
 import { SubscriptionBanner } from "@/components/layout/SubscriptionBanner";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   Tooltip,
   TooltipContent,
@@ -42,25 +43,25 @@ interface NavItem {
   icon: React.ElementType;
   path: string;
   badge?: string | number;
-  roles?: string[];
+  module?: string; // Permission module key
 }
 
 const mainNavItems: NavItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/salon" },
-  { label: "Appointments", icon: Calendar, path: "/salon/appointments" },
-  { label: "Calendar", icon: CalendarDays, path: "/salon/calendar" },
-  { label: "Customers", icon: Users, path: "/salon/customers" },
-  { label: "Products & Services", icon: Scissors, path: "/salon/services" },
-  { label: "Payments", icon: CreditCard, path: "/salon/payments" },
-  { label: "Reports", icon: BarChart3, path: "/salon/reports" },
-  { label: "Messaging", icon: MessageSquare, path: "/salon/messaging" },
-  { label: "Journal", icon: BookOpen, path: "/salon/journal" },
-  { label: "Staff", icon: UserCog, path: "/salon/staff" },
-  { label: "Settings", icon: Settings, path: "/salon/settings" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
+  { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
+  { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
+  { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
+  { label: "Products & Services", icon: Scissors, path: "/salon/services", module: "services" },
+  { label: "Payments", icon: CreditCard, path: "/salon/payments", module: "payments" },
+  { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
+  { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
+  { label: "Journal", icon: BookOpen, path: "/salon/journal", module: "journal" },
+  { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+  { label: "Settings", icon: Settings, path: "/salon/settings", module: "settings" },
 ];
 
 const utilityNavItems: NavItem[] = [
-  { label: "Help", icon: HelpCircle, path: "/salon/help" },
+  { label: "Help", icon: HelpCircle, path: "/salon/help" }, // Help is always visible
 ];
 
 interface SidebarContextType {
@@ -94,6 +95,16 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { unreadCount } = useNotifications();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
+
+  // Filter nav items based on permissions
+  const filteredMainNavItems = useMemo(() => {
+    if (permissionsLoading) return mainNavItems; // Show all during loading
+    return mainNavItems.filter((item) => {
+      if (!item.module) return true; // No module = always visible
+      return hasPermission(item.module);
+    });
+  }, [hasPermission, permissionsLoading]);
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -239,7 +250,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-1 relative z-10">
-        {mainNavItems.map((item) => (
+        {filteredMainNavItems.map((item) => (
           <NavItemComponent key={item.path} item={item} />
         ))}
       </nav>

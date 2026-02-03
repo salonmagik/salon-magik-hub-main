@@ -37,6 +37,7 @@ import {
   CheckCircle,
   X,
   Image as ImageIcon,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -128,7 +129,10 @@ export default function SettingsPage() {
     cancellationGraceHours: 24,
     defaultDepositPercentage: 0,
     bookingStatusMessage: "",
+    slotCapacityDefault: 1,
   });
+
+  const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
 
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -153,6 +157,7 @@ export default function SettingsPage() {
         cancellationGraceHours: currentTenant.cancellation_grace_hours || 24,
         defaultDepositPercentage: Number(currentTenant.default_deposit_percentage) || 0,
         bookingStatusMessage: currentTenant.booking_status_message || "",
+        slotCapacityDefault: currentTenant.slot_capacity_default || 1,
       });
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
@@ -418,6 +423,7 @@ export default function SettingsPage() {
           cancellation_grace_hours: bookingSettings.cancellationGraceHours,
           default_deposit_percentage: bookingSettings.defaultDepositPercentage,
           booking_status_message: bookingSettings.bookingStatusMessage || null,
+          slot_capacity_default: bookingSettings.slotCapacityDefault,
         })
         .eq("id", currentTenant.id);
 
@@ -432,6 +438,57 @@ export default function SettingsPage() {
       toast({ title: "Error", description: "Failed to save settings", variant: "destructive" });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Generate a unique booking slug from salon name
+  const handleGenerateSlug = async () => {
+    if (!currentTenant?.id || !currentTenant.name) return;
+
+    setIsGeneratingSlug(true);
+    try {
+      // Convert name to URL-friendly slug
+      let baseSlug = currentTenant.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .substring(0, 40);
+
+      // Check if slug exists
+      let slug = baseSlug;
+      let attempts = 0;
+      while (attempts < 10) {
+        const { data, error } = await supabase
+          .from("tenants")
+          .select("id")
+          .eq("slug", slug)
+          .neq("id", currentTenant.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (!data) break; // Slug is available
+
+        // Add random suffix
+        slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
+        attempts++;
+      }
+
+      // Update tenant with new slug
+      const { error: updateError } = await supabase
+        .from("tenants")
+        .update({ slug })
+        .eq("id", currentTenant.id);
+
+      if (updateError) throw updateError;
+
+      await refreshTenants();
+      toast({ title: "Success", description: "Booking URL generated!" });
+    } catch (err) {
+      console.error("Error generating slug:", err);
+      toast({ title: "Error", description: "Failed to generate booking URL", variant: "destructive" });
+    } finally {
+      setIsGeneratingSlug(false);
     }
   };
 
@@ -768,7 +825,7 @@ export default function SettingsPage() {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Booking URL */}
-        {bookingUrl && (
+        {bookingUrl ? (
           <div className="space-y-2">
             <Label>Booking URL</Label>
             <div className="flex items-center gap-2">
@@ -780,6 +837,27 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               Share this link with your customers to let them book online
             </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label>Booking URL</Label>
+            <div className="p-4 rounded-lg bg-muted/50 border border-dashed">
+              <p className="text-sm text-muted-foreground mb-3">
+                Generate a booking URL to enable online bookings for your salon
+              </p>
+              <Button
+                onClick={handleGenerateSlug}
+                disabled={isGeneratingSlug}
+                className="gap-2"
+              >
+                {isGeneratingSlug ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Link2 className="w-4 h-4" />
+                )}
+                Generate Booking URL
+              </Button>
+            </div>
           </div>
         )}
 
@@ -875,6 +953,29 @@ export default function SettingsPage() {
             />
             <span className="text-sm text-muted-foreground">%</span>
           </div>
+        </div>
+
+        {/* Slot Capacity */}
+        <div className="space-y-2">
+          <Label>Bookings per Time Slot</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              value={bookingSettings.slotCapacityDefault}
+              onChange={(e) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  slotCapacityDefault: parseInt(e.target.value) || 1,
+                }))
+              }
+              className="w-24"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Maximum number of bookings allowed for the same time slot
+          </p>
         </div>
 
         <div className="space-y-2">

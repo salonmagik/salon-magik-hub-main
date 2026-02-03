@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw } from "lucide-react";
+import { UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock } from "lucide-react";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
@@ -26,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PermissionsTab } from "@/components/staff/PermissionsTab";
 
 const roleLabels: Record<StaffMember["role"], string> = {
   owner: "Owner",
@@ -145,7 +146,7 @@ export default function StaffPage() {
           </Card>
         </div>
 
-        {/* Tabs for Staff and Invitations */}
+        {/* Tabs for Staff, Invitations, and Permissions */}
         <Tabs defaultValue="team">
           <TabsList>
             <TabsTrigger value="team">Team Members</TabsTrigger>
@@ -157,6 +158,12 @@ export default function StaffPage() {
                 </Badge>
               )}
             </TabsTrigger>
+            {currentUserIsOwner && (
+              <TabsTrigger value="permissions" className="flex items-center gap-2">
+                <Lock className="w-3 h-3" />
+                Permissions
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Team Members Tab */}
@@ -335,6 +342,13 @@ export default function StaffPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Permissions Tab - Owner Only */}
+          {currentUserIsOwner && (
+            <TabsContent value="permissions">
+              <PermissionsTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
