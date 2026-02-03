@@ -121,13 +121,34 @@ export function useAppointmentActions() {
     setIsSubmitting(true);
     try {
       const totalAmount = data.services.reduce((sum, s) => sum + s.price, 0);
-      const isUnscheduled = data.isUnscheduled || false;
       const isWalkIn = data.isWalkIn || false;
-
-      // For walk-ins without scheduling, start immediately
+      
+      // For walk-ins: if no scheduledStart provided, start immediately (unscheduled)
+      // If scheduledStart provided (buffer time), schedule for that time
+      const hasScheduledStart = !!data.scheduledStart;
+      const isUnscheduled = data.isUnscheduled !== undefined 
+        ? data.isUnscheduled 
+        : (isWalkIn && !hasScheduledStart);
+      
       const now = new Date().toISOString();
-      const scheduledStart = isUnscheduled ? null : (data.scheduledStart || now);
-      const scheduledEnd = isUnscheduled ? null : (data.scheduledEnd || now);
+      
+      // Calculate total duration for scheduled_end
+      const totalDuration = data.services.reduce((sum, s) => sum + s.duration, 0);
+      
+      let scheduledStart: string | null = null;
+      let scheduledEnd: string | null = null;
+      
+      if (hasScheduledStart) {
+        // Use provided scheduled start (e.g., walk-in with buffer)
+        scheduledStart = data.scheduledStart!;
+        const endTime = new Date(new Date(scheduledStart).getTime() + totalDuration * 60 * 1000);
+        scheduledEnd = data.scheduledEnd || endTime.toISOString();
+      } else if (!isUnscheduled) {
+        // Regular scheduled appointment
+        scheduledStart = data.scheduledStart || now;
+        scheduledEnd = data.scheduledEnd || now;
+      }
+      // If unscheduled (immediate walk-in), both remain null
 
       // Create appointment
       const { data: appointment, error: aptError } = await supabase

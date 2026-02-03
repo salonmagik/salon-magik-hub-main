@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Users, Plus, Loader2, Check } from "lucide-react";
+import { Users, Plus, Loader2, Check, Clock } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AppointmentNotesInput } from "@/components/notes/AppointmentNotesInput";
 import { useCustomers } from "@/hooks/useCustomers";
@@ -25,7 +25,16 @@ import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
 import { useLocations } from "@/hooks/useLocations";
 import { useAppointmentActions } from "@/hooks/useAppointments";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+
+const BUFFER_OPTIONS = [
+  { value: "0", label: "Start immediately" },
+  { value: "5", label: "5 minutes" },
+  { value: "10", label: "10 minutes" },
+  { value: "15", label: "15 minutes" },
+  { value: "30", label: "30 minutes" },
+];
 
 interface WalkInDialogProps {
   open: boolean;
@@ -41,6 +50,7 @@ interface SelectedService {
 }
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
+  const { currentTenant } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
     id: string;
@@ -53,6 +63,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
     customerId: "",
     staffId: "",
     notes: "",
+    bufferMinutes: "0",
   });
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
@@ -62,18 +73,20 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const { defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
 
-  // Reset form when dialog opens
+  // Reset form when dialog opens, use tenant default buffer
   useEffect(() => {
     if (open) {
+      const defaultBuffer = currentTenant?.default_buffer_minutes?.toString() || "0";
       setFormData({
         customerId: "",
         staffId: "",
         notes: "",
+        bufferMinutes: defaultBuffer,
       });
       setSelectedServices([]);
       setNoteAttachments([]);
     }
-  }, [open]);
+  }, [open, currentTenant?.default_buffer_minutes]);
 
   const handleCustomerCreated = () => {
     refetchCustomers();
@@ -105,6 +118,14 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
       return;
     }
 
+    const bufferMinutes = parseInt(formData.bufferMinutes, 10) || 0;
+    const startImmediate = bufferMinutes === 0;
+
+    // If buffer selected, calculate scheduled_start as now + buffer
+    const scheduledStart = bufferMinutes > 0
+      ? new Date(Date.now() + bufferMinutes * 60 * 1000)
+      : undefined;
+
     const result = await createAppointment({
       customerId: formData.customerId,
       services: selectedServices.map((s) => ({
@@ -117,7 +138,8 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
       isWalkIn: true,
-      isUnscheduled: true,
+      isUnscheduled: startImmediate, // Only unscheduled if starting immediately
+      scheduledStart: scheduledStart?.toISOString(),
     });
 
     if (result) {
@@ -258,6 +280,36 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
               </div>
             )}
 
+            {/* Buffer Time */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                Start Time
+              </Label>
+              <Select
+                value={formData.bufferMinutes}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({ ...prev, bufferMinutes: v }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="When to start?" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BUFFER_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.bufferMinutes !== "0" && (
+                <p className="text-xs text-muted-foreground">
+                  Customer will be scheduled to start in {formData.bufferMinutes} minutes
+                </p>
+              )}
+            </div>
+
             {/* Staff Assignment */}
             <div className="space-y-2">
               <Label>Assigned Staff</Label>
@@ -271,9 +323,9 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                 <SelectTrigger>
                   <SelectValue placeholder={staffLoading ? "Loading..." : "Select staff (optional)"} />
                 </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">No staff assigned</SelectItem>
-                {staff.map((member) => (
+                <SelectContent>
+                  <SelectItem value="_none">No staff assigned</SelectItem>
+                  {staff.map((member) => (
                     <SelectItem key={member.userId} value={member.userId}>
                       {member.profile?.full_name || "Unknown"} ({member.role})
                     </SelectItem>
@@ -295,7 +347,11 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
             <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
                 <Check className="w-4 h-4 text-success flex-shrink-0" />
-                <span className="whitespace-nowrap">Service will start immediately</span>
+                <span className="whitespace-nowrap">
+                  {formData.bufferMinutes === "0"
+                    ? "Service will start immediately"
+                    : `Service starts in ${formData.bufferMinutes} minutes`}
+                </span>
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
                 <Button
