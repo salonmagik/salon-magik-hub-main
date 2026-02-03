@@ -13,6 +13,7 @@ import { useServices } from "@/hooks/useServices";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
+import { formatCurrency, getCurrencySymbol } from "@/lib/currency";
 
 interface AddPackageDialogProps {
   open: boolean;
@@ -29,6 +30,7 @@ interface SelectedService {
 
 export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDialogProps) {
   const { currentTenant } = useAuth();
+  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const { services, isLoading: servicesLoading } = useServices();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -185,7 +187,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
                           <div>
                             <p className="font-medium text-sm">{service.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              ${Number(service.price).toFixed(2)} • {service.duration_minutes} mins
+                              {formatCurrency(Number(service.price), currentTenant?.currency || "USD")} • {service.duration_minutes} mins
                             </p>
                           </div>
                         </div>
@@ -224,11 +226,11 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Original Value</Label>
-              <Input value={`$${originalPrice.toFixed(2)}`} disabled className="bg-muted" />
+              <Input value={formatCurrency(originalPrice, currentTenant?.currency || "USD")} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
               <Label>
-                Package Price <span className="text-destructive">*</span>
+                Package Price ({currencySymbol}) <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
                 {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
@@ -248,7 +250,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
 
           {savings > 0 && (
             <div className="text-sm text-success bg-success/10 rounded-lg p-3 text-center">
-              Customers save ${savings.toFixed(2)} ({savingsPercent}% off)
+              Customers save {formatCurrency(savings, currentTenant?.currency || "USD")} ({savingsPercent}% off)
             </div>
           )}
 

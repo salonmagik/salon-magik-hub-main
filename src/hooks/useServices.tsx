@@ -112,6 +112,89 @@ export function useServices() {
     }
   };
 
+  const createCategory = async (data: { name: string; description?: string }) => {
+    if (!currentTenant?.id) {
+      toast({ title: "Error", description: "No active tenant", variant: "destructive" });
+      return null;
+    }
+
+    try {
+      // Get the max sort_order to add new category at the end
+      const maxSortOrder = categories.length > 0 
+        ? Math.max(...categories.map(c => c.sort_order)) + 1 
+        : 0;
+
+      const { data: category, error } = await supabase
+        .from("service_categories")
+        .insert({
+          tenant_id: currentTenant.id,
+          name: data.name,
+          description: data.description || null,
+          sort_order: maxSortOrder,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: "Category created successfully" });
+      await fetchServices();
+      return category;
+    } catch (err) {
+      console.error("Error creating category:", err);
+      toast({ title: "Error", description: "Failed to create category", variant: "destructive" });
+      return null;
+    }
+  };
+
+  const updateCategory = async (id: string, data: { name?: string; description?: string }) => {
+    try {
+      const { error } = await supabase
+        .from("service_categories")
+        .update({
+          name: data.name,
+          description: data.description,
+        })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: "Category updated successfully" });
+      await fetchServices();
+      return true;
+    } catch (err) {
+      console.error("Error updating category:", err);
+      toast({ title: "Error", description: "Failed to update category", variant: "destructive" });
+      return false;
+    }
+  };
+
+  const deleteCategory = async (id: string) => {
+    try {
+      // First, remove category_id from all services in this category
+      await supabase
+        .from("services")
+        .update({ category_id: null })
+        .eq("category_id", id);
+
+      // Then delete the category
+      const { error } = await supabase
+        .from("service_categories")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      toast({ title: "Success", description: "Category deleted successfully" });
+      await fetchServices();
+      return true;
+    } catch (err) {
+      console.error("Error deleting category:", err);
+      toast({ title: "Error", description: "Failed to delete category", variant: "destructive" });
+      return false;
+    }
+  };
+
   return {
     services,
     categories,
@@ -119,5 +202,8 @@ export function useServices() {
     error,
     refetch: fetchServices,
     createService,
+    createCategory,
+    updateCategory,
+    deleteCategory,
   };
 }

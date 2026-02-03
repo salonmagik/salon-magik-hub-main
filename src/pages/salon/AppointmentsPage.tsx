@@ -47,13 +47,15 @@ import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointm
 import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
 import { AppointmentDetailsDialog } from "@/components/dialogs/AppointmentDetailsDialog";
+import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
 import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useAuth } from "@/hooks/useAuth";
-import type { Enums } from "@/integrations/supabase/types";
+import type { Enums, Tables } from "@/integrations/supabase/types";
 import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
 
 type AppointmentStatus = Enums<"appointment_status">;
+type Customer = Tables<"customers">;
 
 const statusBadgeStyles: Record<string, { bg: string; text: string }> = {
   scheduled: { bg: "bg-muted", text: "text-muted-foreground" },
@@ -70,8 +72,10 @@ export default function AppointmentsPage() {
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   
   const [activeTab, setActiveTab] = useState<"scheduled" | "unscheduled">("scheduled");
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split("T")[0]);
@@ -537,7 +541,12 @@ export default function AppointmentsPage() {
                               {canViewCustomerProfile && (
                                 <>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedCustomer(apt.customer as Customer);
+                                      setCustomerDialogOpen(true);
+                                    }}
+                                  >
                                     <User className="w-4 h-4 mr-2" />
                                     View Customer Profile
                                   </DropdownMenuItem>
@@ -602,6 +611,13 @@ export default function AppointmentsPage() {
         open={detailsDialogOpen}
         onOpenChange={setDetailsDialogOpen}
         appointment={convertToCalendarAppointment(selectedAppointment!)}
+      />
+
+      {/* Customer Detail Dialog */}
+      <CustomerDetailDialog
+        open={customerDialogOpen}
+        onOpenChange={setCustomerDialogOpen}
+        customer={selectedCustomer}
       />
     </SalonSidebar>
   );
