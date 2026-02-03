@@ -144,6 +144,7 @@ export function useAppointmentActions() {
     notes?: string;
     isWalkIn?: boolean;
     isUnscheduled?: boolean;
+    attachments?: { id: string; fileName: string; fileType: string; dataUrl: string; isDrawing: boolean }[];
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -220,6 +221,55 @@ export function useAppointmentActions() {
         .insert(servicesToInsert);
 
       if (servicesError) throw servicesError;
+
+      // Upload and save attachments if provided
+      if (data.attachments && data.attachments.length > 0) {
+        for (const attachment of data.attachments) {
+          try {
+            // Convert data URL to Blob
+            const response = await fetch(attachment.dataUrl);
+            const blob = await response.blob();
+            
+            // Generate unique file path
+            const fileExt = attachment.fileName.split('.').pop() || 'png';
+            const filePath = `${currentTenant.id}/${appointment.id}/${crypto.randomUUID()}.${fileExt}`;
+            
+            // Upload to storage
+            const { error: uploadError } = await supabase.storage
+              .from("appointment-attachments")
+              .upload(filePath, blob, {
+                contentType: attachment.fileType,
+                upsert: false,
+              });
+            
+            if (uploadError) {
+              console.error("Failed to upload attachment:", uploadError);
+              continue;
+            }
+            
+            // Get public URL
+            const { data: urlData } = supabase.storage
+              .from("appointment-attachments")
+              .getPublicUrl(filePath);
+            
+            // Save attachment record
+            await supabase
+              .from("appointment_attachments")
+              .insert({
+                tenant_id: currentTenant.id,
+                appointment_id: appointment.id,
+                file_name: attachment.fileName,
+                file_type: attachment.fileType,
+                file_url: urlData.publicUrl,
+                is_drawing: attachment.isDrawing,
+                created_by_id: user?.id || null,
+              });
+          } catch (attachErr) {
+            console.error("Error saving attachment:", attachErr);
+            // Continue with other attachments
+          }
+        }
+      }
 
       toast({ title: "Success", description: "Appointment created successfully" });
       

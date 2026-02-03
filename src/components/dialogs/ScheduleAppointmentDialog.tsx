@@ -120,6 +120,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
       locationId: defaultLocation.id,
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
+      attachments: noteAttachments.length > 0 ? noteAttachments : undefined,
     });
 
     if (result) {
