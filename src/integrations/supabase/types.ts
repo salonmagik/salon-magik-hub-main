@@ -176,6 +176,7 @@ export type Database = {
           customer_id: string
           deposit_amount: number
           id: string
+          is_gifted: boolean
           is_unscheduled: boolean
           is_walk_in: boolean
           location_id: string
@@ -202,6 +203,7 @@ export type Database = {
           customer_id: string
           deposit_amount?: number
           id?: string
+          is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
           location_id: string
@@ -228,6 +230,7 @@ export type Database = {
           customer_id?: string
           deposit_amount?: number
           id?: string
+          is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
           location_id?: string

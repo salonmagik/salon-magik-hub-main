@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { DatePicker, dateToString, stringToDate } from "@/components/ui/date-picker";
 import { TimePicker } from "@/components/ui/time-picker";
 import { User, Plus, Check, Loader2 } from "lucide-react";
@@ -15,11 +15,19 @@ import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
 import { useLocations } from "@/hooks/useLocations";
 import { useAppointmentActions } from "@/hooks/useAppointments";
+import { cn } from "@/lib/utils";
 
 interface ScheduleAppointmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+}
+
+interface SelectedService {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;
 }
 
 export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: ScheduleAppointmentDialogProps) {
@@ -36,13 +44,12 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   >([]);
   const [formData, setFormData] = useState({
     customerId: "",
-    serviceId: "",
     date: new Date().toISOString().split("T")[0],
     startTime: "09:00",
-    duration: "60",
     staffId: "",
     notes: "",
   });
+  const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
   const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
@@ -55,13 +62,12 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
     if (open) {
       setFormData({
         customerId: "",
-        serviceId: "",
         date: new Date().toISOString().split("T")[0],
         startTime: "09:00",
-        duration: "60",
         staffId: "",
         notes: "",
       });
+      setSelectedServices([]);
       setNoteAttachments([]);
     }
   }, [open]);
@@ -74,30 +80,41 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
     refetchServices();
   };
 
+  const toggleService = (service: { id: string; name: string; price: number; duration_minutes: number }) => {
+    const exists = selectedServices.find((s) => s.id === service.id);
+    if (exists) {
+      setSelectedServices((prev) => prev.filter((s) => s.id !== service.id));
+    } else {
+      setSelectedServices((prev) => [
+        ...prev,
+        { id: service.id, name: service.name, price: Number(service.price), duration: service.duration_minutes },
+      ]);
+    }
+  };
+
+  const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
+  const totalDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!defaultLocation?.id) {
+    if (!defaultLocation?.id || selectedServices.length === 0) {
       return;
     }
 
-    const selectedService = services.find((s) => s.id === formData.serviceId);
-    if (!selectedService) return;
-
     const scheduledStart = `${formData.date}T${formData.startTime}:00`;
-    const durationMs = parseInt(formData.duration) * 60 * 1000;
-    const scheduledEnd = new Date(new Date(scheduledStart).getTime() + durationMs).toISOString();
+    const scheduledEnd = new Date(
+      new Date(scheduledStart).getTime() + totalDuration * 60 * 1000
+    ).toISOString();
 
     const result = await createAppointment({
       customerId: formData.customerId,
-      services: [
-        {
-          serviceId: selectedService.id,
-          serviceName: selectedService.name,
-          price: Number(selectedService.price),
-          duration: selectedService.duration_minutes,
-        },
-      ],
+      services: selectedServices.map((s) => ({
+        serviceId: s.id,
+        serviceName: s.name,
+        price: s.price,
+        duration: s.duration,
+      })),
       scheduledStart,
       scheduledEnd,
       locationId: defaultLocation.id,
@@ -114,7 +131,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl">Schedule appointment</DialogTitle>
             <p className="text-sm text-muted-foreground">
@@ -123,70 +140,125 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-            {/* Customer & Service Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>
-                  Customer <span className="text-destructive">*</span>
-                </Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.customerId}
-                    onValueChange={(v) => setFormData((prev) => ({ ...prev, customerId: v }))}
-                    disabled={customersLoading}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <User className="w-4 h-4 mr-2 text-muted-foreground" />
-                      <SelectValue placeholder={customersLoading ? "Loading..." : "Select customer"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id}>
-                          {customer.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button type="button" onClick={() => setCustomerDialogOpen(true)} className="gap-1" size="icon">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>
-                  Service <span className="text-destructive">*</span>
-                </Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.serviceId}
-                    onValueChange={(v) => {
-                      const service = services.find((s) => s.id === v);
-                      setFormData((prev) => ({
-                        ...prev,
-                        serviceId: v,
-                        duration: service?.duration_minutes.toString() || prev.duration,
-                      }));
-                    }}
-                    disabled={servicesLoading}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder={servicesLoading ? "Loading..." : "Select service"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {services.map((service) => (
-                        <SelectItem key={service.id} value={service.id}>
-                          {service.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button type="button" onClick={() => setServiceDialogOpen(true)} className="gap-1" size="icon">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
+            {/* Customer Selection */}
+            <div className="space-y-2">
+              <Label>
+                Customer <span className="text-destructive">*</span>
+              </Label>
+              <div className="flex gap-2">
+                <Select
+                  value={formData.customerId}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, customerId: v }))}
+                  disabled={customersLoading}
+                >
+                  <SelectTrigger className="flex-1">
+                    <User className="w-4 h-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder={customersLoading ? "Loading..." : "Select customer"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button type="button" onClick={() => setCustomerDialogOpen(true)} className="gap-1" size="icon">
+                  <Plus className="w-4 h-4" />
+                </Button>
               </div>
             </div>
+
+            {/* Service Selection */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>
+                  Services <span className="text-destructive">*</span>
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setServiceDialogOpen(true)}
+                  className="h-auto py-1 px-2 text-xs"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Service
+                </Button>
+              </div>
+              <ScrollArea className="h-48 rounded-md border p-2">
+                {servicesLoading ? (
+                  <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                    Loading services...
+                  </div>
+                ) : services.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                    No services available. Create one first.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {services.map((service) => {
+                      const selected = selectedServices.find((s) => s.id === service.id);
+                      return (
+                        <button
+                          key={service.id}
+                          type="button"
+                          onClick={() => toggleService(service)}
+                          aria-pressed={!!selected}
+                          className={cn(
+                            "w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left",
+                            selected
+                              ? "bg-primary/5 border-primary"
+                              : "hover:bg-muted/50"
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              aria-hidden="true"
+                              className={cn(
+                                "h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background flex items-center justify-center",
+                                selected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-transparent"
+                              )}
+                            >
+                              <Check className="h-3 w-3" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{service.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {service.duration_minutes} mins
+                              </p>
+                            </div>
+                          </div>
+                          <span className="font-semibold text-sm">
+                            ${Number(service.price).toFixed(2)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+
+            {/* Summary */}
+            {selectedServices.length > 0 && (
+              <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Services selected</span>
+                  <span className="font-medium">{selectedServices.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Total duration</span>
+                  <span className="font-medium">{totalDuration} mins</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold border-t pt-1">
+                  <span>Total</span>
+                  <span>${totalPrice.toFixed(2)}</span>
+                </div>
+              </div>
+            )}
 
             {/* Date & Time Row - 2 columns even on mobile for compact sizing */}
             <div className="grid grid-cols-2 gap-4">
@@ -213,19 +285,6 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                   disabled={isSubmitting}
                 />
               </div>
-            </div>
-
-            {/* Duration - Separate section */}
-            <div className="space-y-2">
-              <Label>Duration (mins)</Label>
-              <Input
-                type="number"
-                className="h-10 text-sm"
-                value={formData.duration}
-                onChange={(e) => setFormData((prev) => ({ ...prev, duration: e.target.value }))}
-                min="15"
-                step="15"
-              />
             </div>
 
             {/* Staff Row */}
@@ -276,7 +335,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !formData.customerId || !formData.serviceId}
+                  disabled={isSubmitting || !formData.customerId || selectedServices.length === 0}
                   className="flex-1 sm:flex-initial"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

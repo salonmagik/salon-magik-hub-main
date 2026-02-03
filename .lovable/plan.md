@@ -1,14 +1,18 @@
 
 # Complete Implementation Plan: Salon Platform Enhancement
 
-This comprehensive plan covers all phases in priority order, integrating the newly added directives for appointment enhancements, multi-service selection, and product fulfillment tracking.
+**Last Updated:** Batch 1 - Core Appointments (In Progress)
+
+## Recent Completions
+- ✅ Database migration: `is_gifted` column added to appointments
+- ✅ `useAppointmentStats.tsx` hook created - Tab-specific stats queries
+- ✅ `ScheduleAppointmentDialog.tsx` - Multi-service selection + auto-duration
+- ✅ `useAppointments.tsx` - Added `isGifted` and `filterByBookingDate` filters  
+- ✅ `AppointmentsPage.tsx` - Tab-specific stats cards, multi-service display, row click, gifted filter
 
 ---
 
-## Implementation Priority Overview
-
-| Priority | Category | Phases | Status |
-|----------|----------|--------|--------|
+This comprehensive plan covers all phases in priority order, integrating the newly added directives for appointment enhancements, multi-service selection, and product fulfillment tracking.
 | 1 | Critical Fixes | Settings persistence, Journal fixes | Partial (Journal ✅) |
 | 2 | Core Structure | Appointments enhancements, Dashboard restructure, Trial banners | Partial (Banners ✅) |
 | 3 | Workflow | Maker-checker refunds, Confirmation modals | Partial (Refunds ✅) |

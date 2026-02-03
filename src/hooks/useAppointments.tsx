@@ -20,6 +20,8 @@ interface UseAppointmentsOptions {
   status?: AppointmentStatus | "all";
   locationId?: string;
   isUnscheduled?: boolean;
+  isGifted?: boolean;
+  filterByBookingDate?: boolean; // Use created_at instead of scheduled_start
 }
 
 export function useAppointments(options: UseAppointmentsOptions = {}) {
@@ -53,9 +55,18 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
       if (options.date) {
         const startOfDay = `${options.date}T00:00:00`;
         const endOfDay = `${options.date}T23:59:59`;
-        query = query
-          .gte("scheduled_start", startOfDay)
-          .lte("scheduled_start", endOfDay);
+        
+        if (options.filterByBookingDate) {
+          // Use created_at for unscheduled (booking date)
+          query = query
+            .gte("created_at", startOfDay)
+            .lte("created_at", endOfDay);
+        } else {
+          // Use scheduled_start for scheduled
+          query = query
+            .gte("scheduled_start", startOfDay)
+            .lte("scheduled_start", endOfDay);
+        }
       }
 
       // Apply status filter
@@ -73,6 +84,11 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
         query = query.eq("is_unscheduled", options.isUnscheduled);
       }
 
+      // Apply gifted filter
+      if (options.isGifted !== undefined) {
+        query = query.eq("is_gifted", options.isGifted);
+      }
+
       const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
@@ -84,7 +100,7 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, options.date, options.status, options.locationId, options.isUnscheduled]);
+  }, [currentTenant?.id, options.date, options.status, options.locationId, options.isUnscheduled, options.isGifted, options.filterByBookingDate]);
 
   useEffect(() => {
     fetchAppointments();

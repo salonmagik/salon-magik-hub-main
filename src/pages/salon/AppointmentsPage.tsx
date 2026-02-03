@@ -36,20 +36,22 @@ import {
   X,
   RefreshCw,
   MoreHorizontal,
-  AlertCircle,
   RotateCcw,
   UserPlus,
   User,
+  Gift,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointmentDialog";
 import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
+import { AppointmentDetailsDialog } from "@/components/dialogs/AppointmentDetailsDialog";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
-import { useTodayAppointmentCount } from "@/hooks/useTodayAppointmentCount";
+import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useAuth } from "@/hooks/useAuth";
 import type { Enums } from "@/integrations/supabase/types";
+import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
 
 type AppointmentStatus = Enums<"appointment_status">;
 
@@ -67,21 +69,25 @@ export default function AppointmentsPage() {
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
   
   const [activeTab, setActiveTab] = useState<"scheduled" | "unscheduled">("scheduled");
   const [dateFilter, setDateFilter] = useState<string>(new Date().toISOString().split("T")[0]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [giftedFilter, setGiftedFilter] = useState<string>("all");
 
-  // Fetch today's count independently (ONLY TODAY, not affected by filters)
-  const { count: todayCount, isLoading: todayLoading } = useTodayAppointmentCount();
+  // Fetch stats for both tabs
+  const { scheduledStats, unscheduledStats, isLoading: statsLoading, refetch: refetchStats } = useAppointmentStats();
 
   // Fetch appointments based on active tab
   const { appointments, isLoading, refetch } = useAppointments({
     date: dateFilter,
     status: statusFilter as AppointmentStatus | "all",
     isUnscheduled: activeTab === "unscheduled",
+    isGifted: giftedFilter === "gifted" ? true : giftedFilter === "not_gifted" ? false : undefined,
+    filterByBookingDate: activeTab === "unscheduled",
   });
 
   const {
@@ -105,21 +111,26 @@ export default function AppointmentsPage() {
   const canCancelReschedule = userRole && userRole !== "staff";
   const canViewCustomerProfile = userRole && userRole !== "staff";
 
+  const handleRefetch = () => {
+    refetch();
+    refetchStats();
+  };
+
   const handleAction = async (action: string, appointment: AppointmentWithDetails) => {
     setSelectedAppointment(appointment);
     
     switch (action) {
       case "start":
         await startAppointment(appointment.id);
-        refetch();
+        handleRefetch();
         break;
       case "resume":
         await resumeAppointment(appointment.id);
-        refetch();
+        handleRefetch();
         break;
       case "complete":
         await completeAppointment(appointment.id);
-        refetch();
+        handleRefetch();
         break;
       case "pause":
         setActionType("pause");
@@ -136,6 +147,11 @@ export default function AppointmentsPage() {
     }
   };
 
+  const handleRowClick = (appointment: AppointmentWithDetails) => {
+    setSelectedAppointment(appointment);
+    setDetailsDialogOpen(true);
+  };
+
   const handleActionConfirm = async (data: { reason?: string; newStart?: string; newEnd?: string }) => {
     if (!selectedAppointment) return;
 
@@ -150,7 +166,7 @@ export default function AppointmentsPage() {
     setActionDialogOpen(false);
     setActionType(null);
     setSelectedAppointment(null);
-    refetch();
+    handleRefetch();
   };
 
   const formatTime = (dateString: string | null) => {
@@ -179,6 +195,13 @@ export default function AppointmentsPage() {
         break;
     }
     return actions;
+  };
+
+  // Convert AppointmentWithDetails to CalendarAppointment for details dialog
+  const convertToCalendarAppointment = (apt: AppointmentWithDetails | null): CalendarAppointment | null => {
+    if (!apt) return null;
+    // Both types extend the base Appointment type and include customer/services
+    return apt as unknown as CalendarAppointment;
   };
 
   return (
@@ -214,34 +237,133 @@ export default function AppointmentsPage() {
           </TabsList>
         </Tabs>
 
-        {/* Today's Count Card - ONLY TODAY, independent of filters */}
-        <Card className="bg-primary/5 border-primary/20">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Calendar className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Today's Appointments</p>
-                {todayLoading ? (
-                  <Skeleton className="h-7 w-12" />
-                ) : (
-                  <p className="text-2xl font-semibold">{todayCount}</p>
-                )}
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {appointments.length} rows displayed
-            </p>
-          </CardContent>
-        </Card>
+        {/* Tab-Specific Stats Cards */}
+        {activeTab === "scheduled" ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Today's Appointments */}
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Calendar className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Today</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-8" />
+                    ) : (
+                      <p className="text-xl font-semibold">{scheduledStats.todayCount}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Gifted */}
+            <Card className="bg-amber-500/5 border-amber-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/10">
+                    <Gift className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Gifted</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-8" />
+                    ) : (
+                      <p className="text-xl font-semibold">{scheduledStats.giftedCount}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Cancelled */}
+            <Card className="bg-destructive/5 border-destructive/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-destructive/10">
+                    <X className="w-5 h-5 text-destructive" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Cancelled</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-8" />
+                    ) : (
+                      <p className="text-xl font-semibold">{scheduledStats.cancelledCount}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Rescheduled */}
+            <Card className="bg-muted border-border">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-muted-foreground/10">
+                    <RotateCcw className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Rescheduled</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-8" />
+                    ) : (
+                      <p className="text-xl font-semibold">{scheduledStats.rescheduledCount}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 max-w-md">
+            {/* Total Unscheduled */}
+            <Card className="bg-muted border-border">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-muted-foreground/10">
+                    <Clock className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-8" />
+                    ) : (
+                      <p className="text-xl font-semibold">{unscheduledStats.totalCount}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Gifted Unscheduled */}
+            <Card className="bg-amber-500/5 border-amber-500/20">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/10">
+                    <Gift className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Gifted</p>
+                    {statsLoading ? (
+                      <Skeleton className="h-6 w-8" />
+                    ) : (
+                      <p className="text-xl font-semibold">{unscheduledStats.giftedCount}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-4">
           <DatePicker
             value={stringToDate(dateFilter)}
             onChange={(date) => setDateFilter(dateToString(date) || new Date().toISOString().split("T")[0])}
-            placeholder="Filter by date"
+            placeholder={activeTab === "unscheduled" ? "Booked on" : "Filter by date"}
             className="w-auto min-w-[180px]"
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -257,8 +379,20 @@ export default function AppointmentsPage() {
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
+          {activeTab === "unscheduled" && (
+            <Select value={giftedFilter} onValueChange={setGiftedFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Gifted status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="gifted">Gifted</SelectItem>
+                <SelectItem value="not_gifted">Not Gifted</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <div className="flex-1" />
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -309,7 +443,11 @@ export default function AppointmentsPage() {
                 appointments.map((apt) => {
                   const actions = getAvailableActions(apt.status);
                   return (
-                    <TableRow key={apt.id} className="hover:bg-muted/50">
+                    <TableRow 
+                      key={apt.id} 
+                      className="hover:bg-muted/50 cursor-pointer"
+                      onClick={() => handleRowClick(apt)}
+                    >
                       <TableCell>
                         <div>
                           <p className="font-medium">
@@ -323,17 +461,31 @@ export default function AppointmentsPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div>
-                          <p className="font-medium">{apt.customer?.full_name || "Unknown"}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {apt.customer?.phone || "No phone"}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <p className="font-medium">{apt.customer?.full_name || "Unknown"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {apt.customer?.phone || "No phone"}
+                            </p>
+                          </div>
+                          {(apt as any).is_gifted && (
+                            <Gift className="w-4 h-4 text-amber-500" />
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        {apt.services.length > 0 
-                          ? apt.services.map(s => s.service_name).join(", ")
-                          : "—"}
+                        {apt.services.length > 0 ? (
+                          <div>
+                            <p className="font-medium">{apt.services[0].service_name}</p>
+                            {apt.services.length > 1 && (
+                              <p className="text-xs text-muted-foreground">
+                                +{apt.services.length - 1} services
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          "—"
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -349,7 +501,7 @@ export default function AppointmentsPage() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         {(actions.length > 0 || canViewCustomerProfile) && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -426,14 +578,14 @@ export default function AppointmentsPage() {
       <ScheduleAppointmentDialog
         open={appointmentDialogOpen}
         onOpenChange={setAppointmentDialogOpen}
-        onSuccess={refetch}
+        onSuccess={handleRefetch}
       />
 
       {/* Walk-in Dialog */}
       <WalkInDialog
         open={walkInDialogOpen}
         onOpenChange={setWalkInDialogOpen}
-        onSuccess={refetch}
+        onSuccess={handleRefetch}
       />
 
       {/* Action Dialogs */}
@@ -443,6 +595,13 @@ export default function AppointmentsPage() {
         actionType={actionType}
         appointment={selectedAppointment}
         onConfirm={handleActionConfirm}
+      />
+
+      {/* Appointment Details Dialog */}
+      <AppointmentDetailsDialog
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+        appointment={convertToCalendarAppointment(selectedAppointment!)}
       />
     </SalonSidebar>
   );
