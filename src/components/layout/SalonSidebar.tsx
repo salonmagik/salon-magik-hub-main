@@ -291,7 +291,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {/* Sidebar - Mobile */}
           <aside
             className={cn(
-              "fixed inset-y-0 left-0 z-50 w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
+               "fixed inset-y-0 left-0 z-[60] w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
               isMobileOpen ? "translate-x-0" : "-translate-x-full"
             )}
           >
@@ -301,7 +301,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {/* Sidebar - Desktop */}
           <aside
             className={cn(
-              "hidden lg:flex flex-col bg-primary relative transition-all duration-300",
+               "hidden lg:flex flex-col bg-primary relative z-[60] transition-all duration-300",
               isExpanded ? "w-64" : "w-[72px]"
             )}
           >
