@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users,
   Tag,
@@ -18,63 +19,69 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
+import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
+import { useCustomers } from "@/hooks/useCustomers";
+import { useAuth } from "@/hooks/useAuth";
+import type { Tables } from "@/integrations/supabase/types";
 
-// Status cards data
-const statusCards = [
-  { label: "Total Customers", count: 2, icon: Users, color: "text-primary", bgColor: "bg-primary/10" },
-  { label: "VIP Customers", count: 0, icon: Tag, color: "text-success", bgColor: "bg-success/10" },
-  { label: "New This Month", count: 0, icon: UserPlus, color: "text-purple-600", bgColor: "bg-purple-50" },
-  { label: "Inactive", count: 0, icon: Calendar, color: "text-muted-foreground", bgColor: "bg-muted" },
-];
+type Customer = Tables<"customers">;
 
-// Sample customers data
-const customers = [
-  {
-    id: "1",
-    firstName: "Jamin",
-    lastName: "Customer",
-    email: "jaminonuegbu@gmail.com",
-    phone: "+234545245532",
-    status: "active",
-    balance: 0,
-    visits: 0,
-  },
-  {
-    id: "2",
-    firstName: "Darling",
-    lastName: "Customers",
-    email: "agate.ambrose@gmail.com",
-    phone: "+233256611702",
-    status: "active",
-    balance: 0,
-    visits: 0,
-  },
-];
-
-const statusFilters = ["All", "Active", "Inactive", "Blocked"];
+const statusFilters = ["All", "Active", "VIP", "Inactive", "Blocked"];
 
 export default function CustomersPage() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  const { currentTenant } = useAuth();
+  const { customers, isLoading, refetch } = useCustomers();
+
+  const currency = currentTenant?.currency || "USD";
+
+  // Calculate stats
+  const stats = useMemo(() => {
+    const total = customers.length;
+    const vip = customers.filter((c) => c.status === "vip").length;
+    const thisMonth = customers.filter((c) => {
+      const created = new Date(c.created_at);
+      const now = new Date();
+      return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+    }).length;
+    const inactive = customers.filter((c) => c.status === "inactive").length;
+
+    return { total, vip, thisMonth, inactive };
+  }, [customers]);
+
+  const statusCards = [
+    { label: "Total Customers", count: stats.total, icon: Users, color: "text-primary", bgColor: "bg-primary/10" },
+    { label: "VIP Customers", count: stats.vip, icon: Tag, color: "text-purple-600", bgColor: "bg-purple-50" },
+    { label: "New This Month", count: stats.thisMonth, icon: UserPlus, color: "text-success", bgColor: "bg-success/10" },
+    { label: "Inactive", count: stats.inactive, icon: Calendar, color: "text-muted-foreground", bgColor: "bg-muted" },
+  ];
+
+  const getInitials = (name: string) => {
+    const parts = name.split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
   };
 
-  const filteredCustomers = customers.filter((customer) => {
-    const matchesSearch =
-      customer.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.phone.includes(searchQuery);
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((customer) => {
+      const matchesSearch =
+        customer.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (customer.phone || "").includes(searchQuery);
 
-    const matchesFilter =
-      activeFilter === "All" ||
-      customer.status.toLowerCase() === activeFilter.toLowerCase();
+      const matchesFilter =
+        activeFilter === "All" ||
+        customer.status.toLowerCase() === activeFilter.toLowerCase();
 
-    return matchesSearch && matchesFilter;
-  });
+      return matchesSearch && matchesFilter;
+    });
+  }, [customers, searchQuery, activeFilter]);
 
   return (
     <SalonSidebar>
@@ -111,7 +118,9 @@ export default function CustomersPage() {
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{card.label}</p>
-                    <p className="text-2xl font-semibold mt-1">{card.count}</p>
+                    <p className="text-2xl font-semibold mt-1">
+                      {isLoading ? <Skeleton className="h-8 w-8" /> : card.count}
+                    </p>
                   </div>
                   <div className={`p-2 rounded-lg ${card.bgColor}`}>
                     <Icon className={`w-5 h-5 ${card.color}`} />
@@ -127,13 +136,13 @@ export default function CustomersPage() {
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, phone, email, or tag..."
+              placeholder="Search by name, phone, email..."
               className="pl-9"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {statusFilters.map((filter) => (
               <Button
                 key={filter}
@@ -148,98 +157,148 @@ export default function CustomersPage() {
         </div>
 
         {/* Customers Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredCustomers.map((customer) => (
-            <Card
-              key={customer.id}
-              className="hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Avatar */}
-                  <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center text-lg font-semibold flex-shrink-0">
-                    {getInitials(customer.firstName, customer.lastName)}
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    <Skeleton className="w-12 h-12 rounded-full" />
+                    <div className="flex-1">
+                      <Skeleton className="h-5 w-32 mb-2" />
+                      <Skeleton className="h-4 w-48" />
+                    </div>
                   </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filteredCustomers.length === 0 ? (
+          <div className="text-center py-12">
+            <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+            <p className="text-muted-foreground">
+              {searchQuery || activeFilter !== "All"
+                ? "No customers match your search."
+                : "No customers yet. Add your first customer."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredCustomers.map((customer) => (
+              <Card
+                key={customer.id}
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setDetailCustomer(customer)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    {/* Avatar */}
+                    <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center text-lg font-semibold flex-shrink-0">
+                      {getInitials(customer.full_name)}
+                    </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold truncate">
-                        {customer.firstName} {customer.lastName}
-                      </h3>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "capitalize text-xs",
-                          customer.status === "active"
-                            ? "bg-success/10 text-success"
-                            : "bg-muted text-muted-foreground"
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold truncate">{customer.full_name}</h3>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "capitalize text-xs",
+                            customer.status === "active"
+                              ? "bg-success/10 text-success"
+                              : customer.status === "vip"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {customer.status}
+                        </Badge>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+                        {customer.email && (
+                          <div className="flex items-center gap-1">
+                            <Mail className="w-3.5 h-3.5" />
+                            <span className="truncate">{customer.email}</span>
+                          </div>
                         )}
-                      >
-                        {customer.status}
-                      </Badge>
+                        {customer.phone && (
+                          <div className="flex items-center gap-1">
+                            <Phone className="w-3.5 h-3.5" />
+                            <span>{customer.phone}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4 mt-3 text-sm">
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {currency} {Number(customer.outstanding_balance).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {customer.visit_count} visits
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5" />
-                        <span className="truncate">{customer.email}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-3.5 h-3.5" />
-                        <span>{customer.phone}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 mt-3 text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          ₵{customer.balance}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          {customer.visits} visits
-                        </span>
-                      </div>
-                    </div>
+                    {/* More Button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="flex-shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDetailCustomer(customer);
+                      }}
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
                   </div>
-
-                  {/* More Button */}
-                  <Button variant="ghost" size="icon" className="flex-shrink-0">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Pagination */}
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Showing {filteredCustomers.length} of {customers.length} customers
-          </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled>
-              Previous
-            </Button>
-            <Button variant="default" size="sm">
-              1
-            </Button>
-            <Button variant="outline" size="sm" disabled>
-              Next
-            </Button>
+        {!isLoading && filteredCustomers.length > 0 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {filteredCustomers.length} of {customers.length} customers
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled>
+                Previous
+              </Button>
+              <Button variant="default" size="sm">
+                1
+              </Button>
+              <Button variant="outline" size="sm" disabled>
+                Next
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Add Customer Dialog */}
       <AddCustomerDialog
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
+        onSuccess={refetch}
+      />
+
+      {/* Customer Detail Dialog */}
+      <CustomerDetailDialog
+        open={!!detailCustomer}
+        onOpenChange={(open) => !open && setDetailCustomer(null)}
+        customer={detailCustomer}
       />
     </SalonSidebar>
   );

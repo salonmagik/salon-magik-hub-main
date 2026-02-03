@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Sheet,
   SheetContent,
@@ -6,60 +7,17 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, Calendar, CreditCard, UserPlus, Settings, Check } from "lucide-react";
+import { Bell, Calendar, CreditCard, UserPlus, Settings, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { formatDistanceToNow } from "date-fns";
 
 interface NotificationsPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-
-interface Notification {
-  id: string;
-  type: "appointment" | "payment" | "customer" | "system";
-  title: string;
-  description: string;
-  time: string;
-  read: boolean;
-  urgent?: boolean;
-}
-
-const notifications: Notification[] = [
-  {
-    id: "1",
-    type: "appointment",
-    title: "Appointment Confirmation Needed",
-    description: "Sarah Johnson's appointment tomorrow needs confirmation",
-    time: "5 minutes ago",
-    read: false,
-    urgent: true,
-  },
-  {
-    id: "2",
-    type: "payment",
-    title: "Payment Received",
-    description: "Michael Chen paid ₵85 for Hair Cut & Style",
-    time: "15 minutes ago",
-    read: false,
-  },
-  {
-    id: "3",
-    type: "customer",
-    title: "New Customer Registration",
-    description: "Lisa Wong just created an account and booked an appointment",
-    time: "1 hour ago",
-    read: true,
-  },
-  {
-    id: "4",
-    type: "system",
-    title: "System Update Available",
-    description: "New features and improvements are ready to install",
-    time: "2 hours ago",
-    read: true,
-  },
-];
 
 const getIcon = (type: Notification["type"]) => {
   switch (type) {
@@ -92,6 +50,14 @@ const getIconColor = (type: Notification["type"]) => {
 };
 
 export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelProps) {
+  const { notifications, isLoading, markAsRead, markAllAsRead, refetch } = useNotifications();
+
+  useEffect(() => {
+    if (open) {
+      refetch();
+    }
+  }, [open, refetch]);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
   const urgentCount = notifications.filter((n) => n.urgent).length;
 
@@ -106,7 +72,13 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
               <p className="text-sm text-muted-foreground">{unreadCount} unread</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="text-primary">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-primary"
+            onClick={markAllAsRead}
+            disabled={unreadCount === 0}
+          >
             Mark all read
           </Button>
         </SheetHeader>
@@ -133,27 +105,68 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="all" className="space-y-2 mt-0">
-            {notifications.map((notification) => (
-              <NotificationItem key={notification.id} notification={notification} />
-            ))}
-          </TabsContent>
-
-          <TabsContent value="unread" className="space-y-2 mt-0">
-            {notifications
-              .filter((n) => !n.read)
-              .map((notification) => (
-                <NotificationItem key={notification.id} notification={notification} />
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border">
+                  <Skeleton className="w-10 h-10 rounded-lg" />
+                  <div className="flex-1">
+                    <Skeleton className="h-4 w-32 mb-2" />
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
               ))}
-          </TabsContent>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="text-center py-8">
+              <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-muted-foreground">No notifications yet</p>
+            </div>
+          ) : (
+            <>
+              <TabsContent value="all" className="space-y-2 mt-0">
+                {notifications.map((notification) => (
+                  <NotificationItem
+                    key={notification.id}
+                    notification={notification}
+                    onMarkRead={() => markAsRead(notification.id)}
+                  />
+                ))}
+              </TabsContent>
 
-          <TabsContent value="urgent" className="space-y-2 mt-0">
-            {notifications
-              .filter((n) => n.urgent)
-              .map((notification) => (
-                <NotificationItem key={notification.id} notification={notification} />
-              ))}
-          </TabsContent>
+              <TabsContent value="unread" className="space-y-2 mt-0">
+                {notifications.filter((n) => !n.read).length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">All caught up!</p>
+                ) : (
+                  notifications
+                    .filter((n) => !n.read)
+                    .map((notification) => (
+                      <NotificationItem
+                        key={notification.id}
+                        notification={notification}
+                        onMarkRead={() => markAsRead(notification.id)}
+                      />
+                    ))
+                )}
+              </TabsContent>
+
+              <TabsContent value="urgent" className="space-y-2 mt-0">
+                {notifications.filter((n) => n.urgent).length === 0 ? (
+                  <p className="text-center py-8 text-muted-foreground">No urgent notifications</p>
+                ) : (
+                  notifications
+                    .filter((n) => n.urgent)
+                    .map((notification) => (
+                      <NotificationItem
+                        key={notification.id}
+                        notification={notification}
+                        onMarkRead={() => markAsRead(notification.id)}
+                      />
+                    ))
+                )}
+              </TabsContent>
+            </>
+          )}
         </Tabs>
 
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t bg-background flex items-center justify-between">
@@ -169,9 +182,17 @@ export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelPro
   );
 }
 
-function NotificationItem({ notification }: { notification: Notification }) {
+function NotificationItem({
+  notification,
+  onMarkRead,
+}: {
+  notification: Notification;
+  onMarkRead: () => void;
+}) {
   const Icon = getIcon(notification.type);
   const iconColor = getIconColor(notification.type);
+
+  const timeAgo = formatDistanceToNow(new Date(notification.created_at), { addSuffix: true });
 
   return (
     <div
@@ -196,11 +217,21 @@ function NotificationItem({ notification }: { notification: Notification }) {
         <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
           {notification.description}
         </p>
-        <p className="text-xs text-muted-foreground mt-1">{notification.time}</p>
+        <p className="text-xs text-muted-foreground mt-1">{timeAgo}</p>
       </div>
-      <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0">
-        <Check className="w-4 h-4" />
-      </Button>
+      {!notification.read && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMarkRead();
+          }}
+        >
+          <Check className="w-4 h-4" />
+        </Button>
+      )}
     </div>
   );
 }

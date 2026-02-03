@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, DollarSign, Hash, Loader2, Save } from "lucide-react";
+import { Package, Hash, Loader2, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -25,6 +26,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     stockQuantity: "0",
     status: "active",
     description: "",
+    images: [] as string[],
   });
 
   const resetForm = () => {
@@ -34,6 +36,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       stockQuantity: "0",
       status: "active",
       description: "",
+      images: [],
     });
   };
 
@@ -55,6 +58,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
         stock_quantity: parseInt(formData.stockQuantity),
         status: formData.status as "active" | "inactive" | "archived",
         description: formData.description || null,
+        image_urls: formData.images,
       });
 
       if (error) throw error;
@@ -156,6 +160,17 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
+            />
+          </div>
+
+          {/* Images */}
+          <div className="space-y-2">
+            <Label>Images (Optional)</Label>
+            <ImageUploadZone
+              images={formData.images}
+              onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              maxImages={2}
+              disabled={isSubmitting}
             />
           </div>
 
