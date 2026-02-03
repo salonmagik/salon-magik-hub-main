@@ -11,6 +11,7 @@ import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+import AcceptInvitePage from "./pages/auth/AcceptInvitePage";
 
 // Onboarding
 import OnboardingPage from "./pages/onboarding/OnboardingPage";
@@ -64,6 +65,7 @@ const App = () => (
             />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/accept-invite" element={<AcceptInvitePage />} />
 
             {/* Onboarding - requires auth but NOT onboarding completion */}
             <Route

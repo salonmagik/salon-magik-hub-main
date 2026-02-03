@@ -455,6 +455,7 @@ export type Database = {
         Row: {
           created_at: string
           email: string | null
+          flag_reason: string | null
           full_name: string
           id: string
           last_visit_at: string | null
@@ -470,6 +471,7 @@ export type Database = {
         Insert: {
           created_at?: string
           email?: string | null
+          flag_reason?: string | null
           full_name: string
           id?: string
           last_visit_at?: string | null
@@ -485,6 +487,7 @@ export type Database = {
         Update: {
           created_at?: string
           email?: string | null
+          flag_reason?: string | null
           full_name?: string
           id?: string
           last_visit_at?: string | null
@@ -1149,6 +1152,44 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          id: string
+          module: string
+          role: Database["public"]["Enums"]["app_role"]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          module: string
+          role: Database["public"]["Enums"]["app_role"]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          module?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_categories: {
         Row: {
           created_at: string
@@ -1364,6 +1405,7 @@ export type Database = {
           pay_at_salon_enabled: boolean
           paystack_customer_code: string | null
           plan: Database["public"]["Enums"]["subscription_plan"]
+          slot_capacity_default: number
           slug: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -1390,6 +1432,7 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
+          slot_capacity_default?: number
           slug?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -1416,6 +1459,7 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
+          slot_capacity_default?: number
           slug?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -1489,6 +1533,41 @@ export type Database = {
           },
           {
             foreignKeyName: "transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_permission_overrides: {
+        Row: {
+          allowed: boolean
+          created_at: string
+          id: string
+          module: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          allowed: boolean
+          created_at?: string
+          id?: string
+          module: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          allowed?: boolean
+          created_at?: string
+          id?: string
+          module?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_permission_overrides_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -1608,6 +1687,10 @@ export type Database = {
           _tenant_id: string
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_tenant_owner: {
+        Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
       log_audit_event: {

@@ -5,12 +5,38 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Tag, UserPlus, Calendar, Upload, Search, Mail, Phone, CreditCard, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Users,
+  Tag,
+  UserPlus,
+  Calendar,
+  Upload,
+  Search,
+  Mail,
+  Phone,
+  CreditCard,
+  MoreHorizontal,
+  Eye,
+  Star,
+  Flag,
+  Trash2,
+  CheckCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
+import { FlagCustomerDialog } from "@/components/dialogs/FlagCustomerDialog";
+import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Customer = Tables<"customers">;
@@ -22,11 +48,21 @@ export default function CustomersPage() {
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Action dialogs
+  const [flagDialogCustomer, setFlagDialogCustomer] = useState<Customer | null>(null);
+  const [deleteDialogCustomer, setDeleteDialogCustomer] = useState<Customer | null>(null);
 
   const { currentTenant } = useAuth();
-  const { customers, isLoading, refetch } = useCustomers();
+  const { customers, isLoading, refetch, updateCustomerStatus, flagCustomer, deleteCustomer } = useCustomers();
+  const { hasPermission } = usePermissions();
 
   const currency = currentTenant?.currency || "USD";
+
+  // Permission checks
+  const canMakeVIP = hasPermission("customers:vip");
+  const canFlag = hasPermission("customers:flag");
+  const canDelete = hasPermission("customers:delete");
 
   // Calculate stats
   const stats = useMemo(() => {
@@ -65,6 +101,9 @@ export default function CustomersPage() {
 
   const filteredCustomers = useMemo(() => {
     return customers.filter((customer) => {
+      // Exclude deleted customers
+      if (customer.status === "deleted") return false;
+      
       const matchesSearch =
         customer.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -75,6 +114,30 @@ export default function CustomersPage() {
       return matchesSearch && matchesFilter;
     });
   }, [customers, searchQuery, activeFilter]);
+
+  const handleMakeVIP = async (customer: Customer) => {
+    await updateCustomerStatus(customer.id, "vip");
+  };
+
+  const handleRemoveVIP = async (customer: Customer) => {
+    await updateCustomerStatus(customer.id, "active");
+  };
+
+  const handleFlagCustomer = async (reason: string) => {
+    if (!flagDialogCustomer) return;
+    await flagCustomer(flagDialogCustomer.id, reason);
+    setFlagDialogCustomer(null);
+  };
+
+  const handleUnflag = async (customer: Customer) => {
+    await updateCustomerStatus(customer.id, "active");
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!deleteDialogCustomer) return;
+    await deleteCustomer(deleteDialogCustomer.id);
+    setDeleteDialogCustomer(null);
+  };
 
   return (
     <SalonSidebar>
@@ -202,7 +265,9 @@ export default function CustomersPage() {
                               ? "bg-success/10 text-success"
                               : customer.status === "vip"
                                 ? "bg-purple-100 text-purple-700"
-                                : "bg-muted text-muted-foreground",
+                                : customer.status === "blocked"
+                                  ? "bg-destructive/10 text-destructive"
+                                  : "bg-muted text-muted-foreground",
                           )}
                         >
                           {customer.status}
@@ -238,18 +303,73 @@ export default function CustomersPage() {
                       </div>
                     </div>
 
-                    {/* More Button */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDetailCustomer(customer);
-                      }}
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
+                    {/* Dropdown Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="flex-shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem onClick={() => setDetailCustomer(customer)}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Details
+                        </DropdownMenuItem>
+
+                        {canMakeVIP && (
+                          <>
+                            {customer.status === "vip" ? (
+                              <DropdownMenuItem onClick={() => handleRemoveVIP(customer)}>
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Remove VIP
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleMakeVIP(customer)}>
+                                <Star className="w-4 h-4 mr-2" />
+                                Make VIP
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+
+                        {canFlag && (
+                          <>
+                            {customer.status === "blocked" ? (
+                              <DropdownMenuItem onClick={() => handleUnflag(customer)}>
+                                <CheckCircle className="w-4 h-4 mr-2" />
+                                Unflag Customer
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem
+                                onClick={() => setFlagDialogCustomer(customer)}
+                                className="text-orange-600"
+                              >
+                                <Flag className="w-4 h-4 mr-2" />
+                                Flag Customer
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+
+                        {canDelete && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeleteDialogCustomer(customer)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Customer
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </CardContent>
               </Card>
@@ -286,6 +406,25 @@ export default function CustomersPage() {
         open={!!detailCustomer}
         onOpenChange={(open) => !open && setDetailCustomer(null)}
         customer={detailCustomer}
+      />
+
+      {/* Flag Customer Dialog */}
+      <FlagCustomerDialog
+        open={!!flagDialogCustomer}
+        onOpenChange={(open) => !open && setFlagDialogCustomer(null)}
+        customerName={flagDialogCustomer?.full_name || ""}
+        onConfirm={handleFlagCustomer}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmActionDialog
+        open={!!deleteDialogCustomer}
+        onOpenChange={(open) => !open && setDeleteDialogCustomer(null)}
+        title="Delete Customer"
+        description={`Are you sure you want to delete ${deleteDialogCustomer?.full_name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDeleteCustomer}
       />
     </SalonSidebar>
   );

@@ -16,6 +16,7 @@ import { BusinessStep, type BusinessInfo } from "@/components/onboarding/Busines
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
 import { getCurrencyForCountry, type Currency } from "@/lib/pricing";
+import { seedDefaultPermissions } from "@/hooks/usePermissions";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
@@ -229,7 +230,15 @@ export default function OnboardingPage() {
 
       if (creditsError) throw creditsError;
 
-      // 6. Send owner invitation for non-owners
+      // 6. Seed default role permissions
+      try {
+        await seedDefaultPermissions(tenantId);
+      } catch (permError) {
+        console.error("Permission seeding error:", permError);
+        // Don't block onboarding if permission seeding fails
+      }
+
+      // 7. Send owner invitation for non-owners
       if (!isOwner && ownerInvite.email) {
         try {
           await supabase.functions.invoke("send-staff-invitation", {
