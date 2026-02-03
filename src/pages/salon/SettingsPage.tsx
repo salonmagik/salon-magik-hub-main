@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -30,12 +33,17 @@ import {
   MapPin,
   Loader2,
   Save,
+  Copy,
+  Check,
+  CheckCircle,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { differenceInDays, format } from "date-fns";
 
 const settingsTabs = [
   { id: "profile", label: "Salon Profile", icon: Building2 },
@@ -107,6 +115,17 @@ export default function SettingsPage() {
     emailDailyDigest: false,
   });
 
+  const [bookingSettings, setBookingSettings] = useState({
+    onlineBookingEnabled: false,
+    autoConfirmBookings: false,
+    defaultBufferMinutes: 0,
+    cancellationGraceHours: 24,
+    defaultDepositPercentage: 0,
+    bookingStatusMessage: "",
+  });
+
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
   // Load data from tenant and location
   useEffect(() => {
     if (currentTenant) {
@@ -116,6 +135,14 @@ export default function SettingsPage() {
         country: currentTenant.country || "",
         currency: currentTenant.currency || "USD",
       }));
+      setBookingSettings({
+        onlineBookingEnabled: currentTenant.online_booking_enabled || false,
+        autoConfirmBookings: currentTenant.auto_confirm_bookings || false,
+        defaultBufferMinutes: currentTenant.default_buffer_minutes || 0,
+        cancellationGraceHours: currentTenant.cancellation_grace_hours || 24,
+        defaultDepositPercentage: Number(currentTenant.default_deposit_percentage) || 0,
+        bookingStatusMessage: currentTenant.booking_status_message || "",
+      });
     }
     if (profile) {
       setProfileData((prev) => ({
@@ -137,6 +164,17 @@ export default function SettingsPage() {
       });
     }
   }, [currentTenant, profile, defaultLocation]);
+
+  const bookingUrl = currentTenant?.slug ? `${window.location.origin}/b/${currentTenant.slug}` : null;
+
+  const handleCopyUrl = () => {
+    if (bookingUrl) {
+      navigator.clipboard.writeText(bookingUrl);
+      setCopiedUrl(true);
+      toast({ title: "Copied!", description: "Booking URL copied to clipboard" });
+      setTimeout(() => setCopiedUrl(false), 2000);
+    }
+  };
 
   const handleProfileSave = async () => {
     if (!currentTenant?.id) return;
@@ -197,6 +235,34 @@ export default function SettingsPage() {
     } catch (err) {
       console.error("Error saving hours:", err);
       toast({ title: "Error", description: "Failed to save hours", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBookingSave = async () => {
+    if (!currentTenant?.id) return;
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("tenants")
+        .update({
+          online_booking_enabled: bookingSettings.onlineBookingEnabled,
+          auto_confirm_bookings: bookingSettings.autoConfirmBookings,
+          default_buffer_minutes: bookingSettings.defaultBufferMinutes,
+          cancellation_grace_hours: bookingSettings.cancellationGraceHours,
+          default_deposit_percentage: bookingSettings.defaultDepositPercentage,
+          booking_status_message: bookingSettings.bookingStatusMessage || null,
+        })
+        .eq("id", currentTenant.id);
+
+      if (error) throw error;
+
+      toast({ title: "Saved", description: "Booking settings updated" });
+    } catch (err) {
+      console.error("Error saving booking settings:", err);
+      toast({ title: "Error", description: "Failed to save settings", variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -499,6 +565,338 @@ export default function SettingsPage() {
     </Card>
   );
 
+  const renderBookingTab = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>Booking Settings</CardTitle>
+        <CardDescription>
+          Configure how customers can book appointments with your salon.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Booking URL */}
+        {bookingUrl && (
+          <div className="space-y-2">
+            <Label>Booking URL</Label>
+            <div className="flex items-center gap-2">
+              <Input value={bookingUrl} readOnly className="flex-1 bg-muted" />
+              <Button variant="outline" size="icon" onClick={handleCopyUrl}>
+                {copiedUrl ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Share this link with your customers to let them book online
+            </p>
+          </div>
+        )}
+
+        {/* Toggle Settings */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Enable Online Booking</p>
+              <p className="text-sm text-muted-foreground">
+                Allow customers to book appointments through your booking page
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.onlineBookingEnabled}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: checked }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Auto-Confirm Bookings</p>
+              <p className="text-sm text-muted-foreground">
+                Automatically confirm new bookings without manual approval
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.autoConfirmBookings}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({ ...prev, autoConfirmBookings: checked }))
+              }
+            />
+          </div>
+        </div>
+
+        {/* Numeric Settings */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Default Buffer Time</Label>
+            <Select
+              value={bookingSettings.defaultBufferMinutes.toString()}
+              onValueChange={(v) =>
+                setBookingSettings((prev) => ({ ...prev, defaultBufferMinutes: parseInt(v) }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">No buffer</SelectItem>
+                <SelectItem value="5">5 minutes</SelectItem>
+                <SelectItem value="10">10 minutes</SelectItem>
+                <SelectItem value="15">15 minutes</SelectItem>
+                <SelectItem value="30">30 minutes</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Cancellation Grace Period</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                value={bookingSettings.cancellationGraceHours}
+                onChange={(e) =>
+                  setBookingSettings((prev) => ({
+                    ...prev,
+                    cancellationGraceHours: parseInt(e.target.value) || 0,
+                  }))
+                }
+              />
+              <span className="text-sm text-muted-foreground">hours</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Default Deposit Percentage</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={bookingSettings.defaultDepositPercentage}
+              onChange={(e) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  defaultDepositPercentage: parseInt(e.target.value) || 0,
+                }))
+              }
+              className="w-24"
+            />
+            <span className="text-sm text-muted-foreground">%</span>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Booking Status Message</Label>
+          <Textarea
+            placeholder="Optional message to display on your booking page..."
+            value={bookingSettings.bookingStatusMessage}
+            onChange={(e) =>
+              setBookingSettings((prev) => ({ ...prev, bookingStatusMessage: e.target.value }))
+            }
+            rows={2}
+          />
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end pt-4 border-t">
+          <Button onClick={handleBookingSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save settings
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderPaymentsTab = () => {
+    const isPaystack = currentTenant?.country === "NG" || currentTenant?.country === "GH";
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Payments</CardTitle>
+          <CardDescription>
+            Payment processing is securely managed by Salon Magik.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
+              <div>
+                <p className="font-medium">Payments are processed securely</p>
+                <p className="text-sm text-muted-foreground">
+                  All online payments are processed through {isPaystack ? "Paystack" : "Stripe"} via Salon Magik.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium mb-2">Supported Payment Methods</p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">Card</Badge>
+                {isPaystack && <Badge variant="secondary">Mobile Money</Badge>}
+                <Badge variant="secondary">Cash (at salon)</Badge>
+                <Badge variant="secondary">POS</Badge>
+                <Badge variant="secondary">Transfer</Badge>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="font-medium">Pay at Salon</p>
+                <p className="text-sm text-muted-foreground">
+                  Allow customers to choose to pay when they arrive
+                </p>
+              </div>
+              <Badge variant="outline" className="text-success">
+                {currentTenant?.pay_at_salon_enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="font-medium">Deposits</p>
+                <p className="text-sm text-muted-foreground">
+                  Require deposits for bookings
+                </p>
+              </div>
+              <Badge variant="outline" className="text-success">
+                {currentTenant?.deposits_enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t">
+            <Button variant="outline" className="gap-2" asChild>
+              <a href="/salon/payments">
+                <CreditCard className="w-4 h-4" />
+                View Transactions
+              </a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderRolesTab = () => {
+    const roles = [
+      { name: "Owner", permissions: ["Full access", "Manage staff", "Manage settings", "View reports", "Process refunds"] },
+      { name: "Manager", permissions: ["Manage staff", "View reports", "Process refunds", "Manage appointments"] },
+      { name: "Supervisor", permissions: ["Manage appointments", "View reports", "Manage customers"] },
+      { name: "Receptionist", permissions: ["Manage appointments", "Manage customers", "Process payments"] },
+      { name: "Staff", permissions: ["View own appointments", "Update appointment status"] },
+    ];
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Roles & Permissions</CardTitle>
+          <CardDescription>
+            View the default permissions for each role. Custom roles are not yet supported.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {roles.map((role) => (
+              <div key={role.name} className="p-4 rounded-lg bg-muted/50 border">
+                <p className="font-medium mb-2">{role.name}</p>
+                <div className="flex flex-wrap gap-1">
+                  {role.permissions.map((perm) => (
+                    <Badge key={perm} variant="secondary" className="text-xs">
+                      {perm}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderSubscriptionTab = () => {
+    const trialEndsAt = currentTenant?.trial_ends_at ? new Date(currentTenant.trial_ends_at) : null;
+    const daysRemaining = trialEndsAt ? Math.max(0, differenceInDays(trialEndsAt, new Date())) : 0;
+    const isTrialing = currentTenant?.subscription_status === "trialing";
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Subscription</CardTitle>
+          <CardDescription>
+            Manage your subscription and billing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Current Plan */}
+          <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-semibold capitalize">{currentTenant?.plan || "Solo"} Plan</p>
+              <Badge className={cn(
+                currentTenant?.subscription_status === "active" ? "bg-success text-success-foreground" :
+                currentTenant?.subscription_status === "trialing" ? "bg-primary text-primary-foreground" :
+                "bg-destructive text-destructive-foreground"
+              )}>
+                {currentTenant?.subscription_status?.replace("_", " ") || "Unknown"}
+              </Badge>
+            </div>
+            {isTrialing && trialEndsAt && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Trial period</span>
+                  <span className="font-medium">{daysRemaining} days remaining</span>
+                </div>
+                <Progress value={Math.max(0, 100 - (daysRemaining / 14) * 100)} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ends {format(trialEndsAt, "MMM d, yyyy")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Plan Features */}
+          <div>
+            <p className="text-sm font-medium mb-2">Plan Features</p>
+            <ul className="space-y-2">
+              <li className="flex items-center gap-2 text-sm">
+                <CheckCircle className="w-4 h-4 text-success" />
+                Unlimited appointments
+              </li>
+              <li className="flex items-center gap-2 text-sm">
+                <CheckCircle className="w-4 h-4 text-success" />
+                Online booking
+              </li>
+              <li className="flex items-center gap-2 text-sm">
+                <CheckCircle className="w-4 h-4 text-success" />
+                Email & SMS notifications
+              </li>
+              <li className="flex items-center gap-2 text-sm">
+                <CheckCircle className="w-4 h-4 text-success" />
+                Customer management
+              </li>
+            </ul>
+          </div>
+
+          {/* Upgrade Button */}
+          {isTrialing && (
+            <div className="pt-4 border-t">
+              <Button className="w-full gap-2">
+                <Zap className="w-4 h-4" />
+                Upgrade Now
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">
+                Continue using all features after your trial ends
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderPlaceholderTab = () => (
     <Card>
       <CardContent className="p-12 text-center">
@@ -598,8 +996,12 @@ export default function SettingsPage() {
           <div className="flex-1">
             {activeTab === "profile" && renderProfileTab()}
             {activeTab === "hours" && renderHoursTab()}
+            {activeTab === "booking" && renderBookingTab()}
+            {activeTab === "payments" && renderPaymentsTab()}
             {activeTab === "notifications" && renderNotificationsTab()}
-            {!["profile", "hours", "notifications"].includes(activeTab) && renderPlaceholderTab()}
+            {activeTab === "roles" && renderRolesTab()}
+            {activeTab === "subscription" && renderSubscriptionTab()}
+            {activeTab === "integrations" && renderPlaceholderTab()}
           </div>
         </div>
       </div>

@@ -87,14 +87,9 @@ export default function ReportsPage() {
       trend: "up",
       icon: Users,
     },
-    {
-      title: "Avg. Ticket",
-      value: formatCurrency(stats.averageTicket),
-      change: "Per visit",
-      trend: "up",
-      icon: TrendingUp,
-    },
   ];
+
+  const hasInsights = stats.busiestDay || stats.topService || stats.peakHour || stats.retentionRate;
 
   return (
     <SalonSidebar>
@@ -126,7 +121,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <Card key={i}>
@@ -161,6 +156,52 @@ export default function ReportsPage() {
                 );
               })}
         </div>
+
+        {/* Insights Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-medium flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!hasInsights ? (
+              <div className="text-center py-6 text-muted-foreground">
+                <TrendingUp className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p>Keep going! Insights will appear once you have more appointment history.</p>
+                <p className="text-xs mt-1">Need at least 10 completed appointments for insights.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {stats.busiestDay && (
+                  <div className="p-4 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-primary">{stats.busiestDay}</p>
+                    <p className="text-sm text-muted-foreground">Busiest Day</p>
+                  </div>
+                )}
+                {stats.topService && (
+                  <div className="p-4 rounded-lg bg-muted/50 text-center">
+                    <p className="text-lg font-bold text-primary truncate">{stats.topService}</p>
+                    <p className="text-sm text-muted-foreground">Top Service</p>
+                  </div>
+                )}
+                {stats.peakHour && (
+                  <div className="p-4 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-primary">{stats.peakHour}</p>
+                    <p className="text-sm text-muted-foreground">Peak Hour</p>
+                  </div>
+                )}
+                {stats.retentionRate !== null && (
+                  <div className="p-4 rounded-lg bg-muted/50 text-center">
+                    <p className="text-2xl font-bold text-success">{stats.retentionRate}%</p>
+                    <p className="text-sm text-muted-foreground">Retention Rate</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

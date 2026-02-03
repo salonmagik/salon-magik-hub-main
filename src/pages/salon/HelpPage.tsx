@@ -112,28 +112,17 @@ const faqs = [
 
 const resources = [
   {
-    title: "Documentation",
-    description: "Comprehensive guides and tutorials",
-    icon: Book,
-    link: "#",
-  },
-  {
-    title: "Video Tutorials",
-    description: "Step-by-step video walkthroughs",
-    icon: Video,
-    link: "#",
+    title: "Email Support",
+    description: "support@salonmagik.com",
+    icon: Mail,
+    link: "mailto:support@salonmagik.com",
   },
   {
     title: "Live Chat",
     description: "Chat with our support team",
     icon: MessageCircle,
-    link: "#",
-  },
-  {
-    title: "Email Support",
-    description: "support@salonmagik.com",
-    icon: Mail,
-    link: "mailto:support@salonmagik.com",
+    link: "#", // Will integrate with Tawk.to/Crisp
+    isChat: true,
   },
 ];
 
@@ -281,6 +270,13 @@ export default function HelpPage() {
                     <a
                       key={index}
                       href={resource.link}
+                      onClick={(e) => {
+                        if ((resource as any).isChat) {
+                          e.preventDefault();
+                          // Placeholder for chat widget trigger
+                          alert("Live chat coming soon! Please email support@salonmagik.com");
+                        }
+                      }}
                       className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                     >
                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -292,7 +288,9 @@ export default function HelpPage() {
                           {resource.description}
                         </p>
                       </div>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                      {!(resource as any).isChat && (
+                        <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                      )}
                     </a>
                   );
                 })}
