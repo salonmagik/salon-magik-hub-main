@@ -176,6 +176,8 @@ export default function SettingsPage() {
     }
   };
 
+  const { refreshTenants } = useAuth();
+
   const handleProfileSave = async () => {
     if (!currentTenant?.id) return;
 
@@ -205,6 +207,9 @@ export default function SettingsPage() {
         if (locationError) throw locationError;
       }
 
+      // Refresh tenant data in context for immediate UI update
+      await refreshTenants();
+      
       toast({ title: "Saved", description: "Profile settings updated" });
     } catch (err) {
       console.error("Error saving profile:", err);
@@ -259,6 +264,9 @@ export default function SettingsPage() {
 
       if (error) throw error;
 
+      // Refresh tenant data in context for immediate UI update
+      await refreshTenants();
+      
       toast({ title: "Saved", description: "Booking settings updated" });
     } catch (err) {
       console.error("Error saving booking settings:", err);
