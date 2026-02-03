@@ -793,19 +793,27 @@ export default function SettingsPage() {
               </div>
               <Switch
                 checked={currentTenant?.pay_at_salon_enabled || false}
+                disabled={isSaving}
                 onCheckedChange={async (checked) => {
                   if (!currentTenant?.id) return;
+                  setIsSaving(true);
                   try {
                     const { error } = await supabase
                       .from("tenants")
                       .update({ pay_at_salon_enabled: checked })
                       .eq("id", currentTenant.id);
-                    if (error) throw error;
+                    if (error) {
+                      console.error("Error updating pay at salon:", error);
+                      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                      return;
+                    }
                     await refreshTenants();
                     toast({ title: "Saved", description: `Pay at Salon ${checked ? "enabled" : "disabled"}` });
                   } catch (err) {
                     console.error("Error updating pay at salon:", err);
                     toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                  } finally {
+                    setIsSaving(false);
                   }
                 }}
               />
@@ -820,19 +828,27 @@ export default function SettingsPage() {
               </div>
               <Switch
                 checked={currentTenant?.deposits_enabled || false}
+                disabled={isSaving}
                 onCheckedChange={async (checked) => {
                   if (!currentTenant?.id) return;
+                  setIsSaving(true);
                   try {
                     const { error } = await supabase
                       .from("tenants")
                       .update({ deposits_enabled: checked })
                       .eq("id", currentTenant.id);
-                    if (error) throw error;
+                    if (error) {
+                      console.error("Error updating deposits:", error);
+                      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                      return;
+                    }
                     await refreshTenants();
                     toast({ title: "Saved", description: `Deposits ${checked ? "enabled" : "disabled"}` });
                   } catch (err) {
                     console.error("Error updating deposits:", err);
                     toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                  } finally {
+                    setIsSaving(false);
                   }
                 }}
               />
