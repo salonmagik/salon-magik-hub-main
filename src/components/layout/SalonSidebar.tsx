@@ -149,6 +149,23 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const content = (
       <Link
         to={item.path}
+        // Some components used on /salon/settings (e.g. Radix “dismissable layer” patterns)
+        // can call preventDefault() on click events, which blocks react-router navigation.
+        // Navigating on pointer down makes the sidebar links resilient without impacting
+        // modifier-click (new tab) behavior.
+        onPointerDown={(e) => {
+          // Only handle plain left-click / tap
+          if (e.button !== 0) return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+          navigate(item.path);
+        }}
+        onClick={(e) => {
+          // Keep parent click handlers from interfering with link navigation.
+          e.stopPropagation();
+        }}
         className={cn(
           "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
           active
