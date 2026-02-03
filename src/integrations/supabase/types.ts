@@ -453,6 +453,7 @@ export type Database = {
       email_templates: {
         Row: {
           body_html: string
+          channel: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -463,6 +464,7 @@ export type Database = {
         }
         Insert: {
           body_html: string
+          channel?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -473,6 +475,7 @@ export type Database = {
         }
         Update: {
           body_html?: string
+          channel?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -712,6 +715,7 @@ export type Database = {
           created_at: string
           id: string
           package_id: string
+          product_id: string | null
           quantity: number
           service_id: string
         }
@@ -719,6 +723,7 @@ export type Database = {
           created_at?: string
           id?: string
           package_id: string
+          product_id?: string | null
           quantity?: number
           service_id: string
         }
@@ -726,6 +731,7 @@ export type Database = {
           created_at?: string
           id?: string
           package_id?: string
+          product_id?: string | null
           quantity?: number
           service_id?: string
         }
@@ -735,6 +741,13 @@ export type Database = {
             columns: ["package_id"]
             isOneToOne: false
             referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
           {
@@ -1141,11 +1154,18 @@ export type Database = {
       }
       tenants: {
         Row: {
+          auto_confirm_bookings: boolean | null
+          banner_urls: string[] | null
+          booking_status_message: string | null
+          cancellation_grace_hours: number | null
           country: string
           created_at: string
           currency: string
+          default_buffer_minutes: number | null
+          default_deposit_percentage: number | null
           deposits_enabled: boolean
           id: string
+          logo_url: string | null
           name: string
           online_booking_enabled: boolean
           pay_at_salon_enabled: boolean
@@ -1160,11 +1180,18 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_confirm_bookings?: boolean | null
+          banner_urls?: string[] | null
+          booking_status_message?: string | null
+          cancellation_grace_hours?: number | null
           country: string
           created_at?: string
           currency?: string
+          default_buffer_minutes?: number | null
+          default_deposit_percentage?: number | null
           deposits_enabled?: boolean
           id?: string
+          logo_url?: string | null
           name: string
           online_booking_enabled?: boolean
           pay_at_salon_enabled?: boolean
@@ -1179,11 +1206,18 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_confirm_bookings?: boolean | null
+          banner_urls?: string[] | null
+          booking_status_message?: string | null
+          cancellation_grace_hours?: number | null
           country?: string
           created_at?: string
           currency?: string
+          default_buffer_minutes?: number | null
+          default_deposit_percentage?: number | null
           deposits_enabled?: boolean
           id?: string
+          logo_url?: string | null
           name?: string
           online_booking_enabled?: boolean
           pay_at_salon_enabled?: boolean
