@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Users, Plus, Loader2, Check } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
@@ -202,6 +201,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                           key={service.id}
                           type="button"
                           onClick={() => toggleService(service)}
+                          aria-pressed={!!selected}
                           className={cn(
                             "w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left",
                             selected
@@ -210,7 +210,18 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                           )}
                         >
                           <div className="flex items-center gap-3">
-                            <Checkbox checked={!!selected} />
+                            {/* Non-interactive indicator (avoids nested Radix button/refs) */}
+                            <div
+                              aria-hidden="true"
+                              className={cn(
+                                "h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background flex items-center justify-center",
+                                selected
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-transparent"
+                              )}
+                            >
+                              <Check className="h-3 w-3" />
+                            </div>
                             <div>
                               <p className="font-medium text-sm">{service.name}</p>
                               <p className="text-xs text-muted-foreground">
