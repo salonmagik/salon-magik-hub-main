@@ -1,234 +1,400 @@
 
-# Implementation Plan: Payments Page Tabs, Settings Toggles & Functional Audit
+# Comprehensive Implementation Plan: Booking Platform + Salon Platform Fixes
 
-This plan addresses all non-functional areas identified in the salon platform, making all features fully operational with real backend interactions.
-
----
-
-## Summary of Issues Found
-
-| Issue | Location | Status |
-|-------|----------|--------|
-| Payments page tabs (All, Revenue, Refunds, Purse) - no dedicated TabsContent | `PaymentsPage.tsx` | Needs TabsContent structure |
-| "Require deposits for bookings" shows Badge not Toggle | `SettingsPage.tsx` line 787-789 | Convert to Switch |
-| Notifications settings - Save button disabled, doesn't save to backend | `SettingsPage.tsx` line 567 | Integrate `useNotificationSettings` hook |
-| Integrations tab shows "coming soon" | `SettingsPage.tsx` line 1027 | Placeholder (acceptable for now) |
-| Date range filter in Payments page is non-functional | `PaymentsPage.tsx` | Make filter work |
+This plan combines the full public booking flow with all identified salon platform issues, properly prioritized.
 
 ---
 
-## Phase 1: Payments Page - Define TabsContent for Each Tab
+## Issues Summary
 
-**Current Issue:** The tabs work by filtering `filteredTransactions` but there's no dedicated `TabsContent` component for each tab. The UI is functional but lacks proper tab structure.
+| Priority | Issue | Location | Effort |
+|----------|-------|----------|--------|
+| 1 | Currency display - enforce salon currency globally | Multiple files | Medium |
+| 2 | Service categories - empty dropdown, no CRUD | AddServiceDialog + DB | High |
+| 3 | View Customer Profile action not triggering | AppointmentsPage.tsx line 540-543 | Low |
+| 4 | Logo upload not working | SettingsPage.tsx line 322-335 | Medium |
+| 5 | Banner upload for booking page | SettingsPage.tsx (Booking tab) | Medium |
+| 6 | Notifications settings not saving | Already wired - verify | Low |
+| 7 | Remove Integrations tab from Settings | SettingsPage.tsx line 57 | Low |
+| 8 | Booking URL visibility with Copy button | Already exists - verify | Low |
+| 9 | Salons Overview for Chain plans | New page | High |
+| 10 | Full Booking Flow | New pages + hooks | High |
 
-**Solution:** Restructure to use proper `TabsContent` components for cleaner organization and potentially add tab-specific features.
+---
 
-### Changes to `PaymentsPage.tsx`:
-1. Wrap content in proper `TabsContent` components
-2. Add specific empty states for each tab type
-3. Make date range filter functional
+## Phase 1: Critical Settings Fixes
 
+### 1A: Logo Upload (Currently Non-Functional)
+
+**Current State:** Lines 322-335 show an upload button with no functionality - just static UI.
+
+**Solution:**
+- Create new storage bucket `salon-branding` (or reuse `catalog-images`)
+- Add upload logic similar to `ImageUploadZone` component
+- Save `logo_url` to tenants table on upload
+- Display current logo if exists
+
+**Changes:**
 ```tsx
-// Add state for date filter
-const [dateFilter, setDateFilter] = useState("all-time");
+// Add state for logo upload
+const [logoUrl, setLogoUrl] = useState<string | null>(null);
+const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
-// Compute date range based on filter
-const getDateRange = () => {
-  const now = new Date();
-  switch (dateFilter) {
-    case "today":
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return { start: today, end: now };
-    case "week":
-      const weekStart = new Date();
-      weekStart.setDate(weekStart.getDate() - 7);
-      return { start: weekStart, end: now };
-    case "month":
-      const monthStart = new Date();
-      monthStart.setMonth(monthStart.getMonth() - 1);
-      return { start: monthStart, end: now };
-    default:
-      return null;
+// Load from tenant
+useEffect(() => {
+  if (currentTenant?.logo_url) {
+    setLogoUrl(currentTenant.logo_url);
   }
+}, [currentTenant]);
+
+// Upload handler
+const handleLogoUpload = async (file: File) => {
+  // Validate, upload to storage, get public URL
+  // Update tenants table with logo_url
+  // Refresh tenant context
 };
-
-// Apply date filtering
-const dateRange = getDateRange();
-const dateFilteredTransactions = transactions.filter((txn) => {
-  if (!dateRange) return true;
-  const txnDate = new Date(txn.created_at);
-  return txnDate >= dateRange.start && txnDate <= dateRange.end;
-});
-
-// Then filter by tab type
 ```
 
-### Tab-Specific Empty States:
-- **All:** "No transactions found"
-- **Revenue:** "No payments recorded yet"
-- **Refunds:** "No refunds processed"
-- **Purse:** "No purse activity yet"
+### 1B: Banner Upload (New Feature for Booking Page)
+
+**Current State:** `banner_urls` field exists in tenants table (text array, max 2) but no UI to manage it.
+
+**Solution:** Add banner upload section to Booking Settings tab (renderBookingTab):
+- Reuse `ImageUploadZone` component pattern
+- Allow up to 2 banner images
+- Store in `salon-branding` bucket
+- Save URLs to `banner_urls` array in tenants
+
+**UI Location:** After "Booking URL" section in Booking Settings tab:
+```
++----------------------------------------+
+|  Booking Page Banners                  |
+|  Add up to 2 images to personalize     |
+|  your booking page                     |
+|  +--------+  +--------+  +--------+    |
+|  |  img1  |  |  img2  |  | [Add]  |    |
+|  +--------+  +--------+  +--------+    |
++----------------------------------------+
+```
+
+### 1C: Notifications Settings Verification
+
+**Current State:** The wiring exists (lines 79-84, 176-196) - `useNotificationSettings` hook is imported and used. Save handler `handleNotificationsSave` is properly connected.
+
+**Action:** Test to verify it's working. If there's an issue, it may be:
+- Initial load timing
+- Missing tenant ID on first render
+- RLS policy issue
+
+The code looks correct - adding a console.log during testing will confirm.
 
 ---
 
-## Phase 2: Deposits Toggle in Settings
+## Phase 2: Service Categories CRUD
 
-**Current Issue (line 780-790):**
-```tsx
-<div className="flex items-center justify-between py-2">
-  <div>
-    <p className="font-medium">Deposits</p>
-    <p className="text-sm text-muted-foreground">
-      Require deposits for bookings
-    </p>
-  </div>
-  <Badge variant="outline" className="text-success">
-    {currentTenant?.deposits_enabled ? "Enabled" : "Disabled"}
-  </Badge>
-</div>
+### 2A: Database Migration (RLS Policies)
+
+The `service_categories` table has SELECT-only RLS. Need to add:
+
+```sql
+-- INSERT policy
+CREATE POLICY "Users can create service_categories for their tenants"
+ON public.service_categories FOR INSERT
+TO authenticated
+WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
+
+-- UPDATE policy
+CREATE POLICY "Users can update tenant service_categories"
+ON public.service_categories FOR UPDATE
+TO authenticated
+USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())))
+WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
+
+-- DELETE policy
+CREATE POLICY "Users can delete tenant service_categories"
+ON public.service_categories FOR DELETE
+TO authenticated
+USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
 ```
 
-**Solution:** Replace Badge with Switch (like Pay at Salon toggle):
+### 2B: Hook Updates
+
+**File:** `src/hooks/useServices.tsx`
+
+Add methods:
+- `createCategory(name: string, description?: string)`
+- `updateCategory(id: string, updates: {...})`
+- `deleteCategory(id: string)`
+- `categories` state with fetch
+
+### 2C: Dialog Components
+
+**New Files:**
+- `src/components/dialogs/AddCategoryDialog.tsx` - Simple name + description form
+- `src/components/dialogs/ManageCategoriesDialog.tsx` - List/Edit/Delete/Reorder categories
+
+### 2D: AddServiceDialog Enhancement
+
+Add "Add new category" option at the bottom of category dropdown that opens AddCategoryDialog inline.
+
+---
+
+## Phase 3: View Customer Profile Fix
+
+**Current Issue:** Line 540-543 - DropdownMenuItem has no onClick handler.
+
+**File:** `src/pages/salon/AppointmentsPage.tsx`
+
+**Changes:**
+
+1. Import CustomerDetailDialog
+2. Add state for dialog and selected customer:
 ```tsx
-<Switch
-  checked={currentTenant?.deposits_enabled || false}
-  onCheckedChange={async (checked) => {
-    if (!currentTenant?.id) return;
-    try {
-      const { error } = await supabase
-        .from("tenants")
-        .update({ deposits_enabled: checked })
-        .eq("id", currentTenant.id);
-      if (error) throw error;
-      await refreshTenants();
-      toast({ title: "Saved", description: `Deposits ${checked ? "enabled" : "disabled"}` });
-    } catch (err) {
-      console.error("Error updating deposits:", err);
-      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
-    }
+const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+const [selectedCustomerForDialog, setSelectedCustomerForDialog] = useState<Customer | null>(null);
+```
+
+3. Add onClick to DropdownMenuItem:
+```tsx
+<DropdownMenuItem
+  onClick={() => {
+    setSelectedCustomerForDialog(apt.customer);
+    setCustomerDialogOpen(true);
   }}
+>
+  <User className="w-4 h-4 mr-2" />
+  View Customer Profile
+</DropdownMenuItem>
+```
+
+4. Add dialog at end of component:
+```tsx
+<CustomerDetailDialog
+  open={customerDialogOpen}
+  onOpenChange={setCustomerDialogOpen}
+  customer={selectedCustomerForDialog}
 />
 ```
 
 ---
 
-## Phase 3: Make Notifications Settings Functional
+## Phase 4: Currency Consistency
 
-**Current Issues:**
-1. Settings page uses local `notificationSettings` state but doesn't load from or save to database
-2. Save button is `disabled` (line 567)
-3. `useNotificationSettings` hook exists but isn't used in SettingsPage
+### 4A: Create Currency Utility
 
-**Solution:**
+**New File:** `src/lib/currency.ts`
 
-### 3.1 Import and use the existing hook:
-```tsx
-import { useNotificationSettings } from "@/hooks/useNotificationSettings";
-
-// Inside component:
-const { 
-  settings: dbNotificationSettings, 
-  isLoading: notificationsLoading, 
-  isSaving: notificationsSaving, 
-  saveSettings: saveNotificationSettings 
-} = useNotificationSettings();
-```
-
-### 3.2 Initialize local state from hook data:
-```tsx
-// Sync local state with database on load
-useEffect(() => {
-  if (dbNotificationSettings) {
-    setNotificationSettings({
-      emailAppointmentReminders: dbNotificationSettings.email_appointment_reminders,
-      smsAppointmentReminders: dbNotificationSettings.sms_appointment_reminders,
-      emailNewBookings: dbNotificationSettings.email_new_bookings,
-      emailCancellations: dbNotificationSettings.email_cancellations,
-      emailDailyDigest: dbNotificationSettings.email_daily_digest,
-    });
-  }
-}, [dbNotificationSettings]);
-```
-
-### 3.3 Create save handler:
-```tsx
-const handleNotificationsSave = async () => {
-  await saveNotificationSettings({
-    email_appointment_reminders: notificationSettings.emailAppointmentReminders,
-    sms_appointment_reminders: notificationSettings.smsAppointmentReminders,
-    email_new_bookings: notificationSettings.emailNewBookings,
-    email_cancellations: notificationSettings.emailCancellations,
-    email_daily_digest: notificationSettings.emailDailyDigest,
-  });
+```typescript
+const currencySymbols: Record<string, string> = {
+  NGN: "₦",
+  GHS: "₵",
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  ZAR: "R",
+  KES: "KSh",
 };
+
+export function formatCurrency(amount: number, currencyCode: string): string {
+  const symbol = currencySymbols[currencyCode] || currencyCode + " ";
+  return `${symbol}${Number(amount).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+export function getCurrencySymbol(currencyCode: string): string {
+  return currencySymbols[currencyCode] || currencyCode;
+}
 ```
 
-### 3.4 Update the Save button (line 566-571):
+### 4B: Update All Currency Displays
+
+**Files to audit and fix:**
+- `src/components/dialogs/AddServiceDialog.tsx` - Hardcoded "GHS" suffix
+- `src/pages/salon/PaymentsPage.tsx` - Check all amount displays
+- `src/pages/salon/SalonDashboard.tsx` - Revenue display
+- `src/pages/salon/ReportsPage.tsx` - All financial figures
+- `src/components/dialogs/RecordPaymentDialog.tsx` - Amount input
+- `src/components/dialogs/AddProductDialog.tsx` - Price field
+- `src/components/dialogs/AddPackageDialog.tsx` - Price field
+
+---
+
+## Phase 5: Settings Cleanup
+
+### 5A: Remove Integrations Tab
+
+**File:** `src/pages/salon/SettingsPage.tsx`
+
+**Line 57:** Remove from settingsTabs array:
 ```tsx
-<Button onClick={handleNotificationsSave} disabled={notificationsSaving}>
-  {notificationsSaving ? (
-    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-  ) : (
-    <Save className="w-4 h-4 mr-2" />
-  )}
-  Save preferences
-</Button>
+// Remove this line:
+{ id: "integrations", label: "Integrations", icon: Link },
+```
+
+**Line 1092:** Remove the conditional render (will automatically not render).
+
+### 5B: Booking URL Enhancement (Verification)
+
+The booking URL display with copy functionality already exists at lines 619-633. Verify:
+1. URL shows when `currentTenant?.slug` exists
+2. Copy button works and shows "Copied!" feedback
+3. URL visibility tied to `online_booking_enabled` toggle
+
+If slug is missing, the URL won't display. May need to ensure slug is set during onboarding.
+
+---
+
+## Phase 6: Salons Overview (Chain Plans)
+
+### 6A: Access Control
+
+Only visible when:
+- `currentTenant?.plan === 'chain'`
+- User role is `owner` or `manager` with specific permission
+
+### 6B: Navigation Update
+
+**File:** `src/components/layout/SalonSidebar.tsx`
+
+Add conditional nav item after Dashboard:
+```tsx
+{currentTenant?.plan === 'chain' && (
+  <NavItem 
+    label="Salons Overview" 
+    icon={Building2} 
+    path="/salon/overview"
+  />
+)}
+```
+
+### 6C: New Page
+
+**File:** `src/pages/salon/SalonsOverviewPage.tsx`
+
+Features:
+- Performance cards per location (revenue, bookings, utilization)
+- Comparative charts
+- Best/worst performing locations
+- Quick location switching
+
+### 6D: Route Addition
+
+**File:** `src/App.tsx`
+```tsx
+<Route path="/salon/overview" element={<SalonsOverviewPage />} />
 ```
 
 ---
 
-## Phase 4: Audit and Fix Other Non-Functional Areas
+## Phase 7: Full Booking Flow
 
-### 4.1 Settings - Integrations Tab
-**Current:** Shows "This section is coming soon."
-**Decision:** Leave as placeholder - integrations (like Google Calendar, WhatsApp) are future roadmap items.
+### 7A: Database - Public Access Policies
 
-### 4.2 Settings - Roles Tab
-**Current:** Display-only, says "Custom roles are not yet supported"
-**Decision:** Leave as display-only - role management is informational for now.
+```sql
+-- Allow anonymous users to read booking-enabled tenants
+CREATE POLICY "Anon can read booking-enabled tenants by slug"
+ON public.tenants FOR SELECT
+TO anon
+USING (online_booking_enabled = true AND slug IS NOT NULL);
 
-### 4.3 Settings - Subscription "Upgrade Now" Button
-**Current:** Button exists but no action
-**Decision:** Leave as-is - Stripe subscription management is a separate feature.
+-- Allow anonymous users to read active services
+CREATE POLICY "Anon can read active services"
+ON public.services FOR SELECT
+TO anon
+USING (
+  status = 'active' 
+  AND tenant_id IN (
+    SELECT id FROM tenants WHERE online_booking_enabled = true
+  )
+);
 
-### 4.4 Payments Page Export Button
-**Current:** Export button exists but no functionality
-**Solution:** Implement CSV export like in Reports page:
-```tsx
-const handleExport = () => {
-  const csvContent = [
-    ["Date", "Customer", "Type", "Method", "Amount", "Status"],
-    ...filteredTransactions.map((txn) => [
-      format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
-      txn.customer?.full_name || "Guest",
-      txn.type,
-      txn.method,
-      Number(txn.amount).toFixed(2),
-      txn.status,
-    ]),
-  ]
-    .map((row) => row.join(","))
-    .join("\n");
-
-  const blob = new Blob([csvContent], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `transactions-${format(new Date(), "yyyy-MM-dd")}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
+-- Similar for packages, products, locations, service_categories
 ```
+
+### 7B: Storage Bucket
+
+Create `salon-branding` bucket for logos and banners (public read).
+
+### 7C: New Files Structure
+
+```
+src/pages/booking/
+  BookingPage.tsx              # Main container
+  components/
+    BookingLayout.tsx          # Header + cart
+    SalonHeader.tsx            # Branding (logo, banners)
+    CatalogView.tsx            # Services/Packages/Products
+    ServiceCard.tsx
+    PackageCard.tsx
+    ProductCard.tsx
+    CartDrawer.tsx             # Shopping cart
+    BookingWizard.tsx          # Multi-step flow
+    DateTimeSelector.tsx
+    CustomerForm.tsx
+    BookingSummary.tsx
+    PaymentStep.tsx
+    ConfirmationView.tsx
+
+src/hooks/booking/
+  usePublicSalon.tsx           # Fetch tenant by slug
+  usePublicServices.tsx
+  usePublicPackages.tsx
+  usePublicProducts.tsx
+  usePublicLocations.tsx
+  useAvailableSlots.tsx
+  useBookingCart.tsx
+  useCreateBooking.tsx
+
+supabase/functions/
+  create-public-booking/index.ts
+```
+
+### 7D: Routing
+
+**File:** `src/App.tsx`
+```tsx
+<Route path="/b/:slug" element={<BookingPage />} />
+<Route path="/b/:slug/*" element={<BookingPage />} />
+```
+
+### 7E: Booking Flow Steps
+
+1. **Catalog** - Browse services/packages/products
+2. **Cart** - Right drawer showing selected items
+3. **Date/Time** - Calendar + available slots
+4. **Customer Info** - Name, email, phone
+5. **Summary** - Review + deposit calculation
+6. **Payment** - Stripe/Paystack or pay-at-salon
+7. **Confirmation** - Success screen
+
+### 7F: Currency in Booking
+
+The booking page MUST use the salon's currency from `tenant.currency`, displayed using the shared `formatCurrency` utility.
 
 ---
 
-## Files to Modify
+## Files to Create/Modify
 
-| File | Changes |
-|------|---------|
-| `src/pages/salon/PaymentsPage.tsx` | Add TabsContent structure, functional date filter, export functionality |
-| `src/pages/salon/SettingsPage.tsx` | Deposits toggle, notifications backend integration |
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/lib/currency.ts` | Create | Currency formatting utility |
+| `src/pages/salon/SettingsPage.tsx` | Modify | Logo/banner upload, remove Integrations |
+| `src/pages/salon/AppointmentsPage.tsx` | Modify | Fix View Customer Profile |
+| `src/hooks/useServices.tsx` | Modify | Add category CRUD methods |
+| `src/components/dialogs/AddCategoryDialog.tsx` | Create | Category creation |
+| `src/components/dialogs/ManageCategoriesDialog.tsx` | Create | Category management |
+| `src/components/dialogs/AddServiceDialog.tsx` | Modify | Category dropdown + add option |
+| `src/components/dialogs/AddProductDialog.tsx` | Modify | Fix currency display |
+| `src/components/dialogs/AddPackageDialog.tsx` | Modify | Fix currency display |
+| `src/pages/salon/SalonsOverviewPage.tsx` | Create | Chain plan dashboard |
+| `src/components/layout/SalonSidebar.tsx` | Modify | Add Salons Overview nav |
+| `src/pages/booking/BookingPage.tsx` | Create | Main booking container |
+| `src/pages/booking/components/*` | Create | All booking components |
+| `src/hooks/booking/*` | Create | All booking hooks |
+| `supabase/functions/create-public-booking` | Create | Booking edge function |
+| Database migrations | Create | RLS policies + storage bucket |
 
 ---
 
@@ -236,25 +402,60 @@ const handleExport = () => {
 
 | Step | Task | Priority |
 |------|------|----------|
-| 1 | Convert Deposits setting to toggle | High |
-| 2 | Integrate useNotificationSettings into SettingsPage | High |
-| 3 | Make date range filter functional in PaymentsPage | Medium |
-| 4 | Add proper TabsContent structure to PaymentsPage | Medium |
-| 5 | Add CSV export to PaymentsPage | Medium |
+| 1 | Create currency utility | High |
+| 2 | Fix currency displays across app | High |
+| 3 | Add service_categories RLS policies | High |
+| 4 | Implement category CRUD in useServices | High |
+| 5 | Create category dialogs | High |
+| 6 | Update AddServiceDialog with categories | High |
+| 7 | Fix View Customer Profile action | High |
+| 8 | Create salon-branding storage bucket | High |
+| 9 | Implement logo upload in Settings | High |
+| 10 | Add banner upload to Booking Settings | High |
+| 11 | Verify notifications settings work | Medium |
+| 12 | Remove Integrations tab | Low |
+| 13 | Create Salons Overview page | Medium |
+| 14 | Add public RLS policies for booking | High |
+| 15 | Create booking hooks | High |
+| 16 | Build booking page components | High |
+| 17 | Create booking edge function | High |
+| 18 | Wire complete booking flow | High |
+| 19 | Mobile responsiveness pass | Medium |
 
 ---
 
 ## Technical Notes
 
-### Notification Settings Database Mapping
+### Storage Bucket for Branding
 
-| Local State Key | Database Column |
-|-----------------|-----------------|
-| `emailAppointmentReminders` | `email_appointment_reminders` |
-| `smsAppointmentReminders` | `sms_appointment_reminders` |
-| `emailNewBookings` | `email_new_bookings` |
-| `emailCancellations` | `email_cancellations` |
-| `emailDailyDigest` | `email_daily_digest` |
+Need to create `salon-branding` bucket:
+```sql
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('salon-branding', 'salon-branding', true);
 
-### Date Filter Logic
-The date filter will use client-side filtering since transactions are already fetched. For large datasets, this could be moved to the `useTransactions` hook with server-side filtering.
+-- RLS for authenticated users to upload
+CREATE POLICY "Users can upload branding images"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'salon-branding');
+
+-- Public read
+CREATE POLICY "Public can view branding images"
+ON storage.objects FOR SELECT
+TO anon
+USING (bucket_id = 'salon-branding');
+```
+
+### Logo/Banner Constraints
+- Logo: Single image, max 2MB, stored in `logo_url`
+- Banners: Up to 2 images, stored in `banner_urls[]`
+- Format: JPG, PNG, WebP
+
+### Booking Flow Status
+```
+auto_confirm_bookings = true:
+  [created] -> status: "scheduled"
+
+auto_confirm_bookings = false:
+  [created] -> status: "pending" (needs manual confirmation)
+```
