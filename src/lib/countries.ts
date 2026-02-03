@@ -5,10 +5,10 @@ export interface Country {
   flag: string;
 }
 
-// Priority countries shown at the top of the list
+// Priority countries shown at the top of the list (Ghana first for launch market)
 export const PRIORITY_COUNTRIES: Country[] = [
-  { code: "NG", name: "Nigeria", dialCode: "+234", flag: "🇳🇬" },
   { code: "GH", name: "Ghana", dialCode: "+233", flag: "🇬🇭" },
+  { code: "NG", name: "Nigeria", dialCode: "+234", flag: "🇳🇬" },
   { code: "US", name: "United States", dialCode: "+1", flag: "🇺🇸" },
   { code: "GB", name: "United Kingdom", dialCode: "+44", flag: "🇬🇧" },
   { code: "KE", name: "Kenya", dialCode: "+254", flag: "🇰🇪" },
@@ -252,5 +252,5 @@ export function parseE164(phone: string): { dialCode: string; nationalNumber: st
   return null;
 }
 
-// Default country (Nigeria)
+// Default country (Ghana - primary launch market)
 export const DEFAULT_COUNTRY = PRIORITY_COUNTRIES[0];
