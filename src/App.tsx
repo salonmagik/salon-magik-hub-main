@@ -30,6 +30,18 @@ import HelpPage from "./pages/salon/HelpPage";
 import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
 
+// Client Portal
+import { ClientAuthProvider } from "@/hooks/client/useClientAuth";
+import { ClientProtectedRoute, ClientPublicOnlyRoute } from "@/components/client/ClientProtectedRoute";
+import ClientLoginPage from "./pages/client/ClientLoginPage";
+import ClientDashboard from "./pages/client/ClientDashboard";
+import ClientBookingsPage from "./pages/client/ClientBookingsPage";
+import ClientHistoryPage from "./pages/client/ClientHistoryPage";
+import ClientRefundsPage from "./pages/client/ClientRefundsPage";
+import ClientNotificationsPage from "./pages/client/ClientNotificationsPage";
+import ClientProfilePage from "./pages/client/ClientProfilePage";
+import ClientHelpPage from "./pages/client/ClientHelpPage";
+
 // Public Booking
 import BookingPage from "./pages/booking/BookingPage";
 
@@ -181,8 +193,87 @@ const App = () => (
             {/* Public Booking Platform */}
             <Route path="/b/:slug" element={<BookingPage />} />
 
-            {/* Client Portal Routes */}
-            <Route path="/client/*" element={<NotFound />} />
+            {/* Client Portal Routes - wrapped in ClientAuthProvider */}
+            <Route
+              path="/client/login"
+              element={
+                <ClientAuthProvider>
+                  <ClientPublicOnlyRoute>
+                    <ClientLoginPage />
+                  </ClientPublicOnlyRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientDashboard />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/bookings"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientBookingsPage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/history"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientHistoryPage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/refunds"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientRefundsPage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/notifications"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientNotificationsPage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/profile"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientProfilePage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/help"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientHelpPage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
 
             {/* BackOffice Routes */}
             <Route path="/backoffice/*" element={<NotFound />} />
