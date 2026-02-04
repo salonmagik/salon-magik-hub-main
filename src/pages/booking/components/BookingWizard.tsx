@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Calendar, Clock, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, Clock, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -23,7 +24,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useBookingCart, useAvailableSlots, type PublicTenant, type PublicLocation, type CartItem } from "@/hooks/booking";
+import { useBookingCart, useAvailableSlots, useDepositCalculation, type PublicTenant, type PublicLocation } from "@/hooks/booking";
+import { VoucherInput, type AppliedVoucher } from "@/components/booking/VoucherInput";
+import { CustomerPurseToggle } from "@/components/booking/CustomerPurseToggle";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,9 +39,10 @@ interface BookingWizardProps {
 }
 
 type WizardStep = "schedule" | "customer" | "review" | "confirmation";
+type PaymentOption = "pay_now" | "pay_deposit" | "pay_at_salon";
 
 export function BookingWizard({ open, onOpenChange, salon, locations }: BookingWizardProps) {
-  const { items, updateItem, getTotal, clearCart } = useBookingCart();
+  const { items, getTotal, getTotalDuration, clearCart } = useBookingCart();
   const [step, setStep] = useState<WizardStep>("schedule");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
@@ -47,6 +51,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
+
+  // Payment state
+  const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
+  const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
+  const [purseAmount, setPurseAmount] = useState(0);
 
   // Sync location when locations load
   useEffect(() => {
@@ -74,15 +83,42 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     hideSender: boolean;
   }>>({});
 
+  const totalDuration = getTotalDuration();
+  
   const { data: availableSlots, isLoading: slotsLoading } = useAvailableSlots(
     salon.id,
     selectedLocation,
     selectedDate,
-    salon.slot_capacity_default || 1
+    salon.slot_capacity_default || 1,
+    30, // slot duration
+    totalDuration, // service duration
+    15 // buffer minutes
+  );
+
+  // Calculate deposit
+  const depositCalc = useDepositCalculation(
+    items,
+    salon.deposits_enabled ? (salon.default_deposit_percentage || 0) : 0
   );
 
   const giftItems = items.filter((item) => item.isGift);
   const hasSchedulableItems = items.some((item) => item.type !== "product");
+
+  // Calculate final amounts
+  const subtotal = getTotal();
+  const voucherDiscount = appliedVoucher?.discountAmount || 0;
+  const afterVoucher = Math.max(0, subtotal - voucherDiscount);
+  const afterPurse = Math.max(0, afterVoucher - purseAmount);
+  const depositRequired = salon.deposits_enabled && depositCalc.depositAmount > 0;
+  const depositAmount = Math.min(depositCalc.depositAmount, afterPurse);
+  
+  const amountDueNow = paymentOption === "pay_now" 
+    ? afterPurse 
+    : paymentOption === "pay_deposit" 
+      ? depositAmount 
+      : 0;
+  
+  const amountDueAtSalon = afterPurse - amountDueNow;
 
   const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
     { key: "schedule", label: "Schedule", icon: <Calendar className="h-4 w-4" /> },
@@ -147,11 +183,41 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
             ...item,
             giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
           })),
-          payAtSalon: salon.pay_at_salon_enabled,
+          payAtSalon: paymentOption === "pay_at_salon",
+          voucherCode: appliedVoucher?.code || null,
+          voucherDiscount: voucherDiscount,
+          purseAmount: purseAmount,
+          depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
         },
       });
 
       if (error) throw error;
+
+      // If payment is required now, redirect to payment
+      if (amountDueNow > 0 && data.appointmentId) {
+        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
+          body: {
+            tenantId: salon.id,
+            appointmentId: data.appointmentId,
+            amount: amountDueNow,
+            currency: salon.currency,
+            customerEmail: customerInfo.email,
+            customerName: `${customerInfo.firstName} ${customerInfo.lastName}`,
+            description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
+            isDeposit: paymentOption === "pay_deposit",
+            successUrl: window.location.href,
+            cancelUrl: window.location.href,
+          },
+        });
+
+        if (paymentResponse.data?.checkoutUrl) {
+          // For now, just show confirmation (in production, redirect to payment)
+          toast({
+            title: "Payment would be required",
+            description: `Amount: ${formatCurrency(amountDueNow, salon.currency)}. Payment integration coming soon.`,
+          });
+        }
+      }
 
       setBookingReference(data.reference || "CONFIRMED");
       setStep("confirmation");
@@ -176,6 +242,9 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setCustomerInfo({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
       setGiftRecipients({});
       setBookingReference(null);
+      setAppliedVoucher(null);
+      setPurseAmount(0);
+      setPaymentOption("pay_at_salon");
     }
     onOpenChange(false);
   };
@@ -306,6 +375,13 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {/* Duration Estimate */}
+                    {totalDuration > 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Estimated duration: {totalDuration} minutes
+                      </p>
                     )}
                   </>
                 ) : (
@@ -524,18 +600,117 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                       </span>
                     </div>
                   ))}
+                </div>
+
+                <Separator />
+
+                {/* Voucher Input */}
+                <VoucherInput
+                  tenantId={salon.id}
+                  currency={salon.currency}
+                  subtotal={subtotal}
+                  onVoucherApplied={setAppliedVoucher}
+                  appliedVoucher={appliedVoucher}
+                />
+
+                {/* Customer Purse Toggle */}
+                {customerInfo.email && (
+                  <CustomerPurseToggle
+                    tenantId={salon.id}
+                    customerEmail={customerInfo.email}
+                    currency={salon.currency}
+                    maxAmount={afterVoucher}
+                    onPurseApplied={setPurseAmount}
+                  />
+                )}
+
+                {/* Payment Options */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Payment Options
+                  </h3>
+                  
+                  <RadioGroup
+                    value={paymentOption}
+                    onValueChange={(value) => setPaymentOption(value as PaymentOption)}
+                    className="space-y-2"
+                  >
+                    {salon.pay_at_salon_enabled && (
+                      <div className="flex items-center space-x-3 p-3 border rounded-lg">
+                        <RadioGroupItem value="pay_at_salon" id="pay_at_salon" />
+                        <Label htmlFor="pay_at_salon" className="flex-1 cursor-pointer">
+                          <span className="font-medium">Pay at Salon</span>
+                          <p className="text-xs text-muted-foreground">
+                            Pay when you arrive for your appointment
+                          </p>
+                        </Label>
+                      </div>
+                    )}
+
+                    {depositRequired && (
+                      <div className="flex items-center space-x-3 p-3 border rounded-lg">
+                        <RadioGroupItem value="pay_deposit" id="pay_deposit" />
+                        <Label htmlFor="pay_deposit" className="flex-1 cursor-pointer">
+                          <span className="font-medium">
+                            Pay Deposit ({formatCurrency(depositAmount, salon.currency)})
+                          </span>
+                          <p className="text-xs text-muted-foreground">
+                            Secure your booking with a deposit
+                          </p>
+                        </Label>
+                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-3 p-3 border rounded-lg">
+                      <RadioGroupItem value="pay_now" id="pay_now" />
+                      <Label htmlFor="pay_now" className="flex-1 cursor-pointer">
+                        <span className="font-medium">
+                          Pay in Full ({formatCurrency(afterPurse, salon.currency)})
+                        </span>
+                        <p className="text-xs text-muted-foreground">
+                          Complete payment now
+                        </p>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <Separator />
+
+                {/* Price Breakdown */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(subtotal, salon.currency)}</span>
+                  </div>
+                  
+                  {voucherDiscount > 0 && (
+                    <div className="flex items-center justify-between text-sm text-primary">
+                      <span>Voucher Discount</span>
+                      <span>-{formatCurrency(voucherDiscount, salon.currency)}</span>
+                    </div>
+                  )}
+                  
+                  {purseAmount > 0 && (
+                    <div className="flex items-center justify-between text-sm text-primary">
+                      <span>Store Credit</span>
+                      <span>-{formatCurrency(purseAmount, salon.currency)}</span>
+                    </div>
+                  )}
 
                   <Separator />
 
-                  <div className="flex items-center justify-between text-lg font-bold">
-                    <span>Total</span>
-                    <span>{formatCurrency(getTotal(), salon.currency)}</span>
+                  <div className="flex items-center justify-between font-semibold">
+                    <span>Due Now</span>
+                    <span>{formatCurrency(amountDueNow, salon.currency)}</span>
                   </div>
 
-                  {salon.pay_at_salon_enabled && (
-                    <p className="text-sm text-muted-foreground text-center">
-                      Payment will be collected at the salon
-                    </p>
+                  {amountDueAtSalon > 0 && (
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Due at Salon</span>
+                      <span>{formatCurrency(amountDueAtSalon, salon.currency)}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -544,8 +719,8 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
             {/* Confirmation Step */}
             {step === "confirmation" && (
               <div className="text-center py-8 space-y-4">
-                <div className="h-16 w-16 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mx-auto">
-                  <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                  <CheckCircle className="h-8 w-8 text-primary" />
                 </div>
                 <h2 className="text-2xl font-bold">Booking Confirmed!</h2>
                 <p className="text-muted-foreground">
@@ -586,7 +761,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   className="text-white border-0"
                   style={{ backgroundColor: 'var(--brand-color)' }}
                 >
-                  {isSubmitting ? "Submitting..." : "Confirm Booking"}
+                  {isSubmitting 
+                    ? "Submitting..." 
+                    : amountDueNow > 0 
+                      ? `Pay ${formatCurrency(amountDueNow, salon.currency)}` 
+                      : "Confirm Booking"
+                  }
                 </Button>
               ) : (
                 <Button 

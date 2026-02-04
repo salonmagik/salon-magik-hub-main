@@ -14,10 +14,12 @@ export function useAvailableSlots(
   location: PublicLocation | undefined,
   date: Date | undefined,
   slotCapacity: number = 1,
-  slotDurationMinutes: number = 30
+  slotDurationMinutes: number = 30,
+  serviceDurationMinutes: number = 0,
+  bufferMinutes: number = 0
 ) {
   return useQuery({
-    queryKey: ["available-slots", tenantId, location?.id, date?.toISOString(), slotCapacity],
+    queryKey: ["available-slots", tenantId, location?.id, date?.toISOString(), slotCapacity, serviceDurationMinutes],
     queryFn: async (): Promise<SlotInfo[]> => {
       if (!tenantId || !location || !date) return [];
 
@@ -55,6 +57,10 @@ export function useAvailableSlots(
         throw error;
       }
 
+      // Calculate effective service duration (use provided or default to slot duration)
+      const effectiveDuration = serviceDurationMinutes > 0 ? serviceDurationMinutes : slotDurationMinutes;
+      const totalBookingDuration = effectiveDuration + bufferMinutes;
+
       // Generate time slots
       const slots: SlotInfo[] = [];
       let currentSlot = openingDateTime;
@@ -64,19 +70,24 @@ export function useAvailableSlots(
         const slotStart = currentSlot;
         const slotEnd = addMinutes(currentSlot, slotDurationMinutes);
 
+        // Check if booking would extend past closing time
+        const bookingEndTime = addMinutes(currentSlot, totalBookingDuration);
+        const exceedsClosing = isAfter(bookingEndTime, closingDateTime);
+
         // Count bookings that overlap with this slot
         const bookedCount = (appointments || []).filter((apt) => {
           if (!apt.scheduled_start) return false;
           const aptStart = new Date(apt.scheduled_start);
           const aptEnd = apt.scheduled_end ? new Date(apt.scheduled_end) : addMinutes(aptStart, 60);
           
-          // Check for overlap
-          return isBefore(aptStart, slotEnd) && isAfter(aptEnd, slotStart);
+          // Check for overlap including buffer
+          const aptEndWithBuffer = addMinutes(aptEnd, bufferMinutes);
+          return isBefore(aptStart, slotEnd) && isAfter(aptEndWithBuffer, slotStart);
         }).length;
 
         slots.push({
           time: slotTime,
-          available: bookedCount < slotCapacity,
+          available: bookedCount < slotCapacity && !exceedsClosing,
           bookedCount,
         });
 
