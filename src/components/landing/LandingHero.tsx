@@ -32,8 +32,9 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
           
           <p className="text-lg md:text-xl text-muted-foreground max-w-xl">
             Say goodbye to the hustle and go from 0 to 100 with a platform built for your salon. 
-            Manage schedules, customers and staff. Accept payments, offer packages and vouchers, 
-            track sales — everything you need to grow, all in one place.
+            Manage schedules, customers and staff. Accept payments, offer packages and vouchers, and more.
+            <br className="hidden sm:block" />
+            Everything you need to grow, all in one place.
           </p>
 
           {!isLoading && !isWaitlistMode && (
