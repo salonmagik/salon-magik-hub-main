@@ -30,9 +30,10 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
             <span className="text-primary">built for beauty professionals</span>
           </h1>
           
-          <p className="text-lg md:text-xl text-muted-foreground max-w-lg">
-            Run your salon, spa, or barbershop with one simple platform. 
-            Bookings, payments, and customer management — all in one place.
+          <p className="text-lg md:text-xl text-muted-foreground max-w-xl">
+            Say goodbye to the hustle and go from 0 to 100 with a platform built for your salon. 
+            Manage schedules, customers and staff. Accept payments, offer packages and vouchers, 
+            track sales — everything you need to grow, all in one place.
           </p>
 
           {!isLoading && !isWaitlistMode && (
