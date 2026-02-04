@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Mail, MessageSquare, Loader2, Info } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Mail, MessageSquare, Loader2, Info, AlertTriangle } from "lucide-react";
 import { useEmailTemplates, type TemplateType, defaultTemplates, templateTypeLabels } from "@/hooks/useEmailTemplates";
 import { cn } from "@/lib/utils";
 
@@ -22,24 +23,51 @@ interface EditTemplateDialogProps {
   templateType: TemplateType | null;
 }
 
+// Required variables for each template type
 const templateVariables: Record<TemplateType, string[]> = {
-  appointment_confirmation: ["customer_name", "appointment_date", "appointment_time", "service_name"],
-  appointment_reminder: ["customer_name", "appointment_date", "appointment_time", "service_name"],
-  appointment_cancelled: ["customer_name", "appointment_date"],
-  booking_confirmation: ["customer_name", "appointment_date", "appointment_time"],
-  payment_receipt: ["customer_name", "amount", "transaction_id"],
-  refund_confirmation: ["customer_name", "amount"],
+  // Existing
+  appointment_confirmation: ["customer_name", "appointment_date", "appointment_time", "service_name", "salon_name", "location_name", "cta_link"],
+  appointment_reminder: ["customer_name", "appointment_date", "appointment_time", "service_name", "salon_name", "cta_link"],
+  appointment_cancelled: ["customer_name", "appointment_date", "salon_name"],
+  booking_confirmation: ["customer_name", "appointment_date", "appointment_time", "salon_name"],
+  payment_receipt: ["customer_name", "amount", "transaction_id", "salon_name"],
+  refund_confirmation: ["customer_name", "amount", "refund_method", "salon_name"],
   staff_invitation: ["staff_name", "salon_name", "role", "invitation_link"],
   welcome: ["customer_name", "salon_name"],
+  // Auth
+  password_reset: ["reset_link"],
+  password_changed: [],
+  email_verification: ["first_name", "verification_link"],
+  welcome_owner: ["first_name", "cta_link"],
+  // Appointments
+  service_started: ["customer_name", "salon_name"],
+  buffer_requested: ["customer_name", "salon_name", "buffer_duration", "accept_link", "reschedule_link"],
+  service_change_approval: ["customer_name", "salon_name", "old_service", "new_service", "amount", "approve_link"],
+  // Subscription
+  trial_ending_7d: ["first_name", "cta_link"],
+  trial_ending_3h: ["first_name", "cta_link"],
+  payment_failed: ["first_name", "cta_link"],
+  // Commerce
+  store_credit_restored: ["customer_name", "salon_name", "amount"],
+  gift_received: ["recipient_name", "sender_name", "custom_message", "service_name", "view_link"],
+  voucher_applied: ["customer_name", "salon_name"],
+};
+
+// Validate that required variables are present
+const validateTemplate = (type: TemplateType, bodyHtml: string): string[] => {
+  const requiredVars = templateVariables[type] || [];
+  const missingVars = requiredVars.filter(v => !bodyHtml.includes(`{{${v}}}`));
+  return missingVars;
 };
 
 export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTemplateDialogProps) {
-  const { getTemplate, getTemplateOrDefault, upsertTemplate } = useEmailTemplates();
+  const { getTemplate, upsertTemplate } = useEmailTemplates();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [channel, setChannel] = useState<"email" | "sms">("email");
+  const [missingVariables, setMissingVariables] = useState<string[]>([]);
 
   useEffect(() => {
     if (templateType && open) {
@@ -55,8 +83,17 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
         setIsActive(true);
       }
       setChannel("email");
+      setMissingVariables([]);
     }
   }, [templateType, open, getTemplate]);
+
+  // Validate on body change
+  useEffect(() => {
+    if (templateType && bodyHtml) {
+      const missing = validateTemplate(templateType, bodyHtml);
+      setMissingVariables(missing);
+    }
+  }, [templateType, bodyHtml]);
 
   const handleSubmit = async () => {
     if (!templateType) return;
@@ -142,24 +179,36 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
           </div>
 
           {/* Variables Helper */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Available Variables</span>
+          {variables.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Available Variables (click to insert)</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {variables.map((v) => (
+                  <Badge
+                    key={v}
+                    variant={missingVariables.includes(v) ? "destructive" : "outline"}
+                    className="cursor-pointer hover:bg-primary/10 transition-colors"
+                    onClick={() => insertVariable(v)}
+                  >
+                    {`{{${v}}}`}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {variables.map((v) => (
-                <Badge
-                  key={v}
-                  variant="outline"
-                  className="cursor-pointer hover:bg-primary/10 transition-colors"
-                  onClick={() => insertVariable(v)}
-                >
-                  {`{{${v}}}`}
-                </Badge>
-              ))}
-            </div>
-          </div>
+          )}
+
+          {/* Missing Variables Warning */}
+          {missingVariables.length > 0 && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Missing required variables: {missingVariables.map(v => `{{${v}}}`).join(", ")}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Body */}
           <div className="space-y-2">
@@ -178,7 +227,7 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
               value={bodyHtml}
               onChange={(e) => setBodyHtml(e.target.value)}
               placeholder="Enter email content..."
-              rows={10}
+              rows={12}
               className="font-mono text-sm"
             />
           </div>

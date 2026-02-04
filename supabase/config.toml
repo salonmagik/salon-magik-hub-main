@@ -5,3 +5,15 @@ verify_jwt = false
 
 [functions.send-appointment-notification]
 verify_jwt = false
+
+[functions.send-password-reset]
+verify_jwt = false
+
+[functions.verify-reset-token]
+verify_jwt = false
+
+[functions.complete-password-reset]
+verify_jwt = false
+
+[functions.send-email-verification]
+verify_jwt = false

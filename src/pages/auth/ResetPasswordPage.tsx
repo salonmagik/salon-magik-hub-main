@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Lock, ArrowLeft, CheckCircle } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Lock, ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/components/auth/AuthLayout";
@@ -26,45 +26,51 @@ const validatePasswordStrength = (password: string): string | null => {
   return null;
 };
 
+type PageState = "loading" | "invalid" | "form" | "success";
+
 export default function ResetPasswordPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token");
+
+  const [pageState, setPageState] = useState<PageState>("loading");
   const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [isValidSession, setIsValidSession] = useState<boolean | null>(null);
+  const [email, setEmail] = useState("");
   const [formData, setFormData] = useState({
     password: "",
     confirmPassword: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Check if user came from a valid reset link
+  // Verify token on mount
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // Check URL for recovery token (Supabase adds this on redirect)
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const type = hashParams.get("type");
-      
-      if (type === "recovery" || session) {
-        setIsValidSession(true);
-      } else {
-        setIsValidSession(false);
+    const verifyToken = async () => {
+      if (!token) {
+        setPageState("invalid");
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.functions.invoke("verify-reset-token", {
+          body: { token },
+        });
+
+        if (error || !data?.valid) {
+          setPageState("invalid");
+          return;
+        }
+
+        setEmail(data.email);
+        setPageState("form");
+      } catch (err) {
+        console.error("Token verification error:", err);
+        setPageState("invalid");
       }
     };
 
-    checkSession();
-
-    // Listen for auth state changes (recovery link will trigger this)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setIsValidSession(true);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+    verifyToken();
+  }, [token]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -99,23 +105,25 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
+    if (!validateForm() || !token) return;
 
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: formData.password,
+      const { data, error } = await supabase.functions.invoke("complete-password-reset", {
+        body: { token, password: formData.password },
       });
 
-      if (error) {
+      if (error || !data?.success) {
         toast({
           title: "Error",
-          description: error.message,
+          description: data?.error || error?.message || "Failed to reset password",
           variant: "destructive",
         });
       } else {
-        setIsSuccess(true);
+        // Sign out any existing session
+        await supabase.auth.signOut();
+        setPageState("success");
         toast({
           title: "Password updated",
           description: "Your password has been successfully reset.",
@@ -132,19 +140,19 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // Loading state while checking session
-  if (isValidSession === null) {
+  // Loading state
+  if (pageState === "loading") {
     return (
-      <AuthLayout title="Reset your password" subtitle="Please wait...">
+      <AuthLayout title="Reset your password" subtitle="Verifying your reset link...">
         <AuthCard className="flex items-center justify-center py-12">
-          <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </AuthCard>
       </AuthLayout>
     );
   }
 
   // Invalid or expired link
-  if (!isValidSession) {
+  if (pageState === "invalid") {
     return (
       <AuthLayout
         title="Invalid or expired link"
@@ -152,7 +160,7 @@ export default function ResetPasswordPage() {
       >
         <AuthCard className="text-center">
           <p className="text-muted-foreground mb-6">
-            Password reset links expire after a short period for security reasons.
+            Password reset links expire after 1 hour for security reasons.
             Please request a new link.
           </p>
           <AuthButton
@@ -175,7 +183,7 @@ export default function ResetPasswordPage() {
   }
 
   // Success state
-  if (isSuccess) {
+  if (pageState === "success") {
     return (
       <AuthLayout
         title="Password reset successful"
@@ -200,7 +208,7 @@ export default function ResetPasswordPage() {
   return (
     <AuthLayout
       title="Create new password"
-      subtitle="Enter a strong password for your account."
+      subtitle={email ? `Resetting password for ${email}` : "Enter a strong password for your account."}
     >
       <AuthCard>
         <form onSubmit={handleSubmit} className="space-y-4">
