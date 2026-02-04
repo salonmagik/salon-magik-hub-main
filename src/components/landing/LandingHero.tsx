@@ -6,9 +6,10 @@ import heroImage from "@/assets/landing/salon-hero.jpg";
 interface LandingHeroProps {
   isWaitlistMode: boolean;
   isLoading: boolean;
+  onWaitlistClick?: () => void;
 }
 
-export function LandingHero({ isWaitlistMode, isLoading }: LandingHeroProps) {
+export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: LandingHeroProps) {
   return (
     <section className="relative overflow-hidden">
       {/* Background Image with Overlay */}
@@ -51,12 +52,10 @@ export function LandingHero({ isWaitlistMode, isLoading }: LandingHeroProps) {
 
           {!isLoading && isWaitlistMode && (
             <div className="pt-4">
-              <Link to="#waitlist">
-                <Button size="lg" className="text-base">
-                  Join the waitlist
-                  <ArrowRight className="ml-2 w-4 h-4" />
-                </Button>
-              </Link>
+              <Button size="lg" className="text-base" onClick={onWaitlistClick}>
+                Get exclusive access
+                <ArrowRight className="ml-2 w-4 h-4" />
+              </Button>
             </div>
           )}
         </div>

@@ -5,3 +5,4 @@ export { FeaturesSection } from "./FeaturesSection";
 export { BenefitsSection } from "./BenefitsSection";
 export { CTASection } from "./CTASection";
 export { LandingFooter } from "./LandingFooter";
+export { WaitlistDialog } from "./WaitlistDialog";
