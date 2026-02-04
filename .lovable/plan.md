@@ -1,456 +1,401 @@
 
-
-# Complete Template System & Custom Auth Emails Implementation
+# Client Portal Implementation Plan
 
 ## Overview
 
-This plan implements the full Template Catalogue from the PRD, including custom-branded password reset and welcome emails, appointment reminders, buffer request notifications, and all other templates specified in the catalogue.
+This plan implements the complete Client Portal (`/client/*`) platform as specified in the PRD, providing customers with self-service access to their bookings, purse management, refund handling, and profile management.
 
 ---
 
 ## Current State Analysis
 
-### What Exists
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `useEmailTemplates.tsx` | Partial | 8 template types defined, missing 15+ from PRD |
-| `email_templates` table | Exists | Has `channel` column but limited types |
-| `send-appointment-notification` | Exists | Handles scheduled/completed/cancelled/rescheduled |
-| `send-staff-invitation` | Exists | Custom branded emails via Resend |
-| Forgot Password | Uses Supabase default | Sends Supabase-branded email, not Salon Magik |
-| Reset Password Page | Relies on Supabase `#type=recovery` | Uses Supabase auth flow |
-| Appointment Reminder | Not implemented | No scheduler or edge function |
-| Buffer Request | Not implemented | No notification system |
-
-### Key Gaps
-
-1. **Auth emails** use Supabase default templates (not branded)
-2. **Password reset** relies on Supabase's email link flow
-3. **No token management** for custom reset flow
-4. **Missing 15+ template types** from PRD catalogue
-5. **No in-app notification templates** defined
-6. **No buffer request notifications**
-7. **No subscription/trial emails**
+| Component | Status | Reusable? |
+|-----------|--------|-----------|
+| `customers.user_id` column | Exists | Yes - links customers to auth.users |
+| `InactivityGuard` | Exists | Yes - accepts configurable timers |
+| `useCustomerPurse` | Exists | Partially - needs client-context version |
+| `useAppointments` | Exists | Partially - tenant-scoped, needs customer-scoped version |
+| OTP login flow | Exists | Yes - already in LoginPage.tsx |
+| Phone input component | Exists | Yes - AuthPhoneInput |
+| SalonSidebar layout | Exists | Pattern reusable for ClientSidebar |
+| Notification system | Exists | Needs customer-scoped version |
+| RLS policies | Tenant-based | Need customer-self-access policies |
 
 ---
 
-## Implementation Plan
+## Architecture Decisions
 
-### Phase 1: Database Schema Updates
+### 1. Separate Auth Context for Clients
 
-#### 1.1 Create Token Tables
+The current `useAuth` hook is tenant/salon-focused. For the Client Portal, we need a separate `useClientAuth` context that:
+- Identifies the logged-in user as a customer across multiple tenants
+- Fetches all `customers` records where `user_id = auth.uid()`
+- Does NOT require tenant selection (customer sees all their salon relationships)
+
+### 2. OTP-First Authentication
+
+Per PRD requirements (no Google OAuth for clients):
+- Primary: OTP via email or phone
+- Password optional: only prompted if account has password set
+- Single field entry for email/phone detection
+
+### 3. Database Access Strategy
+
+Customers need RLS policies to access their own data across tenants:
+- Read their own `customers` records (via `user_id`)
+- Read their own `appointments`, `transactions`, `refund_requests`
+- Read `customer_purses` for their customer IDs
+- NO access to other customers' data or tenant admin data
+
+---
+
+## Database Schema Changes
+
+### 1. New RLS Policies for Customer Self-Access
 
 ```sql
--- Password reset tokens (1-hour expiry)
-CREATE TABLE public.password_reset_tokens (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT NOT NULL,
-  token TEXT NOT NULL UNIQUE,
-  expires_at TIMESTAMPTZ NOT NULL,
-  used_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- Customers can read their own customer records across all tenants
+CREATE POLICY "Customers can read own customer records"
+ON customers FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+
+-- Customers can read their own appointments
+CREATE POLICY "Customers can read own appointments"
+ON appointments FOR SELECT
+TO authenticated
+USING (
+  customer_id IN (
+    SELECT id FROM customers WHERE user_id = auth.uid()
+  )
 );
 
-CREATE INDEX idx_prt_token ON password_reset_tokens(token);
-CREATE INDEX idx_prt_email ON password_reset_tokens(email);
-
--- Email verification tokens (24-hour expiry)
-CREATE TABLE public.email_verification_tokens (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID,
-  email TEXT NOT NULL,
-  token TEXT NOT NULL UNIQUE,
-  expires_at TIMESTAMPTZ NOT NULL,
-  verified_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- Customers can read their own purses
+CREATE POLICY "Customers can read own purses"
+ON customer_purses FOR SELECT
+TO authenticated
+USING (
+  customer_id IN (
+    SELECT id FROM customers WHERE user_id = auth.uid()
+  )
 );
 
-CREATE INDEX idx_evt_token ON email_verification_tokens(token);
+-- Customers can read their own transactions
+CREATE POLICY "Customers can read own transactions"
+ON transactions FOR SELECT
+TO authenticated
+USING (
+  customer_id IN (
+    SELECT id FROM customers WHERE user_id = auth.uid()
+  )
+);
 
--- Enable RLS (service role only access via edge functions)
-ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_verification_tokens ENABLE ROW LEVEL SECURITY;
+-- Customers can read their own refund requests
+CREATE POLICY "Customers can read own refund requests"
+ON refund_requests FOR SELECT
+TO authenticated
+USING (
+  customer_id IN (
+    SELECT id FROM customers WHERE user_id = auth.uid()
+  )
+);
+
+-- Customers can read notifications targeted at them
+CREATE POLICY "Customers can read own notifications"
+ON notifications FOR SELECT
+TO authenticated
+USING (
+  user_id = auth.uid()
+);
 ```
 
-#### 1.2 Expand Template Type Enum
+### 2. Customer Profiles Table (for OTP-only users)
 
-The `email_templates.template_type` column needs to support additional types from the PRD catalogue.
+Since customers may not have a `profiles` entry (OTP-only users), we need to handle this gracefully or create customer profiles on first login.
 
 ---
 
-### Phase 2: Template Type Expansion
+## File Structure
 
-#### 2.1 New Template Types to Add
-
-| Template Type | Channel | Trigger | Audience |
-|--------------|---------|---------|----------|
-| `password_reset` | email | Forgot password request | User |
-| `password_changed` | email | Password successfully reset | User |
-| `email_verification` | email | New account signup | User |
-| `welcome_owner` | email | Salon owner signup | Owner |
-| `service_started` | in-app | Staff clicks "Start Service" | Customer |
-| `buffer_requested` | email/in-app | Salon requests buffer time | Customer |
-| `service_change_approval` | email | Service modified after start | Customer |
-| `outstanding_fees_alert` | in-app | Customer with unpaid fees books | Salon |
-| `trial_ending_7d` | email | 7 days before trial ends | Owner |
-| `trial_ending_3h` | email | 3 hours before trial ends | Owner |
-| `payment_failed` | email | Subscription charge fails | Owner |
-| `store_credit_restored` | email | Refund to store credit | Customer |
-| `gift_received` | email | Gift sent to recipient | Recipient |
-| `voucher_applied` | email | Voucher redeemed | Customer |
-| `new_feature` | email/in-app | Salon Magik feature launch | All |
-| `maintenance_notice` | email/in-app | Scheduled maintenance | All |
-
-#### 2.2 Update `useEmailTemplates.tsx`
-
-Expand `TemplateType` union and add default templates with Salon Magik branding:
-
-```typescript
-export type TemplateType =
-  // Existing
-  | "appointment_confirmation"
-  | "appointment_reminder"
-  | "appointment_cancelled"
-  | "booking_confirmation"
-  | "payment_receipt"
-  | "refund_confirmation"
-  | "staff_invitation"
-  | "welcome"
-  // New Auth
-  | "password_reset"
-  | "password_changed"
-  | "email_verification"
-  | "welcome_owner"
-  // New Appointment
-  | "service_started"
-  | "buffer_requested"
-  | "service_change_approval"
-  // New Subscription
-  | "trial_ending_7d"
-  | "trial_ending_3h"
-  | "payment_failed"
-  // New Commerce
-  | "store_credit_restored"
-  | "gift_received"
-  | "voucher_applied";
-```
-
----
-
-### Phase 3: Custom Password Reset Flow
-
-#### 3.1 Edge Function: `send-password-reset`
-
-**Purpose**: Replace Supabase's default reset email with branded Salon Magik email
-
-**Flow**:
-1. Accept email from frontend
-2. Check if email exists in auth.users (via service role)
-3. Generate secure random token
-4. Store in `password_reset_tokens` with 1-hour expiry
-5. Fetch custom template if salon has one, else use default
-6. Send branded email via Resend with `{{reset_link}}`
-
-**File**: `supabase/functions/send-password-reset/index.ts`
-
-```typescript
-// Key logic
-const token = crypto.randomUUID();
-const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-await supabase.from("password_reset_tokens").insert({
-  email,
-  token,
-  expires_at: expiresAt.toISOString(),
-});
-
-const resetLink = `${origin}/reset-password?token=${token}`;
-// Send via Resend with branded template
-```
-
-#### 3.2 Edge Function: `verify-reset-token`
-
-**Purpose**: Validate token from URL before showing password form
-
-**Returns**: `{ valid: boolean, email?: string }`
-
-#### 3.3 Edge Function: `complete-password-reset`
-
-**Purpose**: Update password using Supabase Admin API
-
-**Flow**:
-1. Verify token is valid and not used
-2. Use service role to update auth.users password
-3. Mark token as used
-4. Send `password_changed` confirmation email
-5. Return success (frontend redirects to login)
-
-```typescript
-// Using Admin API to update password
-const { error } = await supabase.auth.admin.updateUserById(userId, {
-  password: newPassword,
-});
-```
-
-#### 3.4 Frontend Updates
-
-**`ForgotPasswordPage.tsx`**:
-- Replace `supabase.auth.resetPasswordForEmail()` with edge function call
-- Keep the same UI, just change the API call
-
-**`ResetPasswordPage.tsx`**:
-- Extract `token` from `?token=xxx` query param
-- Call `verify-reset-token` on mount
-- On submit, call `complete-password-reset`
-- On success, sign out user and redirect to `/login`
-
----
-
-### Phase 4: Welcome/Verification Emails
-
-#### 4.1 Edge Function: `send-email-verification`
-
-**Trigger**: Called after successful signup
-
-**Flow**:
-1. Generate verification token (24-hour expiry)
-2. Store in `email_verification_tokens`
-3. Send branded welcome email with verify button
-4. Include trial start messaging
-
-#### 4.2 Edge Function: `verify-email`
-
-**Purpose**: Mark email as verified when user clicks link
-
-**Note**: May integrate with Supabase's email confirmation flow or be standalone
-
-#### 4.3 Update Signup Flow
-
-**`SignupPage.tsx`**:
-- After `supabase.auth.signUp()`, call `send-email-verification`
-- Show "Check your email" success state
-
----
-
-### Phase 5: Template Defaults (Branded HTML)
-
-All templates will use consistent Salon Magik branding:
-
-```html
-<div style="font-family: 'Segoe UI', Tahoma, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-  <div style="text-align: center; margin-bottom: 32px;">
-    <h1 style="color: #E11D48; font-style: italic; margin: 0;">Salon Magik</h1>
-  </div>
-  
-  <!-- Template-specific content -->
-  
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;" />
-  <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-    © 2024 Salon Magik. All rights reserved.
-  </p>
-</div>
-```
-
-#### Key Template Examples
-
-**Password Reset**:
-```
-Subject: Reset your Salon Magik password
-
-Hi there,
-
-We received a request to reset your password. Click the button below:
-
-[Reset Password] ← Button with #E11D48 color
-
-This link expires in 1 hour.
-```
-
-**Welcome Owner**:
-```
-Subject: Welcome to Salon Magik
-
-Hi {{first_name}},
-
-You're officially in.
-
-Salon Magik helps you manage bookings, payments, and customers without chaos.
-
-[Complete Setup] ← CTA button
-
-Your 14-day free trial has started!
-```
-
-**Buffer Requested**:
-```
-Subject: {{salon_name}} has requested a buffer
-
-Hi {{customer_name}},
-
-{{salon_name}} has requested a {{buffer_duration}} minute buffer.
-
-[Accept] [Suggest Reschedule]
-```
-
-**Appointment Reminder**:
-```
-Subject: Reminder: upcoming appointment at {{salon_name}}
-
-Just a reminder about your upcoming appointment today at {{time}}.
-
-[I'm on my way]
+```text
+src/
+├── pages/
+│   └── client/
+│       ├── ClientLoginPage.tsx       # OTP-first login
+│       ├── ClientDashboard.tsx       # Landing after login
+│       ├── ClientBookingsPage.tsx    # Upcoming/Completed/Cancelled
+│       ├── ClientBookingDetailPage.tsx # Single booking with actions
+│       ├── ClientHistoryPage.tsx     # All past transactions/bookings
+│       ├── ClientRefundsPage.tsx     # Refund requests & credits
+│       ├── ClientNotificationsPage.tsx
+│       ├── ClientProfilePage.tsx     # Profile & Security
+│       └── ClientHelpPage.tsx
+│
+├── components/
+│   └── client/
+│       ├── ClientSidebar.tsx         # Layout wrapper with sidebar
+│       ├── ClientInactivityGuard.tsx # 25/30 min timers
+│       ├── BookingCard.tsx           # Booking summary card
+│       ├── BookingActions.tsx        # On My Way, Running Late, etc.
+│       ├── PurseCard.tsx             # Balance display
+│       ├── PurseAuthGate.tsx         # OTP/password gate for purse use
+│       ├── OutstandingFeesAlert.tsx  # Outstanding fees banner
+│       └── ApprovalActionCard.tsx    # Buffer/refund approval UI
+│
+├── hooks/
+│   └── client/
+│       ├── useClientAuth.tsx         # Customer-focused auth context
+│       ├── useClientBookings.tsx     # Customer's appointments
+│       ├── useClientPurse.tsx        # Customer's purse across salons
+│       ├── useClientNotifications.tsx
+│       └── useClientProfile.tsx
 ```
 
 ---
 
-### Phase 6: In-App Notification Templates
+## Implementation Phases
 
-#### 6.1 Update Notification System
+### Phase 1: Database & Auth Infrastructure
 
-The existing `notifications` table and `useNotifications` hook already support types. Define structured notification templates:
+1. **Create RLS policies** for customer self-access
+2. **Create `useClientAuth` context** that:
+   - Authenticates via OTP (email/phone)
+   - Fetches customer records linked to `auth.uid()`
+   - Checks if password is set for optional password prompt
+3. **Create `ClientProtectedRoute`** component
+4. **Create `ClientInactivityGuard`** with 25/30 minute timers
 
-| Notification Key | Type | Title Template | Description Template |
-|-----------------|------|----------------|---------------------|
-| `appointment_created` | appointment | New Appointment | "New appointment for {{service_name}} on {{date}} at {{time}}" |
-| `service_started` | appointment | Service Started | "Your service at {{salon_name}} has started" |
-| `buffer_requested` | appointment | Buffer Requested | "{{salon_name}} requested {{buffer}} min buffer. Please respond." |
-| `outstanding_fees` | payment | Outstanding Fees | "This customer has outstanding fees from a previous appointment" |
-| `refund_requires_approval` | payment | Refund Pending | "{{salon_name}} has requested approval to process a refund" |
+### Phase 2: Client Login Experience
 
-#### 6.2 Create Notification Helper
+1. **ClientLoginPage.tsx**:
+   - Single input field (auto-detect email vs phone)
+   - Send OTP to email or phone
+   - After OTP success, check if password exists:
+     - If yes: prompt for password
+     - If no: complete login
+   - No Google OAuth button
 
-**File**: `src/lib/notifications.ts`
+2. **Password detection edge function**:
+   - `check-customer-auth-method`: Returns whether user has password set
 
-```typescript
-export const notificationTemplates = {
-  appointment_created: {
-    type: "appointment",
-    title: "New Appointment",
-    description: (vars) => `New appointment for ${vars.service_name} on ${vars.date} at ${vars.time}`,
-    urgent: false,
-  },
-  buffer_requested: {
-    type: "appointment",
-    title: "Buffer Requested",
-    description: (vars) => `${vars.salon_name} requested ${vars.buffer_duration} min buffer`,
-    urgent: true,
-  },
-  // ... more templates
-};
+### Phase 3: Layout & Navigation
 
-export function createNotification(templateKey: string, variables: Record<string, string>) {
-  const template = notificationTemplates[templateKey];
-  return {
-    type: template.type,
-    title: template.title,
-    description: template.description(variables),
-    urgent: template.urgent,
-  };
-}
-```
+1. **ClientSidebar.tsx**:
+   - Dashboard, Bookings, History, Refunds & Credits, Notifications, Profile & Security, Help, Logout
+   - Mobile drawer overlay, desktop collapsible
+   - Wrap with `ClientInactivityGuard`
+
+2. **Update App.tsx routing**:
+   - Add `/client/*` routes with `ClientProtectedRoute`
+
+### Phase 4: Dashboard
+
+1. **ClientDashboard.tsx** cards:
+   - Next upcoming appointment
+   - Outstanding fees (with "Pay now" if any)
+   - Purse balance per salon
+   - Gifted services/products
+   - Notifications preview (unread count)
+   - Quick actions: "Book again", "View bookings", "Add purse funds"
+
+### Phase 5: Bookings Module
+
+1. **ClientBookingsPage.tsx**:
+   - Tabs: Upcoming, Completed, Cancelled
+   - List of `BookingCard` components
+   - Each card shows: status, services, date/time, location, payment state
+
+2. **ClientBookingDetailPage.tsx**:
+   - Full booking details
+   - **Actions** (state-dependent):
+     - "On My Way" (once per booking, before start)
+     - "Running Late" (select delay, suggest reschedule if ≥30 min)
+     - "Reschedule" (before start, applies deposit rules)
+     - "Cancel" (before start, applies cancellation rules)
+   - **Approval Actions**:
+     - Buffer request: Accept / Suggest reschedule
+     - Service change: Approve / Reject
+     - Refund proposal: Approve / Reject
+   - **Pay Outstanding** button if fees exist
+   - **Purse Toggle** with auth gate
+
+3. **Hooks**:
+   - `useClientBookings`: Fetch appointments where `customer_id.user_id = auth.uid()`
+   - `useClientBookingActions`: On My Way, Running Late, Reschedule, Cancel
+
+### Phase 6: Purse & Payments
+
+1. **useClientPurse.tsx**:
+   - Fetch all `customer_purses` for customer IDs owned by user
+   - Display balance per salon
+   - Transaction history (topups, redemptions, credits)
+
+2. **PurseAuthGate.tsx**:
+   - When purse is toggled for payment, require OTP or password confirmation
+   - Prevents unauthorized purse usage
+
+3. **Payment flow integration**:
+   - Deposit / Full / Pay-at-salon options
+   - Purse applied first if toggled
+   - Remainder via online payment or pay-at-salon
+
+### Phase 7: Refunds & Credits
+
+1. **ClientRefundsPage.tsx**:
+   - List of refund requests with status
+   - Ability to request refund on eligible transactions
+   - "Mark as received" for offline refunds
+   - Store credit appears in purse immediately
+
+### Phase 8: Notifications
+
+1. **ClientNotificationsPage.tsx**:
+   - Types: booking confirmations, reschedules, buffer requests, service changes, refunds, gifts, system
+   - Inbox with read/unread
+   - Deep links to relevant booking/action
+
+2. **useClientNotifications.tsx**:
+   - Subscribe to realtime notifications for `user_id = auth.uid()`
+
+### Phase 9: Profile & Security
+
+1. **ClientProfilePage.tsx**:
+   - View/edit: name, email, phone
+   - Phone/email edit requires OTP verification
+   - Optional password add/change
+   - Logout all sessions
+   - Communication preferences (email/SMS/WhatsApp)
 
 ---
 
-### Phase 7: Update EditTemplateDialog
+## Key Components Detail
 
-#### 7.1 Expand Variable Support
+### ClientSidebar Navigation Items
 
-Update `templateVariables` mapping to include all required variables per template:
+| Label | Icon | Path | Description |
+|-------|------|------|-------------|
+| Dashboard | LayoutDashboard | /client | Landing page |
+| Bookings | Calendar | /client/bookings | Upcoming/Completed/Cancelled |
+| History | Clock | /client/history | All transactions |
+| Refunds & Credits | RefreshCcw | /client/refunds | Refund requests |
+| Notifications | Bell | /client/notifications | Inbox |
+| Profile & Security | User | /client/profile | Edit profile |
+| Help & Support | HelpCircle | /client/help | Support |
+| Sign out | LogOut | - | Logout action |
 
-```typescript
-const templateVariables: Record<TemplateType, string[]> = {
-  // Auth
-  password_reset: ["reset_link"],
-  password_changed: ["customer_name"],
-  email_verification: ["first_name", "verification_link"],
-  welcome_owner: ["first_name", "cta_link"],
-  
-  // Appointments
-  buffer_requested: ["customer_name", "salon_name", "buffer_duration", "accept_link", "reschedule_link"],
-  service_change_approval: ["customer_name", "salon_name", "old_service", "new_service", "amount", "approve_link"],
-  
-  // Subscription
-  trial_ending_7d: ["first_name", "cta_link"],
-  trial_ending_3h: ["first_name", "cta_link"],
-  payment_failed: ["first_name", "cta_link"],
-  
-  // Commerce
-  gift_received: ["recipient_name", "sender_name", "custom_message", "service_name", "view_link"],
-  voucher_applied: ["customer_name", "salon_name"],
-  store_credit_restored: ["customer_name", "salon_name", "amount"],
-  
-  // ... existing templates
-};
+### Booking Actions State Machine
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                    SCHEDULED                            │
+│                                                         │
+│  Actions: On My Way, Running Late, Reschedule, Cancel   │
+│  Approvals: Buffer Accept/Reject                        │
+└────────────────────────┬────────────────────────────────┘
+                         │ (Service starts)
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                    STARTED                              │
+│                                                         │
+│  Actions: None (customer waits)                         │
+│  Approvals: Service Change Approve/Reject               │
+└────────────────────────┬────────────────────────────────┘
+                         │ (Service ends)
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                   COMPLETED                             │
+│                                                         │
+│  Actions: Tip (48h window), Review                      │
+│  Approvals: Refund/Store-credit Approve/Reject          │
+└─────────────────────────────────────────────────────────┘
 ```
-
-#### 7.2 Template Validation
-
-Add validation to ensure required variables are present before saving:
-
-```typescript
-const validateTemplate = (type: TemplateType, bodyHtml: string): string[] => {
-  const requiredVars = templateVariables[type];
-  const missingVars = requiredVars.filter(v => !bodyHtml.includes(`{{${v}}}`));
-  return missingVars;
-};
-```
-
----
-
-## Files to Create/Modify
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `supabase/functions/send-password-reset/index.ts` | Send branded reset email |
-| `supabase/functions/verify-reset-token/index.ts` | Validate reset token |
-| `supabase/functions/complete-password-reset/index.ts` | Update password via Admin API |
-| `supabase/functions/send-email-verification/index.ts` | Send branded welcome/verification |
-| `src/lib/notification-templates.ts` | In-app notification template definitions |
-
-### Modified Files
-
-| File | Changes |
-|------|---------|
-| `supabase/config.toml` | Add new edge functions with `verify_jwt = false` |
-| `src/hooks/useEmailTemplates.tsx` | Expand `TemplateType` union, add 15+ default templates |
-| `src/components/dialogs/EditTemplateDialog.tsx` | Expand variables, add validation |
-| `src/pages/auth/ForgotPasswordPage.tsx` | Call custom edge function instead of Supabase |
-| `src/pages/auth/ResetPasswordPage.tsx` | Handle `?token=xxx` flow, call edge functions |
-| `src/pages/auth/SignupPage.tsx` | Call verification email edge function after signup |
-| `supabase/migrations/xxx.sql` | Create token tables |
 
 ---
 
 ## Security Considerations
 
-1. **Token Security**: Use `crypto.randomUUID()` for secure tokens
-2. **Single-Use Tokens**: Mark as used immediately after successful operation
-3. **Short Expiry**: Reset tokens expire in 1 hour, verification in 24 hours
-4. **Rate Limiting**: Edge functions should check for recent token requests
-5. **Email Enumeration**: Don't reveal if email exists in error responses
-6. **Service Role Usage**: Only `complete-password-reset` uses Admin API
+1. **No Google OAuth** - PRD constraint enforced
+2. **OTP verification** required for:
+   - Login
+   - Phone/email changes
+   - Purse usage
+3. **Inactivity timers** - 25 min warning, 30 min logout
+4. **RLS policies** - customers only see their own data
+5. **Audit logging** - all payment/refund actions logged
+6. **No card data storage** - tokens only via providers
 
 ---
 
-## Configuration Required
+## Files to Create
 
-The following secrets are already configured:
-- `RESEND_API_KEY` 
-- `RESEND_FROM_EMAIL`
-- `SUPABASE_SERVICE_ROLE_KEY` (needed for Admin API calls)
+| File | Purpose |
+|------|---------|
+| `src/hooks/client/useClientAuth.tsx` | Customer auth context |
+| `src/hooks/client/useClientBookings.tsx` | Customer appointments hook |
+| `src/hooks/client/useClientPurse.tsx` | Customer purse hook |
+| `src/hooks/client/useClientNotifications.tsx` | Customer notifications |
+| `src/hooks/client/useClientProfile.tsx` | Profile management |
+| `src/components/client/ClientSidebar.tsx` | Layout with navigation |
+| `src/components/client/ClientInactivityGuard.tsx` | 25/30 min timers |
+| `src/components/client/ClientProtectedRoute.tsx` | Auth guard |
+| `src/components/client/BookingCard.tsx` | Booking summary |
+| `src/components/client/BookingActions.tsx` | Action buttons |
+| `src/components/client/PurseCard.tsx` | Balance display |
+| `src/components/client/PurseAuthGate.tsx` | Auth gate for purse |
+| `src/components/client/OutstandingFeesAlert.tsx` | Fees banner |
+| `src/pages/client/ClientLoginPage.tsx` | OTP-first login |
+| `src/pages/client/ClientDashboard.tsx` | Dashboard |
+| `src/pages/client/ClientBookingsPage.tsx` | Bookings list |
+| `src/pages/client/ClientBookingDetailPage.tsx` | Booking detail |
+| `src/pages/client/ClientHistoryPage.tsx` | Transaction history |
+| `src/pages/client/ClientRefundsPage.tsx` | Refunds & credits |
+| `src/pages/client/ClientNotificationsPage.tsx` | Notifications |
+| `src/pages/client/ClientProfilePage.tsx` | Profile & security |
+| `src/pages/client/ClientHelpPage.tsx` | Help page |
+| `supabase/functions/check-customer-auth-method/index.ts` | Password detection |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/App.tsx` | Add `/client/*` routes |
+| `supabase/migrations/xxx.sql` | Add customer-self-access RLS policies |
+
+---
+
+## Technical Notes
+
+### OTP-First Login Flow
+
+```text
+1. User enters email or phone
+2. System detects type (email pattern vs phone pattern)
+3. Send OTP via appropriate channel
+4. User enters 6-digit code
+5. Verify OTP
+6. Check if user has password set:
+   a. If no password → Login complete
+   b. If password exists → Prompt for password → Verify → Login complete
+```
+
+### Customer-to-User Linking
+
+The `customers.user_id` column links salon customers to Supabase auth users. A single auth user can be a customer at multiple salons (multiple `customers` records with same `user_id`).
+
+### Purse Per Salon
+
+Each `customer_purses` record is per-tenant (salon). A customer viewing their purse sees all balances across salons where they have accounts.
 
 ---
 
 ## Summary
 
-This implementation:
-1. Replaces Supabase default auth emails with Salon Magik branded templates
-2. Adds custom token-based password reset flow
-3. Expands template system from 8 to 23+ types per PRD catalogue
-4. Adds in-app notification template definitions
-5. Implements template variable validation
-6. Maintains security with short-lived, single-use tokens
-
+This implementation creates a complete self-service Client Portal with:
+- OTP-first authentication (no Google OAuth per PRD)
+- Full booking management with state-appropriate actions
+- Purse/store credit management with auth gate
+- Refund request and approval handling
+- Real-time notifications
+- Profile and security management
+- 25/30 minute inactivity protection
+- Mobile-responsive design matching the Salon platform patterns
