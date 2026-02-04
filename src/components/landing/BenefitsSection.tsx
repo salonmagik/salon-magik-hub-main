@@ -3,7 +3,7 @@ import { CheckCircle } from "lucide-react";
 const benefits = [
   "14-day free trial, no card required",
   "Works on any device — phone, tablet, or desktop",
-  "African payment methods included",
+  "Multiple payment methods supported",
   "WhatsApp notifications coming soon",
   "Offline-first design for unreliable networks",
   "Multi-location support from day one",
@@ -16,11 +16,11 @@ export function BenefitsSection() {
         <div className="grid md:grid-cols-2 gap-12 items-center">
           <div>
             <h2 className="text-3xl md:text-4xl font-semibold mb-4">
-              Why salon owners choose us
+              Why you should sign up
             </h2>
             <p className="opacity-90 max-w-md">
-              We built Salon Magik specifically for African beauty businesses. 
-              Every feature is designed with your reality in mind.
+              Simple, powerful tools designed for modern salons, spas, and barbershops. 
+              Everything you need to run your business.
             </p>
           </div>
 

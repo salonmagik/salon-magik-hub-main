@@ -2,10 +2,8 @@ import { useWaitlistMode } from "@/hooks/useFeatureFlags";
 import {
   LandingNav,
   LandingHero,
-  StatsBar,
   BusinessTypes,
   FeaturesSection,
-  TestimonialsSection,
   BenefitsSection,
   CTASection,
   LandingFooter,
@@ -18,10 +16,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background">
       <LandingNav isWaitlistMode={isWaitlistMode} isLoading={isLoading} />
       <LandingHero isWaitlistMode={isWaitlistMode} isLoading={isLoading} />
-      <StatsBar />
       <BusinessTypes isWaitlistMode={isWaitlistMode} />
       <FeaturesSection />
-      <TestimonialsSection />
       <BenefitsSection />
       <CTASection isWaitlistMode={isWaitlistMode} />
       <LandingFooter />
