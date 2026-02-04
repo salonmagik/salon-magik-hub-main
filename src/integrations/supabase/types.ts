@@ -1893,6 +1893,80 @@ export type Database = {
           },
         ]
       }
+      waitlist_leads: {
+        Row: {
+          approved_at: string | null
+          approved_by_id: string | null
+          converted_at: string | null
+          converted_tenant_id: string | null
+          country: string
+          created_at: string
+          email: string
+          id: string
+          invitation_expires_at: string | null
+          invitation_token: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          plan_interest: string | null
+          position: number | null
+          rejected_reason: string | null
+          status: Database["public"]["Enums"]["waitlist_status"]
+          team_size: string | null
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by_id?: string | null
+          converted_at?: string | null
+          converted_tenant_id?: string | null
+          country: string
+          created_at?: string
+          email: string
+          id?: string
+          invitation_expires_at?: string | null
+          invitation_token?: string | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          plan_interest?: string | null
+          position?: number | null
+          rejected_reason?: string | null
+          status?: Database["public"]["Enums"]["waitlist_status"]
+          team_size?: string | null
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by_id?: string | null
+          converted_at?: string | null
+          converted_tenant_id?: string | null
+          country?: string
+          created_at?: string
+          email?: string
+          id?: string
+          invitation_expires_at?: string | null
+          invitation_token?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          plan_interest?: string | null
+          position?: number | null
+          rejected_reason?: string | null
+          status?: Database["public"]["Enums"]["waitlist_status"]
+          team_size?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waitlist_leads_converted_tenant_id_fkey"
+            columns: ["converted_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1965,6 +2039,7 @@ export type Database = {
         | "past_due"
         | "canceled"
         | "paused"
+      waitlist_status: "pending" | "invited" | "converted" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2132,6 +2207,7 @@ export const Constants = {
         "canceled",
         "paused",
       ],
+      waitlist_status: ["pending", "invited", "converted", "rejected"],
     },
   },
 } as const
