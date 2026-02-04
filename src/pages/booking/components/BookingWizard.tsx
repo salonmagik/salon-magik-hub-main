@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Calendar, Clock, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight } from "lucide-react";
 import {
@@ -44,11 +44,16 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const [bookingReference, setBookingReference] = useState<string | null>(null);
 
   // Schedule state
-  const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(
-    locations[0]
-  );
+  const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
+
+  // Sync location when locations load
+  useEffect(() => {
+    if (locations.length > 0 && !selectedLocation) {
+      setSelectedLocation(locations[0]);
+    }
+  }, [locations, selectedLocation]);
 
   // Customer state
   const [customerInfo, setCustomerInfo] = useState({
@@ -209,11 +214,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   <div
                     className={`h-8 w-8 rounded-full flex items-center justify-center border-2 shrink-0 ${
                       step === s.key
-                        ? "border-primary bg-primary text-primary-foreground"
+                        ? "text-white border-transparent"
                         : steps.findIndex((x) => x.key === step) > i
                         ? "border-muted-foreground bg-muted"
                         : "border-muted"
                     }`}
+                    style={step === s.key ? { backgroundColor: 'var(--brand-color)' } : undefined}
                   >
                     {s.icon}
                   </div>
@@ -574,11 +580,20 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               </Button>
 
               {step === "review" ? (
-                <Button onClick={handleSubmit} disabled={isSubmitting}>
+                <Button 
+                  onClick={handleSubmit} 
+                  disabled={isSubmitting}
+                  className="text-white border-0"
+                  style={{ backgroundColor: 'var(--brand-color)' }}
+                >
                   {isSubmitting ? "Submitting..." : "Confirm Booking"}
                 </Button>
               ) : (
-                <Button onClick={handleNext}>
+                <Button 
+                  onClick={handleNext}
+                  className="text-white border-0"
+                  style={{ backgroundColor: 'var(--brand-color)' }}
+                >
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
@@ -591,7 +606,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           <>
             <Separator />
             <div className="p-6">
-              <Button className="w-full" onClick={handleClose}>
+              <Button 
+                className="w-full text-white border-0" 
+                onClick={handleClose}
+                style={{ backgroundColor: 'var(--brand-color)' }}
+              >
                 Done
               </Button>
             </div>
