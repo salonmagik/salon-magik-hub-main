@@ -19,84 +19,145 @@ interface NotificationRequest {
   newTime?: string;
 }
 
+// Salon Magik Design System
+const STYLES = {
+  primaryColor: "#2563EB",
+  textColor: "#1f2937",
+  textMuted: "#4b5563",
+  textLight: "#6b7280",
+  textLighter: "#9ca3af",
+  surfaceColor: "#f5f7fa",
+  borderColor: "#e5e7eb",
+  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+};
+
+// Build email wrapper with salon branding
+function buildEmailWrapper(
+  content: string,
+  salonName: string,
+  salonLogoUrl?: string
+): string {
+  // Header with salon branding
+  let headerSection = `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <h1 style="color: ${STYLES.primaryColor}; margin: 0 0 8px 0; font-size: 28px; font-family: ${STYLES.fontFamily};">${salonName}</h1>
+      <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
+    </div>
+  `;
+
+  if (salonLogoUrl) {
+    headerSection = `
+      <div style="text-align: center; margin-bottom: 32px;">
+        <img src="${salonLogoUrl}" alt="${salonName} Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;" />
+        <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
+      </div>
+    `;
+  }
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: ${STYLES.surfaceColor}; font-family: ${STYLES.fontFamily};">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          ${headerSection}
+          
+          <div style="font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};">
+            ${content}
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
+          
+          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily};">
+            © 2026 Salon Magik. All rights reserved.
+          </p>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 // Default email templates
 const defaultTemplates: Record<AppointmentAction, { subject: string; body: string }> = {
   scheduled: {
     subject: "Appointment Confirmed at {{salon_name}}",
     body: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #E11D48;">Appointment Confirmed!</h1>
-        <p>Hi {{customer_name}},</p>
-        <p>Your appointment at <strong>{{salon_name}}</strong> has been confirmed.</p>
-        
-        <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">
-          <p style="margin: 0;"><strong>Date:</strong> {{appointment_date}}</p>
-          <p style="margin: 8px 0 0;"><strong>Time:</strong> {{appointment_time}}</p>
-          <p style="margin: 8px 0 0;"><strong>Services:</strong> {{services}}</p>
-          <p style="margin: 8px 0 0;"><strong>Total:</strong> {{total_amount}}</p>
-          <p style="margin: 8px 0 0;"><strong>Location:</strong> {{location}}</p>
-        </div>
-        
-        <p style="color: #666;">We look forward to seeing you!</p>
-        <p style="color: #999; font-size: 12px;">If you need to reschedule or cancel, please contact us.</p>
+      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Confirmed!</h2>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been confirmed.</p>
+      
+      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
+        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Date:</strong> {{appointment_date}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Time:</strong> {{appointment_time}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Total:</strong> {{total_amount}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Location:</strong> {{location}}</p>
       </div>
+      
+      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We look forward to seeing you!</p>
+      <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you need to reschedule or cancel, please contact us.</p>
     `,
   },
   completed: {
     subject: "Thank you for visiting {{salon_name}}!",
     body: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #E11D48;">Thank You for Visiting!</h1>
-        <p>Hi {{customer_name}},</p>
-        <p>Your appointment at <strong>{{salon_name}}</strong> has been completed.</p>
-        
-        <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">
-          <p style="margin: 0;"><strong>Services:</strong> {{services}}</p>
-          <p style="margin: 8px 0 0;"><strong>Total:</strong> {{total_amount}}</p>
-        </div>
-        
-        <p style="color: #666;">We hope you enjoyed your visit and look forward to seeing you again soon!</p>
+      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Thank You for Visiting!</h2>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been completed.</p>
+      
+      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
+        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Total:</strong> {{total_amount}}</p>
       </div>
+      
+      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We hope you enjoyed your visit and look forward to seeing you again soon!</p>
     `,
   },
   cancelled: {
     subject: "Appointment Cancelled at {{salon_name}}",
     body: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #E11D48;">Appointment Cancelled</h1>
-        <p>Hi {{customer_name}},</p>
-        <p>Your appointment at <strong>{{salon_name}}</strong> has been cancelled.</p>
-        
-        <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">
-          <p style="margin: 0;"><strong>Original Date:</strong> {{appointment_date}}</p>
-          <p style="margin: 8px 0 0;"><strong>Services:</strong> {{services}}</p>
-          {{#if reason}}
-          <p style="margin: 8px 0 0;"><strong>Reason:</strong> {{reason}}</p>
-          {{/if}}
-        </div>
-        
-        <p style="color: #666;">We hope to serve you again in the future.</p>
-        <p style="color: #999; font-size: 12px;">If you have any questions, please contact us.</p>
+      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Cancelled</h2>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been cancelled.</p>
+      
+      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
+        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Original Date:</strong> {{appointment_date}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
+        {{#if reason}}
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Reason:</strong> {{reason}}</p>
+        {{/if}}
       </div>
+      
+      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We hope to serve you again in the future.</p>
+      <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you have any questions, please contact us.</p>
     `,
   },
   rescheduled: {
     subject: "Appointment Rescheduled at {{salon_name}}",
     body: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #E11D48;">Appointment Rescheduled</h1>
-        <p>Hi {{customer_name}},</p>
-        <p>Your appointment at <strong>{{salon_name}}</strong> has been rescheduled.</p>
-        
-        <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 20px 0;">
-          <p style="margin: 0;"><strong>New Date:</strong> {{new_date}}</p>
-          <p style="margin: 8px 0 0;"><strong>New Time:</strong> {{new_time}}</p>
-          <p style="margin: 8px 0 0;"><strong>Services:</strong> {{services}}</p>
-          <p style="margin: 8px 0 0;"><strong>Total:</strong> {{total_amount}}</p>
-        </div>
-        
-        <p style="color: #666;">See you at the new time!</p>
+      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Rescheduled</h2>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been rescheduled.</p>
+      
+      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
+        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>New Date:</strong> {{new_date}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>New Time:</strong> {{new_time}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Total:</strong> {{total_amount}}</p>
       </div>
+      
+      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">See you at the new time!</p>
     `,
   },
 };
@@ -118,6 +179,7 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { appointmentId, action, reason, newDate, newTime }: NotificationRequest = await req.json();
@@ -158,10 +220,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Fetch tenant info
+    // Fetch tenant info including logo
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("name, currency")
+      .select("name, currency, logo_url")
       .eq("id", appointment.tenant_id)
       .single();
 
@@ -231,24 +293,20 @@ const handler = async (req: Request): Promise<Response> => {
     emailBody = emailBody.replace(/\{\{#if reason\}\}([\s\S]*?)\{\{\/if\}\}/g, 
       reason ? "$1" : "");
 
-    // Send email via Resend API directly
-    const fromEmailEnv = Deno.env.get("RESEND_FROM_EMAIL");
-    
-    // Validate and use the from email - must be a valid email address
-    let fromEmail = "onboarding@resend.dev";
-    if (fromEmailEnv && fromEmailEnv.includes("@") && fromEmailEnv.includes(".")) {
-      fromEmail = fromEmailEnv.trim();
-    }
-    
+    // Wrap content with salon branding
+    const fullEmailHtml = buildEmailWrapper(
+      emailBody,
+      tenant?.name || "Salon Magik",
+      tenant?.logo_url || undefined
+    );
+
     // Sanitize tenant name - remove characters that could break email format
-    const sanitizedTenantName = (tenant?.name || "SalonMagik")
+    const sanitizedTenantName = (tenant?.name || "Salon Magik")
       .replace(/[<>"\n\r]/g, "")
       .trim();
     
     // Build the from address in proper format
-    const fromAddress = sanitizedTenantName 
-      ? `${sanitizedTenantName} <${fromEmail}>`
-      : fromEmail;
+    const fromAddress = `${sanitizedTenantName} <${fromEmail}>`;
     
     console.log("Sending email with from address:", fromAddress);
     
@@ -262,7 +320,7 @@ const handler = async (req: Request): Promise<Response> => {
         from: fromAddress,
         to: [customerEmail],
         subject: emailSubject,
-        html: emailBody,
+        html: fullEmailHtml,
       }),
     });
 

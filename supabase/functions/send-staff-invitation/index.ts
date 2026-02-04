@@ -16,6 +16,103 @@ interface InvitationRequest {
   role: string;
 }
 
+// Salon Magik Design System
+const STYLES = {
+  primaryColor: "#2563EB",
+  textColor: "#1f2937",
+  textMuted: "#4b5563",
+  textLight: "#6b7280",
+  textLighter: "#9ca3af",
+  surfaceColor: "#f5f7fa",
+  borderColor: "#e5e7eb",
+  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+};
+
+function buildInvitationEmail(
+  firstName: string,
+  salonName: string,
+  role: string,
+  invitationLink: string,
+  salonLogoUrl?: string
+): string {
+  // Header with salon branding if available
+  let headerSection = `
+    <div style="text-align: center; margin-bottom: 32px;">
+      <h1 style="color: ${STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 32px; font-family: ${STYLES.fontFamily};">Salon Magik</h1>
+    </div>
+  `;
+
+  if (salonLogoUrl) {
+    headerSection = `
+      <div style="text-align: center; margin-bottom: 32px;">
+        <img src="${salonLogoUrl}" alt="${salonName} Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;" />
+        <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
+      </div>
+    `;
+  } else {
+    headerSection = `
+      <div style="text-align: center; margin-bottom: 32px;">
+        <h1 style="color: ${STYLES.primaryColor}; margin: 0 0 8px 0; font-size: 28px; font-family: ${STYLES.fontFamily};">${salonName}</h1>
+        <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
+      </div>
+    `;
+  }
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: ${STYLES.surfaceColor}; font-family: ${STYLES.fontFamily};">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+          ${headerSection}
+          
+          <h2 style="color: ${STYLES.textColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Join Our Team</h2>
+          
+          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi ${firstName},</p>
+          
+          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
+            You've been invited to join <strong>${salonName}</strong> as a <strong>${role}</strong>.
+          </p>
+          
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${invitationLink}" 
+               style="background-color: ${STYLES.primaryColor}; color: white; padding: 14px 28px; 
+                      text-decoration: none; border-radius: 8px; display: inline-block;
+                      font-weight: 500; font-size: 16px; font-family: ${STYLES.fontFamily};">
+              Accept Invitation
+            </a>
+          </div>
+          
+          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
+            This invitation expires in 7 days.
+          </p>
+          
+          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
+            If you didn't expect this invitation, you can safely ignore this email.
+          </p>
+          
+          <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
+          
+          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily};">
+            © 2026 Salon Magik. All rights reserved.
+          </p>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -34,6 +131,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
+    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -75,10 +173,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Get tenant details
+    // Get tenant details including logo
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("name")
+      .select("name, logo_url")
       .eq("id", tenantId)
       .single();
 
@@ -141,21 +239,13 @@ const handler = async (req: Request): Promise<Response> => {
       .single();
 
     let subject = `You're invited to join ${tenant.name}`;
-    let htmlBody = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #333;">Join Our Team</h1>
-        <p>Hi ${firstName},</p>
-        <p>You've been invited to join <strong>${tenant.name}</strong> as a <strong>${role}</strong>.</p>
-        <p style="margin: 24px 0;">
-          <a href="${invitationLink}" 
-             style="background-color: #E11D48; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-            Accept Invitation
-          </a>
-        </p>
-        <p style="color: #666; font-size: 14px;">This invitation expires in 7 days.</p>
-        <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, you can safely ignore this email.</p>
-      </div>
-    `;
+    let htmlBody = buildInvitationEmail(
+      firstName,
+      tenant.name,
+      role,
+      invitationLink,
+      tenant.logo_url || undefined
+    );
 
     // Apply custom template if exists
     if (emailTemplate) {
@@ -171,6 +261,9 @@ const handler = async (req: Request): Promise<Response> => {
         .replace(/{{invitation_link}}/g, invitationLink);
     }
 
+    // Sanitize sender name
+    const sanitizedSalonName = tenant.name.replace(/[<>"\\n\\r]/g, "").trim();
+
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -179,7 +272,7 @@ const handler = async (req: Request): Promise<Response> => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: "Salon Magik <noreply@salonmagik.app>",
+        from: `${sanitizedSalonName} <${fromEmail}>`,
         to: [email],
         subject: subject,
         html: htmlBody,
