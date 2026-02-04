@@ -2157,6 +2157,13 @@ export type Database = {
         Returns: boolean
       }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
+      has_backoffice_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["backoffice_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2165,6 +2172,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_backoffice_user: { Args: { _user_id: string }; Returns: boolean }
       is_tenant_owner: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean

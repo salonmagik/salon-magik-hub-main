@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.send-email-verification]
 verify_jwt = false
+
+[functions.submit-waitlist]
+verify_jwt = false
+
+[functions.create-public-booking]
+verify_jwt = false

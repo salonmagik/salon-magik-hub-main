@@ -254,3 +254,9 @@ export function parseE164(phone: string): { dialCode: string; nationalNumber: st
 
 // Default country (Ghana - primary launch market)
 export const DEFAULT_COUNTRY = PRIORITY_COUNTRIES[0];
+
+// Combined list with priority countries at the top, avoiding duplicates
+export const COUNTRIES = [
+  ...PRIORITY_COUNTRIES,
+  ...ALL_COUNTRIES.filter((c) => !PRIORITY_COUNTRIES.some((p) => p.code === c.code)),
+];
