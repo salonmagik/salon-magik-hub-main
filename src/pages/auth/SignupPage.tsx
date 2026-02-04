@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -9,13 +9,13 @@ import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@/components/ui/checkbox";
-import { isValidPassword } from "@/lib/form-utils";
+import { validateSignup, type SignupField, type SignupFormData } from "@/pages/auth/signup/validation";
 
 export default function SignupPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<SignupFormData>({
     firstName: "",
     lastName: "",
     email: "",
@@ -24,78 +24,40 @@ export default function SignupPage() {
     confirmPassword: "",
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Compute form validity for button state
-  const isFormValid = useMemo(() => {
-    const passwordValidation = isValidPassword(formData.password);
-    return (
-      formData.firstName.trim() !== "" &&
-      formData.lastName.trim() !== "" &&
-      formData.email.trim() !== "" &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) &&
-      formData.phone.trim() !== "" &&
-      formData.password.length >= 8 &&
-      passwordValidation.valid &&
-      formData.password === formData.confirmPassword &&
-      acceptTerms
-    );
-  }, [formData, acceptTerms]);
+  const [touched, setTouched] = useState<Record<SignupField, boolean>>({
+    firstName: false,
+    lastName: false,
+    email: false,
+    phone: false,
+    password: false,
+    confirmPassword: false,
+    terms: false,
+  });
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
+  const validation = useMemo(() => validateSignup(formData, acceptTerms), [formData, acceptTerms]);
+  const isFormValid = validation.isValid;
+  const hasInteracted = Object.values(touched).some(Boolean);
 
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = "First name is required";
-    }
-
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = "Last name is required";
-    }
-
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email";
-    }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = "Phone number is required";
-    }
-
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    } else {
-      const passwordValidation = isValidPassword(formData.password);
-      if (!passwordValidation.valid) {
-        newErrors.password = passwordValidation.error || "Invalid password";
-      }
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
-    if (!acceptTerms) {
-      newErrors.terms = "You must accept the terms and conditions";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const markTouched = (field: SignupField) => {
+    setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
   };
+
+  const shouldShowError = (field: SignupField) => touched[field];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    markTouched(name as SignupField);
     setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
+    // Button is disabled until valid, but keep this as a safety net.
+    if (!validation.isValid) {
+      return;
+    }
 
     setIsLoading(true);
 
@@ -214,7 +176,8 @@ export default function SignupPage() {
             icon={<User size={18} />}
             value={formData.firstName}
             onChange={handleChange}
-            error={errors.firstName}
+            onBlur={() => markTouched("firstName")}
+            error={shouldShowError("firstName") ? validation.errors.firstName : undefined}
             disabled={isLoading}
           />
 
@@ -226,7 +189,8 @@ export default function SignupPage() {
             icon={<User size={18} />}
             value={formData.lastName}
             onChange={handleChange}
-            error={errors.lastName}
+            onBlur={() => markTouched("lastName")}
+            error={shouldShowError("lastName") ? validation.errors.lastName : undefined}
             disabled={isLoading}
           />
         </div>
@@ -239,7 +203,8 @@ export default function SignupPage() {
           icon={<Mail size={18} />}
           value={formData.email}
           onChange={handleChange}
-          error={errors.email}
+          onBlur={() => markTouched("email")}
+          error={shouldShowError("email") ? validation.errors.email : undefined}
           disabled={isLoading}
         />
 
@@ -247,12 +212,10 @@ export default function SignupPage() {
           label="Phone number"
           value={formData.phone}
           onChange={(value) => {
+            markTouched("phone");
             setFormData((prev) => ({ ...prev, phone: value }));
-            if (errors.phone) {
-              setErrors((prev) => ({ ...prev, phone: "" }));
-            }
           }}
-          error={errors.phone}
+          error={shouldShowError("phone") ? validation.errors.phone : undefined}
           disabled={isLoading}
           defaultCountry="GH"
         />
@@ -265,7 +228,8 @@ export default function SignupPage() {
           icon={<Lock size={18} />}
           value={formData.password}
           onChange={handleChange}
-          error={errors.password}
+          onBlur={() => markTouched("password")}
+          error={shouldShowError("password") ? validation.errors.password : undefined}
           disabled={isLoading}
         />
 
@@ -277,7 +241,10 @@ export default function SignupPage() {
           icon={<Lock size={18} />}
           value={formData.confirmPassword}
           onChange={handleChange}
-          error={errors.confirmPassword}
+          onBlur={() => markTouched("confirmPassword")}
+          error={
+            shouldShowError("confirmPassword") ? validation.errors.confirmPassword : undefined
+          }
           disabled={isLoading}
         />
 
@@ -286,7 +253,10 @@ export default function SignupPage() {
             <Checkbox
               id="terms"
               checked={acceptTerms}
-              onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+              onCheckedChange={(checked) => {
+                markTouched("terms");
+                setAcceptTerms(checked as boolean);
+              }}
               className="mt-0.5"
             />
             <label
@@ -303,8 +273,8 @@ export default function SignupPage() {
               </Link>
             </label>
           </div>
-          {errors.terms && (
-            <p className="text-sm text-destructive">{errors.terms}</p>
+          {shouldShowError("terms") && validation.errors.terms && (
+            <p className="text-sm text-destructive">{validation.errors.terms}</p>
           )}
         </div>
 
@@ -315,6 +285,10 @@ export default function SignupPage() {
         >
           Create account
         </AuthButton>
+
+        {!isFormValid && hasInteracted && validation.blockingReason && (
+          <p className="text-sm text-destructive">{validation.blockingReason}</p>
+        )}
       </form>
 
       {/* Login Link */}
