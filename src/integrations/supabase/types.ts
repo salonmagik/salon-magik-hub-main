@@ -1059,6 +1059,168 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_features: {
+        Row: {
+          created_at: string
+          feature_text: string
+          id: string
+          plan_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          feature_text: string
+          id?: string
+          plan_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          feature_text?: string
+          id?: string
+          plan_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_features_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_limits: {
+        Row: {
+          created_at: string
+          features_enabled: Json
+          id: string
+          max_locations: number
+          max_products: number | null
+          max_services: number | null
+          max_staff: number
+          monthly_messages: number
+          plan_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          features_enabled?: Json
+          id?: string
+          max_locations?: number
+          max_products?: number | null
+          max_services?: number | null
+          max_staff?: number
+          monthly_messages?: number
+          plan_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          features_enabled?: Json
+          id?: string
+          max_locations?: number
+          max_products?: number | null
+          max_services?: number | null
+          max_staff?: number
+          monthly_messages?: number
+          plan_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_limits_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: true
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_pricing: {
+        Row: {
+          annual_price: number
+          created_at: string
+          currency: string
+          effective_monthly: number
+          id: string
+          monthly_price: number
+          plan_id: string
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          annual_price?: number
+          created_at?: string
+          currency: string
+          effective_monthly: number
+          id?: string
+          monthly_price: number
+          plan_id: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Update: {
+          annual_price?: number
+          created_at?: string
+          currency?: string
+          effective_monthly?: number
+          id?: string
+          monthly_price?: number
+          plan_id?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_pricing_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plans: {
+        Row: {
+          created_at: string
+          description: string | null
+          display_order: number
+          id: string
+          is_active: boolean
+          is_recommended: boolean
+          name: string
+          slug: string
+          trial_days: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          is_recommended?: boolean
+          name: string
+          slug: string
+          trial_days?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          is_recommended?: boolean
+          name?: string
+          slug?: string
+          trial_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       products: {
         Row: {
           created_at: string
