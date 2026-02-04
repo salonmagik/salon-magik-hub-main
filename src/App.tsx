@@ -3,8 +3,15 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
+
+// Marketing pages
+import LandingPage from "./pages/marketing/LandingPage";
+import PricingPage from "./pages/marketing/PricingPage";
+import SupportPage from "./pages/marketing/SupportPage";
+import TermsPage from "./pages/marketing/TermsPage";
+import PrivacyPage from "./pages/marketing/PrivacyPage";
 
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
@@ -12,6 +19,7 @@ import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import AcceptInvitePage from "./pages/auth/AcceptInvitePage";
+import InvitationExpiredPage from "./pages/auth/InvitationExpiredPage";
 
 // Onboarding
 import OnboardingPage from "./pages/onboarding/OnboardingPage";
@@ -50,6 +58,16 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Smart root route component - redirects based on auth state
+function RootRoute() {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) return null;
+  
+  // Authenticated users go to salon, unauthenticated see landing page
+  return isAuthenticated ? <Navigate to="/salon" replace /> : <LandingPage />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -58,8 +76,24 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Redirect root to login */}
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Landing Page - smart redirect based on auth */}
+            <Route path="/" element={<RootRoute />} />
+
+            {/* Marketing Pages */}
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+
+            {/* Public Auth Routes - redirect if already logged in */}
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <LoginPage />
+                </PublicOnlyRoute>
+              }
+            />
 
             {/* Public Auth Routes - redirect if already logged in */}
             <Route
@@ -81,6 +115,7 @@ const App = () => (
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
+            <Route path="/invitation-expired" element={<InvitationExpiredPage />} />
 
             {/* Onboarding - requires auth but NOT onboarding completion */}
             <Route

@@ -100,3 +100,33 @@ export function usePlanBySlug(slug: string) {
     data: plans?.find((p) => p.slug === slug),
   };
 }
+
+// Separate hooks for features and limits (for PricingPage compatibility)
+export function usePlanFeatures() {
+  return useQuery({
+    queryKey: ["plan-features"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plan_features")
+        .select("*")
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function usePlanLimits() {
+  return useQuery({
+    queryKey: ["plan-limits"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("plan_limits").select("*");
+
+      if (error) throw error;
+      return data;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
