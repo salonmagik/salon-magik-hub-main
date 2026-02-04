@@ -24,11 +24,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, CheckCircle, Sparkles } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 const waitlistSchema = z.object({
   name: z.string().min(2, "Name is required"),
   email: z.string().email("Valid email is required"),
-  phone: z.string().optional(),
+  phone: z.string().min(8, "Phone number is required"),
   country: z.string().min(1, "Country is required"),
   plan_interest: z.string().optional(),
   team_size: z.string().optional(),
@@ -146,10 +147,10 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
           <Sparkles className="w-5 h-5 text-primary" />
-          <h3 className="text-lg font-medium">Join the waitlist</h3>
+          <h3 className="text-lg font-medium">Exclusive access</h3>
         </div>
         <p className="text-sm text-muted-foreground">
-          Be among the first to try Salon Magik. We'll notify you when it's your turn.
+          Request early access and be the first to experience Salon Magik. We'll notify you when access is ready.
         </p>
       </div>
 
@@ -188,9 +189,15 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Phone (optional)</FormLabel>
+                <FormLabel>Phone *</FormLabel>
                 <FormControl>
-                  <Input type="tel" placeholder="+1 234 567 8900" {...field} />
+                  <PhoneInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    defaultCountry="GH"
+                    placeholder="Phone number"
+                    hasError={!!form.formState.errors.phone}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
