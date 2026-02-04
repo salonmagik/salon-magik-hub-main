@@ -44,6 +44,7 @@ import { ClientProtectedRoute, ClientPublicOnlyRoute } from "@/components/client
 import ClientLoginPage from "./pages/client/ClientLoginPage";
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientBookingsPage from "./pages/client/ClientBookingsPage";
+import ClientBookingDetailPage from "./pages/client/ClientBookingDetailPage";
 import ClientHistoryPage from "./pages/client/ClientHistoryPage";
 import ClientRefundsPage from "./pages/client/ClientRefundsPage";
 import ClientNotificationsPage from "./pages/client/ClientNotificationsPage";
@@ -255,6 +256,16 @@ const App = () => (
                 <ClientAuthProvider>
                   <ClientProtectedRoute>
                     <ClientBookingsPage />
+                  </ClientProtectedRoute>
+                </ClientAuthProvider>
+              }
+            />
+            <Route
+              path="/client/bookings/:id"
+              element={
+                <ClientAuthProvider>
+                  <ClientProtectedRoute>
+                    <ClientBookingDetailPage />
                   </ClientProtectedRoute>
                 </ClientAuthProvider>
               }

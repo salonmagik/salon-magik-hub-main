@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ClientSidebar } from "@/components/client/ClientSidebar";
 import { useClientBookings } from "@/hooks/client/useClientBookings";
 import type { ClientAppointmentWithDetails } from "@/hooks/client/useClientBookings";
@@ -6,13 +7,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Calendar, Clock, MapPin, Store, XCircle } from "lucide-react";
+import { Calendar, Clock, MapPin, Store, XCircle, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/currency";
 
 type BookingFilter = "upcoming" | "completed" | "cancelled";
 
 function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
+  const navigate = useNavigate();
+  
   const statusColors: Record<string, string> = {
     scheduled: "bg-blue-100 text-blue-800",
     started: "bg-yellow-100 text-yellow-800",
@@ -41,7 +44,10 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
   };
 
   return (
-    <Card className="mb-4">
+    <Card 
+      className="mb-4 cursor-pointer hover:border-primary/50 transition-colors"
+      onClick={() => navigate(`/client/bookings/${booking.id}`)}
+    >
       <CardContent className="pt-4">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           {/* Left side - Main info */}
@@ -101,16 +107,19 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
             )}
           </div>
 
-          {/* Right side - Amount */}
-          <div className="text-right">
-            <p className="text-lg font-semibold">
-              {formatCurrency(booking.total_amount, booking.tenant?.currency || "USD")}
-            </p>
-            {booking.amount_paid > 0 && booking.amount_paid < booking.total_amount && (
-              <p className="text-xs text-muted-foreground">
-                Paid: {formatCurrency(booking.amount_paid, booking.tenant?.currency || "USD")}
+          {/* Right side - Amount & Arrow */}
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <p className="text-lg font-semibold">
+                {formatCurrency(booking.total_amount, booking.tenant?.currency || "USD")}
               </p>
-            )}
+              {booking.amount_paid > 0 && booking.amount_paid < booking.total_amount && (
+                <p className="text-xs text-muted-foreground">
+                  Paid: {formatCurrency(booking.amount_paid, booking.tenant?.currency || "USD")}
+                </p>
+              )}
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
           </div>
         </div>
       </CardContent>
