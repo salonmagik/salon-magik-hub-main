@@ -1,48 +1,71 @@
 import { useState } from "react";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
-import { 
-  PRICING, 
-  PLAN_FEATURES, 
-  PLAN_DESCRIPTIONS, 
-  TRIAL_DAYS,
-  type Currency,
-  type PlanId 
-} from "@/lib/pricing";
+import { usePlans } from "@/hooks/usePlans";
+import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
 
 export type SubscriptionPlan = "solo" | "studio" | "chain";
 
 interface PlanStepProps {
   selectedPlan: SubscriptionPlan | null;
   onPlanSelect: (plan: SubscriptionPlan) => void;
-  currency: Currency;
+  currency: string;
 }
 
 export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps) {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
+  
+  const { data: plans, isLoading: plansLoading } = usePlans();
+  const { data: pricing, isLoading: pricingLoading } = usePlanPricing(currency);
 
-  const plans: PlanId[] = ["solo", "studio", "chain"];
+  const isLoading = plansLoading || pricingLoading;
 
-  const getPrice = (planId: PlanId) => {
-    const tier = PRICING[planId][currency];
-    if (billingCycle === "annual" && tier.annual > 0) {
+  const getPrice = (planId: string) => {
+    const plan = plans?.find(p => p.slug === planId);
+    const planPricing = pricing?.find(p => p.plan_id === plan?.id);
+    
+    if (!planPricing) {
+      return { price: 0, period: "/mo", note: null, savings: 0 };
+    }
+
+    if (billingCycle === "annual" && planPricing.annual_price > 0) {
+      const savings = Math.round(((planPricing.monthly_price - planPricing.effective_monthly) / planPricing.monthly_price) * 100);
       return {
-        price: tier.effectiveMonthly,
+        price: planPricing.effective_monthly,
         period: "/mo",
         note: "billed annually",
-        savings: Math.round(((tier.monthly - tier.effectiveMonthly) / tier.monthly) * 100),
+        savings,
       };
     }
     return {
-      price: tier.monthly,
+      price: planPricing.monthly_price,
       period: "/month",
       note: null,
       savings: 0,
     };
   };
+
+  if (isLoading) {
+    return (
+      <>
+        <CardHeader>
+          <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
+            <Sparkles className="w-6 h-6 text-primary" />
+          </div>
+          <CardTitle>Choose your plan</CardTitle>
+          <CardDescription>Loading plans...</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </CardContent>
+      </>
+    );
+  }
+
+  const trialDays = plans?.[0]?.trial_days || 14;
 
   return (
     <>
@@ -52,7 +75,7 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
         </div>
         <CardTitle>Choose your plan</CardTitle>
         <CardDescription>
-          Start with a {TRIAL_DAYS}-day free trial. No credit card required.
+          Start with a {trialDays}-day free trial. No credit card required.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -89,18 +112,16 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
 
         {/* Plans */}
         <div className="space-y-3">
-          {plans.map((planId) => {
-            const isSelected = selectedPlan === planId;
-            const priceInfo = getPrice(planId);
-            const features = PLAN_FEATURES[planId];
-            const description = PLAN_DESCRIPTIONS[planId];
-            const isRecommended = planId === "studio";
+          {plans?.map((plan) => {
+            const isSelected = selectedPlan === plan.slug;
+            const priceInfo = getPrice(plan.slug);
+            const isRecommended = plan.is_recommended;
 
             return (
               <button
-                key={planId}
+                key={plan.id}
                 type="button"
-                onClick={() => onPlanSelect(planId)}
+                onClick={() => onPlanSelect(plan.slug as SubscriptionPlan)}
                 className={cn(
                   "w-full p-4 rounded-lg border text-left transition-colors relative",
                   isSelected
@@ -122,9 +143,9 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
                         isSelected && "text-primary"
                       )}
                     >
-                      {planId}
+                      {plan.name}
                     </p>
-                    <p className="text-sm text-muted-foreground">{description}</p>
+                    <p className="text-sm text-muted-foreground">{plan.description}</p>
                   </div>
                   <div className="text-right">
                     <p
@@ -145,10 +166,10 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {features.slice(0, 6).map((feature, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm">
+                  {plan.features.slice(0, 6).map((feature) => (
+                    <div key={feature.id} className="flex items-center gap-2 text-sm">
                       <Check className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <span className="text-muted-foreground">{feature}</span>
+                      <span className="text-muted-foreground">{feature.feature_text}</span>
                     </div>
                   ))}
                 </div>
@@ -167,7 +188,7 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
 
         {/* Trial info */}
         <p className="text-center text-sm text-muted-foreground">
-          All plans include a {TRIAL_DAYS}-day free trial. Card required before trial ends.
+          All plans include a {trialDays}-day free trial. Card required before trial ends.
         </p>
       </CardContent>
     </>

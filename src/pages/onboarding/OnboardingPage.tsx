@@ -15,7 +15,7 @@ import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanSte
 import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
-import { getCurrencyForCountry, type Currency } from "@/lib/pricing";
+import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
@@ -68,7 +68,7 @@ export default function OnboardingPage() {
   const isChain = selectedPlan === "chain";
 
   // Get currency based on selected country
-  const currency: Currency = businessInfo.country 
+  const currency = businessInfo.country 
     ? getCurrencyForCountry(businessInfo.country) 
     : "USD";
 
