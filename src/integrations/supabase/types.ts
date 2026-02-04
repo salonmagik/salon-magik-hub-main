@@ -371,6 +371,60 @@ export type Database = {
           },
         ]
       }
+      backoffice_allowed_domains: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      backoffice_users: {
+        Row: {
+          created_at: string
+          email_domain: string
+          id: string
+          last_login_at: string | null
+          role: Database["public"]["Enums"]["backoffice_role"]
+          totp_enabled: boolean
+          totp_secret: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email_domain: string
+          id?: string
+          last_login_at?: string | null
+          role?: Database["public"]["Enums"]["backoffice_role"]
+          totp_enabled?: boolean
+          totp_secret?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email_domain?: string
+          id?: string
+          last_login_at?: string | null
+          role?: Database["public"]["Enums"]["backoffice_role"]
+          totp_enabled?: boolean
+          totp_secret?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       communication_credits: {
         Row: {
           balance: number
@@ -824,6 +878,57 @@ export type Database = {
           },
         ]
       }
+      maintenance_events: {
+        Row: {
+          created_at: string
+          created_by_id: string | null
+          description: string | null
+          end_at: string | null
+          id: string
+          is_active: boolean
+          resolution_notes: string | null
+          resolved_at: string | null
+          scope: string
+          severity: string
+          start_at: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_id?: string | null
+          description?: string | null
+          end_at?: string | null
+          id?: string
+          is_active?: boolean
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          scope?: string
+          severity?: string
+          start_at: string
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_id?: string | null
+          description?: string | null
+          end_at?: string | null
+          id?: string
+          is_active?: boolean
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          scope?: string
+          severity?: string
+          start_at?: string
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       message_logs: {
         Row: {
           channel: string
@@ -1263,6 +1368,36 @@ export type Database = {
           slug?: string
           trial_days?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          key: string
+          updated_at: string
+          updated_by_id: string | null
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string
+          updated_by_id?: string | null
+          value?: Json
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string
+          updated_by_id?: string | null
+          value?: Json
         }
         Relationships: []
       }
@@ -2056,6 +2191,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "rescheduled"
+      backoffice_role: "super_admin" | "admin" | "support_agent"
       feature_flag_scope: "platform" | "app" | "tenant" | "feature"
       journal_category: "service_payment" | "product_sale" | "expense" | "other"
       journal_direction: "inflow" | "outflow"
@@ -2222,6 +2358,7 @@ export const Constants = {
         "cancelled",
         "rescheduled",
       ],
+      backoffice_role: ["super_admin", "admin", "support_agent"],
       feature_flag_scope: ["platform", "app", "tenant", "feature"],
       journal_category: ["service_payment", "product_sale", "expense", "other"],
       journal_direction: ["inflow", "outflow"],
