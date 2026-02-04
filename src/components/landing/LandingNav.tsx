@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 interface LandingNavProps {
   isWaitlistMode: boolean;
   isLoading: boolean;
+  onWaitlistClick?: () => void;
 }
 
-export function LandingNav({ isWaitlistMode, isLoading }: LandingNavProps) {
+export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: LandingNavProps) {
   return (
     <nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -31,9 +32,9 @@ export function LandingNav({ isWaitlistMode, isLoading }: LandingNavProps) {
             </>
           )}
           {!isLoading && isWaitlistMode && (
-            <Link to="#waitlist">
-              <Button size="sm">Join waitlist</Button>
-            </Link>
+            <Button size="sm" onClick={onWaitlistClick}>
+              Exclusive access
+            </Button>
           )}
         </div>
       </div>

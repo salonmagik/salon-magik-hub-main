@@ -1,10 +1,52 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
+import { 
+  wrapEmailTemplate, 
+  heading, 
+  paragraph, 
+  createInfoBox,
+  EMAIL_STYLES 
+} from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function sanitizeName(name: string): string {
+  return name.replace(/[<>"'\n\r]/g, "").trim();
+}
+
+function buildWaitlistConfirmationEmail(name: string, position: number): string {
+  const content = `
+    ${heading("You're on the list!")}
+    
+    ${paragraph(`Hi ${sanitizeName(name)},`)}
+    
+    ${paragraph("Thank you for your interest in Salon Magik! You've been added to our exclusive early access waitlist.")}
+    
+    ${createInfoBox(`
+      <p style="color: ${EMAIL_STYLES.textColor}; font-size: 18px; margin: 0 0 8px 0; font-family: ${EMAIL_STYLES.fontFamily};">
+        <strong>Your position:</strong> #${position}
+      </p>
+      <p style="color: ${EMAIL_STYLES.textMuted}; font-size: 14px; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">
+        We'll notify you when it's your turn to join.
+      </p>
+    `)}
+    
+    ${paragraph("We're building the booking software that beauty professionals deserve — simple, powerful, and designed with your business in mind.")}
+    
+    ${paragraph("In the meantime, feel free to reply to this email if you have any questions or feedback. We'd love to hear from you!")}
+    
+    <p style="color: ${EMAIL_STYLES.textMuted}; font-size: 16px; line-height: 1.6; margin: 24px 0 0 0; font-family: ${EMAIL_STYLES.fontFamily};">
+      Best,<br/>
+      <strong>The Salon Magik Team</strong>
+    </p>
+  `;
+  
+  return wrapEmailTemplate(content);
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -91,6 +133,31 @@ serve(async (req) => {
     }
 
     console.log(`Waitlist lead added: ${email}, position: ${newLead.position}`);
+
+    // Send confirmation email
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
+    
+    if (resendApiKey && fromEmail) {
+      try {
+        const resend = new Resend(resendApiKey);
+        const emailHtml = buildWaitlistConfirmationEmail(name.trim(), newLead.position);
+        
+        await resend.emails.send({
+          from: `Salon Magik <${fromEmail}>`,
+          to: [email.toLowerCase().trim()],
+          subject: `You're #${newLead.position} on the Salon Magik waitlist!`,
+          html: emailHtml,
+        });
+        
+        console.log(`Waitlist confirmation email sent to: ${email}`);
+      } catch (emailError) {
+        // Log email error but don't fail the request
+        console.error("Failed to send confirmation email:", emailError);
+      }
+    } else {
+      console.warn("Email not sent: RESEND_API_KEY or RESEND_FROM_EMAIL not configured");
+    }
 
     return new Response(
       JSON.stringify({ 
