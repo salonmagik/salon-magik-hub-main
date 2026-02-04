@@ -14,15 +14,19 @@ export const EMAIL_STYLES = {
   fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
 };
 
+// Salon Magik logo URL (hosted publicly)
+export const SALON_MAGIK_LOGO_URL = "https://salonmagik.lovable.app/favicon.png";
+
 interface EmailWrapperOptions {
   salonName?: string;
   salonLogoUrl?: string;
-  showSalonBranding?: boolean; // For salon-specific emails
+  showSalonBranding?: boolean; // For salon-specific emails (customer emails from salons)
 }
 
 /**
- * Wraps email content with consistent Salon Magik branding
- * For salon-specific emails, include salonLogoUrl to show the salon's logo
+ * Wraps email content with consistent branding
+ * - For Salon Magik system emails: Shows Salon Magik logo
+ * - For salon-specific customer emails: Shows salon's logo (or name + "Powered by Salon Magik")
  */
 export function wrapEmailTemplate(
   content: string, 
@@ -30,17 +34,11 @@ export function wrapEmailTemplate(
 ): string {
   const { salonName, salonLogoUrl, showSalonBranding = false } = options;
   
-  // Header section - Salon Magik branding or Salon logo
-  let headerSection = `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <h1 style="color: ${EMAIL_STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 32px; font-family: ${EMAIL_STYLES.fontFamily};">
-        Salon Magik
-      </h1>
-    </div>
-  `;
+  let headerSection: string;
   
-  // If showing salon branding with logo
+  // If showing salon branding (emails sent to customers from salons)
   if (showSalonBranding && salonLogoUrl) {
+    // Salon has a logo - show it with "Powered by" text
     headerSection = `
       <div style="text-align: center; margin-bottom: 32px;">
         <img src="${salonLogoUrl}" alt="${salonName || 'Salon'} Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;" />
@@ -55,6 +53,16 @@ export function wrapEmailTemplate(
           ${salonName}
         </h1>
         <p style="color: ${EMAIL_STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">Powered by Salon Magik</p>
+      </div>
+    `;
+  } else {
+    // Default: Salon Magik branding with logo
+    headerSection = `
+      <div style="text-align: center; margin-bottom: 32px;">
+        <img src="${SALON_MAGIK_LOGO_URL}" alt="Salon Magik" style="width: 60px; height: 60px; margin-bottom: 12px; border-radius: 12px;" />
+        <h1 style="color: ${EMAIL_STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 28px; font-family: ${EMAIL_STYLES.fontFamily};">
+          Salon Magik
+        </h1>
       </div>
     `;
   }
