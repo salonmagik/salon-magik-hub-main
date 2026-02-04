@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import confetti from "canvas-confetti";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, CheckCircle, Sparkles } from "lucide-react";
+import { Loader2, PartyPopper, Sparkles } from "lucide-react";
 import { COUNTRIES } from "@/lib/countries";
 import { PhoneInput } from "@/components/ui/phone-input";
 
@@ -91,20 +92,46 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
     }
   };
 
+  // Trigger confetti on success
+  useEffect(() => {
+    if (isSuccess) {
+      const duration = 3000;
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        confetti({
+          particleCount: 3,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          colors: ['#2563EB', '#7C3AED', '#EC4899', '#F59E0B'],
+        });
+        confetti({
+          particleCount: 3,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          colors: ['#2563EB', '#7C3AED', '#EC4899', '#F59E0B'],
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      };
+
+      frame();
+    }
+  }, [isSuccess]);
+
   if (isSuccess) {
     return (
       <Card className="p-8 text-center bg-success-bg border-success/20">
-        <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle className="w-8 h-8 text-success" />
+        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+          <PartyPopper className="w-8 h-8 text-primary" />
         </div>
-        <h3 className="text-xl font-medium mb-2">You're on the list!</h3>
-        {position && (
-          <p className="text-2xl font-semibold text-primary mb-2">
-            Position #{position}
-          </p>
-        )}
+        <h3 className="text-xl font-medium mb-3">Welcome to Salon Magik!</h3>
         <p className="text-muted-foreground">
-          We'll reach out shortly when it's your turn to join.
+          You're officially on the waitlist. We'll notify you soon when it's time to get started.
         </p>
       </Card>
     );
