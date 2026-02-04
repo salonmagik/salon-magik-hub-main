@@ -145,7 +145,12 @@ export function CartDrawer({ open, onOpenChange, currency, onCheckout }: CartDra
                 <span>Total</span>
                 <span>{formatCurrency(total, currency)}</span>
               </div>
-              <Button className="w-full" size="lg" onClick={onCheckout}>
+              <Button 
+                className="w-full text-white border-0" 
+                size="lg" 
+                onClick={onCheckout}
+                style={{ backgroundColor: 'var(--brand-color)' }}
+              >
                 Proceed to Checkout
               </Button>
             </SheetFooter>

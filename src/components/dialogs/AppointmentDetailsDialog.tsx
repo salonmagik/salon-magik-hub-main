@@ -178,8 +178,8 @@ export function AppointmentDetailsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-5 py-2">
+        <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+          <div className="space-y-5 py-2 pr-4">
             {/* Customer Info */}
             <div className="flex items-start gap-3">
               <User className="w-5 h-5 text-muted-foreground mt-0.5" />

@@ -1,4 +1,4 @@
-import { Plus, Clock, Package } from "lucide-react";
+import { ShoppingBag, Clock, Package as PackageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useBookingCart } from "@/hooks/booking";
@@ -26,7 +26,6 @@ export function ItemCard({
   price,
   originalPrice,
   currency,
-  imageUrl,
   durationMinutes,
   stockQuantity,
 }: ItemCardProps) {
@@ -51,7 +50,6 @@ export function ItemCard({
       durationMinutes: type === "service" ? durationMinutes : undefined,
       schedulingOption: type === "product" ? "leave_unscheduled" : "schedule_now",
       isGift: false,
-      imageUrl: imageUrl || undefined,
     });
 
     toast({
@@ -66,152 +64,75 @@ export function ItemCard({
     ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : 0;
 
+  const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+
   return (
-    <>
-      {/* Desktop: Horizontal compact layout */}
-      <div className="hidden sm:flex items-start gap-3 p-3 rounded-lg border bg-card hover:shadow-md transition-shadow">
-        {/* Thumbnail */}
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={name}
-            className="w-20 h-20 rounded-md object-cover shrink-0"
-          />
-        ) : (
-          <div className="w-20 h-20 rounded-md bg-muted flex items-center justify-center shrink-0">
-            <Package className="h-8 w-8 text-muted-foreground/50" />
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              {type === "package" && (
-                <Badge variant="secondary" className="text-xs mb-1">
-                  Package
-                </Badge>
-              )}
-              <h3 className="font-semibold text-sm leading-tight line-clamp-1">{name}</h3>
-              {description && (
-                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                  {description}
-                </p>
-              )}
-            </div>
-            <Button
-              size="icon"
-              variant="outline"
-              className="h-8 w-8 shrink-0"
-              onClick={handleAddToCart}
-              disabled={isOutOfStock}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* Meta row */}
-          <div className="flex items-center gap-3 mt-2">
-            {type === "service" && durationMinutes && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                <span>{durationMinutes} min</span>
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">
-                {formatCurrency(price, currency)}
+    <div className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[160px]">
+      {/* Header: Type + Price */}
+      <div className="flex items-start justify-between mb-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {typeLabel}
+        </span>
+        <div className="text-right">
+          <span className="font-bold text-base">
+            {formatCurrency(price, currency)}
+          </span>
+          {hasDiscount && (
+            <div className="flex items-center gap-1.5 justify-end mt-0.5">
+              <span className="text-xs text-muted-foreground line-through">
+                {formatCurrency(originalPrice, currency)}
               </span>
-              {hasDiscount && (
-                <>
-                  <span className="text-xs text-muted-foreground line-through">
-                    {formatCurrency(originalPrice, currency)}
-                  </span>
-                  <Badge variant="destructive" className="text-xs px-1 py-0">
-                    -{discountPercent}%
-                  </Badge>
-                </>
-              )}
+              <Badge variant="destructive" className="text-xs px-1 py-0">
+                -{discountPercent}%
+              </Badge>
             </div>
-            {isOutOfStock && (
-              <Badge variant="outline" className="text-xs">Out of Stock</Badge>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Mobile: Compact vertical card */}
-      <div className="sm:hidden rounded-lg border bg-card overflow-hidden hover:shadow-md transition-shadow">
-        {/* Image */}
-        {imageUrl ? (
-          <div className="aspect-video overflow-hidden bg-muted">
-            <img
-              src={imageUrl}
-              alt={name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="aspect-video bg-muted flex items-center justify-center">
-            <Package className="h-10 w-10 text-muted-foreground/50" />
-          </div>
-        )}
+      {/* Name */}
+      <h3 className="font-semibold text-base line-clamp-1">{name}</h3>
 
-        <div className="p-3 space-y-2">
-          {type === "package" && (
-            <Badge variant="secondary" className="text-xs">
-              Package
+      {/* Description */}
+      {description && (
+        <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{description}</p>
+      )}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Metadata Badges + Add Button */}
+      <div className="flex items-end justify-between mt-3 gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          {type === "service" && durationMinutes && (
+            <Badge variant="secondary" className="text-xs gap-1">
+              <Clock className="h-3 w-3" />
+              {durationMinutes} min
             </Badge>
           )}
-          
-          <h3 className="font-semibold text-sm line-clamp-1">{name}</h3>
-          
-          {description && (
-            <p className="text-xs text-muted-foreground line-clamp-2">
-              {description}
-            </p>
+          {type === "package" && (
+            <Badge variant="secondary" className="text-xs gap-1">
+              <PackageIcon className="h-3 w-3" />
+              Bundle
+            </Badge>
           )}
-
-          {/* Duration for services */}
-          {type === "service" && durationMinutes && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" />
-              <span>{durationMinutes} min</span>
-            </div>
+          {isOutOfStock && (
+            <Badge variant="outline" className="text-xs">Out of Stock</Badge>
           )}
-
-          {/* Price & Add Button */}
-          <div className="flex items-center justify-between pt-1">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm">
-                  {formatCurrency(price, currency)}
-                </span>
-                {hasDiscount && (
-                  <span className="text-xs text-muted-foreground line-through">
-                    {formatCurrency(originalPrice, currency)}
-                  </span>
-                )}
-              </div>
-              {hasDiscount && (
-                <Badge variant="destructive" className="text-xs px-1 py-0">
-                  Save {discountPercent}%
-                </Badge>
-              )}
-            </div>
-
-            <Button
-              size="sm"
-              onClick={handleAddToCart}
-              disabled={isOutOfStock}
-              className="h-8"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              {isOutOfStock ? "Out" : "Add"}
-            </Button>
-          </div>
         </div>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAddToCart}
+          disabled={isOutOfStock}
+          className="gap-1.5 shrink-0 text-white border-0"
+          style={{ backgroundColor: isOutOfStock ? undefined : 'var(--brand-color)' }}
+        >
+          <ShoppingBag className="h-4 w-4" />
+          Add
+        </Button>
       </div>
-    </>
+    </div>
   );
 }

@@ -50,8 +50,8 @@ export function BookingLayout({ children, salon, onCartClick }: BookingLayoutPro
             <ShoppingBag className="h-5 w-5" />
             {itemCount > 0 && (
               <Badge
-                className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
-                variant="default"
+                className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs text-white border-0"
+                style={{ backgroundColor: 'var(--brand-color)' }}
               >
                 {itemCount}
               </Badge>
