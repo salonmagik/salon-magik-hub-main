@@ -41,7 +41,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hasCompletedOnboarding: false,
   });
 
-  // Fetch profile data
+  // Force sign out - clears session and resets state
+  const forceSignOut = async () => {
+    console.log("Forcing sign out - user data not found");
+    await supabase.auth.signOut();
+    localStorage.removeItem("currentTenantId");
+    setState({
+      user: null,
+      session: null,
+      profile: null,
+      tenants: [],
+      roles: [],
+      currentTenant: null,
+      isLoading: false,
+      isAuthenticated: false,
+      hasCompletedOnboarding: false,
+    });
+  };
+
+  // Fetch profile data - returns null if user doesn't exist (deleted account)
   const fetchProfile = async (userId: string): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from("profiles")
@@ -117,6 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
               const profile = await fetchProfile(session.user.id);
+              
+              // If profile doesn't exist, the user was likely deleted - force sign out
+              if (!profile) {
+                console.log("Auth state change: profile not found - account may have been deleted");
+                await forceSignOut();
+                return;
+              }
+              
               const { tenants, roles } = await fetchTenantsAndRoles(session.user.id);
               
               // Get stored tenant preference or use first tenant
@@ -144,6 +170,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (session?.user) {
         const profile = await fetchProfile(session.user.id);
+        
+        // If profile doesn't exist, the user was likely deleted - force sign out
+        if (!profile) {
+          console.log("Session exists but profile not found - account may have been deleted");
+          await forceSignOut();
+          return () => {
+            subscription.unsubscribe();
+          };
+        }
+        
         const { tenants, roles } = await fetchTenantsAndRoles(session.user.id);
         
         const storedTenantId = localStorage.getItem("currentTenantId");
