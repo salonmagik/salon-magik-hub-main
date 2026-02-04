@@ -43,16 +43,12 @@ export function usePublicSalon(slug: string | undefined) {
     queryFn: async (): Promise<PublicTenant | null> => {
       if (!slug) return null;
 
+      // Use the secure view that only exposes safe columns
+      // The view isn't in generated types, so we need to cast
       const { data, error } = await supabase
-        .from("tenants")
-        .select(
-          `id, name, slug, logo_url, banner_urls, currency, country, timezone,
-           online_booking_enabled, auto_confirm_bookings, deposits_enabled,
-           default_deposit_percentage, cancellation_grace_hours, booking_status_message,
-           slot_capacity_default, pay_at_salon_enabled, brand_color`
-        )
+        .from("public_booking_tenants" as any)
+        .select("*")
         .eq("slug", slug)
-        .eq("online_booking_enabled", true)
         .maybeSingle();
 
       if (error) {
@@ -60,7 +56,7 @@ export function usePublicSalon(slug: string | undefined) {
         throw error;
       }
 
-      return data;
+      return data as unknown as PublicTenant | null;
     },
     enabled: !!slug,
   });
