@@ -60,6 +60,13 @@ export type Database = {
             foreignKeyName: "appointment_attachments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_attachments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -319,6 +326,13 @@ export type Database = {
             foreignKeyName: "appointments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -362,6 +376,13 @@ export type Database = {
           tenant_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "audit_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "audit_logs_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -458,6 +479,13 @@ export type Database = {
             foreignKeyName: "communication_credits_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_credits_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -494,6 +522,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_purses_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -559,6 +594,13 @@ export type Database = {
             foreignKeyName: "customers_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -599,6 +641,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "email_templates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_templates_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -766,6 +815,13 @@ export type Database = {
             foreignKeyName: "journal_entries_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -869,6 +925,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "locations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "locations_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -984,6 +1047,13 @@ export type Database = {
             foreignKeyName: "message_logs_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_logs_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1027,6 +1097,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notification_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notification_settings_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1077,6 +1154,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1173,6 +1257,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "packages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "packages_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1443,6 +1534,13 @@ export type Database = {
             foreignKeyName: "products_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1539,6 +1637,13 @@ export type Database = {
             foreignKeyName: "refund_requests_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1584,6 +1689,13 @@ export type Database = {
             foreignKeyName: "role_permissions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1618,6 +1730,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "service_categories_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "service_categories_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1688,6 +1807,13 @@ export type Database = {
             foreignKeyName: "services_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "services_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1741,6 +1867,13 @@ export type Database = {
             foreignKeyName: "staff_invitations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_invitations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1774,6 +1907,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_locations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -1937,6 +2077,13 @@ export type Database = {
             foreignKeyName: "transactions_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -1972,6 +2119,13 @@ export type Database = {
             foreignKeyName: "user_permission_overrides_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_permission_overrides_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2000,6 +2154,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_roles_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -2062,6 +2223,13 @@ export type Database = {
             columns: ["redeemed_by_customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vouchers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
             referencedColumns: ["id"]
           },
           {
@@ -2142,6 +2310,13 @@ export type Database = {
             foreignKeyName: "waitlist_leads_converted_tenant_id_fkey"
             columns: ["converted_tenant_id"]
             isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "waitlist_leads_converted_tenant_id_fkey"
+            columns: ["converted_tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -2149,7 +2324,66 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_booking_tenants: {
+        Row: {
+          auto_confirm_bookings: boolean | null
+          banner_urls: string[] | null
+          booking_status_message: string | null
+          brand_color: string | null
+          cancellation_grace_hours: number | null
+          country: string | null
+          currency: string | null
+          default_deposit_percentage: number | null
+          deposits_enabled: boolean | null
+          id: string | null
+          logo_url: string | null
+          name: string | null
+          online_booking_enabled: boolean | null
+          pay_at_salon_enabled: boolean | null
+          slot_capacity_default: number | null
+          slug: string | null
+          timezone: string | null
+        }
+        Insert: {
+          auto_confirm_bookings?: boolean | null
+          banner_urls?: string[] | null
+          booking_status_message?: string | null
+          brand_color?: string | null
+          cancellation_grace_hours?: number | null
+          country?: string | null
+          currency?: string | null
+          default_deposit_percentage?: number | null
+          deposits_enabled?: boolean | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          online_booking_enabled?: boolean | null
+          pay_at_salon_enabled?: boolean | null
+          slot_capacity_default?: number | null
+          slug?: string | null
+          timezone?: string | null
+        }
+        Update: {
+          auto_confirm_bookings?: boolean | null
+          banner_urls?: string[] | null
+          booking_status_message?: string | null
+          brand_color?: string | null
+          cancellation_grace_hours?: number | null
+          country?: string | null
+          currency?: string | null
+          default_deposit_percentage?: number | null
+          deposits_enabled?: boolean | null
+          id?: string | null
+          logo_url?: string | null
+          name?: string | null
+          online_booking_enabled?: boolean | null
+          pay_at_salon_enabled?: boolean | null
+          slot_capacity_default?: number | null
+          slug?: string | null
+          timezone?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       belongs_to_tenant: {
