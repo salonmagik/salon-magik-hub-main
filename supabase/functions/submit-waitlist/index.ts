@@ -18,26 +18,19 @@ function sanitizeName(name: string): string {
   return name.replace(/[<>"'\n\r]/g, "").trim();
 }
 
-function buildWaitlistConfirmationEmail(firstName: string, position: number): string {
+function buildWaitlistConfirmationEmail(firstName: string): string {
   const content = `
-    ${heading("You're on the list!")}
+    ${heading("You're in!")}
     
     ${paragraph(`Hi ${sanitizeName(firstName)},`)}
     
-    ${paragraph("Thank you for your interest in Salon Magik! You've been added to our exclusive early access waitlist.")}
+    ${paragraph("Thanks for requesting early access to Salon Magik! You're officially in.")}
     
-    ${createInfoBox(`
-      <p style="color: ${EMAIL_STYLES.textColor}; font-size: 18px; margin: 0 0 8px 0; font-family: ${EMAIL_STYLES.fontFamily};">
-        <strong>Your position:</strong> #${position}
-      </p>
-      <p style="color: ${EMAIL_STYLES.textMuted}; font-size: 14px; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">
-        We'll notify you when it's your turn to join.
-      </p>
-    `)}
+    ${paragraph("We're building a platform that helps salon, spa, and barbershop owners like you manage everything in one place — schedules, customers, staff, payments, and more. No more juggling multiple tools or dealing with the daily chaos.")}
     
-    ${paragraph("We're building the booking software that beauty professionals deserve — simple, powerful, and designed with your business in mind.")}
+    ${paragraph("We'll reach out soon with next steps to get you set up.")}
     
-    ${paragraph("In the meantime, feel free to reply to this email if you have any questions or feedback. We'd love to hear from you!")}
+    ${paragraph(`Have questions or want to share what you're looking for in a salon management platform? Reach out to us at <a href="mailto:support@salonmagik.com" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none;">support@salonmagik.com</a> — we'd love to hear from you.`)}
     
     <p style="color: ${EMAIL_STYLES.textMuted}; font-size: 16px; line-height: 1.6; margin: 24px 0 0 0; font-family: ${EMAIL_STYLES.fontFamily};">
       Best,<br/>
@@ -141,12 +134,12 @@ serve(async (req) => {
     if (resendApiKey && fromEmail) {
       try {
         const resend = new Resend(resendApiKey);
-        const emailHtml = buildWaitlistConfirmationEmail(first_name.trim(), newLead.position);
+        const emailHtml = buildWaitlistConfirmationEmail(first_name.trim());
         
         await resend.emails.send({
           from: `Salon Magik <${fromEmail}>`,
           to: [email.toLowerCase().trim()],
-          subject: `You're #${newLead.position} on the Salon Magik waitlist!`,
+          subject: "You're in! Welcome to Salon Magik early access",
           html: emailHtml,
         });
         
