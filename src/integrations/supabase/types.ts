@@ -584,6 +584,51 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_flags: {
+        Row: {
+          created_at: string
+          created_by_id: string | null
+          description: string | null
+          id: string
+          is_enabled: boolean
+          name: string
+          reason: string | null
+          schedule_end: string | null
+          schedule_start: string | null
+          scope: Database["public"]["Enums"]["feature_flag_scope"]
+          target_tenant_ids: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_id?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          name: string
+          reason?: string | null
+          schedule_end?: string | null
+          schedule_start?: string | null
+          scope?: Database["public"]["Enums"]["feature_flag_scope"]
+          target_tenant_ids?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_id?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          name?: string
+          reason?: string | null
+          schedule_end?: string | null
+          schedule_start?: string | null
+          scope?: Database["public"]["Enums"]["feature_flag_scope"]
+          target_tenant_ids?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       journal_entries: {
         Row: {
           amount: number
@@ -2011,6 +2056,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "rescheduled"
+      feature_flag_scope: "platform" | "app" | "tenant" | "feature"
       journal_category: "service_payment" | "product_sale" | "expense" | "other"
       journal_direction: "inflow" | "outflow"
       journal_status: "active" | "pending_approval" | "rejected" | "reversed"
@@ -2176,6 +2222,7 @@ export const Constants = {
         "cancelled",
         "rescheduled",
       ],
+      feature_flag_scope: ["platform", "app", "tenant", "feature"],
       journal_category: ["service_payment", "product_sale", "expense", "other"],
       journal_direction: ["inflow", "outflow"],
       journal_status: ["active", "pending_approval", "rejected", "reversed"],
