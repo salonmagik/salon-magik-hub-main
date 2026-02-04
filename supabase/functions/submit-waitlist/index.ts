@@ -18,11 +18,11 @@ function sanitizeName(name: string): string {
   return name.replace(/[<>"'\n\r]/g, "").trim();
 }
 
-function buildWaitlistConfirmationEmail(name: string, position: number): string {
+function buildWaitlistConfirmationEmail(firstName: string, position: number): string {
   const content = `
     ${heading("You're on the list!")}
     
-    ${paragraph(`Hi ${sanitizeName(name)},`)}
+    ${paragraph(`Hi ${sanitizeName(firstName)},`)}
     
     ${paragraph("Thank you for your interest in Salon Magik! You've been added to our exclusive early access waitlist.")}
     
@@ -61,12 +61,12 @@ serve(async (req) => {
     );
 
     const body = await req.json();
-    const { name, email, phone, country, plan_interest, team_size, notes } = body;
+    const { first_name, last_name, email, phone, country, plan_interest, team_size, notes } = body;
 
     // Validate required fields
-    if (!name || !email || !country) {
+    if (!first_name || !last_name || !email || !country) {
       return new Response(
-        JSON.stringify({ error: "Name, email, and country are required" }),
+        JSON.stringify({ error: "First name, last name, email, and country are required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -106,7 +106,7 @@ serve(async (req) => {
     const { data: newLead, error: insertError } = await supabaseClient
       .from("waitlist_leads")
       .insert({
-        name: name.trim(),
+        name: `${first_name.trim()} ${last_name.trim()}`,
         email: email.toLowerCase().trim(),
         phone: phone?.trim() || null,
         country,
@@ -141,7 +141,7 @@ serve(async (req) => {
     if (resendApiKey && fromEmail) {
       try {
         const resend = new Resend(resendApiKey);
-        const emailHtml = buildWaitlistConfirmationEmail(name.trim(), newLead.position);
+        const emailHtml = buildWaitlistConfirmationEmail(first_name.trim(), newLead.position);
         
         await resend.emails.send({
           from: `Salon Magik <${fromEmail}>`,
