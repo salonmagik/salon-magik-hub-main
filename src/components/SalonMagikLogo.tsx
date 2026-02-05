@@ -3,12 +3,13 @@ import { cn } from "@/lib/utils";
 
 interface SalonMagikLogoProps {
   className?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   showText?: boolean;
   variant?: "default" | "white";
 }
 
 const sizes = {
+  xs: { icon: 18, container: 28, text: "text-base" },
   sm: { icon: 20, container: 32, text: "text-lg" },
   md: { icon: 24, container: 40, text: "text-xl" },
   lg: { icon: 28, container: 48, text: "text-2xl" },
