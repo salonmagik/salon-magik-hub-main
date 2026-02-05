@@ -37,6 +37,7 @@ import JournalPage from "./pages/salon/JournalPage";
 import HelpPage from "./pages/salon/HelpPage";
 import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
+import EmailTemplatesPage from "./pages/salon/EmailTemplatesPage";
 
 // Client Portal
 import { ClientAuthProvider } from "@/hooks/client/useClientAuth";
@@ -228,6 +229,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/email-templates"
+              element={
+                <ProtectedRoute>
+                  <EmailTemplatesPage />
                 </ProtectedRoute>
               }
             />
