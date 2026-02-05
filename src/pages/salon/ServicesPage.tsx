@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Scissors,
   Package,
@@ -21,14 +22,18 @@ import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
 import { AddProductDialog } from "@/components/dialogs/AddProductDialog";
 import { AddVoucherDialog } from "@/components/dialogs/AddVoucherDialog";
 import { ProductFulfillmentTab } from "@/components/catalog/ProductFulfillmentTab";
+import { AddItemPopover } from "@/components/catalog/AddItemPopover";
+import { BulkActionsBar } from "@/components/catalog/BulkActionsBar";
 import { useServices } from "@/hooks/useServices";
 import { usePackages } from "@/hooks/usePackages";
 import { useProducts } from "@/hooks/useProducts";
 import { useVouchers } from "@/hooks/useVouchers";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
-type TabValue = "all" | "services" | "packages" | "products" | "vouchers";
+type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
 type ProductSubTab = "inventory" | "fulfillment";
 
 export default function ServicesPage() {
@@ -39,8 +44,13 @@ export default function ServicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
+  
+  // Multi-select state
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectionType, setSelectionType] = useState<"service" | "product" | "package" | "voucher" | null>(null);
 
   const { currentTenant } = useAuth();
+  const { isOwner, currentRole } = usePermissions();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
@@ -48,6 +58,7 @@ export default function ServicesPage() {
 
   const currency = currentTenant?.currency || "USD";
   const isLoading = servicesLoading || packagesLoading || productsLoading;
+  const canManage = isOwner || currentRole === "manager";
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = {
@@ -61,7 +72,7 @@ export default function ServicesPage() {
   };
 
   // Build unified items list
-  const allItems = [
+  const allItems = useMemo(() => [
     ...services.map((s) => ({
       id: s.id,
       type: "service" as const,
@@ -89,7 +100,7 @@ export default function ServicesPage() {
       stock: p.stock_quantity,
       images: p.image_urls || [],
     })),
-  ];
+  ], [services, packages, products]);
 
   const filteredItems = allItems.filter((item) => {
     const matchesSearch =
@@ -97,6 +108,53 @@ export default function ServicesPage() {
       item.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
   });
+
+  // Handle selection
+  const handleSelectItem = (id: string, type: "service" | "product" | "package" | "voucher") => {
+    setSelectedItems((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+        if (newSet.size === 0) setSelectionType(null);
+      } else {
+        // Clear selection if switching types
+        if (selectionType && selectionType !== type) {
+          newSet.clear();
+        }
+        newSet.add(id);
+        setSelectionType(type);
+      }
+      return newSet;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedItems(new Set());
+    setSelectionType(null);
+  };
+
+  // Clear selection on tab change
+  const handleTabChange = (tab: TabValue) => {
+    setActiveTab(tab);
+    clearSelection();
+  };
+
+  const handleAddFromPopover = (type: "service" | "product" | "package" | "voucher") => {
+    switch (type) {
+      case "service":
+        setServiceDialogOpen(true);
+        break;
+      case "product":
+        setProductDialogOpen(true);
+        break;
+      case "package":
+        setPackageDialogOpen(true);
+        break;
+      case "voucher":
+        setVoucherDialogOpen(true);
+        break;
+    }
+  };
 
   const handleAddClick = () => {
     switch (activeTab) {
@@ -140,12 +198,14 @@ export default function ServicesPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Products & Services</h1>
+            <h1 className="text-2xl font-semibold">Services and Products</h1>
             <p className="text-muted-foreground">
               Manage your service catalog, packages, products, and vouchers.
             </p>
           </div>
-          {addButtonLabel && (
+          {activeTab === "all" ? (
+            <AddItemPopover onSelect={handleAddFromPopover} />
+          ) : addButtonLabel && (
             <Button onClick={handleAddClick}>
               <Plus className="w-4 h-4 mr-2" />
               {addButtonLabel}
@@ -153,21 +213,21 @@ export default function ServicesPage() {
           )}
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)}>
+        {/* Tabs - Reordered: All, Services, Products, Packages, Vouchers */}
+        <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabValue)}>
           <TabsList className="flex-wrap">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="services" className="flex items-center gap-2">
               <Scissors className="w-4 h-4" />
               Services
             </TabsTrigger>
-            <TabsTrigger value="packages" className="flex items-center gap-2">
-              <Package className="w-4 h-4" />
-              Packages
-            </TabsTrigger>
             <TabsTrigger value="products" className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4" />
               Products
+            </TabsTrigger>
+            <TabsTrigger value="packages" className="flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              Packages
             </TabsTrigger>
             <TabsTrigger value="vouchers" className="flex items-center gap-2">
               <Gift className="w-4 h-4" />
@@ -443,27 +503,45 @@ interface CatalogItem {
   images?: string[];
 }
 
-function ItemCard({
-  item,
-  currency,
-  formatCurrency,
-}: {
+interface SelectableItemCardProps {
   item: CatalogItem;
   currency: string;
   formatCurrency: (amount: number) => string;
-}) {
+  isSelected?: boolean;
+  onSelect?: (id: string, type: "service" | "product" | "package" | "voucher") => void;
+}
+
+function SelectableItemCard({
+  item,
+  currency,
+  formatCurrency,
+  isSelected = false,
+  onSelect,
+}: SelectableItemCardProps) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
-    package: { label: "PACKAGE", color: "text-purple-600" },
-    product: { label: "PRODUCT", color: "text-emerald-600" },
+    package: { label: "PACKAGE", color: "text-primary/80" },
+    product: { label: "PRODUCT", color: "text-primary/60" },
   };
 
   const typeInfo = typeLabels[item.type] || typeLabels.service;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className={cn(
+      "hover:shadow-md transition-all cursor-pointer",
+      isSelected && "ring-2 ring-primary"
+    )}>
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
+          {/* Checkbox */}
+          {onSelect && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onSelect(item.id, item.type as "service" | "product" | "package")}
+              className="mt-1"
+            />
+          )}
+
           {/* Image thumbnail */}
           {item.images && item.images.length > 0 ? (
             <img
@@ -514,5 +592,24 @@ function ItemCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// Legacy ItemCard for backward compatibility
+function ItemCard({
+  item,
+  currency,
+  formatCurrency,
+}: {
+  item: CatalogItem;
+  currency: string;
+  formatCurrency: (amount: number) => string;
+}) {
+  return (
+    <SelectableItemCard
+      item={item}
+      currency={currency}
+      formatCurrency={formatCurrency}
+    />
   );
 }

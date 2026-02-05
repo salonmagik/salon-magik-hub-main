@@ -31,7 +31,7 @@ import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { useNotifications } from "@/hooks/useNotifications";
-import { SubscriptionBanner } from "@/components/layout/SubscriptionBanner";
+import { BannerProvider, GlobalBanner } from "@/components/banners";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -53,7 +53,7 @@ const mainNavItems: NavItem[] = [
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
-  { label: "Services & Products", icon: Scissors, path: "/salon/services", module: "services" },
+  { label: "Services and Products", icon: Scissors, path: "/salon/services", module: "services" },
   { label: "Payments", icon: CreditCard, path: "/salon/payments", module: "payments" },
   { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
@@ -277,8 +277,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         </div>
       </div>
 
-      {/* Subscription Banner (only when expanded) */}
-      {(isExpanded || isMobileOpen) && <SubscriptionBanner />}
+      {/* Global Banner (only when expanded) */}
+      {(isExpanded || isMobileOpen) && <GlobalBanner />}
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-1 relative z-10">
@@ -348,8 +348,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         closeMobile: () => setIsMobileOpen(false),
       }}
     >
-      <InactivityGuard>
-        <div className="min-h-screen flex bg-surface">
+      <BannerProvider platform="salon">
+        <InactivityGuard>
+          <div className="min-h-screen flex bg-surface">
           {/* Mobile Overlay */}
           {isMobileOpen && (
             <div
@@ -464,6 +465,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           onOpenChange={setNotificationsOpen}
         />
       </InactivityGuard>
+    </BannerProvider>
     </SidebarContext.Provider>
   );
 }
