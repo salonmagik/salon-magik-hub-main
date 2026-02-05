@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
+import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
 
 // Marketing pages
 import LandingPage from "./pages/marketing/LandingPage";
@@ -38,6 +39,7 @@ import HelpPage from "./pages/salon/HelpPage";
 import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
 import EmailTemplatesPage from "./pages/salon/EmailTemplatesPage";
+import AccessDeniedPage from "./pages/salon/AccessDeniedPage";
 
 // Client Portal
 import { ClientAuthProvider } from "@/hooks/client/useClientAuth";
@@ -228,7 +230,17 @@ const App = () => (
               path="/salon/settings"
               element={
                 <ProtectedRoute>
-                  <SettingsPage />
+                  <ModuleProtectedRoute module="settings">
+                    <SettingsPage />
+                  </ModuleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/access-denied"
+              element={
+                <ProtectedRoute>
+                  <AccessDeniedPage />
                 </ProtectedRoute>
               }
             />

@@ -120,7 +120,7 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="address">Address (optional)</Label>
+          <Label htmlFor="address">Address *</Label>
           <Input
             id="address"
             placeholder="e.g., 123 Victoria Island"

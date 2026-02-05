@@ -26,12 +26,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { useNotifications } from "@/hooks/useNotifications";
 import { SubscriptionBanner } from "@/components/layout/SubscriptionBanner";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Tooltip,
   TooltipContent,
@@ -51,7 +53,7 @@ const mainNavItems: NavItem[] = [
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
-  { label: "Products & Services", icon: Scissors, path: "/salon/services", module: "services" },
+  { label: "Services & Products", icon: Scissors, path: "/salon/services", module: "services" },
   { label: "Payments", icon: CreditCard, path: "/salon/payments", module: "payments" },
   { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
@@ -97,14 +99,44 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const { unreadCount } = useNotifications();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
 
-  // Filter nav items based on permissions
+  const { currentTenant } = useAuth();
+
+  // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
-    if (permissionsLoading) return mainNavItems; // Show all during loading
+    if (permissionsLoading) return []; // Return EMPTY to prevent flash
     return mainNavItems.filter((item) => {
       if (!item.module) return true; // No module = always visible
       return hasPermission(item.module);
     });
   }, [hasPermission, permissionsLoading]);
+
+  // Get plan display info
+  const getPlanDisplay = () => {
+    if (!currentTenant) return { emoji: "🎁", label: "Free" };
+    
+    const isTrialing = currentTenant.subscription_status === "trialing";
+    const isPastDue = currentTenant.subscription_status === "past_due";
+    const isActive = currentTenant.subscription_status === "active";
+    
+    if (isPastDue) {
+      return { emoji: "⚠️", label: "Past Due" };
+    }
+    if (isTrialing && currentTenant.trial_ends_at) {
+      const daysLeft = Math.ceil(
+        (new Date(currentTenant.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      );
+      if (daysLeft > 0) {
+        return { emoji: "⏰", label: `Trial (${daysLeft}d)` };
+      }
+      return { emoji: "⚠️", label: "Trial Ended" };
+    }
+    if (isActive) {
+      return { emoji: "✨", label: "Pro" };
+    }
+    return { emoji: "🎁", label: "Free" };
+  };
+
+  const planDisplay = getPlanDisplay();
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -240,8 +272,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             !isExpanded && !isMobileOpen && "justify-center"
           )}
         >
-          <span>🎁</span>
-          {(isExpanded || isMobileOpen) && <span>Free</span>}
+          <span>{planDisplay.emoji}</span>
+          {(isExpanded || isMobileOpen) && <span>{planDisplay.label}</span>}
         </div>
       </div>
 
@@ -250,9 +282,18 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 space-y-1 relative z-10">
-        {filteredMainNavItems.map((item) => (
-          <NavItemComponent key={item.path} item={item} />
-        ))}
+        {permissionsLoading ? (
+          // Show skeleton during loading to prevent flash
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-10 w-full rounded-lg bg-white/10" />
+            ))}
+          </div>
+        ) : (
+          filteredMainNavItems.map((item) => (
+            <NavItemComponent key={item.path} item={item} />
+          ))
+        )}
       </nav>
 
       {/* Footer */}
@@ -330,7 +371,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {/* Sidebar - Desktop */}
           <aside
             className={cn(
-               "hidden lg:flex flex-col bg-primary relative z-[60] transition-all duration-300",
+               "hidden lg:flex flex-col bg-primary relative z-[60] transition-all duration-300 h-screen overflow-hidden",
               isExpanded ? "w-64" : "w-[72px]"
             )}
           >
