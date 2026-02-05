@@ -2784,6 +2784,7 @@ export type Database = {
         | "past_due"
         | "canceled"
         | "paused"
+        | "permanently_deactivated"
       waitlist_status: "pending" | "invited" | "converted" | "rejected"
     }
     CompositeTypes: {
@@ -2953,6 +2954,7 @@ export const Constants = {
         "past_due",
         "canceled",
         "paused",
+        "permanently_deactivated",
       ],
       waitlist_status: ["pending", "invited", "converted", "rejected"],
     },
