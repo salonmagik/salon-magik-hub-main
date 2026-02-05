@@ -1,10 +1,43 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature, x-paystack-signature",
 };
+
+// Schema validation for webhook data
+const WebhookMetadataSchema = z.object({
+  appointment_id: z.string().uuid().optional(),
+  payment_intent_id: z.string().uuid().optional(),
+}).passthrough();
+
+const StripeObjectSchema = z.object({
+  id: z.string().min(1),
+  status: z.string().optional(),
+  amount_received: z.number().nonnegative().optional(),
+  metadata: WebhookMetadataSchema.optional(),
+}).passthrough();
+
+const StripeEventSchema = z.object({
+  type: z.string().min(1),
+  data: z.object({
+    object: StripeObjectSchema,
+  }),
+}).passthrough();
+
+const PaystackDataSchema = z.object({
+  reference: z.string().min(1).optional(),
+  status: z.string().optional(),
+  amount: z.number().nonnegative().optional(),
+  metadata: WebhookMetadataSchema.optional(),
+}).passthrough();
+
+const PaystackEventSchema = z.object({
+  event: z.string().min(1),
+  data: PaystackDataSchema,
+}).passthrough();
 
 interface WebhookEvent {
   type: string;
@@ -16,6 +49,20 @@ interface WebhookEvent {
     status?: string;
     reference?: string;
   };
+}
+
+function isValidUUID(value: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(value);
+}
+
+function validateAmount(amount: number | undefined): number | undefined {
+  if (amount === undefined) return undefined;
+  if (amount < 0 || amount > 10000000) {
+    console.error("Invalid amount value:", amount);
+    return undefined;
+  }
+  return amount;
 }
 
 // Verify Stripe webhook signature using HMAC SHA256
@@ -154,19 +201,40 @@ serve(async (req) => {
         );
       }
 
-      const data = body.data as Record<string, unknown> | undefined;
-      const object = data?.object as Record<string, unknown> | undefined;
-      const metadata = object?.metadata as Record<string, string> | undefined;
-      
+      // Validate Stripe payload structure
+      const stripeResult = StripeEventSchema.safeParse(body);
+      if (!stripeResult.success) {
+        console.error("Invalid Stripe payload structure:", stripeResult.error.message);
+        return new Response(
+          JSON.stringify({ error: "Invalid payload structure" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const stripeEvent = stripeResult.data;
+      const object = stripeEvent.data.object;
+      const metadata = object.metadata;
+      const appointmentId = metadata?.appointment_id;
+      const paymentIntentId = metadata?.payment_intent_id;
+
+      // Validate UUID format if provided
+      if (appointmentId && !isValidUUID(appointmentId)) {
+        console.error("Invalid appointment_id format:", appointmentId);
+        return new Response(
+          JSON.stringify({ error: "Invalid appointment_id format" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       event = {
-        type: body.type as string,
+        type: stripeEvent.type,
         gateway: "stripe",
         data: {
-          paymentIntentId: metadata?.payment_intent_id,
-          appointmentId: metadata?.appointment_id,
-          amount: typeof object?.amount_received === "number" ? object.amount_received / 100 : undefined,
-          status: object?.status as string | undefined,
-          reference: object?.id as string | undefined,
+          paymentIntentId,
+          appointmentId,
+          amount: validateAmount(object.amount_received ? object.amount_received / 100 : undefined),
+          status: object.status,
+          reference: object.id,
         },
       };
     } else if (paystackSignature) {
@@ -188,18 +256,40 @@ serve(async (req) => {
         );
       }
 
-      const data = body.data as Record<string, unknown> | undefined;
-      const metadata = data?.metadata as Record<string, string> | undefined;
-      
+      // Validate Paystack payload structure
+      const paystackResult = PaystackEventSchema.safeParse(body);
+      if (!paystackResult.success) {
+        console.error("Invalid Paystack payload structure:", paystackResult.error.message);
+        return new Response(
+          JSON.stringify({ error: "Invalid payload structure" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const paystackEvent = paystackResult.data;
+      const data = paystackEvent.data;
+      const metadata = data.metadata;
+      const appointmentId = metadata?.appointment_id;
+      const paymentIntentId = metadata?.payment_intent_id;
+
+      // Validate UUID format if provided
+      if (appointmentId && !isValidUUID(appointmentId)) {
+        console.error("Invalid appointment_id format:", appointmentId);
+        return new Response(
+          JSON.stringify({ error: "Invalid appointment_id format" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       event = {
-        type: body.event as string,
+        type: paystackEvent.event,
         gateway: "paystack",
         data: {
-          paymentIntentId: metadata?.payment_intent_id,
-          appointmentId: metadata?.appointment_id,
-          amount: typeof data?.amount === "number" ? data.amount / 100 : undefined,
-          status: data?.status as string | undefined,
-          reference: data?.reference as string | undefined,
+          paymentIntentId,
+          appointmentId,
+          amount: validateAmount(data.amount ? data.amount / 100 : undefined),
+          status: data.status,
+          reference: data.reference,
         },
       };
     } else {

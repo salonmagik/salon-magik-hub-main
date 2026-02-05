@@ -30,6 +30,8 @@
    LogOut,
    Shield,
    ChevronDown,
+  DollarSign,
+  Eye,
  } from "lucide-react";
  
  interface BackofficeLayoutProps {
@@ -41,6 +43,8 @@
    { href: "/backoffice/waitlist", label: "Waitlist", icon: Users },
    { href: "/backoffice/tenants", label: "Tenants", icon: Building2 },
    { href: "/backoffice/feature-flags", label: "Feature Flags", icon: Flag },
+  { href: "/backoffice/plans", label: "Plans", icon: DollarSign },
+  { href: "/backoffice/impersonation", label: "Impersonation", icon: Eye },
    { href: "/backoffice/settings", label: "Settings", icon: Settings },
  ];
  

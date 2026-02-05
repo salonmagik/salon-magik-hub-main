@@ -66,6 +66,10 @@ import NotFound from "./pages/NotFound";
  import BackofficeDashboardPage from "./pages/backoffice/BackofficeDashboardPage";
  import WaitlistPage from "./pages/backoffice/WaitlistPage";
  import TenantsPage from "./pages/backoffice/TenantsPage";
+ import FeatureFlagsPage from "./pages/backoffice/FeatureFlagsPage";
+ import PlansPage from "./pages/backoffice/PlansPage";
+ import ImpersonationPage from "./pages/backoffice/ImpersonationPage";
+ import BackofficeSettingsPage from "./pages/backoffice/SettingsPage";
  
 const queryClient = new QueryClient();
 
@@ -388,6 +392,46 @@ const App = () => (
                  </BackofficeAuthProvider>
                }
              />
+          <Route
+            path="/backoffice/feature-flags"
+            element={
+              <BackofficeAuthProvider>
+                <BackofficeProtectedRoute>
+                  <FeatureFlagsPage />
+                </BackofficeProtectedRoute>
+              </BackofficeAuthProvider>
+            }
+          />
+          <Route
+            path="/backoffice/plans"
+            element={
+              <BackofficeAuthProvider>
+                <BackofficeProtectedRoute>
+                  <PlansPage />
+                </BackofficeProtectedRoute>
+              </BackofficeAuthProvider>
+            }
+          />
+          <Route
+            path="/backoffice/impersonation"
+            element={
+              <BackofficeAuthProvider>
+                <BackofficeProtectedRoute>
+                  <ImpersonationPage />
+                </BackofficeProtectedRoute>
+              </BackofficeAuthProvider>
+            }
+          />
+          <Route
+            path="/backoffice/settings"
+            element={
+              <BackofficeAuthProvider>
+                <BackofficeProtectedRoute>
+                  <BackofficeSettingsPage />
+                </BackofficeProtectedRoute>
+              </BackofficeAuthProvider>
+            }
+          />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
