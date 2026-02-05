@@ -31,18 +31,19 @@
  } from "@/components/ui/alert-dialog";
  import { Textarea } from "@/components/ui/textarea";
  import { Label } from "@/components/ui/label";
- import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users } from "lucide-react";
+ import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, RefreshCw } from "lucide-react";
  import { format } from "date-fns";
  
  export default function WaitlistPage() {
    const [activeTab, setActiveTab] = useState<WaitlistStatus | "all">("pending");
    const { data: leads, isLoading } = useWaitlist(activeTab === "all" ? undefined : activeTab);
-   const { approveLead, rejectLead } = useWaitlistActions();
+   const { approveLead, rejectLead, resendInvite } = useWaitlistActions();
  
    const [selectedLead, setSelectedLead] = useState<WaitlistLead | null>(null);
    const [showApproveDialog, setShowApproveDialog] = useState(false);
-   const [showRejectDialog, setShowRejectDialog] = useState(false);
-   const [rejectReason, setRejectReason] = useState("");
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showResendDialog, setShowResendDialog] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
  
    const handleApprove = () => {
      if (!selectedLead) return;
@@ -51,13 +52,20 @@
      setSelectedLead(null);
    };
  
-   const handleReject = () => {
-     if (!selectedLead) return;
-     rejectLead.mutate({ leadId: selectedLead.id, reason: rejectReason || undefined });
-     setShowRejectDialog(false);
-     setSelectedLead(null);
-     setRejectReason("");
-   };
+  const handleReject = () => {
+    if (!selectedLead) return;
+    rejectLead.mutate({ leadId: selectedLead.id, reason: rejectReason || undefined });
+    setShowRejectDialog(false);
+    setSelectedLead(null);
+    setRejectReason("");
+  };
+
+  const handleResend = () => {
+    if (!selectedLead) return;
+    resendInvite.mutate(selectedLead.id);
+    setShowResendDialog(false);
+    setSelectedLead(null);
+  };
  
    const getStatusBadge = (status: WaitlistStatus) => {
      switch (status) {
@@ -174,39 +182,59 @@
                              <TableCell className="text-muted-foreground text-sm">
                                {format(new Date(lead.created_at), "MMM d, yyyy")}
                              </TableCell>
-                             <TableCell>
-                               {lead.status === "pending" && (
-                                 <DropdownMenu>
-                                   <DropdownMenuTrigger asChild>
-                                     <Button variant="ghost" size="icon" className="h-8 w-8">
-                                       <MoreHorizontal className="h-4 w-4" />
-                                     </Button>
-                                   </DropdownMenuTrigger>
-                                   <DropdownMenuContent align="end">
-                                     <DropdownMenuItem
-                                       onClick={() => {
-                                         setSelectedLead(lead);
-                                         setShowApproveDialog(true);
-                                       }}
-                                       className="text-emerald-600"
-                                     >
-                                       <Check className="mr-2 h-4 w-4" />
-                                       Approve
-                                     </DropdownMenuItem>
-                                     <DropdownMenuItem
-                                       onClick={() => {
-                                         setSelectedLead(lead);
-                                         setShowRejectDialog(true);
-                                       }}
-                                       className="text-destructive"
-                                     >
-                                       <X className="mr-2 h-4 w-4" />
-                                       Reject
-                                     </DropdownMenuItem>
-                                   </DropdownMenuContent>
-                                 </DropdownMenu>
-                               )}
-                             </TableCell>
+                              <TableCell>
+                                {lead.status === "pending" && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedLead(lead);
+                                          setShowApproveDialog(true);
+                                        }}
+                                        className="text-emerald-600"
+                                      >
+                                        <Check className="mr-2 h-4 w-4" />
+                                        Approve
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedLead(lead);
+                                          setShowRejectDialog(true);
+                                        }}
+                                        className="text-destructive"
+                                      >
+                                        <X className="mr-2 h-4 w-4" />
+                                        Reject
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                                {lead.status === "invited" && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedLead(lead);
+                                          setShowResendDialog(true);
+                                        }}
+                                      >
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Resend Invite
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
+                              </TableCell>
                            </TableRow>
                          ))}
                        </TableBody>
@@ -274,7 +302,26 @@
              </AlertDialogAction>
            </AlertDialogFooter>
          </AlertDialogContent>
-       </AlertDialog>
-     </BackofficeLayout>
-   );
- }
+        </AlertDialog>
+
+        {/* Resend Invite Dialog */}
+        <AlertDialog open={showResendDialog} onOpenChange={setShowResendDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Resend Invitation</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will send a new invitation email to <strong>{selectedLead?.email}</strong> with a fresh 7-day valid link.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSelectedLead(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleResend} disabled={resendInvite.isPending}>
+                {resendInvite.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Resend Invitation
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </BackofficeLayout>
+    );
+  }
