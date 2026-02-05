@@ -371,7 +371,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {/* Sidebar - Desktop */}
           <aside
             className={cn(
-               "hidden lg:flex flex-col bg-primary relative z-[60] transition-all duration-300 h-screen overflow-hidden",
+               "hidden lg:flex flex-col bg-primary fixed top-0 left-0 z-[60] transition-all duration-300 h-screen overflow-hidden",
               isExpanded ? "w-64" : "w-[72px]"
             )}
           >
@@ -392,9 +392,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           </aside>
 
           {/* Main Content */}
-          <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
+          <main className={cn(
+            "flex-1 flex flex-col min-h-screen overflow-hidden transition-all duration-300",
+            isExpanded ? "lg:ml-64" : "lg:ml-[72px]"
+          )}>
             {/* Top Bar */}
-            <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6">
+            <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
               <button
                 onClick={() => setIsMobileOpen(true)}
                 className="p-2 hover:bg-muted rounded-lg lg:hidden"
