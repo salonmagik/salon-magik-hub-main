@@ -57,6 +57,16 @@ import BookingPage from "./pages/booking/BookingPage";
 // Other pages
 import NotFound from "./pages/NotFound";
 
+ // BackOffice
+ import { BackofficeAuthProvider } from "@/hooks/backoffice";
+ import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/backoffice/BackofficeProtectedRoute";
+ import BackofficeLoginPage from "./pages/backoffice/BackofficeLoginPage";
+ import BackofficeVerify2FAPage from "./pages/backoffice/BackofficeVerify2FAPage";
+ import BackofficeSetup2FAPage from "./pages/backoffice/BackofficeSetup2FAPage";
+ import BackofficeDashboardPage from "./pages/backoffice/BackofficeDashboardPage";
+ import WaitlistPage from "./pages/backoffice/WaitlistPage";
+ import TenantsPage from "./pages/backoffice/TenantsPage";
+ 
 const queryClient = new QueryClient();
 
 // Smart root route component - redirects based on auth state
@@ -322,7 +332,62 @@ const App = () => (
             />
 
             {/* BackOffice Routes */}
-            <Route path="/backoffice/*" element={<NotFound />} />
+             <Route
+               path="/backoffice/login"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficePublicRoute>
+                     <BackofficeLoginPage />
+                   </BackofficePublicRoute>
+                 </BackofficeAuthProvider>
+               }
+             />
+             <Route
+               path="/backoffice/verify-2fa"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficeVerify2FAPage />
+                 </BackofficeAuthProvider>
+               }
+             />
+             <Route
+               path="/backoffice/setup-2fa"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficeSetup2FAPage />
+                 </BackofficeAuthProvider>
+               }
+             />
+             <Route
+               path="/backoffice"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficeProtectedRoute>
+                     <BackofficeDashboardPage />
+                   </BackofficeProtectedRoute>
+                 </BackofficeAuthProvider>
+               }
+             />
+             <Route
+               path="/backoffice/waitlist"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficeProtectedRoute>
+                     <WaitlistPage />
+                   </BackofficeProtectedRoute>
+                 </BackofficeAuthProvider>
+               }
+             />
+             <Route
+               path="/backoffice/tenants"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficeProtectedRoute>
+                     <TenantsPage />
+                   </BackofficeProtectedRoute>
+                 </BackofficeAuthProvider>
+               }
+             />
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
