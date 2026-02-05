@@ -73,6 +73,7 @@ import NotFound from "./pages/NotFound";
  import PlansPage from "./pages/backoffice/PlansPage";
  import ImpersonationPage from "./pages/backoffice/ImpersonationPage";
  import BackofficeSettingsPage from "./pages/backoffice/SettingsPage";
+ import AdminsPage from "./pages/backoffice/AdminsPage";
  
 const queryClient = new QueryClient();
 
@@ -439,6 +440,16 @@ const App = () => (
               <BackofficeAuthProvider>
                 <BackofficeProtectedRoute>
                   <ImpersonationPage />
+                </BackofficeProtectedRoute>
+              </BackofficeAuthProvider>
+            }
+          />
+          <Route
+            path="/backoffice/admins"
+            element={
+              <BackofficeAuthProvider>
+                <BackofficeProtectedRoute>
+                  <AdminsPage />
                 </BackofficeProtectedRoute>
               </BackofficeAuthProvider>
             }

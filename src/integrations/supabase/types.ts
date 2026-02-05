@@ -345,10 +345,13 @@ export type Database = {
           after_json: Json | null
           before_json: Json | null
           created_at: string
+          criticality_score: number | null
+          ended_at: string | null
           entity_id: string | null
           entity_type: string
           id: string
           metadata: Json | null
+          started_at: string | null
           tenant_id: string | null
         }
         Insert: {
@@ -357,10 +360,13 @@ export type Database = {
           after_json?: Json | null
           before_json?: Json | null
           created_at?: string
+          criticality_score?: number | null
+          ended_at?: string | null
           entity_id?: string | null
           entity_type: string
           id?: string
           metadata?: Json | null
+          started_at?: string | null
           tenant_id?: string | null
         }
         Update: {
@@ -369,10 +375,13 @@ export type Database = {
           after_json?: Json | null
           before_json?: Json | null
           created_at?: string
+          criticality_score?: number | null
+          ended_at?: string | null
           entity_id?: string | null
           entity_type?: string
           id?: string
           metadata?: Json | null
+          started_at?: string | null
           tenant_id?: string | null
         }
         Relationships: [
@@ -407,6 +416,60 @@ export type Database = {
           created_at?: string
           domain?: string
           id?: string
+        }
+        Relationships: []
+      }
+      backoffice_sessions: {
+        Row: {
+          city: string | null
+          country: string | null
+          created_at: string
+          device_type: string | null
+          end_reason: string | null
+          ended_at: string | null
+          id: string
+          ip_address: unknown
+          isp: string | null
+          last_activity_at: string
+          region: string | null
+          session_token: string
+          started_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          ip_address?: unknown
+          isp?: string | null
+          last_activity_at?: string
+          region?: string | null
+          session_token: string
+          started_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_type?: string | null
+          end_reason?: string | null
+          ended_at?: string | null
+          id?: string
+          ip_address?: unknown
+          isp?: string | null
+          last_activity_at?: string
+          region?: string | null
+          session_token?: string
+          started_at?: string
+          user_agent?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -1880,7 +1943,10 @@ export type Database = {
           first_name: string
           id: string
           invited_by_id: string | null
+          invited_via: string | null
           last_name: string
+          last_resent_at: string | null
+          resend_count: number | null
           role: Database["public"]["Enums"]["app_role"]
           status: string
           tenant_id: string
@@ -1894,7 +1960,10 @@ export type Database = {
           first_name: string
           id?: string
           invited_by_id?: string | null
+          invited_via?: string | null
           last_name: string
+          last_resent_at?: string | null
+          resend_count?: number | null
           role?: Database["public"]["Enums"]["app_role"]
           status?: string
           tenant_id: string
@@ -1908,7 +1977,10 @@ export type Database = {
           first_name?: string
           id?: string
           invited_by_id?: string | null
+          invited_via?: string | null
           last_name?: string
+          last_resent_at?: string | null
+          resend_count?: number | null
           role?: Database["public"]["Enums"]["app_role"]
           status?: string
           tenant_id?: string
