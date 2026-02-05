@@ -2647,15 +2647,12 @@ export type Database = {
     Views: {
       public_booking_tenants: {
         Row: {
-          auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
           booking_status_message: string | null
           brand_color: string | null
           cancellation_grace_hours: number | null
           country: string | null
           currency: string | null
-          default_deposit_percentage: number | null
-          deposits_enabled: boolean | null
           id: string | null
           logo_url: string | null
           name: string | null
@@ -2666,15 +2663,12 @@ export type Database = {
           timezone: string | null
         }
         Insert: {
-          auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
           country?: string | null
           currency?: string | null
-          default_deposit_percentage?: number | null
-          deposits_enabled?: boolean | null
           id?: string | null
           logo_url?: string | null
           name?: string | null
@@ -2685,15 +2679,12 @@ export type Database = {
           timezone?: string | null
         }
         Update: {
-          auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
           country?: string | null
           currency?: string | null
-          default_deposit_percentage?: number | null
-          deposits_enabled?: boolean | null
           id?: string | null
           logo_url?: string | null
           name?: string | null
