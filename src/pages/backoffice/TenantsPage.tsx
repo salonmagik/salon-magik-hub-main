@@ -31,22 +31,24 @@
      t.owner_email?.toLowerCase().includes(searchQuery.toLowerCase())
    );
  
-   const getStatusBadge = (status: string) => {
-     switch (status) {
-       case "active":
-         return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Active</Badge>;
-       case "trialing":
-         return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Trial</Badge>;
-       case "past_due":
-         return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Past Due</Badge>;
-       case "canceled":
-         return <Badge className="bg-red-100 text-red-700 border-red-200">Canceled</Badge>;
-       case "inactive":
-         return <Badge variant="secondary">Inactive</Badge>;
-       default:
-         return <Badge variant="secondary">{status}</Badge>;
-     }
-   };
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Active</Badge>;
+      case "trialing":
+        return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Trial</Badge>;
+      case "past_due":
+        return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Past Due</Badge>;
+      case "canceled":
+        return <Badge className="bg-red-100 text-red-700 border-red-200">Canceled</Badge>;
+      case "permanently_deactivated":
+        return <Badge className="bg-zinc-100 text-zinc-500 border-zinc-200">Deactivated</Badge>;
+      case "inactive":
+        return <Badge variant="secondary">Inactive</Badge>;
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
  
    return (
      <BackofficeLayout>
