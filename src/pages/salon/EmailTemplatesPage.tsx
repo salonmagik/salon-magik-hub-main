@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -366,7 +367,12 @@ export default function EmailTemplatesPage() {
                 <div className="py-4">
                   <div
                     className="border rounded-lg p-4 bg-white"
-                    dangerouslySetInnerHTML={{ __html: selectedTemplate?.body_html || "" }}
+                    dangerouslySetInnerHTML={{ 
+                      __html: DOMPurify.sanitize(selectedTemplate?.body_html || "", {
+                        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'a', 'img', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'table', 'tr', 'td', 'th', 'tbody', 'thead', 'hr', 'ul', 'ol', 'li'],
+                        ALLOWED_ATTR: ['href', 'src', 'alt', 'style', 'class', 'width', 'height', 'border', 'cellpadding', 'cellspacing']
+                      })
+                    }}
                   />
                 </div>
                 <DialogFooter>
