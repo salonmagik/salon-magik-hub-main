@@ -1415,6 +1415,88 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_intents: {
+        Row: {
+          amount: number
+          appointment_id: string | null
+          created_at: string
+          currency: string
+          customer_email: string
+          customer_name: string | null
+          gateway: string
+          gateway_reference: string | null
+          id: string
+          is_deposit: boolean
+          metadata: Json | null
+          paystack_access_code: string | null
+          paystack_reference: string | null
+          status: string
+          stripe_session_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          appointment_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_email: string
+          customer_name?: string | null
+          gateway: string
+          gateway_reference?: string | null
+          id?: string
+          is_deposit?: boolean
+          metadata?: Json | null
+          paystack_access_code?: string | null
+          paystack_reference?: string | null
+          status?: string
+          stripe_session_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_email?: string
+          customer_name?: string | null
+          gateway?: string
+          gateway_reference?: string | null
+          id?: string
+          is_deposit?: boolean
+          metadata?: Json | null
+          paystack_access_code?: string | null
+          paystack_reference?: string | null
+          status?: string
+          stripe_session_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_intents_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_intents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_intents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_features: {
         Row: {
           created_at: string
@@ -2255,6 +2337,7 @@ export type Database = {
           customer_id: string | null
           id: string
           method: Database["public"]["Enums"]["payment_method"]
+          paystack_reference: string | null
           provider: string | null
           provider_reference: string | null
           status: string
@@ -2270,6 +2353,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           method: Database["public"]["Enums"]["payment_method"]
+          paystack_reference?: string | null
           provider?: string | null
           provider_reference?: string | null
           status?: string
@@ -2285,6 +2369,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
+          paystack_reference?: string | null
           provider?: string | null
           provider_reference?: string | null
           status?: string
