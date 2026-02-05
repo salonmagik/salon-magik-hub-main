@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,9 +40,16 @@ import {
   UserPlus,
   User,
   Gift,
+  Bell,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointmentDialog";
 import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
@@ -102,6 +109,7 @@ export default function AppointmentsPage() {
     completeAppointment,
     cancelAppointment,
     rescheduleAppointment,
+    sendReminder,
   } = useAppointmentActions();
 
   // Get user's role for the current tenant
@@ -134,6 +142,10 @@ export default function AppointmentsPage() {
         break;
       case "complete":
         await completeAppointment(appointment.id);
+        handleRefetch();
+        break;
+      case "reminder":
+        await sendReminder(appointment.id);
         handleRefetch();
         break;
       case "pause":
@@ -182,11 +194,28 @@ export default function AppointmentsPage() {
     });
   };
 
+  // Check if reminder cooldown is active (30 minutes)
+  const getReminderCooldownInfo = useCallback((lastReminderSent: string | null) => {
+    if (!lastReminderSent) return { canSend: true, remainingMinutes: 0 };
+    
+    const lastSent = new Date(lastReminderSent);
+    const now = new Date();
+    const diffMs = now.getTime() - lastSent.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const cooldownMinutes = 30;
+    
+    if (diffMinutes >= cooldownMinutes) {
+      return { canSend: true, remainingMinutes: 0 };
+    }
+    
+    return { canSend: false, remainingMinutes: cooldownMinutes - diffMinutes };
+  }, []);
+
   const getAvailableActions = (status: AppointmentStatus) => {
     const actions: string[] = [];
     switch (status) {
       case "scheduled":
-        actions.push("start");
+        actions.push("start", "reminder");
         if (canCancelReschedule) actions.push("reschedule", "cancel");
         break;
       case "started":
@@ -538,6 +567,32 @@ export default function AppointmentsPage() {
                                   Complete
                                 </DropdownMenuItem>
                               )}
+                              {actions.includes("reminder") && (() => {
+                                const cooldownInfo = getReminderCooldownInfo((apt as any).last_reminder_sent_at);
+                                return (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span>
+                                          <DropdownMenuItem 
+                                            onClick={() => handleAction("reminder", apt)}
+                                            disabled={!cooldownInfo.canSend}
+                                            className={!cooldownInfo.canSend ? "opacity-50 cursor-not-allowed" : ""}
+                                          >
+                                            <Bell className="w-4 h-4 mr-2" />
+                                            Send Reminder
+                                          </DropdownMenuItem>
+                                        </span>
+                                      </TooltipTrigger>
+                                      {!cooldownInfo.canSend && (
+                                        <TooltipContent>
+                                          <p>Wait {cooldownInfo.remainingMinutes} min to send again</p>
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                );
+                              })()}
                               {canViewCustomerProfile && (
                                 <>
                                   <DropdownMenuSeparator />
