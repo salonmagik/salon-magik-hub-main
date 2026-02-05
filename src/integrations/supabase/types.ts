@@ -2653,6 +2653,8 @@ export type Database = {
           cancellation_grace_hours: number | null
           country: string | null
           currency: string | null
+          default_deposit_percentage: number | null
+          deposits_enabled: boolean | null
           id: string | null
           logo_url: string | null
           name: string | null
@@ -2669,6 +2671,8 @@ export type Database = {
           cancellation_grace_hours?: number | null
           country?: string | null
           currency?: string | null
+          default_deposit_percentage?: number | null
+          deposits_enabled?: boolean | null
           id?: string | null
           logo_url?: string | null
           name?: string | null
@@ -2685,6 +2689,8 @@ export type Database = {
           cancellation_grace_hours?: number | null
           country?: string | null
           currency?: string | null
+          default_deposit_percentage?: number | null
+          deposits_enabled?: boolean | null
           id?: string | null
           logo_url?: string | null
           name?: string | null
