@@ -13,7 +13,6 @@ export type PublicTenant = Pick<
   | "country"
   | "timezone"
   | "online_booking_enabled"
-  | "auto_confirm_bookings"
   | "deposits_enabled"
   | "default_deposit_percentage"
   | "cancellation_grace_hours"
