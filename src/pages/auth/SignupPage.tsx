@@ -23,7 +23,8 @@ export default function SignupPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
-  const invitationToken = searchParams.get("invitation");
+   // Support both 'invitation' and 'invite' query params for waitlist tokens
+   const invitationToken = searchParams.get("invitation") || searchParams.get("invite");
   
   const [isLoading, setIsLoading] = useState(false);
   const [isValidatingToken, setIsValidatingToken] = useState(!!invitationToken);
