@@ -9,7 +9,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type AppointmentAction = "scheduled" | "completed" | "cancelled" | "rescheduled";
+type AppointmentAction = "scheduled" | "completed" | "cancelled" | "rescheduled" | "reminder";
 
 interface NotificationRequest {
   appointmentId: string;
@@ -160,6 +160,24 @@ const defaultTemplates: Record<AppointmentAction, { subject: string; body: strin
       <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">See you at the new time!</p>
     `,
   },
+  reminder: {
+    subject: "Reminder: Upcoming Appointment at {{salon_name}}",
+    body: `
+      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Reminder</h2>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">This is a friendly reminder about your upcoming appointment at <strong>{{salon_name}}</strong>.</p>
+      
+      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
+        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Date:</strong> {{appointment_date}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Time:</strong> {{appointment_time}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Location:</strong> {{location}}</p>
+      </div>
+      
+      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We look forward to seeing you!</p>
+      <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you need to reschedule or cancel, please contact us as soon as possible.</p>
+    `,
+  },
 };
 
 // Map action to template type
@@ -168,6 +186,7 @@ const actionToTemplateType: Record<AppointmentAction, string> = {
   completed: "appointment_completed",
   cancelled: "appointment_cancelled",
   rescheduled: "appointment_rescheduled",
+  reminder: "appointment_reminder",
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -189,7 +208,7 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Missing required fields: appointmentId and action");
     }
 
-    if (!["scheduled", "completed", "cancelled", "rescheduled"].includes(action)) {
+    if (!["scheduled", "completed", "cancelled", "rescheduled", "reminder"].includes(action)) {
       throw new Error("Invalid action type");
     }
 
@@ -345,6 +364,14 @@ const handler = async (req: Request): Promise<Response> => {
       sent_at: new Date().toISOString(),
       credits_used: 1,
     });
+
+    // Update last_reminder_sent_at if this is a reminder
+    if (action === "reminder") {
+      await supabase
+        .from("appointments")
+        .update({ last_reminder_sent_at: new Date().toISOString() })
+        .eq("id", appointmentId);
+    }
 
     return new Response(
       JSON.stringify({ success: true, emailId: emailData.id }),

@@ -240,6 +240,7 @@ export type Database = {
           is_gifted: boolean
           is_unscheduled: boolean
           is_walk_in: boolean
+          last_reminder_sent_at: string | null
           location_id: string
           notes: string | null
           pause_count: number
@@ -267,6 +268,7 @@ export type Database = {
           is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
+          last_reminder_sent_at?: string | null
           location_id: string
           notes?: string | null
           pause_count?: number
@@ -294,6 +296,7 @@ export type Database = {
           is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
+          last_reminder_sent_at?: string | null
           location_id?: string
           notes?: string | null
           pause_count?: number

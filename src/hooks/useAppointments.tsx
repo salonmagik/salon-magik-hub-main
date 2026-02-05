@@ -471,6 +471,28 @@ export function useAppointmentActions() {
     }
   };
 
+  const sendReminder = async (appointmentId: string) => {
+    if (!currentTenant?.id) return false;
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-appointment-notification", {
+        body: { appointmentId, action: "reminder" },
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Reminder Sent", description: "Customer has been notified" });
+      return true;
+    } catch (err) {
+      console.error("Error sending reminder:", err);
+      toast({ title: "Error", description: "Failed to send reminder", variant: "destructive" });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     isSubmitting,
     createAppointment,
@@ -480,5 +502,6 @@ export function useAppointmentActions() {
     completeAppointment,
     cancelAppointment,
     rescheduleAppointment,
+    sendReminder,
   };
 }
