@@ -40,6 +40,8 @@ import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
 import EmailTemplatesPage from "./pages/salon/EmailTemplatesPage";
 import AccessDeniedPage from "./pages/salon/AccessDeniedPage";
+import AuditLogPage from "./pages/salon/AuditLogPage";
+import SalonsOverviewPage from "./pages/salon/SalonsOverviewPage";
 
 // Client Portal
 import { ClientAuthProvider } from "@/hooks/client/useClientAuth";
@@ -284,6 +286,26 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <HelpPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/audit-log"
+              element={
+                <ProtectedRoute>
+                  <ModuleProtectedRoute module="audit_log">
+                    <AuditLogPage />
+                  </ModuleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/overview"
+              element={
+                <ProtectedRoute>
+                  <ModuleProtectedRoute module="salons_overview">
+                    <SalonsOverviewPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />

@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, ReactNode, useMemo } fr
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
+  Building2,
   Calendar,
   CalendarDays,
   Scissors,
@@ -19,6 +20,7 @@ import {
   ChevronLeft,
   Bell,
   Plus,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
@@ -50,6 +52,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
+  { label: "Salons Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
@@ -59,6 +62,7 @@ const mainNavItems: NavItem[] = [
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
   { label: "Journal", icon: BookOpen, path: "/salon/journal", module: "journal" },
   { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+  { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
   { label: "Settings", icon: Settings, path: "/salon/settings", module: "settings" },
 ];
 
