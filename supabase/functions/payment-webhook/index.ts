@@ -1,43 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature, x-paystack-signature",
 };
-
-// Schema validation for webhook data
-const WebhookMetadataSchema = z.object({
-  appointment_id: z.string().uuid().optional(),
-  payment_intent_id: z.string().uuid().optional(),
-}).passthrough();
-
-const StripeObjectSchema = z.object({
-  id: z.string().min(1),
-  status: z.string().optional(),
-  amount_received: z.number().nonnegative().optional(),
-  metadata: WebhookMetadataSchema.optional(),
-}).passthrough();
-
-const StripeEventSchema = z.object({
-  type: z.string().min(1),
-  data: z.object({
-    object: StripeObjectSchema,
-  }),
-}).passthrough();
-
-const PaystackDataSchema = z.object({
-  reference: z.string().min(1).optional(),
-  status: z.string().optional(),
-  amount: z.number().nonnegative().optional(),
-  metadata: WebhookMetadataSchema.optional(),
-}).passthrough();
-
-const PaystackEventSchema = z.object({
-  event: z.string().min(1),
-  data: PaystackDataSchema,
-}).passthrough();
 
 interface WebhookEvent {
   type: string;
@@ -45,6 +11,7 @@ interface WebhookEvent {
   data: {
     paymentIntentId?: string;
     appointmentId?: string;
+    tenantId?: string;
     amount?: number;
     status?: string;
     reference?: string;
@@ -54,15 +21,6 @@ interface WebhookEvent {
 function isValidUUID(value: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(value);
-}
-
-function validateAmount(amount: number | undefined): number | undefined {
-  if (amount === undefined) return undefined;
-  if (amount < 0 || amount > 10000000) {
-    console.error("Invalid amount value:", amount);
-    return undefined;
-  }
-  return amount;
 }
 
 // Verify Stripe webhook signature using HMAC SHA256
@@ -150,7 +108,7 @@ async function verifyPaystackSignature(
   }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -201,38 +159,29 @@ serve(async (req) => {
         );
       }
 
-      // Validate Stripe payload structure
-      const stripeResult = StripeEventSchema.safeParse(body);
-      if (!stripeResult.success) {
-        console.error("Invalid Stripe payload structure:", stripeResult.error.message);
-        return new Response(
-          JSON.stringify({ error: "Invalid payload structure" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const stripeEvent = body as {
+        type: string;
+        data: {
+          object: {
+            id: string;
+            status?: string;
+            amount_received?: number;
+            metadata?: Record<string, string>;
+          };
+        };
+      };
 
-      const stripeEvent = stripeResult.data;
       const object = stripeEvent.data.object;
       const metadata = object.metadata;
-      const appointmentId = metadata?.appointment_id;
-      const paymentIntentId = metadata?.payment_intent_id;
-
-      // Validate UUID format if provided
-      if (appointmentId && !isValidUUID(appointmentId)) {
-        console.error("Invalid appointment_id format:", appointmentId);
-        return new Response(
-          JSON.stringify({ error: "Invalid appointment_id format" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
       event = {
         type: stripeEvent.type,
         gateway: "stripe",
         data: {
-          paymentIntentId,
-          appointmentId,
-          amount: validateAmount(object.amount_received ? object.amount_received / 100 : undefined),
+          paymentIntentId: metadata?.payment_intent_id,
+          appointmentId: metadata?.appointment_id,
+          tenantId: metadata?.tenant_id,
+          amount: object.amount_received ? object.amount_received / 100 : undefined,
           status: object.status,
           reference: object.id,
         },
@@ -256,44 +205,36 @@ serve(async (req) => {
         );
       }
 
-      // Validate Paystack payload structure
-      const paystackResult = PaystackEventSchema.safeParse(body);
-      if (!paystackResult.success) {
-        console.error("Invalid Paystack payload structure:", paystackResult.error.message);
-        return new Response(
-          JSON.stringify({ error: "Invalid payload structure" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      const paystackEvent = body as {
+        event: string;
+        data: {
+          reference?: string;
+          status?: string;
+          amount?: number;
+          metadata?: {
+            appointment_id?: string;
+            payment_intent_id?: string;
+            tenant_id?: string;
+          };
+        };
+      };
 
-      const paystackEvent = paystackResult.data;
       const data = paystackEvent.data;
       const metadata = data.metadata;
-      const appointmentId = metadata?.appointment_id;
-      const paymentIntentId = metadata?.payment_intent_id;
-
-      // Validate UUID format if provided
-      if (appointmentId && !isValidUUID(appointmentId)) {
-        console.error("Invalid appointment_id format:", appointmentId);
-        return new Response(
-          JSON.stringify({ error: "Invalid appointment_id format" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
 
       event = {
         type: paystackEvent.event,
         gateway: "paystack",
         data: {
-          paymentIntentId,
-          appointmentId,
-          amount: validateAmount(data.amount ? data.amount / 100 : undefined),
+          paymentIntentId: metadata?.payment_intent_id,
+          appointmentId: metadata?.appointment_id,
+          tenantId: metadata?.tenant_id,
+          amount: data.amount ? data.amount / 100 : undefined,
           status: data.status,
           reference: data.reference,
         },
       };
     } else {
-      // Reject requests without valid signatures (no testing backdoor in production)
       console.error("No webhook signature provided");
       return new Response(
         JSON.stringify({ error: "Missing webhook signature" }),
@@ -309,7 +250,16 @@ serve(async (req) => {
       event.type === "payment_intent.succeeded" ||
       event.type === "charge.success"
     ) {
-      const { appointmentId, amount, reference } = event.data;
+      const { appointmentId, amount, reference, tenantId } = event.data;
+
+      // Validate appointment ID
+      if (appointmentId && !isValidUUID(appointmentId)) {
+        console.error("Invalid appointment_id format:", appointmentId);
+        return new Response(
+          JSON.stringify({ error: "Invalid appointment_id format" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       if (appointmentId && amount) {
         // Update appointment payment status
@@ -335,7 +285,7 @@ serve(async (req) => {
 
         if (appointment) {
           // Record transaction
-          await supabase.from("transactions").insert({
+          const transactionData: Record<string, unknown> = {
             tenant_id: appointment.tenant_id,
             customer_id: appointment.customer_id,
             appointment_id: appointmentId,
@@ -345,7 +295,14 @@ serve(async (req) => {
             gateway: event.gateway,
             gateway_reference: reference,
             status: "completed",
-          });
+          };
+
+          // Add Paystack reference if applicable
+          if (event.gateway === "paystack" && reference) {
+            transactionData.paystack_reference = reference;
+          }
+
+          await supabase.from("transactions").insert(transactionData);
 
           // Create notification for salon
           await supabase.from("notifications").insert({
@@ -360,7 +317,7 @@ serve(async (req) => {
         }
 
         // Update payment intent status
-        if (event.data.paymentIntentId) {
+        if (event.data.paymentIntentId && isValidUUID(event.data.paymentIntentId)) {
           await supabase
             .from("payment_intents")
             .update({
@@ -380,7 +337,7 @@ serve(async (req) => {
     ) {
       const { paymentIntentId } = event.data;
 
-      if (paymentIntentId) {
+      if (paymentIntentId && isValidUUID(paymentIntentId)) {
         await supabase
           .from("payment_intents")
           .update({
