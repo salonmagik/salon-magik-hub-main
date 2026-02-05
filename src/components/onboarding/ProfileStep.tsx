@@ -97,7 +97,7 @@ export function ProfileStep({ profileInfo, signInEmail, signInPhone, onChange }:
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Phone number</span>
+            <span className="text-sm font-medium">Phone number *</span>
             {signInPhone && (
               <div className="flex items-center gap-2">
                 <Checkbox
