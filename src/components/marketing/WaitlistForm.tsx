@@ -76,14 +76,41 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
         }
       );
 
-      if (fnError) throw fnError;
+      if (fnError) {
+        // Check if the error body contains our custom error message
+        const errorBody = fnError.context?.body;
+        if (typeof errorBody === "string") {
+          try {
+            const parsed = JSON.parse(errorBody);
+            if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+          } catch {
+            // Not JSON, use original error
+          }
+        }
+        throw fnError;
+      }
+
+      // Check if response indicates already on waitlist
+      if (result?.message?.includes("already on the waitlist")) {
+        setError("You've already submitted a request before now. We'll notify you when access is ready!");
+        return;
+      }
 
       setPosition(result?.position || null);
       setIsSuccess(true);
     } catch (err: any) {
       console.error("Waitlist submission error:", err);
-      if (err.message?.includes("duplicate") || err.message?.includes("unique")) {
-        setError("This email is already on the waitlist!");
+      const errorMessage = err.message || "";
+      
+      if (
+        errorMessage.includes("duplicate") || 
+        errorMessage.includes("unique") ||
+        errorMessage.includes("already on the waitlist") ||
+        errorMessage.includes("already submitted")
+      ) {
+        setError("You've already submitted a request before now. We'll notify you when access is ready!");
       } else {
         setError(err.message || "Something went wrong. Please try again.");
       }

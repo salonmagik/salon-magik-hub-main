@@ -52,97 +52,146 @@
    });
  }
  
- export function useWaitlistActions() {
-   const queryClient = useQueryClient();
-   const { toast } = useToast();
- 
-   const approveLead = useMutation({
-     mutationFn: async (leadId: string) => {
-       // Generate invitation token
-       const token = crypto.randomUUID();
-       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
- 
-       // Update lead with invited status and token
-       const { data, error } = await supabase
-         .from("waitlist_leads")
-         .update({
-           status: "invited" as const,
-           invitation_token: token,
-           invitation_expires_at: expiresAt.toISOString(),
-           approved_at: new Date().toISOString(),
-         })
-         .eq("id", leadId)
-         .select()
-         .single();
- 
-       if (error) throw error;
- 
-       // Send invitation email via edge function
-       const { error: emailError } = await supabase.functions.invoke("send-waitlist-invitation", {
-         body: { leadId },
-       });
- 
-       if (emailError) {
-         console.error("Error sending invitation email:", emailError);
-         // Don't throw - approval succeeded, email is secondary
-         toast({
-           title: "Lead approved",
-           description: "However, the invitation email could not be sent. Check logs.",
-           variant: "destructive",
-         });
-       }
- 
-       return data;
-     },
-     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ["waitlist"] });
-       toast({
-         title: "Lead approved",
-         description: "Invitation email has been sent.",
-       });
-     },
-     onError: (error) => {
-       toast({
-         title: "Error approving lead",
-         description: error.message,
-         variant: "destructive",
-       });
-     },
-   });
- 
-   const rejectLead = useMutation({
-     mutationFn: async ({ leadId, reason }: { leadId: string; reason?: string }) => {
-       const { data, error } = await supabase
-         .from("waitlist_leads")
-         .update({
-           status: "rejected",
-           rejected_reason: reason || null,
-         })
-         .eq("id", leadId)
-         .select()
-         .single();
- 
-       if (error) throw error;
-       return data;
-     },
-     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ["waitlist"] });
-       toast({
-         title: "Lead rejected",
-         description: "No notification was sent to the applicant.",
-       });
-     },
-     onError: (error) => {
-       toast({
-         title: "Error rejecting lead",
-         description: error.message,
-         variant: "destructive",
-       });
-     },
-   });
- 
-   return {
-     approveLead,
-     rejectLead,
-   };
- }
+export function useWaitlistActions() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const approveLead = useMutation({
+    mutationFn: async (leadId: string) => {
+      // Generate invitation token
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Update lead with invited status and token
+      const { data, error } = await supabase
+        .from("waitlist_leads")
+        .update({
+          status: "invited" as const,
+          invitation_token: token,
+          invitation_expires_at: expiresAt.toISOString(),
+          approved_at: new Date().toISOString(),
+        })
+        .eq("id", leadId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Send invitation email via edge function
+      const { error: emailError } = await supabase.functions.invoke("send-waitlist-invitation", {
+        body: { leadId },
+      });
+
+      if (emailError) {
+        console.error("Error sending invitation email:", emailError);
+        // Don't throw - approval succeeded, email is secondary
+        toast({
+          title: "Lead approved",
+          description: "However, the invitation email could not be sent. Check logs.",
+          variant: "destructive",
+        });
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["waitlist"] });
+      toast({
+        title: "Lead approved",
+        description: "Invitation email has been sent.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error approving lead",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resendInvite = useMutation({
+    mutationFn: async (leadId: string) => {
+      // Generate new invitation token
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Update lead with new token and expiry
+      const { data, error } = await supabase
+        .from("waitlist_leads")
+        .update({
+          invitation_token: token,
+          invitation_expires_at: expiresAt.toISOString(),
+        })
+        .eq("id", leadId)
+        .eq("status", "invited")
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Send invitation email via edge function
+      const { error: emailError } = await supabase.functions.invoke("send-waitlist-invitation", {
+        body: { leadId },
+      });
+
+      if (emailError) {
+        console.error("Error resending invitation email:", emailError);
+        throw new Error("Failed to send invitation email");
+      }
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["waitlist"] });
+      toast({
+        title: "Invitation resent",
+        description: "A new invitation email has been sent with a fresh 7-day link.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error resending invite",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectLead = useMutation({
+    mutationFn: async ({ leadId, reason }: { leadId: string; reason?: string }) => {
+      const { data, error } = await supabase
+        .from("waitlist_leads")
+        .update({
+          status: "rejected",
+          rejected_reason: reason || null,
+        })
+        .eq("id", leadId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["waitlist"] });
+      toast({
+        title: "Lead rejected",
+        description: "No notification was sent to the applicant.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error rejecting lead",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  return {
+    approveLead,
+    resendInvite,
+    rejectLead,
+  };
+}
