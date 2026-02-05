@@ -25,6 +25,7 @@ interface UserPermissionOverride {
 export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> = {
   owner: {
     dashboard: true,
+    salons_overview: true,
     appointments: true,
     "appointments:own": true,
     calendar: true,
@@ -38,10 +39,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     messaging: true,
     journal: true,
     staff: true,
+    audit_log: true,
     settings: true,
   },
   manager: {
     dashboard: true,
+    salons_overview: true,
     appointments: true,
     "appointments:own": true,
     calendar: true,
@@ -55,10 +58,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     messaging: true,
     journal: true,
     staff: true,
+    audit_log: false,
     settings: false,
   },
   supervisor: {
     dashboard: true,
+    salons_overview: false,
     appointments: true,
     "appointments:own": true,
     calendar: true,
@@ -72,10 +77,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     messaging: true,
     journal: false,
     staff: false,
+    audit_log: false,
     settings: false,
   },
   receptionist: {
     dashboard: true,
+    salons_overview: false,
     appointments: true,
     "appointments:own": true,
     calendar: true,
@@ -89,10 +96,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     messaging: true,
     journal: false,
     staff: false,
+    audit_log: false,
     settings: false,
   },
   staff: {
     dashboard: false,
+    salons_overview: false,
     appointments: false,
     "appointments:own": true,
     calendar: false,
@@ -106,12 +115,14 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     messaging: false,
     journal: false,
     staff: false,
+    audit_log: false,
     settings: false,
   },
 };
 
 export const MODULE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
+  salons_overview: "Salons Overview",
   appointments: "All Appointments",
   "appointments:own": "Own Appointments",
   calendar: "Calendar",
@@ -125,6 +136,7 @@ export const MODULE_LABELS: Record<string, string> = {
   messaging: "Messaging",
   journal: "Journal",
   staff: "Staff Management",
+  audit_log: "Audit Log",
   settings: "Settings",
 };
 
