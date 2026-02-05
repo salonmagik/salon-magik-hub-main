@@ -17,7 +17,12 @@ export interface StaffInvitation {
   accepted_at: string | null;
   expires_at: string;
   created_at: string;
+  last_resent_at: string | null;
+  resend_count: number;
+  invited_via: string | null;
 }
+
+const RESEND_THROTTLE_MINUTES = 30;
 
 export function useStaffInvitations() {
   const { currentTenant } = useAuth();
@@ -76,16 +81,88 @@ export function useStaffInvitations() {
     }
   };
 
+  const canResend = (invitation: StaffInvitation): { allowed: boolean; minutesRemaining: number } => {
+    if (!invitation.last_resent_at) {
+      return { allowed: true, minutesRemaining: 0 };
+    }
+
+    const lastResent = new Date(invitation.last_resent_at);
+    const now = new Date();
+    const minutesSinceResend = (now.getTime() - lastResent.getTime()) / (1000 * 60);
+    const minutesRemaining = Math.ceil(RESEND_THROTTLE_MINUTES - minutesSinceResend);
+
+    return {
+      allowed: minutesSinceResend >= RESEND_THROTTLE_MINUTES,
+      minutesRemaining: Math.max(0, minutesRemaining),
+    };
+  };
+
+  const resendInvitation = async (id: string) => {
+    const invitation = invitations.find((i) => i.id === id);
+    if (!invitation) {
+      toast({ title: "Error", description: "Invitation not found", variant: "destructive" });
+      return false;
+    }
+
+    const { allowed, minutesRemaining } = canResend(invitation);
+    if (!allowed) {
+      toast({
+        title: "Throttled",
+        description: `Please wait ${minutesRemaining} minute${minutesRemaining !== 1 ? "s" : ""} before resending.`,
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      // Update resend tracking
+      const { error: updateError } = await supabase
+        .from("staff_invitations")
+        .update({
+          last_resent_at: new Date().toISOString(),
+          resend_count: (invitation.resend_count || 0) + 1,
+          status: "pending", // Reset if expired
+        })
+        .eq("id", id);
+
+      if (updateError) throw updateError;
+
+      // Trigger email resend via edge function
+      const { error: resendError } = await supabase.functions.invoke("send-staff-invitation", {
+        body: {
+          invitationId: id,
+          resend: true,
+        },
+      });
+
+      if (resendError) throw resendError;
+
+      toast({ title: "Success", description: "Invitation resent successfully" });
+      await fetchInvitations();
+      return true;
+    } catch (err) {
+      console.error("Error resending invitation:", err);
+      toast({ title: "Error", description: "Failed to resend invitation", variant: "destructive" });
+      return false;
+    }
+  };
+
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
   const acceptedInvitations = invitations.filter((i) => i.status === "accepted");
+  const expiredInvitations = pendingInvitations.filter(
+    (i) => new Date(i.expires_at) < new Date()
+  );
 
   return {
     invitations,
     pendingInvitations,
     acceptedInvitations,
+    expiredInvitations,
     isLoading,
     error,
     refetch: fetchInvitations,
     cancelInvitation,
+    resendInvitation,
+    canResend,
   };
 }

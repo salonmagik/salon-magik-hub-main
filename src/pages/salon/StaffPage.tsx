@@ -14,8 +14,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock } from "lucide-react";
+import { UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle } from "lucide-react";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
+import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useAuth } from "@/hooks/useAuth";
@@ -55,8 +56,17 @@ function getInitials(name: string | undefined): string {
 
 export default function StaffPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedInvitationId, setSelectedInvitationId] = useState<string | null>(null);
   const { staff, isLoading, refetch } = useStaff();
-  const { invitations, isLoading: invitationsLoading, refetch: refetchInvitations, cancelInvitation } = useStaffInvitations();
+  const {
+    invitations,
+    isLoading: invitationsLoading,
+    refetch: refetchInvitations,
+    cancelInvitation,
+    resendInvitation,
+    canResend,
+  } = useStaffInvitations();
   const { user } = useAuth();
 
   const currentUserIsOwner = staff.some(
@@ -64,6 +74,22 @@ export default function StaffPage() {
   );
 
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
+
+  const handleCancelClick = (id: string) => {
+    setSelectedInvitationId(id);
+    setCancelDialogOpen(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (selectedInvitationId) {
+      await cancelInvitation(selectedInvitationId);
+      setSelectedInvitationId(null);
+    }
+  };
+
+  const handleResend = async (id: string) => {
+    await resendInvitation(id);
+  };
 
   return (
     <SalonSidebar>
@@ -296,47 +322,82 @@ export default function StaffPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {pendingInvitations.map((invitation) => (
-                      <div
-                        key={invitation.id}
-                        className="flex items-center justify-between p-4 rounded-lg border bg-muted/50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Mail className="w-5 h-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-medium">
-                              {invitation.first_name} {invitation.last_name}
-                            </p>
-                            <p className="text-sm text-muted-foreground">{invitation.email}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" className="text-xs">
-                                {roleLabels[invitation.role]}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                Expires {format(new Date(invitation.expires_at), "MMM d, yyyy")}
-                              </span>
+                    {pendingInvitations.map((invitation) => {
+                      const isExpired = new Date(invitation.expires_at) < new Date();
+                      const resendStatus = canResend(invitation);
+
+                      return (
+                        <div
+                          key={invitation.id}
+                          className={`flex items-center justify-between p-4 rounded-lg border ${
+                            isExpired ? "bg-destructive/5 border-destructive/20" : "bg-muted/50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              isExpired ? "bg-destructive/10" : "bg-primary/10"
+                            }`}>
+                              {isExpired ? (
+                                <AlertTriangle className="w-5 h-5 text-destructive" />
+                              ) : (
+                                <Mail className="w-5 h-5 text-primary" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium">
+                                {invitation.first_name} {invitation.last_name}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{invitation.email}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="outline" className="text-xs">
+                                  {roleLabels[invitation.role]}
+                                </Badge>
+                                {isExpired ? (
+                                  <Badge variant="destructive" className="text-xs">
+                                    Expired
+                                  </Badge>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    Expires {format(new Date(invitation.expires_at), "MMM d, yyyy")}
+                                  </span>
+                                )}
+                                {invitation.resend_count > 0 && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Resent {invitation.resend_count}×
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1"
+                              onClick={() => handleResend(invitation.id)}
+                              disabled={!resendStatus.allowed}
+                              title={
+                                resendStatus.allowed
+                                  ? "Resend invitation"
+                                  : `Wait ${resendStatus.minutesRemaining} min`
+                              }
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              {resendStatus.allowed ? "Resend" : `${resendStatus.minutesRemaining}m`}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive gap-1"
+                              onClick={() => handleCancelClick(invitation.id)}
+                            >
+                              <X className="w-3 h-3" />
+                              Cancel
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" className="gap-1">
-                            <RefreshCw className="w-3 h-3" />
-                            Resend
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive gap-1"
-                            onClick={() => cancelInvitation(invitation.id)}
-                          >
-                            <X className="w-3 h-3" />
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -359,6 +420,16 @@ export default function StaffPage() {
           refetch();
           refetchInvitations();
         }}
+      />
+
+      <ConfirmActionDialog
+        open={cancelDialogOpen}
+        onOpenChange={setCancelDialogOpen}
+        title="Cancel Invitation"
+        description="Are you sure you want to cancel this invitation? The recipient will no longer be able to join your team with this link."
+        confirmLabel="Cancel Invitation"
+        variant="destructive"
+        onConfirm={handleConfirmCancel}
       />
     </SalonSidebar>
   );

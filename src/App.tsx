@@ -159,7 +159,9 @@ const App = () => (
               path="/salon/appointments"
               element={
                 <ProtectedRoute>
-                  <AppointmentsPage />
+                  <ModuleProtectedRoute module="appointments">
+                    <AppointmentsPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -167,7 +169,9 @@ const App = () => (
               path="/salon/customers"
               element={
                 <ProtectedRoute>
-                  <CustomersPage />
+                  <ModuleProtectedRoute module="customers">
+                    <CustomersPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -175,7 +179,9 @@ const App = () => (
               path="/salon/services"
               element={
                 <ProtectedRoute>
-                  <ServicesPage />
+                  <ModuleProtectedRoute module="services">
+                    <ServicesPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -183,7 +189,9 @@ const App = () => (
               path="/salon/payments"
               element={
                 <ProtectedRoute>
-                  <PaymentsPage />
+                  <ModuleProtectedRoute module="payments">
+                    <PaymentsPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -191,7 +199,9 @@ const App = () => (
               path="/salon/reports"
               element={
                 <ProtectedRoute>
-                  <ReportsPage />
+                  <ModuleProtectedRoute module="reports">
+                    <ReportsPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -199,7 +209,9 @@ const App = () => (
               path="/salon/messaging"
               element={
                 <ProtectedRoute>
-                  <MessagingPage />
+                  <ModuleProtectedRoute module="messaging">
+                    <MessagingPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -207,7 +219,9 @@ const App = () => (
               path="/salon/journal"
               element={
                 <ProtectedRoute>
-                  <JournalPage />
+                  <ModuleProtectedRoute module="journal">
+                    <JournalPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -215,7 +229,19 @@ const App = () => (
               path="/salon/staff"
               element={
                 <ProtectedRoute>
-                  <StaffPage />
+                  <ModuleProtectedRoute module="staff">
+                    <StaffPage />
+                  </ModuleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/calendar"
+              element={
+                <ProtectedRoute>
+                  <ModuleProtectedRoute module="calendar">
+                    <CalendarPage />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />

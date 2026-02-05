@@ -13,9 +13,6 @@ import {
 import {
   HelpCircle,
   Search,
-  Book,
-  Video,
-  MessageCircle,
   Mail,
   ExternalLink,
   ChevronRight,
@@ -26,6 +23,8 @@ import {
   CreditCard,
   Scissors,
   BarChart3,
+  Play,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -67,11 +66,38 @@ const gettingStartedSteps = [
   },
 ];
 
+const videoTutorials = [
+  {
+    title: "Getting Started",
+    description: "Learn the basics of Salon Magik",
+    duration: "5 min",
+    thumbnail: "/placeholder.svg",
+  },
+  {
+    title: "Adding Services",
+    description: "Create and manage your service catalog",
+    duration: "3 min",
+    thumbnail: "/placeholder.svg",
+  },
+  {
+    title: "Staff Management",
+    description: "Invite staff and manage permissions",
+    duration: "4 min",
+    thumbnail: "/placeholder.svg",
+  },
+  {
+    title: "Payment Setup",
+    description: "Configure deposits and payment methods",
+    duration: "6 min",
+    thumbnail: "/placeholder.svg",
+  },
+];
+
 const faqs = [
   {
     question: "How do I add a new service?",
     answer:
-      "Go to Products & Services, click on the Services tab, then click 'Add Service'. Fill in the service name, price, duration, and any other details. You can also assign services to categories for better organization.",
+      "Go to Services and Products, click on the Services tab, then click 'Add Service'. Fill in the service name, price, duration, and any other details. You can also assign services to categories for better organization.",
   },
   {
     question: "How do I manage customer appointments?",
@@ -86,7 +112,7 @@ const faqs = [
   {
     question: "Can I offer packages and bundles?",
     answer:
-      "Yes! Go to Products & Services, click on the Packages tab, and create a new package. You can bundle multiple services together at a discounted price. The savings will be automatically displayed to customers.",
+      "Yes! Go to Services and Products, click on the Packages tab, and create a new package. You can bundle multiple services together at a discounted price. The savings will be automatically displayed to customers.",
   },
   {
     question: "How do I process refunds?",
@@ -218,6 +244,53 @@ export default function HelpPage() {
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Video Tutorials */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Video className="w-5 h-5 text-primary" />
+                  Video Tutorials
+                </CardTitle>
+                <CardDescription>
+                  Watch step-by-step guides to master Salon Magik
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Accordion type="single" collapsible className="w-full">
+                  {videoTutorials.map((video, index) => (
+                    <AccordionItem key={index} value={`video-${index}`}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center gap-3 text-left">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Play className="w-4 h-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{video.title}</p>
+                            <p className="text-xs text-muted-foreground">{video.duration}</p>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="pt-2">
+                          <div className="aspect-video bg-muted rounded-lg flex items-center justify-center mb-3">
+                            <div className="text-center">
+                              <Video className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
+                              <p className="text-sm text-muted-foreground">
+                                Video coming soon
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            {video.description}
+                          </p>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </CardContent>
             </Card>
 
