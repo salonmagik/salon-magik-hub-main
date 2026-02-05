@@ -38,15 +38,16 @@
    children: ReactNode;
  }
  
- const navItems = [
-   { href: "/backoffice", label: "Dashboard", icon: LayoutDashboard },
-   { href: "/backoffice/waitlist", label: "Waitlist", icon: Users },
-   { href: "/backoffice/tenants", label: "Tenants", icon: Building2 },
-   { href: "/backoffice/feature-flags", label: "Feature Flags", icon: Flag },
+const navItems = [
+  { href: "/backoffice", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/backoffice/waitlist", label: "Waitlist", icon: Users },
+  { href: "/backoffice/tenants", label: "Tenants", icon: Building2 },
+  { href: "/backoffice/feature-flags", label: "Feature Flags", icon: Flag },
   { href: "/backoffice/plans", label: "Plans", icon: DollarSign },
+  { href: "/backoffice/admins", label: "Admins", icon: Shield },
   { href: "/backoffice/impersonation", label: "Impersonation", icon: Eye },
-   { href: "/backoffice/settings", label: "Settings", icon: Settings },
- ];
+  { href: "/backoffice/settings", label: "Settings", icon: Settings },
+];
  
  export function BackofficeLayout({ children }: BackofficeLayoutProps) {
    const location = useLocation();
