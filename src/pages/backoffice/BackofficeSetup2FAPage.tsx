@@ -7,17 +7,17 @@
  import { useToast } from "@/hooks/use-toast";
  import { Loader2, Shield, Smartphone, Copy, Check } from "lucide-react";
  
- // Generate a random base32 secret
- function generateSecret(): string {
-   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-   let secret = "";
-   const array = new Uint8Array(20);
-   crypto.getRandomValues(array);
-   for (const byte of array) {
-     secret += chars[byte % 32];
-   }
-   return secret;
- }
+// Generate a random base32 secret - exactly 16 characters for Google Authenticator compatibility
+function generateSecret(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let secret = "";
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  for (const byte of array) {
+    secret += chars[byte % 32];
+  }
+  return secret;
+}
  
  export default function BackofficeSetup2FAPage() {
    const navigate = useNavigate();
@@ -105,12 +105,19 @@
                <span className="font-medium">Add to your authenticator app</span>
              </div>
              
-             {/* QR Code placeholder - in production, generate actual QR */}
-             <div className="p-4 bg-muted rounded-lg text-center">
-               <p className="text-sm text-muted-foreground mb-2">
-                 Scan the QR code or enter this key manually:
-               </p>
-               <div className="flex items-center justify-center gap-2">
+              <div className="p-4 bg-muted rounded-lg text-center space-y-4">
+                {/* QR Code Image */}
+                <div className="flex justify-center">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`}
+                    alt="Scan with authenticator app"
+                    className="w-48 h-48 rounded-lg bg-white p-2"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Or enter this key manually:
+                </p>
+                <div className="flex items-center justify-center gap-2">
                  <code className="bg-background px-3 py-2 rounded text-sm font-mono break-all">
                    {secret.match(/.{1,4}/g)?.join(" ")}
                  </code>
