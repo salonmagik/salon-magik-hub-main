@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Wallet, Lock } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Wallet, Lock, AlertCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -33,13 +33,13 @@ export function CustomerPurseToggle({
 }: CustomerPurseToggleProps) {
   const [isEnabled, setIsEnabled] = useState(false);
   const [purseBalance, setPurseBalance] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showAuthDialog, setShowAuthDialog] = useState(false);
   const [authCode, setAuthCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
 
-  const checkPurseBalance = async () => {
+  const checkPurseBalance = useCallback(async () => {
     setIsLoading(true);
     try {
       // Look up customer by email and tenant
@@ -70,21 +70,20 @@ export function CustomerPurseToggle({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [tenantId, customerEmail]);
+
+  // Check balance when email changes
+  useEffect(() => {
+    if (customerEmail) {
+      checkPurseBalance();
+    }
+  }, [customerEmail, checkPurseBalance]);
 
   const handleToggle = async (enabled: boolean) => {
     if (enabled) {
-      // Check balance first
-      await checkPurseBalance();
-      
       if (purseBalance && purseBalance > 0) {
         // Show auth dialog for verification
         setShowAuthDialog(true);
-      } else {
-        toast({
-          title: "No store credit",
-          description: "You don't have any store credit with this salon.",
-        });
       }
     } else {
       setIsEnabled(false);
@@ -102,10 +101,10 @@ export function CustomerPurseToggle({
         setIsVerified(true);
         setIsEnabled(true);
         setShowAuthDialog(false);
-        
+
         const amountToApply = Math.min(purseBalance || 0, maxAmount);
         onPurseApplied(amountToApply);
-        
+
         toast({
           title: "Store credit applied",
           description: `${formatCurrency(amountToApply, currency)} will be deducted from your balance.`,
@@ -131,14 +130,46 @@ export function CustomerPurseToggle({
     });
   };
 
-  if (purseBalance === null && !isLoading) {
-    // Haven't checked yet - show disabled toggle
-    return null;
+  // Still loading
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30 animate-pulse">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-muted" />
+          <div className="space-y-2">
+            <div className="h-4 w-24 bg-muted rounded" />
+            <div className="h-3 w-32 bg-muted rounded" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
+  // No balance - show disabled state with message
   if (purseBalance === 0) {
-    return null; // No balance, don't show toggle
+    return (
+      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30 opacity-60">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+            <Wallet className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <Label className="text-sm font-medium text-muted-foreground">Store Credit</Label>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              No store credit available
+            </p>
+          </div>
+        </div>
+        <Switch disabled checked={false} />
+      </div>
+    );
   }
+
+  // Calculate amounts
+  const amountToApply = Math.min(purseBalance || 0, maxAmount);
+  const remainderAfterPurse = maxAmount - amountToApply;
+  const coversFullAmount = remainderAfterPurse === 0;
 
   return (
     <>
@@ -147,21 +178,37 @@ export function CustomerPurseToggle({
           <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
             <Wallet className="h-5 w-5 text-primary" />
           </div>
-          <div>
+          <div className="space-y-0.5">
             <Label className="text-sm font-medium">Use Store Credit</Label>
             <p className="text-xs text-muted-foreground">
               Balance: {formatCurrency(purseBalance || 0, currency)}
-              {isVerified && (
-                <span className="ml-2 text-primary">✓ Verified</span>
-              )}
             </p>
+            {isEnabled && isVerified && (
+              <div className="text-xs space-y-0.5">
+                <p className="text-primary font-medium">
+                  {formatCurrency(amountToApply, currency)} will be applied
+                </p>
+                {coversFullAmount ? (
+                  <p className="text-muted-foreground">No additional payment required</p>
+                ) : (
+                  <p className="text-muted-foreground">
+                    Remaining {formatCurrency(remainderAfterPurse, currency)} due via other payment
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <Switch
-          checked={isEnabled}
-          onCheckedChange={handleToggle}
-          disabled={isLoading}
-        />
+        <div className="flex items-center gap-2">
+          {isVerified && (
+            <span className="text-xs text-primary font-medium">✓ Verified</span>
+          )}
+          <Switch
+            checked={isEnabled}
+            onCheckedChange={handleToggle}
+            disabled={isLoading}
+          />
+        </div>
       </div>
 
       <Dialog open={showAuthDialog} onOpenChange={setShowAuthDialog}>
@@ -172,7 +219,8 @@ export function CustomerPurseToggle({
               Verify Your Identity
             </DialogTitle>
             <DialogDescription>
-              To use your store credit, please verify your identity. We've sent a code to {customerEmail}.
+              To use your store credit, please verify your identity. We'll send a code to{" "}
+              {customerEmail}.
             </DialogDescription>
           </DialogHeader>
 
@@ -189,12 +237,8 @@ export function CustomerPurseToggle({
               />
             </div>
 
-            <Button
-              variant="link"
-              className="px-0 text-sm"
-              onClick={handleSendCode}
-            >
-              Didn't receive a code? Send again
+            <Button variant="link" className="px-0 text-sm" onClick={handleSendCode}>
+              Send verification code
             </Button>
           </div>
 

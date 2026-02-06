@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { format, startOfMonth } from "date-fns";
-import { Calendar, Clock, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
+import { format } from "date-fns";
+import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,29 +8,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useBookingCart, useAvailableSlots, useAvailableDays, useDepositCalculation, type PublicTenant, type PublicLocation } from "@/hooks/booking";
-import { VoucherInput, type AppliedVoucher } from "@/components/booking/VoucherInput";
-import { CustomerPurseToggle } from "@/components/booking/CustomerPurseToggle";
+import { useBookingCart, useDepositCalculation, type PublicTenant, type PublicLocation, type GiftRecipient } from "@/hooks/booking";
+import { SchedulingStep } from "./SchedulingStep";
+import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
+import { GiftRecipientsStep } from "./GiftRecipientsStep";
+import { ReviewStep, type PaymentOption } from "./ReviewStep";
+import { type AppliedVoucher } from "@/components/booking/VoucherInput";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
 
 interface BookingWizardProps {
   open: boolean;
@@ -39,23 +27,31 @@ interface BookingWizardProps {
   locations: PublicLocation[];
 }
 
-type WizardStep = "schedule" | "customer" | "review" | "confirmation";
-type PaymentOption = "pay_now" | "pay_deposit" | "pay_at_salon";
+type WizardStep = "scheduling" | "booker" | "gifts" | "review" | "confirmation";
 
 export function BookingWizard({ open, onOpenChange, salon, locations }: BookingWizardProps) {
-  const { items, getTotal, getTotalDuration, clearCart } = useBookingCart();
-  const [step, setStep] = useState<WizardStep>("schedule");
+  const { items, getTotal, getTotalDuration, clearCart, getGiftItems } = useBookingCart();
+  const [step, setStep] = useState<WizardStep>("scheduling");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
-  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   // Schedule state
   const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
-  
-  // Anonymous booking state - still capture details even when anonymous
-  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [leaveUnscheduled, setLeaveUnscheduled] = useState(false);
+
+  // Customer state
+  const [bookerInfo, setBookerInfo] = useState<BookerInfo>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    notes: "",
+  });
+
+  // Gift recipients
+  const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
 
   // Payment state
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
@@ -69,46 +65,9 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     }
   }, [locations, selectedLocation]);
 
-  // Customer state
-  const [customerInfo, setCustomerInfo] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    notes: "",
-  });
-
-  // Gift recipient (for items marked as gifts)
-  const [giftRecipients, setGiftRecipients] = useState<Record<string, {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    message: string;
-    hideSender: boolean;
-  }>>({});
-
   const totalDuration = getTotalDuration();
-  
-  // Get available days for calendar dots
-  const { data: availableDays, isLoading: daysLoading } = useAvailableDays(
-    salon.id,
-    selectedLocation,
-    calendarMonth,
-    salon.slot_capacity_default || 1,
-    totalDuration,
-    15 // buffer minutes
-  );
-  
-  const { data: availableSlots, isLoading: slotsLoading } = useAvailableSlots(
-    salon.id,
-    selectedLocation,
-    selectedDate,
-    salon.slot_capacity_default || 1,
-    30, // slot duration
-    totalDuration, // service duration
-    15 // buffer minutes
-  );
+  const giftItems = getGiftItems();
+  const hasSchedulableItems = items.some((item) => item.type !== "product");
 
   // Calculate deposit
   const depositCalc = useDepositCalculation(
@@ -116,54 +75,67 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     salon.deposits_enabled ? (salon.default_deposit_percentage || 0) : 0
   );
 
-  const giftItems = items.filter((item) => item.isGift);
-  const hasSchedulableItems = items.some((item) => item.type !== "product");
-
-  // Helper to check if a date is available
-  const isDateAvailable = (date: Date): boolean => {
-    if (!availableDays) return false;
-    const dayInfo = availableDays.find(
-      (d) => format(d.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
-    );
-    return dayInfo?.available ?? false;
-  };
-
   // Calculate final amounts
   const subtotal = getTotal();
   const voucherDiscount = appliedVoucher?.discountAmount || 0;
   const afterVoucher = Math.max(0, subtotal - voucherDiscount);
   const afterPurse = Math.max(0, afterVoucher - purseAmount);
-  const depositRequired = salon.deposits_enabled && depositCalc.depositAmount > 0;
   const depositAmount = Math.min(depositCalc.depositAmount, afterPurse);
-  
-  const amountDueNow = paymentOption === "pay_now" 
-    ? afterPurse 
-    : paymentOption === "pay_deposit" 
-      ? depositAmount 
+
+  const amountDueNow =
+    afterPurse === 0
+      ? 0
+      : paymentOption === "pay_now"
+      ? afterPurse
+      : paymentOption === "pay_deposit"
+      ? depositAmount
       : 0;
-  
+
   const amountDueAtSalon = afterPurse - amountDueNow;
 
-  const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
-    { key: "schedule", label: "Schedule", icon: <Calendar className="h-4 w-4" /> },
-    { key: "customer", label: "Your Info", icon: <User className="h-4 w-4" /> },
-    { key: "review", label: "Review", icon: <CreditCard className="h-4 w-4" /> },
-    { key: "confirmation", label: "Confirmed", icon: <CheckCircle className="h-4 w-4" /> },
-  ];
+  // Determine if we should skip scheduling step
+  const shouldSkipScheduling = !hasSchedulableItems;
+
+  // Get effective first step
+  const getFirstStep = (): WizardStep => {
+    return shouldSkipScheduling ? "booker" : "scheduling";
+  };
+
+  // Step configuration
+  const getStepConfig = () => {
+    const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [];
+
+    if (!shouldSkipScheduling) {
+      steps.push({ key: "scheduling", label: "Schedule", icon: <Calendar className="h-4 w-4" /> });
+    }
+
+    steps.push({ key: "booker", label: "Your Info", icon: <User className="h-4 w-4" /> });
+
+    if (giftItems.length > 0) {
+      steps.push({ key: "gifts", label: "Gift Recipients", icon: <Gift className="h-4 w-4" /> });
+    }
+
+    steps.push({ key: "review", label: "Review", icon: <CreditCard className="h-4 w-4" /> });
+    steps.push({ key: "confirmation", label: "Confirmed", icon: <CheckCircle className="h-4 w-4" /> });
+
+    return steps;
+  };
+
+  const steps = getStepConfig();
 
   const handleNext = () => {
-    if (step === "schedule") {
-      if (hasSchedulableItems && (!selectedDate || !selectedTime || !selectedLocation)) {
+    if (step === "scheduling") {
+      if (!leaveUnscheduled && hasSchedulableItems && (!selectedDate || !selectedTime || !selectedLocation)) {
         toast({
           title: "Missing selection",
-          description: "Please select a date, time, and location",
+          description: "Please select a date, time, and location, or choose to leave unscheduled",
           variant: "destructive",
         });
         return;
       }
-      setStep("customer");
-    } else if (step === "customer") {
-      if (!customerInfo.firstName || !customerInfo.lastName || !customerInfo.email) {
+      setStep("booker");
+    } else if (step === "booker") {
+      if (!bookerInfo.firstName || !bookerInfo.lastName || !bookerInfo.email) {
         toast({
           title: "Missing information",
           description: "Please fill in all required fields",
@@ -171,13 +143,26 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         });
         return;
       }
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(bookerInfo.email)) {
+        toast({
+          title: "Invalid email",
+          description: "Please enter a valid email address",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Go to gifts step if there are gift items, otherwise review
+      setStep(giftItems.length > 0 ? "gifts" : "review");
+    } else if (step === "gifts") {
       // Validate gift recipients
       for (const item of giftItems) {
         const recipient = giftRecipients[item.id];
-        if (!recipient?.firstName || !recipient?.lastName || !recipient?.email) {
+        if (!recipient?.firstName || !recipient?.lastName || !recipient?.email || !recipient?.phone) {
           toast({
             title: "Missing gift recipient",
-            description: `Please fill in recipient details for "${item.name}"`,
+            description: `Please fill in all recipient details for "${item.name}"`,
             variant: "destructive",
           });
           return;
@@ -188,8 +173,15 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   };
 
   const handleBack = () => {
-    if (step === "customer") setStep("schedule");
-    else if (step === "review") setStep("customer");
+    if (step === "booker") {
+      if (!shouldSkipScheduling) {
+        setStep("scheduling");
+      }
+    } else if (step === "gifts") {
+      setStep("booker");
+    } else if (step === "review") {
+      setStep(giftItems.length > 0 ? "gifts" : "booker");
+    }
   };
 
   const handleSubmit = async () => {
@@ -200,10 +192,10 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         body: {
           tenantId: salon.id,
           locationId: selectedLocation?.id,
-          scheduledDate: selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
-          scheduledTime: selectedTime,
-          customer: customerInfo,
-          isAnonymous: isAnonymous,
+          scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
+          scheduledTime: leaveUnscheduled ? null : selectedTime,
+          customer: bookerInfo,
+          isUnscheduled: leaveUnscheduled,
           items: items.map((item) => ({
             ...item,
             giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
@@ -226,8 +218,8 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
             appointmentId: data.appointmentId,
             amount: amountDueNow,
             currency: salon.currency,
-            customerEmail: customerInfo.email,
-            customerName: `${customerInfo.firstName} ${customerInfo.lastName}`,
+            customerEmail: bookerInfo.email,
+            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
             description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
             isDeposit: paymentOption === "pay_deposit",
             successUrl: window.location.href,
@@ -236,7 +228,6 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         });
 
         if (paymentResponse.data?.checkoutUrl) {
-          // For now, just show confirmation (in production, redirect to payment)
           toast({
             title: "Payment would be required",
             description: `Amount: ${formatCurrency(amountDueNow, salon.currency)}. Payment integration coming soon.`,
@@ -261,29 +252,29 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
   const handleClose = () => {
     if (step === "confirmation") {
-      setStep("schedule");
+      setStep(getFirstStep());
       setSelectedDate(undefined);
       setSelectedTime(undefined);
-      setCustomerInfo({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
+      setLeaveUnscheduled(false);
+      setBookerInfo({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
       setGiftRecipients({});
       setBookingReference(null);
       setAppliedVoucher(null);
       setPurseAmount(0);
       setPaymentOption("pay_at_salon");
-      setIsAnonymous(false);
     }
     onOpenChange(false);
   };
 
-  const updateGiftRecipient = (itemId: string, field: string, value: string | boolean) => {
-    setGiftRecipients((prev) => ({
-      ...prev,
-      [itemId]: {
-        ...prev[itemId],
-        [field]: value,
-      },
-    }));
-  };
+  // Reset step when opening
+  useEffect(() => {
+    if (open) {
+      setStep(getFirstStep());
+    }
+  }, [open, shouldSkipScheduling]);
+
+  const currentStepIndex = steps.findIndex((s) => s.key === step);
+  const isFirstStep = currentStepIndex === 0;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -292,7 +283,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           <DialogTitle>Book Appointment</DialogTitle>
         </DialogHeader>
 
-        {/* Steps Progress - Scrollable */}
+        {/* Steps Progress */}
         <div className="overflow-x-auto">
           <div className="flex items-center gap-3 px-6 py-4 min-w-max">
             {steps.map((s, i) => (
@@ -301,7 +292,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   className={`flex items-center gap-2 ${
                     step === s.key
                       ? "text-primary"
-                      : steps.findIndex((x) => x.key === step) > i
+                      : currentStepIndex > i
                       ? "text-muted-foreground"
                       : "text-muted-foreground/50"
                   }`}
@@ -310,19 +301,17 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                     className={`h-8 w-8 rounded-full flex items-center justify-center border-2 shrink-0 ${
                       step === s.key
                         ? "text-white border-transparent"
-                        : steps.findIndex((x) => x.key === step) > i
+                        : currentStepIndex > i
                         ? "border-muted-foreground bg-muted"
                         : "border-muted"
                     }`}
-                    style={step === s.key ? { backgroundColor: 'var(--brand-color)' } : undefined}
+                    style={step === s.key ? { backgroundColor: "var(--brand-color)" } : undefined}
                   >
                     {s.icon}
                   </div>
                   <span className="text-sm font-medium whitespace-nowrap">{s.label}</span>
                 </div>
-                {i < steps.length - 1 && (
-                  <div className="w-8 h-px bg-muted shrink-0" />
-                )}
+                {i < steps.length - 1 && <div className="w-8 h-px bg-muted shrink-0" />}
               </div>
             ))}
           </div>
@@ -333,457 +322,73 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         {/* Step Content */}
         <ScrollArea className="flex-1 px-6">
           <div className="py-4">
-            {/* Schedule Step */}
-            {step === "schedule" && (
-              <div className="space-y-6">
-                {hasSchedulableItems ? (
-                  <>
-                    {/* Location Selection */}
-                    {locations.length > 1 && (
-                      <div className="space-y-2">
-                        <Label>Select Location</Label>
-                        <Select
-                          value={selectedLocation?.id}
-                          onValueChange={(id) =>
-                            setSelectedLocation(locations.find((l) => l.id === id))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose a location" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {locations.map((loc) => (
-                              <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name} - {loc.city}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {/* Date Selection */}
-                    <div className="space-y-2">
-                      <Label>Select Date</Label>
-                      <CalendarComponent
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        month={calendarMonth}
-                        onMonthChange={setCalendarMonth}
-                        disabled={(date) => {
-                          const today = new Date();
-                          today.setHours(0, 0, 0, 0);
-                          return date < today;
-                        }}
-                        modifiers={{
-                          available: (date) => isDateAvailable(date),
-                        }}
-                        modifiersClassNames={{
-                          available: "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
-                        }}
-                        className={cn("rounded-md border pointer-events-auto")}
-                      />
-                      {daysLoading && (
-                        <p className="text-xs text-muted-foreground">Loading availability...</p>
-                      )}
-                    </div>
-
-                    {/* Time Selection */}
-                    {selectedDate && (
-                      <div className="space-y-2">
-                        <Label>Select Time</Label>
-                        {slotsLoading ? (
-                          <div className="text-sm text-muted-foreground">Loading available times...</div>
-                        ) : availableSlots && availableSlots.length > 0 ? (
-                          <div className="grid grid-cols-4 gap-2">
-                            {availableSlots
-                              .filter((slot) => slot.available)
-                              .map((slot) => (
-                                <Button
-                                  key={slot.time}
-                                  variant={selectedTime === slot.time ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => setSelectedTime(slot.time)}
-                                >
-                                  {slot.time}
-                                </Button>
-                              ))}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            No available times for this date
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Duration Estimate */}
-                    {totalDuration > 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Estimated duration: {totalDuration} minutes
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p>Your cart only contains products.</p>
-                    <p className="text-sm mt-2">You can proceed to enter your details.</p>
-                  </div>
-                )}
-              </div>
+            {step === "scheduling" && (
+              <SchedulingStep
+                salon={salon}
+                locations={locations}
+                selectedLocation={selectedLocation}
+                onLocationChange={setSelectedLocation}
+                selectedDate={selectedDate}
+                onDateChange={setSelectedDate}
+                selectedTime={selectedTime}
+                onTimeChange={setSelectedTime}
+                leaveUnscheduled={leaveUnscheduled}
+                onLeaveUnscheduledChange={setLeaveUnscheduled}
+                totalDuration={totalDuration}
+              />
             )}
 
-            {/* Customer Step */}
-            {step === "customer" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>First Name *</Label>
-                    <Input
-                      value={customerInfo.firstName}
-                      onChange={(e) =>
-                        setCustomerInfo((prev) => ({ ...prev, firstName: e.target.value }))
-                      }
-                      placeholder="John"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Last Name *</Label>
-                    <Input
-                      value={customerInfo.lastName}
-                      onChange={(e) =>
-                        setCustomerInfo((prev) => ({ ...prev, lastName: e.target.value }))
-                      }
-                      placeholder="Doe"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Email *</Label>
-                  <Input
-                    type="email"
-                    value={customerInfo.email}
-                    onChange={(e) =>
-                      setCustomerInfo((prev) => ({ ...prev, email: e.target.value }))
-                    }
-                    placeholder="john@example.com"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input
-                    type="tel"
-                    value={customerInfo.phone}
-                    onChange={(e) =>
-                      setCustomerInfo((prev) => ({ ...prev, phone: e.target.value }))
-                    }
-                    placeholder="+1 234 567 8900"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Notes for the salon</Label>
-                  <Textarea
-                    value={customerInfo.notes}
-                    onChange={(e) =>
-                      setCustomerInfo((prev) => ({ ...prev, notes: e.target.value }))
-                    }
-                    placeholder="Any special requests..."
-                    rows={3}
-                  />
-                </div>
-
-                {/* Anonymous Booking Option */}
-                <div className="flex items-start gap-3 p-4 border rounded-lg bg-muted/30">
-                  <Checkbox
-                    id="anonymous-booking"
-                    checked={isAnonymous}
-                    onCheckedChange={(checked) => setIsAnonymous(!!checked)}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="anonymous-booking" className="cursor-pointer font-medium">
-                      Keep my identity anonymous
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Your details will still be captured for booking purposes, but your name will not be visible to other customers.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Gift Recipients */}
-                {giftItems.length > 0 && (
-                  <div className="space-y-4">
-                    <Separator />
-                    <div className="flex items-center gap-2">
-                      <Gift className="h-5 w-5 text-primary" />
-                      <h3 className="font-semibold">Gift Recipients</h3>
-                    </div>
-
-                    {giftItems.map((item) => (
-                      <div key={item.id} className="p-4 border rounded-lg space-y-4">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary">{item.name}</Badge>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <Label className="text-xs">Recipient First Name *</Label>
-                            <Input
-                              value={giftRecipients[item.id]?.firstName || ""}
-                              onChange={(e) =>
-                                updateGiftRecipient(item.id, "firstName", e.target.value)
-                              }
-                              placeholder="Jane"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">Recipient Last Name *</Label>
-                            <Input
-                              value={giftRecipients[item.id]?.lastName || ""}
-                              onChange={(e) =>
-                                updateGiftRecipient(item.id, "lastName", e.target.value)
-                              }
-                              placeholder="Smith"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label className="text-xs">Recipient Email *</Label>
-                          <Input
-                            type="email"
-                            value={giftRecipients[item.id]?.email || ""}
-                            onChange={(e) =>
-                              updateGiftRecipient(item.id, "email", e.target.value)
-                            }
-                            placeholder="jane@example.com"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <Label className="text-xs">Gift Message</Label>
-                          <Textarea
-                            value={giftRecipients[item.id]?.message || ""}
-                            onChange={(e) =>
-                              updateGiftRecipient(item.id, "message", e.target.value)
-                            }
-                            placeholder="A special message for the recipient..."
-                            rows={2}
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            id={`hide-sender-${item.id}`}
-                            checked={giftRecipients[item.id]?.hideSender || false}
-                            onCheckedChange={(checked) =>
-                              updateGiftRecipient(item.id, "hideSender", !!checked)
-                            }
-                          />
-                          <Label htmlFor={`hide-sender-${item.id}`} className="text-sm">
-                            Keep my identity anonymous
-                          </Label>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {step === "booker" && (
+              <BookerInfoStep info={bookerInfo} onChange={setBookerInfo} />
             )}
 
-            {/* Review Step */}
+            {step === "gifts" && (
+              <GiftRecipientsStep
+                giftItems={giftItems}
+                recipients={giftRecipients}
+                onRecipientsChange={setGiftRecipients}
+              />
+            )}
+
             {step === "review" && (
-              <div className="space-y-6">
-                {/* Booking Details */}
-                {hasSchedulableItems && selectedDate && selectedTime && (
-                  <div className="p-4 border rounded-lg space-y-2">
-                    <h3 className="font-semibold flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Appointment Details
-                    </h3>
-                    <div className="text-sm text-muted-foreground">
-                      <p>{format(selectedDate, "EEEE, MMMM d, yyyy")}</p>
-                      <p className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {selectedTime}
-                      </p>
-                      {selectedLocation && (
-                        <p>
-                          {selectedLocation.name}, {selectedLocation.city}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Customer Info */}
-                <div className="p-4 border rounded-lg space-y-2">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Your Information
-                  </h3>
-                  <div className="text-sm text-muted-foreground">
-                    <p>
-                      {customerInfo.firstName} {customerInfo.lastName}
-                    </p>
-                    <p>{customerInfo.email}</p>
-                    {customerInfo.phone && <p>{customerInfo.phone}</p>}
-                  </div>
-                </div>
-
-                {/* Items */}
-                <div className="space-y-3">
-                  <h3 className="font-semibold">Order Summary</h3>
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium">{item.name}</p>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>Qty: {item.quantity}</span>
-                          {item.isGift && (
-                            <Badge variant="secondary" className="text-xs">
-                              Gift
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                      <span className="font-semibold">
-                        {formatCurrency(item.price * item.quantity, salon.currency)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <Separator />
-
-                {/* Voucher Input */}
-                <VoucherInput
-                  tenantId={salon.id}
-                  currency={salon.currency}
-                  subtotal={subtotal}
-                  onVoucherApplied={setAppliedVoucher}
-                  appliedVoucher={appliedVoucher}
-                />
-
-                {/* Customer Purse Toggle */}
-                {customerInfo.email && (
-                  <CustomerPurseToggle
-                    tenantId={salon.id}
-                    customerEmail={customerInfo.email}
-                    currency={salon.currency}
-                    maxAmount={afterVoucher}
-                    onPurseApplied={setPurseAmount}
-                  />
-                )}
-
-                {/* Payment Options */}
-                <div className="space-y-3">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Wallet className="h-4 w-4" />
-                    Payment Options
-                  </h3>
-                  
-                  <RadioGroup
-                    value={paymentOption}
-                    onValueChange={(value) => setPaymentOption(value as PaymentOption)}
-                    className="space-y-2"
-                  >
-                    {salon.pay_at_salon_enabled && (
-                      <div className="flex items-center space-x-3 p-3 border rounded-lg">
-                        <RadioGroupItem value="pay_at_salon" id="pay_at_salon" />
-                        <Label htmlFor="pay_at_salon" className="flex-1 cursor-pointer">
-                          <span className="font-medium">Pay at Salon</span>
-                          <p className="text-xs text-muted-foreground">
-                            Pay when you arrive for your appointment
-                          </p>
-                        </Label>
-                      </div>
-                    )}
-
-                    {depositRequired && (
-                      <div className="flex items-center space-x-3 p-3 border rounded-lg">
-                        <RadioGroupItem value="pay_deposit" id="pay_deposit" />
-                        <Label htmlFor="pay_deposit" className="flex-1 cursor-pointer">
-                          <span className="font-medium">
-                            Pay Deposit ({formatCurrency(depositAmount, salon.currency)})
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            Secure your booking with a deposit
-                          </p>
-                        </Label>
-                      </div>
-                    )}
-
-                    <div className="flex items-center space-x-3 p-3 border rounded-lg">
-                      <RadioGroupItem value="pay_now" id="pay_now" />
-                      <Label htmlFor="pay_now" className="flex-1 cursor-pointer">
-                        <span className="font-medium">
-                          Pay in Full ({formatCurrency(afterPurse, salon.currency)})
-                        </span>
-                        <p className="text-xs text-muted-foreground">
-                          Complete payment now
-                        </p>
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                <Separator />
-
-                {/* Price Breakdown */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>Subtotal</span>
-                    <span>{formatCurrency(subtotal, salon.currency)}</span>
-                  </div>
-                  
-                  {voucherDiscount > 0 && (
-                    <div className="flex items-center justify-between text-sm text-primary">
-                      <span>Voucher Discount</span>
-                      <span>-{formatCurrency(voucherDiscount, salon.currency)}</span>
-                    </div>
-                  )}
-                  
-                  {purseAmount > 0 && (
-                    <div className="flex items-center justify-between text-sm text-primary">
-                      <span>Store Credit</span>
-                      <span>-{formatCurrency(purseAmount, salon.currency)}</span>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between font-semibold">
-                    <span>Due Now</span>
-                    <span>{formatCurrency(amountDueNow, salon.currency)}</span>
-                  </div>
-
-                  {amountDueAtSalon > 0 && (
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <span>Due at Salon</span>
-                      <span>{formatCurrency(amountDueAtSalon, salon.currency)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ReviewStep
+                selectedDate={selectedDate}
+                selectedTime={selectedTime}
+                selectedLocation={selectedLocation}
+                leaveUnscheduled={leaveUnscheduled}
+                bookerInfo={bookerInfo}
+                items={items}
+                giftRecipients={giftRecipients}
+                salon={{
+                  id: salon.id,
+                  currency: salon.currency,
+                  pay_at_salon_enabled: salon.pay_at_salon_enabled,
+                  deposits_enabled: salon.deposits_enabled,
+                  default_deposit_percentage: salon.default_deposit_percentage,
+                }}
+                paymentOption={paymentOption}
+                onPaymentOptionChange={setPaymentOption}
+                appliedVoucher={appliedVoucher}
+                onVoucherApplied={setAppliedVoucher}
+                purseAmount={purseAmount}
+                onPurseApplied={setPurseAmount}
+                subtotal={subtotal}
+                voucherDiscount={voucherDiscount}
+                afterVoucher={afterVoucher}
+                afterPurse={afterPurse}
+                depositAmount={depositAmount}
+                amountDueNow={amountDueNow}
+                amountDueAtSalon={amountDueAtSalon}
+              />
             )}
 
-            {/* Confirmation Step */}
             {step === "confirmation" && (
               <div className="text-center py-8 space-y-4">
                 <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <CheckCircle className="h-8 w-8 text-primary" />
                 </div>
                 <h2 className="text-2xl font-bold">Booking Confirmed!</h2>
-                <p className="text-muted-foreground">
-                  Your booking has been successfully submitted.
-                </p>
+                <p className="text-muted-foreground">Your booking has been successfully submitted.</p>
                 {bookingReference && (
                   <div className="p-4 bg-muted rounded-lg">
                     <p className="text-sm text-muted-foreground">Reference Number</p>
@@ -791,7 +396,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   </div>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  A confirmation email has been sent to {customerInfo.email}
+                  A confirmation email has been sent to {bookerInfo.email}
                 </p>
               </div>
             )}
@@ -806,31 +411,30 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               <Button
                 variant="outline"
                 onClick={handleBack}
-                disabled={step === "schedule"}
+                disabled={isFirstStep}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Back
               </Button>
 
               {step === "review" ? (
-                <Button 
-                  onClick={handleSubmit} 
+                <Button
+                  onClick={handleSubmit}
                   disabled={isSubmitting}
                   className="text-white border-0"
-                  style={{ backgroundColor: 'var(--brand-color)' }}
+                  style={{ backgroundColor: "var(--brand-color)" }}
                 >
-                  {isSubmitting 
-                    ? "Submitting..." 
-                    : amountDueNow > 0 
-                      ? `Pay ${formatCurrency(amountDueNow, salon.currency)}` 
-                      : "Confirm Booking"
-                  }
+                  {isSubmitting
+                    ? "Submitting..."
+                    : amountDueNow > 0
+                    ? `Pay ${formatCurrency(amountDueNow, salon.currency)}`
+                    : "Confirm Booking"}
                 </Button>
               ) : (
-                <Button 
+                <Button
                   onClick={handleNext}
                   className="text-white border-0"
-                  style={{ backgroundColor: 'var(--brand-color)' }}
+                  style={{ backgroundColor: "var(--brand-color)" }}
                 >
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />
@@ -844,10 +448,10 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           <>
             <Separator />
             <div className="p-6">
-              <Button 
-                className="w-full text-white border-0" 
+              <Button
+                className="w-full text-white border-0"
                 onClick={handleClose}
-                style={{ backgroundColor: 'var(--brand-color)' }}
+                style={{ backgroundColor: "var(--brand-color)" }}
               >
                 Done
               </Button>

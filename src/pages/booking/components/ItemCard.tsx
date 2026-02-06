@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { useBookingCart } from "@/hooks/booking";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "@/hooks/use-toast";
+import { QuantityControl } from "./QuantityControl";
 
 interface ItemCardProps {
   type: "service" | "package" | "product";
@@ -29,7 +30,10 @@ export function ItemCard({
   durationMinutes,
   stockQuantity,
 }: ItemCardProps) {
-  const { addItem } = useBookingCart();
+  const { addItem, getItemInCart, updateQuantity } = useBookingCart();
+
+  const itemInCart = getItemInCart(id, type);
+  const isInCart = !!itemInCart;
 
   const handleAddToCart = () => {
     if (type === "product" && stockQuantity !== undefined && stockQuantity <= 0) {
@@ -48,14 +52,33 @@ export function ItemCard({
       price,
       quantity: 1,
       durationMinutes: type === "service" ? durationMinutes : undefined,
-      schedulingOption: type === "product" ? "leave_unscheduled" : "schedule_now",
       isGift: false,
+      fulfillmentType: type === "product" ? "pickup" : undefined,
     });
 
     toast({
       title: "Added to cart",
       description: `${name} has been added to your cart`,
     });
+  };
+
+  const handleIncrement = () => {
+    if (type === "product" && stockQuantity !== undefined) {
+      const currentQty = itemInCart?.quantity || 0;
+      if (currentQty >= stockQuantity) {
+        toast({
+          title: "Stock limit reached",
+          description: `Only ${stockQuantity} available`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    updateQuantity(id, 1);
+  };
+
+  const handleDecrement = () => {
+    updateQuantity(id, -1);
   };
 
   const isOutOfStock = type === "product" && stockQuantity !== undefined && stockQuantity <= 0;
@@ -101,7 +124,7 @@ export function ItemCard({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Metadata Badges + Add Button */}
+      {/* Metadata Badges + Add Button / Quantity Counter */}
       <div className="flex items-end justify-between mt-3 gap-2">
         <div className="flex flex-wrap gap-1.5">
           {type === "service" && durationMinutes && (
@@ -121,17 +144,26 @@ export function ItemCard({
           )}
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleAddToCart}
-          disabled={isOutOfStock}
-          className="gap-1.5 shrink-0 text-white border-0"
-          style={{ backgroundColor: isOutOfStock ? undefined : 'var(--brand-color)' }}
-        >
-          <ShoppingBag className="h-4 w-4" />
-          Add
-        </Button>
+        {isInCart ? (
+          <QuantityControl
+            quantity={itemInCart.quantity}
+            onIncrement={handleIncrement}
+            onDecrement={handleDecrement}
+            size="sm"
+          />
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAddToCart}
+            disabled={isOutOfStock}
+            className="gap-1.5 shrink-0 text-white border-0"
+            style={{ backgroundColor: isOutOfStock ? undefined : 'var(--brand-color)' }}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Add
+          </Button>
+        )}
       </div>
     </div>
   );
