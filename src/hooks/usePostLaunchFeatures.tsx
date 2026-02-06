@@ -176,25 +176,8 @@ export interface Invoice {
   sentAt: string | null;
 }
 
-// Placeholder hook - to be implemented
-export function useInvoices() {
-  return {
-    generateInvoice: async (_appointmentId: string) => {
-      console.log("Invoice generation not yet implemented");
-      return { success: false, message: "Coming soon" };
-    },
-    sendInvoice: async (_invoiceId: string) => {
-      console.log("Invoice sending not yet implemented");
-      return { success: false, message: "Coming soon" };
-    },
-    downloadInvoice: async (_invoiceId: string) => {
-      console.log("Invoice download not yet implemented");
-      return null;
-    },
-    invoices: [],
-    isLoading: false,
-  };
-}
+// IMPLEMENTED: See src/hooks/useInvoices.tsx
+export { useInvoices } from "./useInvoices";
 
 // ============================================
 // Feature: Service Change During Appointment
@@ -231,66 +214,13 @@ export function useServiceChange() {
 // ============================================
 // Feature: Communication Credits Purchase
 // ============================================
-// - Credit pricing per region
-// - Payment flow for credit purchase
-// - Credit balance top-up logic
-
-export interface CreditPackage {
-  id: string;
-  credits: number;
-  priceUSD: number;
-  priceNGN: number;
-  priceGHS: number;
-}
-
-export const CREDIT_PACKAGES: CreditPackage[] = [
-  { id: "pack_50", credits: 50, priceUSD: 5, priceNGN: 3500, priceGHS: 60 },
-  { id: "pack_100", credits: 100, priceUSD: 9, priceNGN: 6500, priceGHS: 108 },
-  { id: "pack_250", credits: 250, priceUSD: 20, priceNGN: 15000, priceGHS: 240 },
-  { id: "pack_500", credits: 500, priceUSD: 35, priceNGN: 27000, priceGHS: 420 },
-];
-
-// Placeholder hook - to be implemented
-export function useCreditPurchase() {
-  return {
-    purchaseCredits: async (_packageId: string) => {
-      console.log("Credit purchase not yet implemented");
-      return { success: false, checkoutUrl: null };
-    },
-    packages: CREDIT_PACKAGES,
-    isLoading: false,
-  };
-}
+// IMPLEMENTED: See src/hooks/useCreditPurchase.tsx
+export { useCreditPurchase, CREDIT_PACKAGES } from "./useCreditPurchase";
+export type { CreditPackage } from "./useCreditPurchase";
 
 // ============================================
 // Feature: Trial Enforcement
 // ============================================
-// - Trial countdown banner
-// - Card collection modal before trial expires
-// - Access restriction on trial expiry
-
-export interface TrialStatus {
-  isTrialing: boolean;
-  daysRemaining: number;
-  expiresAt: string | null;
-  cardOnFile: boolean;
-  isExpired: boolean;
-}
-
-// Placeholder hook - to be implemented
-export function useTrialEnforcement() {
-  return {
-    getTrialStatus: (): TrialStatus => ({
-      isTrialing: false,
-      daysRemaining: 0,
-      expiresAt: null,
-      cardOnFile: false,
-      isExpired: false,
-    }),
-    collectCard: async () => {
-      console.log("Card collection not yet implemented");
-      return { success: false, checkoutUrl: null };
-    },
-    isLoading: false,
-  };
-}
+// IMPLEMENTED: See src/hooks/useTrialEnforcement.tsx
+export { useTrialEnforcement } from "./useTrialEnforcement";
+export type { TrialStatus } from "./useTrialEnforcement";
