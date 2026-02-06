@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useBookingCart, useDepositCalculation, type PublicTenant, type PublicLocation, type GiftRecipient } from "@/hooks/booking";
+import { CartStep } from "./CartStep";
 import { SchedulingStep } from "./SchedulingStep";
 import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
 import { GiftRecipientsStep } from "./GiftRecipientsStep";
@@ -27,11 +28,11 @@ interface BookingWizardProps {
   locations: PublicLocation[];
 }
 
-type WizardStep = "scheduling" | "booker" | "gifts" | "review" | "confirmation";
+type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "confirmation";
 
 export function BookingWizard({ open, onOpenChange, salon, locations }: BookingWizardProps) {
-  const { items, getTotal, getTotalDuration, clearCart, getGiftItems } = useBookingCart();
-  const [step, setStep] = useState<WizardStep>("scheduling");
+  const { items, getTotal, getTotalDuration, clearCart, getGiftItems, getItemCount } = useBookingCart();
+  const [step, setStep] = useState<WizardStep>("cart");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
 
@@ -96,14 +97,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   // Determine if we should skip scheduling step
   const shouldSkipScheduling = !hasSchedulableItems;
 
-  // Get effective first step
-  const getFirstStep = (): WizardStep => {
-    return shouldSkipScheduling ? "booker" : "scheduling";
-  };
-
-  // Step configuration
+  // Step configuration - always include cart as first step
   const getStepConfig = () => {
-    const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [];
+    const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
+      { key: "cart", label: "Your Cart", icon: <ShoppingCart className="h-4 w-4" /> },
+    ];
 
     if (!shouldSkipScheduling) {
       steps.push({ key: "scheduling", label: "Schedule", icon: <Calendar className="h-4 w-4" /> });
@@ -112,11 +110,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     steps.push({ key: "booker", label: "Your Info", icon: <User className="h-4 w-4" /> });
 
     if (giftItems.length > 0) {
-      steps.push({ key: "gifts", label: "Gift Recipients", icon: <Gift className="h-4 w-4" /> });
+      steps.push({ key: "gifts", label: "Recipients", icon: <Gift className="h-4 w-4" /> });
     }
 
     steps.push({ key: "review", label: "Review", icon: <CreditCard className="h-4 w-4" /> });
-    steps.push({ key: "confirmation", label: "Confirmed", icon: <CheckCircle className="h-4 w-4" /> });
+    steps.push({ key: "confirmation", label: "Done", icon: <CheckCircle className="h-4 w-4" /> });
 
     return steps;
   };
@@ -124,7 +122,29 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const steps = getStepConfig();
 
   const handleNext = () => {
-    if (step === "scheduling") {
+    if (step === "cart") {
+      if (items.length === 0) {
+        toast({
+          title: "Cart is empty",
+          description: "Please add items to your cart before proceeding",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Check fulfillment type for products
+      const productsWithoutFulfillment = items.filter(
+        (item) => item.type === "product" && !item.fulfillmentType
+      );
+      if (productsWithoutFulfillment.length > 0) {
+        toast({
+          title: "Select fulfillment",
+          description: "Please select Pickup or Delivery for all products",
+          variant: "destructive",
+        });
+        return;
+      }
+      setStep(shouldSkipScheduling ? "booker" : "scheduling");
+    } else if (step === "scheduling") {
       if (!leaveUnscheduled && hasSchedulableItems && (!selectedDate || !selectedTime || !selectedLocation)) {
         toast({
           title: "Missing selection",
@@ -173,10 +193,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   };
 
   const handleBack = () => {
-    if (step === "booker") {
-      if (!shouldSkipScheduling) {
-        setStep("scheduling");
-      }
+    if (step === "cart") {
+      onOpenChange(false); // Close modal
+    } else if (step === "scheduling") {
+      setStep("cart");
+    } else if (step === "booker") {
+      setStep(shouldSkipScheduling ? "cart" : "scheduling");
     } else if (step === "gifts") {
       setStep("booker");
     } else if (step === "review") {
@@ -252,7 +274,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
   const handleClose = () => {
     if (step === "confirmation") {
-      setStep(getFirstStep());
+      setStep("cart");
       setSelectedDate(undefined);
       setSelectedTime(undefined);
       setLeaveUnscheduled(false);
@@ -269,27 +291,27 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   // Reset step when opening
   useEffect(() => {
     if (open) {
-      setStep(getFirstStep());
+      setStep("cart");
     }
-  }, [open, shouldSkipScheduling]);
+  }, [open]);
 
   const currentStepIndex = steps.findIndex((s) => s.key === step);
-  const isFirstStep = currentStepIndex === 0;
+  const isCartStep = step === "cart";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle>Book Appointment</DialogTitle>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-0 shrink-0">
+          <DialogTitle>Complete Checkout</DialogTitle>
         </DialogHeader>
 
-        {/* Steps Progress */}
-        <div className="overflow-x-auto">
-          <div className="flex items-center gap-3 px-6 py-4 min-w-max">
+        {/* Steps Progress - hidden scrollbar, reduced padding */}
+        <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] shrink-0">
+          <div className="flex items-center gap-2 px-4 py-2 min-w-max">
             {steps.map((s, i) => (
-              <div key={s.key} className="flex items-center gap-3 shrink-0">
+              <div key={s.key} className="flex items-center gap-2 shrink-0">
                 <div
-                  className={`flex items-center gap-2 ${
+                  className={`flex items-center gap-1.5 ${
                     step === s.key
                       ? "text-primary"
                       : currentStepIndex > i
@@ -298,7 +320,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   }`}
                 >
                   <div
-                    className={`h-8 w-8 rounded-full flex items-center justify-center border-2 shrink-0 ${
+                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
                       step === s.key
                         ? "text-white border-transparent"
                         : currentStepIndex > i
@@ -309,19 +331,26 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   >
                     {s.icon}
                   </div>
-                  <span className="text-sm font-medium whitespace-nowrap">{s.label}</span>
+                  <span className="text-xs font-medium whitespace-nowrap">{s.label}</span>
                 </div>
-                {i < steps.length - 1 && <div className="w-8 h-px bg-muted shrink-0" />}
+                {i < steps.length - 1 && <div className="w-6 h-px bg-muted shrink-0" />}
               </div>
             ))}
           </div>
         </div>
 
-        <Separator />
+        <Separator className="shrink-0" />
 
-        {/* Step Content */}
-        <ScrollArea className="flex-1 px-6">
-          <div className="py-4">
+        {/* Step Content - scrollable */}
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="px-6 py-4">
+            {step === "cart" && (
+              <CartStep 
+                currency={salon.currency} 
+                onBrowse={handleClose}
+              />
+            )}
+
             {step === "scheduling" && (
               <SchedulingStep
                 salon={salon}
@@ -406,15 +435,14 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         {/* Footer Actions */}
         {step !== "confirmation" && (
           <>
-            <Separator />
-            <div className="p-6 flex items-center justify-between">
+            <Separator className="shrink-0" />
+            <div className="p-4 flex items-center justify-between shrink-0">
               <Button
                 variant="outline"
                 onClick={handleBack}
-                disabled={isFirstStep}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Back
+                {isCartStep ? "Close" : "Back"}
               </Button>
 
               {step === "review" ? (
@@ -433,10 +461,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               ) : (
                 <Button
                   onClick={handleNext}
+                  disabled={step === "cart" && items.length === 0}
                   className="text-white border-0"
                   style={{ backgroundColor: "var(--brand-color)" }}
                 >
-                  Next
+                  Continue
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
@@ -446,8 +475,8 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
         {step === "confirmation" && (
           <>
-            <Separator />
-            <div className="p-6">
+            <Separator className="shrink-0" />
+            <div className="p-4 shrink-0">
               <Button
                 className="w-full text-white border-0"
                 onClick={handleClose}
