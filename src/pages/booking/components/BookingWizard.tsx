@@ -297,9 +297,14 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const currentStepIndex = steps.findIndex((s) => s.key === step);
   const isCartStep = step === "cart";
 
+  const brandColor = salon.brand_color || "#2563EB";
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 gap-0">
+      <DialogContent 
+        className="max-w-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 gap-0"
+        style={{ "--brand-color": brandColor } as React.CSSProperties}
+      >
         <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
           <DialogTitle>Complete Checkout</DialogTitle>
         </DialogHeader>
