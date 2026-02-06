@@ -38,7 +38,7 @@ export default function BackofficeForgotPasswordPage() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.functions.invoke("send-password-reset", {
+      const { error } = await supabase.functions.invoke("send-backoffice-password-reset", {
         body: {
           email: email.toLowerCase().trim(),
           origin: window.location.origin,
