@@ -1,194 +1,375 @@
 
 
-# Platform Completion & Migration Preparation Plan
+# Multi-Step Booking Checkout Flow - Complete Implementation Plan
 
 ## Overview
-
-This plan outlines a structured approach to complete the SalonMagik platform development, close all identified gaps and security issues, and then prepare for migration to a Vercel + Supabase architecture with subdomain-based session isolation.
-
----
-
-## Phase 1: Security Hardening (Critical)
-
-Three active security findings need immediate attention before any migration:
-
-### 1.1 Fix `profiles` Table Public Exposure
-**Issue**: User personal information (names, phone numbers, avatar URLs) could be accessed by anonymous users.
-
-**Solution**:
-- Add RLS policies to restrict profile access to:
-  - The profile owner (`user_id = auth.uid()`)
-  - Authenticated users within the same tenant (for staff directory purposes)
-
-### 1.2 Fix `appointments` Table Public Exposure  
-**Issue**: Customer booking history, payment details, and personal notes are visible to anonymous users through the availability check policy.
-
-**Solution**:
-- Create a separate, minimal view or policy for anonymous availability checking that only exposes time slots
-- Restrict full appointment data to authenticated tenant members and the customer themselves
-
-### 1.3 Strengthen `notifications` Tenant Isolation
-**Issue**: Potential cross-tenant notification leakage if policies aren't correctly enforced.
-
-**Solution**:
-- Audit and update notification policies to ensure strict tenant isolation using `get_user_tenant_ids()` function
+This plan implements a streamlined booking checkout experience that separates concerns across logical steps, properly positions the "Keep my identity anonymous" toggle in Step 3 (Gift Recipients), and enhances the Customer Purse payment option with split-payment functionality.
 
 ---
 
-## Phase 2: Platform Gap Closure
+## Flow Architecture
 
-### 2.1 Salon Admin Platform (Priority: High)
-
-| Gap | Description | Status |
-|-----|-------------|--------|
-| Staff Online Count | `useSalonsOverview.tsx` uses random placeholder for `staffOnline` | ✅ **DONE** - Real session tracking with `staff_sessions` table |
-| Real-time Updates | No realtime subscriptions for live dashboard updates | ✅ **DONE** - Realtime subscription added |
-
-### 2.2 Client Portal (Priority: High)
-
-| Gap | Description | Status |
-|-----|-------------|--------|
-| Phone OTP Login | Shows "coming soon" message for phone-based login | ⏳ Needs SMS provider (Twilio/Africa's Talking) |
-| Password Step | Password authentication step exists in UI but not fully wired | ✅ **DONE** - Flow updated |
-
-### 2.3 BackOffice Platform (Priority: High)
-
-| Gap | Description | Status |
-|-----|-------------|--------|
-| 2FA Setup | QR code and TOTP verification implemented | ✅ **DONE** |
-| Impersonation Viewing | Session recording works but no actual salon view mode | ✅ **DONE** - ImpersonationProvider + Banner added |
-
-### 2.4 Public Booking Platform (Priority: Medium)
-
-| Gap | Description | Status |
-|-----|-------------|--------|
-| Subdomain Slug Resolution | Currently uses `/b/:slug` path routing | Will become subdomain-based post-migration |
+```text
++------------------+     +------------------+     +-------------------+     +------------------+     +--------------+
+|   CART DRAWER    | --> |  STEP 1:         | --> |  STEP 2:          | --> |  STEP 3:         | --> |  STEP 4:     |
+|   Item Mgmt      |     |  Scheduling      |     |  Booker Details   |     |  Gift Recipients |     |  Review &    |
+|                  |     |                  |     |                   |     |  (if any gifts)  |     |  Payment     |
++------------------+     +------------------+     +-------------------+     +------------------+     +--------------+
+```
 
 ---
 
-## Phase 3: Post-Launch Features Audit
+## Cart Drawer (Simplified)
 
-The following features are documented in `usePostLaunchFeatures.tsx` as placeholder stubs:
+The cart drawer focuses purely on item management:
 
-| Feature | Description | Priority | Status |
-|---------|-------------|----------|--------|
-| OTP Verification for Service Start | Customer receives OTP when service starts (Studio/Chain plans) | Medium | Placeholder |
-| Tips System | Tip entry after service completion with 48-hour window | Medium | Placeholder |
-| Customer Reviews | Rating/review submission with moderation | Medium | Placeholder |
-| Buffer Time Flow | "On My Way" / "Running Late" customer notifications | Low | Placeholder |
-| Invoice Generation | PDF/HTML invoices with email sending | High | ✅ **DONE** - `useInvoices` hook |
-| Service Change During Appointment | Proposal and approval flow for service modifications | Medium | Placeholder |
-| Communication Credits Purchase | Credit top-up payment flow | High | ✅ **DONE** - `useCreditPurchase` + UI |
-| Trial Enforcement | Trial countdown, card collection, access restriction | High | ✅ **DONE** - `useTrialEnforcement` + Banner |
-
----
-
-## Phase 4: Code Cleanup
-
-### 4.1 Remove Duplicate Route ✅ DONE
-In `App.tsx`, duplicate route definitions have been removed.
-
-### 4.2 Clean Up Placeholder Page ✅ DONE
-`PlaceholderPages.tsx` has been removed.
-
----
-
-## Phase 5: Create Migration Documentation
-
-Create a comprehensive markdown file documenting the Vercel + Supabase migration plan for future reference.
-
-**File to create**: `docs/MIGRATION_GUIDE.md`
-
-**Contents**:
-1. Architecture overview (subdomain mapping)
-2. Supabase project setup instructions
-3. Database migration steps
-4. Edge function deployment
-5. Storage bucket configuration
-6. Auth configuration (redirect URLs, providers)
-7. Secrets management
-8. Vercel deployment guide
-9. DNS configuration
-10. Session isolation implementation
-11. Testing checklist
-
----
-
-## Phase 6: Monorepo Restructure Preparation
-
-Before migration, prepare the codebase for monorepo structure:
-
-### 6.1 Identify Shared Code
-| Package | Contents |
+| Element | Behavior |
 |---------|----------|
-| `packages/ui` | All shadcn components from `src/components/ui/` |
-| `packages/supabase-client` | Types, client configuration, shared hooks |
-| `packages/shared` | Utilities (`lib/utils.ts`, `lib/currency.ts`, `lib/countries.ts`), common hooks |
+| Item Image | Display if available, fallback to type label |
+| Item Type Badge | SERVICE / PRODUCT / PACKAGE in uppercase |
+| Item Name + Price | Standard display |
+| Quantity Counter | -/+/number controls, removes item at 0 |
+| Location Selector | For multi-location salons (dropdown per item) |
+| Delete Button | "Remove" link in destructive color |
+| Gift Checkbox | Simple "This is a gift" checkbox per item |
+| Fulfillment Toggle | **Products only**: Pickup / Delivery radio buttons |
+| Proceed Button | Always enabled (scheduling handled in next step) |
 
-### 6.2 Identify Platform-Specific Code
-| App | Routes | Key Components |
-|-----|--------|----------------|
-| `apps/backoffice` | `/backoffice/*` | BackofficeLayout, BackofficeAuth |
-| `apps/salon-admin` | `/salon/*` | SalonSidebar, all salon pages |
-| `apps/client-portal` | `/client/*` | ClientSidebar, all client pages |
-| `apps/public-booking` | `[slug].domain.com` | BookingWizard, CatalogView |
-| `apps/marketing` | `/`, `/pricing`, `/terms`, etc. | Landing components |
+**What Moves OUT of Cart:**
+- Schedule now / Leave unscheduled radio buttons (moves to Step 1)
+- Date picker and time selection (moves to Step 1)
+- Anonymous booking toggle (moves to Step 3)
 
-### 6.3 Session Isolation Strategy
-Each app will have a unique `storageKey` in the Supabase client configuration:
+---
 
-```text
-BackOffice:     sb-salonmagik-backoffice-auth
-Salon Admin:    sb-salonmagik-salon-auth
-Client Portal:  sb-salonmagik-client-auth
-Public Booking: (no persistent auth)
-Marketing:      (no auth)
+## Step 1: Scheduling
+
+- Groups schedulable items (services, packages with services) together
+- Products and product-only packages skip scheduling
+- Single date/time selection for the entire booking (shared appointment)
+- Uses existing `useAvailableDays` and `useAvailableSlots` hooks
+- "Leave unscheduled" option at bottom for users who want to schedule later
+- **Skip Condition**: If cart contains ONLY products, auto-skip to Step 2
+
+---
+
+## Step 2: Booker Details (Your Information)
+
+Collect sender/booker information - required regardless of gift status.
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| First Name | Yes | |
+| Last Name | Yes | |
+| Email | Yes | For confirmation |
+| Phone | No | Optional for non-gift bookings |
+| Notes for salon | No | Special requests |
+
+---
+
+## Step 3: Gift Recipients (Conditional)
+
+**Display Condition:** Only shown when one or more cart items have `isGift: true`
+
+### Smart Consolidation Logic
+```
+if (giftItems.length > 1) {
+  Show question: "Are all gifts for the same person?"
+  
+  if (sameRecipient === true) {
+    Show single form, apply recipient to all gift items
+  } else {
+    Show tabbed/accordion forms for each gift item
+  }
+} else if (giftItems.length === 1) {
+  Show single form directly (no "same person" question)
+}
+```
+
+### Gift Recipient Form Fields
+| Field | Required | Notes |
+|-------|----------|-------|
+| Recipient Full Name | Yes | First + Last |
+| Recipient Email | Yes | Gift notification sent here |
+| Recipient Phone | Yes | Per your requirement |
+| Message | No | Personal note from sender |
+| **Hide sender identity** | No | **Checkbox placed HERE** |
+
+### Anonymity Clarification (UI Copy)
+- **Label**: "Keep my identity anonymous"
+- **Description**: "The recipient won't see your name or contact details. The salon will still have your information for booking purposes."
+
+**Skip Condition:** If no items marked as gifts, auto-skip to Step 4
+
+---
+
+## Step 4: Review and Payment (Enhanced with Purse Split-Payment)
+
+### Sections
+
+1. **Appointment Summary** (if scheduled)
+   - Date, Time, Location, Duration estimate
+
+2. **Your Information**
+   - Booker name, email, phone
+
+3. **Gift Recipients** (if any)
+   - Summary per gift item with recipient name
+
+4. **Order Summary**
+   - List of items with quantities and prices
+   - Gift badges on gift items
+
+5. **Voucher/Promo Code Input**
+   - Reuse existing `VoucherInput` component
+
+6. **Customer Purse (Enhanced)**
+   - Requires OTP verification (existing auth flow)
+   - Shows current balance
+   - **New behaviors:**
+     - **Balance = 0**: Show "Insufficient balance" message, disable toggle
+     - **Balance < total**: Allow split payment - show "Use N12,000 from store credit" with remainder calculation
+     - **Balance >= total**: Apply full purse amount
+
+7. **Payment Options**
+   - Pay at Salon (if enabled)
+   - Pay Deposit (if deposits enabled)
+   - Pay Full Amount
+   - **Purse + Remainder**: When purse covers partial amount
+
+8. **Totals (Enhanced)**
+   - Subtotal
+   - Voucher discount (if applied)
+   - Store Credit applied (if applicable)
+   - **Remainder to pay** (if purse is partial)
+   - Amount due now
+   - Amount due at salon
+
+9. **Confirm Button**
+
+---
+
+## Customer Purse Enhancement Details
+
+### Current Behavior (to be preserved)
+- Toggle to enable/disable purse usage
+- OTP verification via dialog before applying
+- Applies minimum of (purse balance, total amount)
+
+### Enhanced Behavior (new)
+
+**Scenario 1: Zero Balance**
+```
++-----------------------------------------------+
+| [Wallet Icon] Store Credit                    |
+| Balance: N0.00                               |
+| "Insufficient balance"              [Disabled]|
++-----------------------------------------------+
+```
+
+**Scenario 2: Partial Balance (purse < total)**
+```
++-----------------------------------------------+
+| [Wallet Icon] Use Store Credit               |
+| Balance: N5,000 available        [Toggle ON] |
+|                                              |
+| N5,000 will be applied.                      |
+| Remaining N7,000 due via other payment.      |
+|                           [Verified ✓]       |
++-----------------------------------------------+
+```
+
+**Scenario 3: Full Coverage (purse >= total)**
+```
++-----------------------------------------------+
+| [Wallet Icon] Use Store Credit               |
+| Balance: N20,000 available       [Toggle ON] |
+|                                              |
+| N12,000 will be applied.                     |
+| No additional payment required.              |
+|                           [Verified ✓]       |
++-----------------------------------------------+
+```
+
+### Payment Calculation Logic
+```typescript
+const subtotal = getTotal();
+const afterVoucher = Math.max(0, subtotal - voucherDiscount);
+const purseApplied = Math.min(purseBalance, afterVoucher);
+const remainderAfterPurse = afterVoucher - purseApplied;
+
+// If purse covers everything
+if (remainderAfterPurse === 0) {
+  // No additional payment needed, can submit directly
+  amountDueNow = 0;
+  amountDueAtSalon = 0;
+} else {
+  // User must select payment option for remainder
+  if (paymentOption === "pay_now") {
+    amountDueNow = remainderAfterPurse;
+    amountDueAtSalon = 0;
+  } else if (paymentOption === "pay_deposit") {
+    amountDueNow = Math.min(depositAmount, remainderAfterPurse);
+    amountDueAtSalon = remainderAfterPurse - amountDueNow;
+  } else {
+    amountDueNow = 0;
+    amountDueAtSalon = remainderAfterPurse;
+  }
+}
+```
+
+### Authentication Flow for Purse
+When user enables purse toggle:
+1. If not authenticated → Show OTP login dialog
+2. Send OTP to booker's email
+3. On verification → Fetch purse balance for this salon
+4. Apply purse amount automatically
+
+---
+
+## ItemCard: Add vs Quantity Counter
+
+Transform the "Add" button to a quantity counter once item is in cart:
+
+```
+State: Not in cart
++---------------------------+
+|  [Add] button             |
++---------------------------+
+
+State: In cart (qty = 2)
++---------------------------+
+|  [-]  2  [+]              |
++---------------------------+
+
+State: Reduced to 0
++---------------------------+
+|  [Add] button (returns)   |
++---------------------------+
 ```
 
 ---
 
-## Implementation Order
+## Technical Implementation
 
-```text
-Week 1: Security
-├── Fix profiles table RLS
-├── Fix appointments table exposure
-└── Strengthen notifications isolation
+### Files to Modify
 
-Week 2: Platform Gaps
-├── Implement staff online tracking
-├── Complete client portal auth flow
-└── Clean up duplicate routes
+| File | Changes |
+|------|---------|
+| `src/hooks/booking/useBookingCart.tsx` | Add `fulfillmentType` field, helper to get first gift recipient |
+| `src/pages/booking/components/CartDrawer.tsx` | Simplify to item management only, add fulfillment toggle for products |
+| `src/pages/booking/components/ItemCard.tsx` | Add quantity counter mode when item in cart |
+| `src/pages/booking/components/BookingWizard.tsx` | Restructure steps, add gift consolidation logic, enhance purse display |
+| `src/components/booking/CustomerPurseToggle.tsx` | Add zero balance handling, split-payment messaging |
 
-Week 3: Critical Features
-├── Invoice generation
-├── Communication credits purchase
-└── Trial enforcement
+### New Components to Create
 
-Week 4: Migration Preparation
-├── Create migration documentation
-├── Plan monorepo structure
-└── Test session isolation locally
+| Component | Purpose |
+|-----------|---------|
+| `src/pages/booking/components/QuantityControl.tsx` | Reusable +/- counter component |
+| `src/pages/booking/components/GiftRecipientsStep.tsx` | Step 3 with consolidation logic + anonymity toggle |
+| `src/pages/booking/components/SchedulingStep.tsx` | Step 1 extracted for clarity |
+| `src/pages/booking/components/BookerInfoStep.tsx` | Step 2 extracted for clarity |
+| `src/pages/booking/components/ReviewStep.tsx` | Step 4 with enhanced purse + payment options |
+| `src/pages/booking/components/FulfillmentToggle.tsx` | Pickup/Delivery radio for products |
+
+### Data Model Updates
+
+**CartItem additions** (in `useBookingCart.tsx`):
+```typescript
+interface CartItem {
+  // ... existing fields
+  fulfillmentType?: "pickup" | "delivery"; // For products
+}
+```
+
+**Helper function** (in `useBookingCart.tsx`):
+```typescript
+const getFirstGiftRecipient = (): GiftRecipient | undefined => {
+  const firstGift = items.find(item => item.isGift && item.giftRecipient);
+  return firstGift?.giftRecipient;
+};
+```
+
+### Enhanced CustomerPurseToggle Props
+```typescript
+interface CustomerPurseToggleProps {
+  tenantId: string;
+  customerEmail: string;
+  currency: string;
+  maxAmount: number; // Total after voucher
+  onPurseApplied: (amount: number) => void;
+  showInsufficientMessage?: boolean; // New: show message even at 0
+}
+```
+
+### Wizard Step Flow Logic
+```typescript
+type WizardStep = "scheduling" | "booker" | "gifts" | "review" | "confirmation";
+
+const getNextStep = (current: WizardStep): WizardStep => {
+  switch (current) {
+    case "scheduling":
+      return "booker";
+    case "booker":
+      return giftItems.length > 0 ? "gifts" : "review";
+    case "gifts":
+      return "review";
+    case "review":
+      return "confirmation";
+    default:
+      return "scheduling";
+  }
+};
+
+const shouldSkipScheduling = (): boolean => {
+  return items.every(item => item.type === "product");
+};
 ```
 
 ---
 
-## Files to Create/Modify
+## Validation Rules
 
-| File | Action | Description |
-|------|--------|-------------|
-| `docs/MIGRATION_GUIDE.md` | Create | Complete Vercel + Supabase migration guide |
-| `supabase/migrations/[timestamp]_fix_security.sql` | Create | RLS policy fixes for profiles, appointments, notifications |
-| `src/App.tsx` | Modify | Remove duplicate routes |
-| `src/pages/salon/PlaceholderPages.tsx` | Delete | No longer needed |
-| `src/hooks/useSalonsOverview.tsx` | Modify | Replace placeholder staff count with real data |
+### Cart Drawer
+- Proceed button always enabled (validation happens in wizard steps)
+- Products must have fulfillment type selected before checkout
+
+### Step 1 (Scheduling)
+- If user chooses "Schedule now": date AND time required
+- If user chooses "Leave unscheduled": can proceed
+
+### Step 2 (Booker Details)
+- First name required
+- Last name required
+- Email required (valid format)
+
+### Step 3 (Gift Recipients)
+- For each gift item:
+  - Recipient name required
+  - Recipient email required (valid format)
+  - Recipient phone required
+
+### Step 4 (Review)
+- Payment option must be selected (unless purse covers 100%)
+- If online payment: redirect to payment processor
 
 ---
 
-## Notes
+## Testing Scenarios
 
-- The migration to Vercel + Supabase will require a new Supabase project (Lovable Cloud is not accessible externally)
-- DNS propagation may take up to 72 hours after configuration
-- Consider using a monorepo tool like Turborepo for efficient builds across apps
-- All existing Edge Functions will need redeployment via Supabase CLI
+1. **Add service** - Verify quantity counter appears on card
+2. **Increase/decrease quantity** - Counter works, remove at 0
+3. **Add product** - Fulfillment toggle (Pickup/Delivery) appears in cart
+4. **Mark item as gift** - Checkbox toggles gift badge
+5. **Single gift item** - Direct recipient form in Step 3 with anonymity toggle
+6. **Multiple gifts, same recipient** - Consolidation question, single form
+7. **Multiple gifts, different recipients** - Individual forms per item
+8. **Anonymity toggle** - Only visible in Step 3 gift form
+9. **Products only cart** - Skip scheduling step entirely
+10. **Purse with zero balance** - Show "Insufficient balance", toggle disabled
+11. **Purse partial coverage** - Show split payment: purse + remainder
+12. **Purse full coverage** - No additional payment needed
+13. **Purse + deposit** - Apply purse first, then deposit from remainder
+14. **Complete flow** - Full booking with all features
 
