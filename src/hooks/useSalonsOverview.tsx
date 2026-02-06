@@ -17,6 +17,9 @@ export interface LocationPerformance {
 
 type DateRange = "today" | "week" | "month";
 
+// Consider a session active if last activity was within 5 minutes
+const ACTIVITY_THRESHOLD_MINUTES = 5;
+
 function getDateRange(range: DateRange): { start: Date; end: Date } {
   const now = new Date();
   const end = endOfDay(now);
@@ -51,6 +54,8 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
 
     try {
       const { start, end } = getDateRange(dateRange);
+      const activityThreshold = new Date();
+      activityThreshold.setMinutes(activityThreshold.getMinutes() - ACTIVITY_THRESHOLD_MINUTES);
 
       // Fetch locations for this tenant
       const { data: locationsData, error: locationsError } = await supabase
@@ -76,14 +81,22 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
 
       if (appointmentsError) throw appointmentsError;
 
-      // Fetch staff roles for staff count (simplified - just count unique users per location)
-      // In a real implementation, you'd track actual online sessions
-      const { data: staffRoles, error: staffError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("tenant_id", currentTenant.id);
+      // Fetch active staff sessions for real-time online count
+      const { data: staffSessions, error: sessionsError } = await supabase
+        .from("staff_sessions")
+        .select("location_id")
+        .eq("tenant_id", currentTenant.id)
+        .is("ended_at", null)
+        .gte("last_activity_at", activityThreshold.toISOString());
 
-      if (staffError) throw staffError;
+      if (sessionsError) throw sessionsError;
+
+      // Count staff online by location
+      const staffByLocation: Record<string, number> = {};
+      staffSessions?.forEach((session) => {
+        const locId = session.location_id || "unassigned";
+        staffByLocation[locId] = (staffByLocation[locId] || 0) + 1;
+      });
 
       // Build performance data for each location
       const performanceData: LocationPerformance[] = locationsData.map((loc) => {
@@ -95,8 +108,8 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         
         const revenue = completedAppointments.reduce((sum, a) => sum + Number(a.amount_paid || 0), 0);
         
-        // Simplified staff online count - in production, track actual sessions
-        const staffOnline = Math.floor(Math.random() * 3) + 1; // Placeholder
+        // Use real staff session data
+        const staffOnline = staffByLocation[loc.id] || 0;
         
         return {
           id: loc.id,
@@ -123,6 +136,31 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
   useEffect(() => {
     fetchOverview();
   }, [fetchOverview]);
+
+  // Subscribe to realtime changes for staff sessions
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+
+    const channel = supabase
+      .channel("salon-overview-sessions")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "staff_sessions",
+          filter: `tenant_id=eq.${currentTenant.id}`,
+        },
+        () => {
+          fetchOverview();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentTenant?.id, fetchOverview]);
 
   return {
     locations,

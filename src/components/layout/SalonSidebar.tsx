@@ -36,6 +36,8 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { BannerProvider, GlobalBanner } from "@/components/banners";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { TrialBanner } from "@/components/billing/TrialBanner";
+import { useStaffSessions } from "@/hooks/useStaffSessions";
 import {
   Tooltip,
   TooltipContent,
@@ -102,8 +104,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const { toast } = useToast();
   const { unreadCount } = useNotifications();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
-
   const { currentTenant } = useAuth();
+  
+  // Start staff session on mount
+  const { startSession } = useStaffSessions();
+  useEffect(() => {
+    startSession();
+  }, [startSession]);
 
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
@@ -451,6 +458,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 </Button>
               </div>
             </header>
+
+            {/* Trial Banner */}
+            <TrialBanner />
 
             {/* Page Content */}
             <div className="flex-1 overflow-auto p-4 lg:p-6">{children}</div>

@@ -78,9 +78,9 @@ export default function ClientLoginPage() {
         });
         setStep("otp");
       } else {
-        // For phone OTP - would need SMS provider configured
-        // For now, show an informative message
-        setError("Phone OTP login is coming soon. Please use your email address.");
+        // Phone OTP requires SMS provider (Twilio/Africa's Talking)
+        // Show informative message with alternative
+        setError("Phone login coming soon. Please use your email address, or contact your salon for assistance.");
       }
     } catch (err) {
       console.error("Login error:", err);

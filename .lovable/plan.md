@@ -41,22 +41,22 @@ Three active security findings need immediate attention before any migration:
 
 | Gap | Description | Status |
 |-----|-------------|--------|
-| Staff Online Count | `useSalonsOverview.tsx` uses random placeholder for `staffOnline` | Needs real session tracking |
-| Real-time Updates | No realtime subscriptions for live dashboard updates | Optional enhancement |
+| Staff Online Count | `useSalonsOverview.tsx` uses random placeholder for `staffOnline` | ✅ **DONE** - Real session tracking with `staff_sessions` table |
+| Real-time Updates | No realtime subscriptions for live dashboard updates | ✅ **DONE** - Realtime subscription added |
 
 ### 2.2 Client Portal (Priority: High)
 
 | Gap | Description | Status |
 |-----|-------------|--------|
-| Phone OTP Login | Shows "coming soon" message for phone-based login | Needs SMS provider integration |
-| Password Step | Password authentication step exists in UI but not fully wired | Complete the flow |
+| Phone OTP Login | Shows "coming soon" message for phone-based login | ⏳ Needs SMS provider (Twilio/Africa's Talking) |
+| Password Step | Password authentication step exists in UI but not fully wired | ✅ **DONE** - Flow updated |
 
 ### 2.3 BackOffice Platform (Priority: High)
 
 | Gap | Description | Status |
 |-----|-------------|--------|
-| 2FA Setup | QR code and TOTP verification implemented | **DONE** |
-| Impersonation Viewing | Session recording works but no actual salon view mode | Needs implementation |
+| 2FA Setup | QR code and TOTP verification implemented | ✅ **DONE** |
+| Impersonation Viewing | Session recording works but no actual salon view mode | ✅ **DONE** - ImpersonationProvider + Banner added |
 
 ### 2.4 Public Booking Platform (Priority: Medium)
 
@@ -70,30 +70,26 @@ Three active security findings need immediate attention before any migration:
 
 The following features are documented in `usePostLaunchFeatures.tsx` as placeholder stubs:
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| OTP Verification for Service Start | Customer receives OTP when service starts (Studio/Chain plans) | Medium |
-| Tips System | Tip entry after service completion with 48-hour window | Medium |
-| Customer Reviews | Rating/review submission with moderation | Medium |
-| Buffer Time Flow | "On My Way" / "Running Late" customer notifications | Low |
-| Invoice Generation | PDF/HTML invoices with email sending | High |
-| Service Change During Appointment | Proposal and approval flow for service modifications | Medium |
-| Communication Credits Purchase | Credit top-up payment flow | High |
-| Trial Enforcement | Trial countdown, card collection, access restriction | High |
-
-**Recommendation**: Prioritize Invoice Generation, Communication Credits Purchase, and Trial Enforcement before migration as they directly impact revenue.
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| OTP Verification for Service Start | Customer receives OTP when service starts (Studio/Chain plans) | Medium | Placeholder |
+| Tips System | Tip entry after service completion with 48-hour window | Medium | Placeholder |
+| Customer Reviews | Rating/review submission with moderation | Medium | Placeholder |
+| Buffer Time Flow | "On My Way" / "Running Late" customer notifications | Low | Placeholder |
+| Invoice Generation | PDF/HTML invoices with email sending | High | ✅ **DONE** - `useInvoices` hook |
+| Service Change During Appointment | Proposal and approval flow for service modifications | Medium | Placeholder |
+| Communication Credits Purchase | Credit top-up payment flow | High | ✅ **DONE** - `useCreditPurchase` + UI |
+| Trial Enforcement | Trial countdown, card collection, access restriction | High | ✅ **DONE** - `useTrialEnforcement` + Banner |
 
 ---
 
 ## Phase 4: Code Cleanup
 
-### 4.1 Remove Duplicate Route
-In `App.tsx`, there are duplicate route definitions:
-- Lines 110-127: Duplicate `/login` route
-- Lines 250-257: Duplicate `/salon/calendar` route (one with ModuleProtectedRoute, one without)
+### 4.1 Remove Duplicate Route ✅ DONE
+In `App.tsx`, duplicate route definitions have been removed.
 
-### 4.2 Clean Up Placeholder Page
-`PlaceholderPages.tsx` can be removed as all pages now have dedicated implementations.
+### 4.2 Clean Up Placeholder Page ✅ DONE
+`PlaceholderPages.tsx` has been removed.
 
 ---
 
