@@ -8,7 +8,6 @@ import {
 import { BookingLayout } from "./components/BookingLayout";
 import { SalonHeader } from "./components/SalonHeader";
 import { CatalogView } from "./components/CatalogView";
-import { CartDrawer } from "./components/CartDrawer";
 import { BookingWizard } from "./components/BookingWizard";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -16,8 +15,7 @@ function BookingPageContent() {
   const { slug } = useParams<{ slug: string }>();
   const { salon, locations, isLoading: salonLoading, notFound } = usePublicSalon(slug);
   const { services, packages, products, categories, isLoading: catalogLoading } = usePublicCatalog(salon?.id);
-  const [cartOpen, setCartOpen] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const isLoading = salonLoading || catalogLoading;
 
@@ -66,7 +64,7 @@ function BookingPageContent() {
     <>
       <BookingLayout
         salon={salon}
-        onCartClick={() => setCartOpen(true)}
+        onCartClick={() => setCheckoutOpen(true)}
       >
         <div className="space-y-8">
           <SalonHeader salon={salon} locations={locations} />
@@ -81,21 +79,9 @@ function BookingPageContent() {
         </div>
       </BookingLayout>
 
-      <CartDrawer
-        open={cartOpen}
-        onOpenChange={setCartOpen}
-        currency={salon.currency}
-        tenantId={salon.id}
-        locations={locations}
-        onCheckout={() => {
-          setCartOpen(false);
-          setWizardOpen(true);
-        }}
-      />
-
       <BookingWizard
-        open={wizardOpen}
-        onOpenChange={setWizardOpen}
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
         salon={salon}
         locations={locations}
       />

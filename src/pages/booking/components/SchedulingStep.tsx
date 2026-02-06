@@ -126,28 +126,30 @@ export function SchedulingStep({
           {/* Date Selection */}
           <div className="space-y-2">
             <Label>Select Date</Label>
-            <CalendarComponent
-              mode="single"
-              selected={selectedDate}
-              onSelect={onDateChange}
-              month={calendarMonth}
-              onMonthChange={setCalendarMonth}
-              disabled={(date) => {
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                return date < today;
-              }}
-              modifiers={{
-                available: (date) => isDateAvailable(date),
-              }}
-              modifiersClassNames={{
-                available:
-                  "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
-              }}
-              className={cn("rounded-md border pointer-events-auto")}
-            />
+            <div className="flex justify-center w-full">
+              <CalendarComponent
+                mode="single"
+                selected={selectedDate}
+                onSelect={onDateChange}
+                month={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                disabled={(date) => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  return date < today;
+                }}
+                modifiers={{
+                  available: (date) => isDateAvailable(date),
+                }}
+                modifiersClassNames={{
+                  available:
+                    "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
+                }}
+                className={cn("rounded-md border pointer-events-auto w-full max-w-[350px]")}
+              />
+            </div>
             {daysLoading && (
-              <p className="text-xs text-muted-foreground">Loading availability...</p>
+              <p className="text-xs text-muted-foreground text-center">Loading availability...</p>
             )}
           </div>
 
