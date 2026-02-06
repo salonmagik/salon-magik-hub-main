@@ -18,6 +18,9 @@ verify_jwt = false
 [functions.complete-password-reset]
 verify_jwt = false
 
+[functions.complete-backoffice-password-reset]
+verify_jwt = false
+
 [functions.send-email-verification]
 verify_jwt = false
 
