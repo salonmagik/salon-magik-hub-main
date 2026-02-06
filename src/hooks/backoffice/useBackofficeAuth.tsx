@@ -99,80 +99,104 @@
      return data;
    };
  
-   // Initialize auth
-   const initializeAuth = useCallback(async () => {
-     try {
-       const { data: { subscription } } = supabase.auth.onAuthStateChange(
-         async (event, session) => {
-           console.log("BackOffice auth state changed:", event);
- 
-           if (event === "SIGNED_OUT" || !session) {
-             setState({
-               user: null,
-               session: null,
-               profile: null,
-               backofficeUser: null,
-               isLoading: false,
-               isAuthenticated: false,
-               isTotpVerified: false,
-               requiresTotpSetup: false,
-             });
-             // Clear TOTP session
-             sessionStorage.removeItem("backoffice_totp_verified");
-             return;
-           }
- 
-           if (session?.user) {
-             setTimeout(async () => {
-               const profile = await fetchProfile(session.user.id);
-               const backofficeUser = await fetchBackofficeUser(session.user.id, session.user.email || "");
-               
-               // Check if TOTP was already verified this session
-               const totpVerifiedInSession = sessionStorage.getItem("backoffice_totp_verified") === "true";
- 
-               setState({
-                 user: session.user,
-                 session,
-                 profile,
-                 backofficeUser,
-                 isLoading: false,
-                 isAuthenticated: !!backofficeUser,
-                 isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : false,
-                 requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
-               });
-             }, 0);
-           }
-         }
-       );
- 
-       // Get initial session
-       const { data: { session } } = await supabase.auth.getSession();
- 
-       if (session?.user) {
-         const profile = await fetchProfile(session.user.id);
-         const backofficeUser = await fetchBackofficeUser(session.user.id, session.user.email || "");
-         const totpVerifiedInSession = sessionStorage.getItem("backoffice_totp_verified") === "true";
- 
-         setState({
-           user: session.user,
-           session,
-           profile,
-           backofficeUser,
-           isLoading: false,
-           isAuthenticated: !!backofficeUser,
-           isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : false,
-           requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
-         });
-       } else {
-         setState(prev => ({ ...prev, isLoading: false }));
-       }
- 
-       return () => subscription.unsubscribe();
-     } catch (error) {
-       console.error("BackOffice auth initialization error:", error);
-       setState(prev => ({ ...prev, isLoading: false }));
-     }
-   }, []);
+  // Initialize auth - proper pattern to avoid race conditions
+  const initializeAuth = useCallback(async () => {
+    let isMounted = true;
+    
+    try {
+      // Set up the auth state change listener FIRST (for ongoing changes)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!isMounted) return;
+          console.log("BackOffice auth state changed:", event);
+
+          if (event === "SIGNED_OUT" || !session) {
+            setState({
+              user: null,
+              session: null,
+              profile: null,
+              backofficeUser: null,
+              isLoading: false,
+              isAuthenticated: false,
+              isTotpVerified: false,
+              requiresTotpSetup: false,
+            });
+            sessionStorage.removeItem("backoffice_totp_verified");
+            return;
+          }
+
+          // For ongoing auth changes (not initial load), update state immediately
+          // Don't control isLoading here - let the initial load handle that
+          if (session?.user) {
+            // Update session/user immediately
+            setState(prev => ({
+              ...prev,
+              user: session.user,
+              session,
+            }));
+            
+            // Fire and forget - fetch profile/backoffice data in background
+            const profile = await fetchProfile(session.user.id);
+            const backofficeUser = await fetchBackofficeUser(session.user.id, session.user.email || "");
+            const totpVerifiedInSession = sessionStorage.getItem("backoffice_totp_verified") === "true";
+
+            if (!isMounted) return;
+            
+            setState(prev => ({
+              ...prev,
+              profile,
+              backofficeUser,
+              isAuthenticated: !!backofficeUser,
+              isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : false,
+              requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
+            }));
+          }
+        }
+      );
+
+      // INITIAL load - fetch session and complete before setting isLoading = false
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!isMounted) {
+        subscription.unsubscribe();
+        return;
+      }
+
+      if (session?.user) {
+        const profile = await fetchProfile(session.user.id);
+        const backofficeUser = await fetchBackofficeUser(session.user.id, session.user.email || "");
+        const totpVerifiedInSession = sessionStorage.getItem("backoffice_totp_verified") === "true";
+
+        if (!isMounted) {
+          subscription.unsubscribe();
+          return;
+        }
+
+        setState({
+          user: session.user,
+          session,
+          profile,
+          backofficeUser,
+          isLoading: false,
+          isAuthenticated: !!backofficeUser,
+          isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : false,
+          requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
+        });
+      } else {
+        setState(prev => ({ ...prev, isLoading: false }));
+      }
+
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    } catch (error) {
+      console.error("BackOffice auth initialization error:", error);
+      if (isMounted) {
+        setState(prev => ({ ...prev, isLoading: false }));
+      }
+    }
+  }, []);
  
    useEffect(() => {
      initializeAuth();
