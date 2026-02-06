@@ -717,6 +717,30 @@ export default function SettingsPage() {
     </Card>
   );
 
+  const handleNotificationToggle = async (
+    field: keyof typeof notificationSettings,
+    checked: boolean
+  ) => {
+    setNotificationSettings((prev) => ({ ...prev, [field]: checked }));
+    
+    const fieldMap: Record<string, string> = {
+      emailAppointmentReminders: "email_appointment_reminders",
+      smsAppointmentReminders: "sms_appointment_reminders",
+      emailNewBookings: "email_new_bookings",
+      emailCancellations: "email_cancellations",
+      emailDailyDigest: "email_daily_digest",
+    };
+    
+    const success = await saveNotificationSettings({
+      [fieldMap[field]]: checked,
+    });
+    
+    if (!success) {
+      // Revert on failure
+      setNotificationSettings((prev) => ({ ...prev, [field]: !checked }));
+    }
+  };
+
   const renderNotificationsTab = () => (
     <Card>
       <CardHeader>
@@ -725,94 +749,85 @@ export default function SettingsPage() {
           Configure how you and your customers receive notifications.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Email appointment reminders</p>
-              <p className="text-sm text-muted-foreground">
-                Send customers email reminders before appointments
-              </p>
-            </div>
-            <Switch
-              checked={notificationSettings.emailAppointmentReminders}
-              onCheckedChange={(checked) =>
-                setNotificationSettings((prev) => ({ ...prev, emailAppointmentReminders: checked }))
-              }
-            />
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">Email appointment reminders</p>
+            <p className="text-sm text-muted-foreground">
+              Send customers email reminders before appointments
+            </p>
           </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">SMS appointment reminders</p>
-              <p className="text-sm text-muted-foreground">
-                Send customers SMS reminders (uses credits)
-              </p>
-            </div>
-            <Switch
-              checked={notificationSettings.smsAppointmentReminders}
-              onCheckedChange={(checked) =>
-                setNotificationSettings((prev) => ({ ...prev, smsAppointmentReminders: checked }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">New booking notifications</p>
-              <p className="text-sm text-muted-foreground">
-                Get notified when a new booking is made
-              </p>
-            </div>
-            <Switch
-              checked={notificationSettings.emailNewBookings}
-              onCheckedChange={(checked) =>
-                setNotificationSettings((prev) => ({ ...prev, emailNewBookings: checked }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Cancellation alerts</p>
-              <p className="text-sm text-muted-foreground">
-                Get notified when an appointment is cancelled
-              </p>
-            </div>
-            <Switch
-              checked={notificationSettings.emailCancellations}
-              onCheckedChange={(checked) =>
-                setNotificationSettings((prev) => ({ ...prev, emailCancellations: checked }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Daily digest</p>
-              <p className="text-sm text-muted-foreground">
-                Receive a daily summary of upcoming appointments
-              </p>
-            </div>
-            <Switch
-              checked={notificationSettings.emailDailyDigest}
-              onCheckedChange={(checked) =>
-                setNotificationSettings((prev) => ({ ...prev, emailDailyDigest: checked }))
-              }
-            />
-          </div>
+          <Switch
+            checked={notificationSettings.emailAppointmentReminders}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("emailAppointmentReminders", checked)
+            }
+          />
         </div>
 
-        {/* Save Button */}
-        <div className="flex justify-end pt-4 border-t">
-          <Button onClick={handleNotificationsSave} disabled={notificationsSaving}>
-            {notificationsSaving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
-            Save preferences
-          </Button>
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">SMS appointment reminders</p>
+            <p className="text-sm text-muted-foreground">
+              Send customers SMS reminders (uses credits)
+            </p>
+          </div>
+          <Switch
+            checked={notificationSettings.smsAppointmentReminders}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("smsAppointmentReminders", checked)
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">New booking notifications</p>
+            <p className="text-sm text-muted-foreground">
+              Get notified when a new booking is made
+            </p>
+          </div>
+          <Switch
+            checked={notificationSettings.emailNewBookings}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("emailNewBookings", checked)
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">Cancellation alerts</p>
+            <p className="text-sm text-muted-foreground">
+              Get notified when an appointment is cancelled
+            </p>
+          </div>
+          <Switch
+            checked={notificationSettings.emailCancellations}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("emailCancellations", checked)
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">Daily digest</p>
+            <p className="text-sm text-muted-foreground">
+              Receive a daily summary of upcoming appointments
+            </p>
+          </div>
+          <Switch
+            checked={notificationSettings.emailDailyDigest}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("emailDailyDigest", checked)
+            }
+          />
         </div>
       </CardContent>
     </Card>
