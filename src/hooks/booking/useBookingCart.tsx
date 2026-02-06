@@ -18,13 +18,10 @@ export interface CartItem {
   quantity: number;
   durationMinutes?: number;
   locationId?: string;
-  schedulingOption: "schedule_now" | "leave_unscheduled" | "scheduled";
-  scheduledDate?: string;
-  scheduledTime?: string;
-  fulfillmentType?: "pickup" | "delivery";
   isGift: boolean;
   giftRecipient?: GiftRecipient;
   imageUrl?: string;
+  fulfillmentType?: "pickup" | "delivery";
 }
 
 interface BookingCartContextType {
@@ -32,10 +29,13 @@ interface BookingCartContextType {
   addItem: (item: Omit<CartItem, "id">) => void;
   removeItem: (id: string) => void;
   updateItem: (id: string, updates: Partial<CartItem>) => void;
+  updateQuantity: (itemId: string, delta: number) => void;
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
   getTotalDuration: () => number;
+  getItemInCart: (itemId: string, type: CartItem["type"]) => CartItem | undefined;
+  getGiftItems: () => CartItem[];
 }
 
 const BookingCartContext = createContext<BookingCartContextType | undefined>(undefined);
@@ -65,6 +65,32 @@ export function BookingCartProvider({ children }: { children: ReactNode }) {
     setItems([]);
   }, []);
 
+  const updateQuantity = useCallback((itemId: string, delta: number) => {
+    setItems((prev) => {
+      const item = prev.find((i) => i.itemId === itemId);
+      if (!item) return prev;
+      
+      const newQuantity = item.quantity + delta;
+      if (newQuantity <= 0) {
+        return prev.filter((i) => i.itemId !== itemId);
+      }
+      return prev.map((i) =>
+        i.itemId === itemId ? { ...i, quantity: newQuantity } : i
+      );
+    });
+  }, []);
+
+  const getItemInCart = useCallback(
+    (itemId: string, type: CartItem["type"]): CartItem | undefined => {
+      return items.find((item) => item.itemId === itemId && item.type === type);
+    },
+    [items]
+  );
+
+  const getGiftItems = useCallback((): CartItem[] => {
+    return items.filter((item) => item.isGift);
+  }, [items]);
+
   const getTotal = useCallback(() => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, [items]);
@@ -86,10 +112,13 @@ export function BookingCartProvider({ children }: { children: ReactNode }) {
         addItem,
         removeItem,
         updateItem,
+        updateQuantity,
         clearCart,
         getTotal,
         getItemCount,
         getTotalDuration,
+        getItemInCart,
+        getGiftItems,
       }}
     >
       {children}
