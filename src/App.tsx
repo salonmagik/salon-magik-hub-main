@@ -67,6 +67,7 @@ import NotFound from "./pages/NotFound";
  import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/backoffice/BackofficeProtectedRoute";
   import BackofficeLoginPage from "./pages/backoffice/BackofficeLoginPage";
   import BackofficeForgotPasswordPage from "./pages/backoffice/BackofficeForgotPasswordPage";
+  import BackofficeResetPasswordPage from "./pages/backoffice/BackofficeResetPasswordPage";
   import BackofficeVerify2FAPage from "./pages/backoffice/BackofficeVerify2FAPage";
  import BackofficeSetup2FAPage from "./pages/backoffice/BackofficeSetup2FAPage";
  import BackofficeDashboardPage from "./pages/backoffice/BackofficeDashboardPage";
@@ -405,6 +406,16 @@ const App = () => (
                  <BackofficeAuthProvider>
                    <BackofficePublicRoute>
                      <BackofficeForgotPasswordPage />
+                   </BackofficePublicRoute>
+                 </BackofficeAuthProvider>
+               }
+             />
+             <Route
+               path="/backoffice/reset-password"
+               element={
+                 <BackofficeAuthProvider>
+                   <BackofficePublicRoute>
+                     <BackofficeResetPasswordPage />
                    </BackofficePublicRoute>
                  </BackofficeAuthProvider>
                }
