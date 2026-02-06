@@ -1,96 +1,198 @@
 
-# Fix BackOffice 2FA Setup - QR Code and TOTP Validation
 
-## Issues Identified
+# Platform Completion & Migration Preparation Plan
 
-1. **No QR Code Displayed**: The setup page has a placeholder comment but never renders an actual QR code image
-2. **Invalid Secret Key**: The secret generation and TOTP verification are broken:
-   - The current TOTP implementation uses a fake algorithm (simple hash sum) instead of proper HMAC-SHA1
-   - Google Authenticator requires RFC 6238 compliant TOTP
+## Overview
 
-## Solution
-
-### 1. Add QR Code Image Generation
-
-Use a QR code API service to generate the QR code from the `otpauth://` URL. The QR Code API service (`api.qrserver.com`) is free, reliable, and doesn't require authentication.
-
-**Changes to `BackofficeSetup2FAPage.tsx`:**
-- Generate proper 16-character base32 secret (standard for TOTP)
-- Create QR code image using the `otpauth://` URL
-- Display the QR code image with proper loading state
-
-### 2. Fix TOTP Verification (Edge Function)
-
-Replace the broken verification logic with the `otpauth` library which is available in Deno.
-
-**Changes to `verify-backoffice-totp/index.ts`:**
-- Import `otpauth` library from npm
-- Use proper HMAC-SHA1 based TOTP verification
-- Support time window drift (±1 step) for better UX
+This plan outlines a structured approach to complete the SalonMagik platform development, close all identified gaps and security issues, and then prepare for migration to a Vercel + Supabase architecture with subdomain-based session isolation.
 
 ---
 
-## Technical Implementation
+## Phase 1: Security Hardening (Critical)
 
-### Frontend Changes (`BackofficeSetup2FAPage.tsx`)
+Three active security findings need immediate attention before any migration:
 
-```tsx
-// Improved secret generation - exactly 16 characters for compatibility
-function generateSecret(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let secret = "";
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
-  for (const byte of array) {
-    secret += chars[byte % 32];
-  }
-  return secret;
-}
+### 1.1 Fix `profiles` Table Public Exposure
+**Issue**: User personal information (names, phone numbers, avatar URLs) could be accessed by anonymous users.
 
-// QR Code URL using free API service
-const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`;
+**Solution**:
+- Add RLS policies to restrict profile access to:
+  - The profile owner (`user_id = auth.uid()`)
+  - Authenticated users within the same tenant (for staff directory purposes)
 
-// Render actual QR code image
-<img 
-  src={qrCodeUrl} 
-  alt="Scan with authenticator app"
-  className="mx-auto w-48 h-48"
-/>
+### 1.2 Fix `appointments` Table Public Exposure  
+**Issue**: Customer booking history, payment details, and personal notes are visible to anonymous users through the availability check policy.
+
+**Solution**:
+- Create a separate, minimal view or policy for anonymous availability checking that only exposes time slots
+- Restrict full appointment data to authenticated tenant members and the customer themselves
+
+### 1.3 Strengthen `notifications` Tenant Isolation
+**Issue**: Potential cross-tenant notification leakage if policies aren't correctly enforced.
+
+**Solution**:
+- Audit and update notification policies to ensure strict tenant isolation using `get_user_tenant_ids()` function
+
+---
+
+## Phase 2: Platform Gap Closure
+
+### 2.1 Salon Admin Platform (Priority: High)
+
+| Gap | Description | Status |
+|-----|-------------|--------|
+| Staff Online Count | `useSalonsOverview.tsx` uses random placeholder for `staffOnline` | Needs real session tracking |
+| Real-time Updates | No realtime subscriptions for live dashboard updates | Optional enhancement |
+
+### 2.2 Client Portal (Priority: High)
+
+| Gap | Description | Status |
+|-----|-------------|--------|
+| Phone OTP Login | Shows "coming soon" message for phone-based login | Needs SMS provider integration |
+| Password Step | Password authentication step exists in UI but not fully wired | Complete the flow |
+
+### 2.3 BackOffice Platform (Priority: High)
+
+| Gap | Description | Status |
+|-----|-------------|--------|
+| 2FA Setup | QR code and TOTP verification implemented | **DONE** |
+| Impersonation Viewing | Session recording works but no actual salon view mode | Needs implementation |
+
+### 2.4 Public Booking Platform (Priority: Medium)
+
+| Gap | Description | Status |
+|-----|-------------|--------|
+| Subdomain Slug Resolution | Currently uses `/b/:slug` path routing | Will become subdomain-based post-migration |
+
+---
+
+## Phase 3: Post-Launch Features Audit
+
+The following features are documented in `usePostLaunchFeatures.tsx` as placeholder stubs:
+
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| OTP Verification for Service Start | Customer receives OTP when service starts (Studio/Chain plans) | Medium |
+| Tips System | Tip entry after service completion with 48-hour window | Medium |
+| Customer Reviews | Rating/review submission with moderation | Medium |
+| Buffer Time Flow | "On My Way" / "Running Late" customer notifications | Low |
+| Invoice Generation | PDF/HTML invoices with email sending | High |
+| Service Change During Appointment | Proposal and approval flow for service modifications | Medium |
+| Communication Credits Purchase | Credit top-up payment flow | High |
+| Trial Enforcement | Trial countdown, card collection, access restriction | High |
+
+**Recommendation**: Prioritize Invoice Generation, Communication Credits Purchase, and Trial Enforcement before migration as they directly impact revenue.
+
+---
+
+## Phase 4: Code Cleanup
+
+### 4.1 Remove Duplicate Route
+In `App.tsx`, there are duplicate route definitions:
+- Lines 110-127: Duplicate `/login` route
+- Lines 250-257: Duplicate `/salon/calendar` route (one with ModuleProtectedRoute, one without)
+
+### 4.2 Clean Up Placeholder Page
+`PlaceholderPages.tsx` can be removed as all pages now have dedicated implementations.
+
+---
+
+## Phase 5: Create Migration Documentation
+
+Create a comprehensive markdown file documenting the Vercel + Supabase migration plan for future reference.
+
+**File to create**: `docs/MIGRATION_GUIDE.md`
+
+**Contents**:
+1. Architecture overview (subdomain mapping)
+2. Supabase project setup instructions
+3. Database migration steps
+4. Edge function deployment
+5. Storage bucket configuration
+6. Auth configuration (redirect URLs, providers)
+7. Secrets management
+8. Vercel deployment guide
+9. DNS configuration
+10. Session isolation implementation
+11. Testing checklist
+
+---
+
+## Phase 6: Monorepo Restructure Preparation
+
+Before migration, prepare the codebase for monorepo structure:
+
+### 6.1 Identify Shared Code
+| Package | Contents |
+|---------|----------|
+| `packages/ui` | All shadcn components from `src/components/ui/` |
+| `packages/supabase-client` | Types, client configuration, shared hooks |
+| `packages/shared` | Utilities (`lib/utils.ts`, `lib/currency.ts`, `lib/countries.ts`), common hooks |
+
+### 6.2 Identify Platform-Specific Code
+| App | Routes | Key Components |
+|-----|--------|----------------|
+| `apps/backoffice` | `/backoffice/*` | BackofficeLayout, BackofficeAuth |
+| `apps/salon-admin` | `/salon/*` | SalonSidebar, all salon pages |
+| `apps/client-portal` | `/client/*` | ClientSidebar, all client pages |
+| `apps/public-booking` | `[slug].domain.com` | BookingWizard, CatalogView |
+| `apps/marketing` | `/`, `/pricing`, `/terms`, etc. | Landing components |
+
+### 6.3 Session Isolation Strategy
+Each app will have a unique `storageKey` in the Supabase client configuration:
+
+```text
+BackOffice:     sb-salonmagik-backoffice-auth
+Salon Admin:    sb-salonmagik-salon-auth
+Client Portal:  sb-salonmagik-client-auth
+Public Booking: (no persistent auth)
+Marketing:      (no auth)
 ```
 
-### Edge Function Changes (`verify-backoffice-totp/index.ts`)
+---
 
-```typescript
-import * as OTPAuth from "npm:otpauth";
+## Implementation Order
 
-// Proper TOTP verification
-const totp = new OTPAuth.TOTP({
-  issuer: "SalonMagik",
-  label: user.email,
-  algorithm: "SHA1",
-  digits: 6,
-  period: 30,
-  secret: OTPAuth.Secret.fromBase32(backofficeUser.totp_secret),
-});
+```text
+Week 1: Security
+├── Fix profiles table RLS
+├── Fix appointments table exposure
+└── Strengthen notifications isolation
 
-// Validate with 1-step window for clock drift
-const delta = totp.validate({ token, window: 1 });
-const isValid = delta !== null;
+Week 2: Platform Gaps
+├── Implement staff online tracking
+├── Complete client portal auth flow
+└── Clean up duplicate routes
+
+Week 3: Critical Features
+├── Invoice generation
+├── Communication credits purchase
+└── Trial enforcement
+
+Week 4: Migration Preparation
+├── Create migration documentation
+├── Plan monorepo structure
+└── Test session isolation locally
 ```
 
 ---
 
-## Files to Modify
+## Files to Create/Modify
 
-| File | Changes |
-|------|---------|
-| `src/pages/backoffice/BackofficeSetup2FAPage.tsx` | Add QR code image, fix secret length to 16 chars |
-| `supabase/functions/verify-backoffice-totp/index.ts` | Replace fake TOTP with proper `otpauth` library |
+| File | Action | Description |
+|------|--------|-------------|
+| `docs/MIGRATION_GUIDE.md` | Create | Complete Vercel + Supabase migration guide |
+| `supabase/migrations/[timestamp]_fix_security.sql` | Create | RLS policy fixes for profiles, appointments, notifications |
+| `src/App.tsx` | Modify | Remove duplicate routes |
+| `src/pages/salon/PlaceholderPages.tsx` | Delete | No longer needed |
+| `src/hooks/useSalonsOverview.tsx` | Modify | Replace placeholder staff count with real data |
 
 ---
 
-## Security Considerations
+## Notes
 
-- The QR code API only receives the otpauth URL (no secret stored server-side in the API)
-- The `otpauth` library is RFC 6238 compliant
-- Time window of ±1 step (30 seconds each) allows for minor clock drift
+- The migration to Vercel + Supabase will require a new Supabase project (Lovable Cloud is not accessible externally)
+- DNS propagation may take up to 72 hours after configuration
+- Consider using a monorepo tool like Turborepo for efficient builds across apps
+- All existing Edge Functions will need redeployment via Supabase CLI
+
