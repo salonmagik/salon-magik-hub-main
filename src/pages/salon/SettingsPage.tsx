@@ -875,9 +875,30 @@ export default function SettingsPage() {
             </div>
             <Switch
               checked={bookingSettings.onlineBookingEnabled}
-              onCheckedChange={(checked) =>
-                setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: checked }))
-              }
+              disabled={isSaving}
+              onCheckedChange={async (checked) => {
+                if (!currentTenant?.id) return;
+                setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: checked }));
+                setIsSaving(true);
+                try {
+                  const { error } = await supabase
+                    .from("tenants")
+                    .update({ online_booking_enabled: checked })
+                    .eq("id", currentTenant.id);
+                  if (error) throw error;
+                  await refreshTenants();
+                  toast({ 
+                    title: checked ? "Online booking enabled" : "Online booking disabled",
+                    description: checked ? "Customers can now book online" : "Online booking is now off"
+                  });
+                } catch (err) {
+                  console.error("Error updating online booking:", err);
+                  setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: !checked }));
+                  toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
             />
           </div>
 
