@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, startOfMonth } from "date-fns";
 import { Calendar, Clock, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, Wallet } from "lucide-react";
 import {
   Dialog,
@@ -24,12 +24,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useBookingCart, useAvailableSlots, useDepositCalculation, type PublicTenant, type PublicLocation } from "@/hooks/booking";
+import { useBookingCart, useAvailableSlots, useAvailableDays, useDepositCalculation, type PublicTenant, type PublicLocation } from "@/hooks/booking";
 import { VoucherInput, type AppliedVoucher } from "@/components/booking/VoucherInput";
 import { CustomerPurseToggle } from "@/components/booking/CustomerPurseToggle";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface BookingWizardProps {
   open: boolean;
@@ -46,11 +47,15 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const [step, setStep] = useState<WizardStep>("schedule");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
   // Schedule state
   const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
+  
+  // Anonymous booking state - still capture details even when anonymous
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   // Payment state
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
@@ -85,6 +90,16 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
   const totalDuration = getTotalDuration();
   
+  // Get available days for calendar dots
+  const { data: availableDays, isLoading: daysLoading } = useAvailableDays(
+    salon.id,
+    selectedLocation,
+    calendarMonth,
+    salon.slot_capacity_default || 1,
+    totalDuration,
+    15 // buffer minutes
+  );
+  
   const { data: availableSlots, isLoading: slotsLoading } = useAvailableSlots(
     salon.id,
     selectedLocation,
@@ -103,6 +118,15 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
   const giftItems = items.filter((item) => item.isGift);
   const hasSchedulableItems = items.some((item) => item.type !== "product");
+
+  // Helper to check if a date is available
+  const isDateAvailable = (date: Date): boolean => {
+    if (!availableDays) return false;
+    const dayInfo = availableDays.find(
+      (d) => format(d.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+    );
+    return dayInfo?.available ?? false;
+  };
 
   // Calculate final amounts
   const subtotal = getTotal();
@@ -179,6 +203,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           scheduledDate: selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
           scheduledTime: selectedTime,
           customer: customerInfo,
+          isAnonymous: isAnonymous,
           items: items.map((item) => ({
             ...item,
             giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
@@ -245,6 +270,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setAppliedVoucher(null);
       setPurseAmount(0);
       setPaymentOption("pay_at_salon");
+      setIsAnonymous(false);
     }
     onOpenChange(false);
   };
@@ -343,9 +369,24 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                         mode="single"
                         selected={selectedDate}
                         onSelect={setSelectedDate}
-                        disabled={(date) => date < new Date()}
-                        className="rounded-md border"
+                        month={calendarMonth}
+                        onMonthChange={setCalendarMonth}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          return date < today;
+                        }}
+                        modifiers={{
+                          available: (date) => isDateAvailable(date),
+                        }}
+                        modifiersClassNames={{
+                          available: "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
+                        }}
+                        className={cn("rounded-md border pointer-events-auto")}
                       />
+                      {daysLoading && (
+                        <p className="text-xs text-muted-foreground">Loading availability...</p>
+                      )}
                     </div>
 
                     {/* Time Selection */}
@@ -453,6 +494,23 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                     placeholder="Any special requests..."
                     rows={3}
                   />
+                </div>
+
+                {/* Anonymous Booking Option */}
+                <div className="flex items-start gap-3 p-4 border rounded-lg bg-muted/30">
+                  <Checkbox
+                    id="anonymous-booking"
+                    checked={isAnonymous}
+                    onCheckedChange={(checked) => setIsAnonymous(!!checked)}
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="anonymous-booking" className="cursor-pointer font-medium">
+                      Keep my identity anonymous
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Your details will still be captured for booking purposes, but your name will not be visible to other customers.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Gift Recipients */}
