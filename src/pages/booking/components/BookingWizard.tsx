@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useBookingCart, useDepositCalculation, type PublicTenant, type PublicLocation, type GiftRecipient } from "@/hooks/booking";
 import { CartStep } from "./CartStep";
@@ -300,8 +299,8 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-0 shrink-0">
+      <DialogContent className="max-w-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
           <DialogTitle>Complete Checkout</DialogTitle>
         </DialogHeader>
 
@@ -339,10 +338,10 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           </div>
         </div>
 
-        <Separator className="shrink-0" />
+        <Separator />
 
         {/* Step Content - scrollable */}
-        <ScrollArea className="flex-1 min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="px-6 py-4">
             {step === "cart" && (
               <CartStep 
@@ -430,13 +429,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer Actions */}
         {step !== "confirmation" && (
-          <>
-            <Separator className="shrink-0" />
-            <div className="p-4 flex items-center justify-between shrink-0">
+          <div className="border-t bg-background shrink-0">
+            <div className="p-4 flex items-center justify-between">
               <Button
                 variant="outline"
                 onClick={handleBack}
@@ -470,22 +468,19 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 </Button>
               )}
             </div>
-          </>
+          </div>
         )}
 
         {step === "confirmation" && (
-          <>
-            <Separator className="shrink-0" />
-            <div className="p-4 shrink-0">
-              <Button
-                className="w-full text-white border-0"
-                onClick={handleClose}
-                style={{ backgroundColor: "var(--brand-color)" }}
-              >
-                Done
-              </Button>
-            </div>
-          </>
+          <div className="border-t bg-background p-4 shrink-0">
+            <Button
+              className="w-full text-white border-0"
+              onClick={handleClose}
+              style={{ backgroundColor: "var(--brand-color)" }}
+            >
+              Done
+            </Button>
+          </div>
         )}
       </DialogContent>
     </Dialog>

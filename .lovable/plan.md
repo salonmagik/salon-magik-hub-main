@@ -173,16 +173,17 @@ const [checkoutOpen, setCheckoutOpen] = useState(false);
 ---
 
 ## Testing Checklist
-- [ ] Cart icon opens Complete Checkout modal
-- [ ] Cart items display correctly in first step
-- [ ] Quantity controls work in cart step
-- [ ] Gift checkbox works in cart step
-- [ ] Products show fulfillment toggle in cart step
-- [ ] Continue from cart goes to scheduling (or booker for products-only)
-- [ ] Back on cart step closes modal
-- [ ] Modal content scrolls properly
-- [ ] Steps progress bar has no visible scrollbar
-- [ ] Calendar fills container width
-- [ ] Time slots appear after date selection
-- [ ] Complete checkout flow works end-to-end
+- [x] Cart icon opens Complete Checkout modal
+- [x] Cart items display correctly in first step
+- [x] Quantity controls work in cart step
+- [x] Gift checkbox works in cart step
+- [x] Products show fulfillment toggle in cart step
+- [x] Continue from cart goes to scheduling (or booker for products-only)
+- [x] Back on cart step closes modal
+- [x] Modal content scrolls properly
+- [x] Steps progress bar has no visible scrollbar
+- [x] Calendar fills container width
+- [x] Time slots appear after date selection
+- [x] Complete checkout flow works end-to-end
+- [x] Edge function deployed and working
 
