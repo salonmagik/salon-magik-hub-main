@@ -2934,6 +2934,7 @@ export type Database = {
         Returns: boolean
       }
       is_backoffice_user: { Args: { _user_id: string }; Returns: boolean }
+      is_bookable_tenant: { Args: { _tenant_id: string }; Returns: boolean }
       is_tenant_owner: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
