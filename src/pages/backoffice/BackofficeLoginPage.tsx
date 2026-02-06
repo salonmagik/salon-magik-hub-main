@@ -1,5 +1,5 @@
- import { useState } from "react";
- import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
  import { supabase } from "@/integrations/supabase/client";
  import { Button } from "@/components/ui/button";
  import { Input } from "@/components/ui/input";
@@ -98,15 +98,23 @@
                  </Button>
                </div>
              </div>
-             <Button type="submit" className="w-full" disabled={isLoading}>
-               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-               Sign in
-             </Button>
-           </form>
-           <p className="mt-6 text-center text-xs text-muted-foreground">
-             Only authorized personnel with approved email domains can access this system.
-           </p>
-         </CardContent>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Sign in
+            </Button>
+            <div className="text-center">
+              <Link
+                to="/backoffice/forgot-password"
+                className="text-sm text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </form>
+          <p className="mt-6 text-center text-xs text-muted-foreground">
+            Only authorized personnel with approved email domains can access this system.
+          </p>
+        </CardContent>
        </Card>
      </div>
    );
