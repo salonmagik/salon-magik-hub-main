@@ -85,6 +85,8 @@ function BookingPageContent() {
         open={cartOpen}
         onOpenChange={setCartOpen}
         currency={salon.currency}
+        tenantId={salon.id}
+        locations={locations}
         onCheckout={() => {
           setCartOpen(false);
           setWizardOpen(true);
