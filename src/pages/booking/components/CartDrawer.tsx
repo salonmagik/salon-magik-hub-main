@@ -149,7 +149,7 @@ export function CartDrawer({ open, onOpenChange, currency, onCheckout }: CartDra
                 className="w-full text-white border-0" 
                 size="lg" 
                 onClick={onCheckout}
-                style={{ backgroundColor: 'var(--brand-color)' }}
+                style={{ backgroundColor: 'var(--brand-color, hsl(220, 91%, 54%))' }}
               >
                 Proceed to Checkout
               </Button>
