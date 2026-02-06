@@ -115,16 +115,6 @@ const App = () => (
                 </PublicOnlyRoute>
               }
             />
-
-            {/* Public Auth Routes - redirect if already logged in */}
-            <Route
-              path="/login"
-              element={
-                <PublicOnlyRoute>
-                  <LoginPage />
-                </PublicOnlyRoute>
-              }
-            />
             <Route
               path="/signup"
               element={
@@ -244,14 +234,6 @@ const App = () => (
                   <ModuleProtectedRoute module="calendar">
                     <CalendarPage />
                   </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/calendar"
-              element={
-                <ProtectedRoute>
-                  <CalendarPage />
                 </ProtectedRoute>
               }
             />
