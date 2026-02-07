@@ -54,7 +54,9 @@ export default function AcceptInvitePage() {
         });
 
         if (error) {
-          setValidationError(error.message || "Invalid or expired invitation");
+          // Supabase invoke returns a generic message for non-2xx responses.
+          // The backend is designed to return { error } with a 200 so we can show friendly copy here.
+          setValidationError("Invalid or expired invitation");
           setIsValidating(false);
           return;
         }

@@ -16,20 +16,23 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
+
     // Use service role to bypass RLS
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { token }: ValidateInvitationRequest = await req.json();
 
     if (!token) {
-      return new Response(
-        JSON.stringify({ error: "Token is required" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return json({ error: "Token is required" });
     }
 
     // Fetch invitation by token
@@ -41,30 +44,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (error || !data) {
       console.error("Invitation lookup error:", error);
-      return new Response(
-        JSON.stringify({ error: "Invalid invitation token" }),
-        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return json({ error: "Invalid or expired invitation" });
     }
 
     // Check status
     if (data.status !== "pending") {
-      return new Response(
-        JSON.stringify({ 
-          error: data.status === "accepted" 
-            ? "This invitation has already been accepted" 
-            : "This invitation is no longer valid"
-        }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return json({
+        error:
+          data.status === "accepted"
+            ? "This invitation has already been accepted"
+            : "This invitation is no longer valid",
+      });
     }
 
     // Check expiry
     if (new Date(data.expires_at) < new Date()) {
-      return new Response(
-        JSON.stringify({ error: "This invitation has expired" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return json({ error: "This invitation has expired" });
     }
 
     // Return invitation details (without exposing sensitive data)
@@ -82,16 +77,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Invitation validated successfully for:", data.email);
 
-    return new Response(
-      JSON.stringify(response),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return json(response);
   } catch (error: any) {
     console.error("Error in validate-staff-invitation:", error);
-    return new Response(
-      JSON.stringify({ error: error.message || "Failed to validate invitation" }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    // Always return 200 so the client can show a friendly error (Supabase invoke treats non-2xx as a transport error).
+    return json({ error: error.message || "Failed to validate invitation" });
   }
 };
 
