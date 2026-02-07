@@ -69,9 +69,12 @@ export function useAvailableDays(
           return { date, available: false, hasSlots: false };
         }
 
-        // Get opening and closing times
-        const openingTime = location.opening_time || "09:00";
-        const closingTime = location.closing_time || "18:00";
+        // Get opening and closing times - handle time format with seconds (HH:mm:ss)
+        const rawOpeningTime = location.opening_time || "09:00:00";
+        const rawClosingTime = location.closing_time || "18:00:00";
+        // Extract HH:mm from potential HH:mm:ss format
+        const openingTime = rawOpeningTime.substring(0, 5);
+        const closingTime = rawClosingTime.substring(0, 5);
 
         // Parse times
         const baseDate = format(date, "yyyy-MM-dd");

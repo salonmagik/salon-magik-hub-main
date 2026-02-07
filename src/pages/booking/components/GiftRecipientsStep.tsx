@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PhoneInput } from "@/components/ui/phone-input";
 import type { CartItem, GiftRecipient } from "@/hooks/booking/useBookingCart";
 
 interface GiftRecipientsStepProps {
@@ -117,11 +118,11 @@ export function GiftRecipientsStep({
 
       <div className="space-y-1">
         <Label className="text-xs">Phone *</Label>
-        <Input
-          type="tel"
+        <PhoneInput
           value={recipient.phone || ""}
-          onChange={(e) => onUpdate("phone", e.target.value)}
-          placeholder="+1 234 567 8900"
+          onChange={(value) => onUpdate("phone", value)}
+          placeholder="Phone number"
+          defaultCountry="NG"
         />
       </div>
 

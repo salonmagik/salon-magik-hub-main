@@ -1,6 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export interface BookerInfo {
   firstName: string;
@@ -60,11 +61,11 @@ export function BookerInfoStep({ info, onChange }: BookerInfoStepProps) {
 
       <div className="space-y-2">
         <Label>Phone</Label>
-        <Input
-          type="tel"
+        <PhoneInput
           value={info.phone}
-          onChange={(e) => updateField("phone", e.target.value)}
-          placeholder="+1 234 567 8900"
+          onChange={(value) => updateField("phone", value)}
+          placeholder="Phone number"
+          defaultCountry="NG"
         />
       </div>
 

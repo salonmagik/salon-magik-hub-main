@@ -1,90 +1,108 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Package, Hash, Loader2, Save } from "lucide-react";
+import { Package, Hash, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { getCurrencySymbol } from "@/lib/currency";
 
-interface AddProductDialogProps {
+interface ProductData {
+  id: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  stock_quantity: number;
+  status: string;
+  image_urls?: string[];
+}
+
+interface EditProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  product: ProductData | null;
   onSuccess?: () => void;
 }
 
-export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
+export function EditProductDialog({ open, onOpenChange, product, onSuccess }: EditProductDialogProps) {
   const { currentTenant } = useAuth();
   const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     price: "",
-    stockQuantity: "0",
+    stockQuantity: "",
     status: "active",
     description: "",
     images: [] as string[],
   });
 
-  const resetForm = () => {
-    setFormData({
-      name: "",
-      price: "",
-      stockQuantity: "0",
-      status: "active",
-      description: "",
-      images: [],
-    });
-  };
+  // Initialize form when product changes
+  useEffect(() => {
+    if (product && open) {
+      setFormData({
+        name: product.name,
+        price: String(product.price),
+        stockQuantity: String(product.stock_quantity),
+        status: product.status,
+        description: product.description || "",
+        images: product.image_urls || [],
+      });
+    }
+  }, [product, open]);
 
-  // Check if form is valid
-  const isFormValid = useMemo(() => {
+  // Track if any changes have been made
+  const hasChanges = useMemo(() => {
+    if (!product) return false;
     return (
-      formData.name.trim() !== "" &&
-      formData.price !== "" &&
-      parseFloat(formData.price) > 0
+      formData.name !== product.name ||
+      formData.price !== String(product.price) ||
+      formData.stockQuantity !== String(product.stock_quantity) ||
+      formData.status !== product.status ||
+      formData.description !== (product.description || "") ||
+      JSON.stringify(formData.images) !== JSON.stringify(product.image_urls || [])
     );
-  }, [formData]);
+  }, [formData, product]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!currentTenant?.id) {
-      toast({ title: "Error", description: "No active tenant", variant: "destructive" });
-      return;
-    }
+    if (!product) return;
 
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("products").insert({
-        tenant_id: currentTenant.id,
-        name: formData.name,
-        price: parseFloat(formData.price),
-        stock_quantity: parseInt(formData.stockQuantity),
-        status: formData.status as "active" | "inactive" | "archived",
-        description: formData.description || null,
-        image_urls: formData.images,
-      });
+      const { error } = await supabase
+        .from("products")
+        .update({
+          name: formData.name,
+          price: parseFloat(formData.price),
+          stock_quantity: parseInt(formData.stockQuantity),
+          status: formData.status as "active" | "inactive" | "archived",
+          description: formData.description || null,
+          image_urls: formData.images,
+        })
+        .eq("id", product.id);
 
       if (error) throw error;
 
-      toast({ title: "Success", description: "Product created successfully" });
-      resetForm();
+      toast({ title: "Success", description: "Product updated successfully" });
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
-      console.error("Error creating product:", err);
-      toast({ title: "Error", description: "Failed to create product", variant: "destructive" });
+      console.error("Error updating product:", err);
+      toast({ title: "Error", description: "Failed to update product", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (!product) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,8 +112,8 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             <Package className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <DialogTitle className="text-xl">Add Product</DialogTitle>
-            <p className="text-sm text-muted-foreground">Add a new product to your inventory</p>
+            <DialogTitle className="text-xl">Edit Product</DialogTitle>
+            <p className="text-sm text-muted-foreground">Update product details</p>
           </div>
         </DialogHeader>
 
@@ -119,19 +137,15 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
               <Label>
                 Price ({currencySymbol}) <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  className="pl-9"
-                  value={formData.price}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
-                  required
-                  min="0"
-                  step="0.01"
-                />
-              </div>
+              <Input
+                type="number"
+                placeholder="0.00"
+                value={formData.price}
+                onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                required
+                min="0"
+                step="0.01"
+              />
             </div>
             <div className="space-y-2">
               <Label>Stock Quantity</Label>
@@ -158,7 +172,6 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
               <SelectContent>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -195,9 +208,9 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || !isFormValid}>
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Add Product
+            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || !hasChanges}>
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Update Product
             </Button>
           </DialogFooter>
         </form>
