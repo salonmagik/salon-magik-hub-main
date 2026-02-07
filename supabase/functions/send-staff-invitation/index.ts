@@ -318,9 +318,11 @@ const handler = async (req: Request): Promise<Response> => {
       recipientRole = role;
     }
 
-    // Build invitation link
-    const baseUrl = req.headers.get("origin") || "https://salonmagik.app";
-    const invitationLink = `${baseUrl}/accept-invite?token=${inviteToken}`;
+    // Build invitation link - use published app URL for production emails
+    const appUrl = Deno.env.get("APP_URL") || "https://salonmagik.lovable.app";
+    const invitationLink = `${appUrl}/accept-invite?token=${inviteToken}`;
+    
+    console.log("Generated invitation link with token:", inviteToken);
 
     // Get email template (or use default)
     const { data: emailTemplate } = await supabase
