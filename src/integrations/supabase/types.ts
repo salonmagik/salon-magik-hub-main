@@ -2359,6 +2359,7 @@ export type Database = {
           temp_password_used: boolean | null
           tenant_id: string
           token: string
+          user_id: string | null
         }
         Insert: {
           accepted_at?: string | null
@@ -2379,6 +2380,7 @@ export type Database = {
           temp_password_used?: boolean | null
           tenant_id: string
           token: string
+          user_id?: string | null
         }
         Update: {
           accepted_at?: string | null
@@ -2399,6 +2401,7 @@ export type Database = {
           temp_password_used?: boolean | null
           tenant_id?: string
           token?: string
+          user_id?: string | null
         }
         Relationships: [
           {

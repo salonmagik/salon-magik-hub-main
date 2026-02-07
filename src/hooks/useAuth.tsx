@@ -17,6 +17,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   hasCompletedOnboarding: boolean;
+  requiresPasswordChange: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -24,6 +25,7 @@ interface AuthContextType extends AuthState {
   setCurrentTenant: (tenant: Tenant) => void;
   refreshProfile: () => Promise<void>;
   refreshTenants: () => Promise<void>;
+  clearPasswordChangeFlag: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -39,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
     isAuthenticated: false,
     hasCompletedOnboarding: false,
+    requiresPasswordChange: false,
   });
 
   // Force sign out - clears session and resets state
@@ -56,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading: false,
       isAuthenticated: false,
       hasCompletedOnboarding: false,
+      requiresPasswordChange: false,
     });
   };
 
@@ -127,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               isLoading: false,
               isAuthenticated: false,
               hasCompletedOnboarding: false,
+              requiresPasswordChange: false,
             });
             return;
           }
@@ -173,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 isLoading: false,
                 isAuthenticated: true,
                 hasCompletedOnboarding: tenants.length > 0,
+                requiresPasswordChange: session.user.user_metadata?.requires_password_change === true,
               });
             }, 0);
           }
@@ -223,6 +229,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
           isAuthenticated: true,
           hasCompletedOnboarding: tenants.length > 0,
+          requiresPasswordChange: session.user.user_metadata?.requires_password_change === true,
         });
       } else {
         setState((prev) => ({ ...prev, isLoading: false }));
@@ -274,6 +281,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 0);
   };
 
+  const clearPasswordChangeFlag = () => {
+    setState((prev) => ({ ...prev, requiresPasswordChange: false }));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -282,6 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentTenant,
         refreshProfile,
         refreshTenants,
+        clearPasswordChangeFlag,
       }}
     >
       {children}

@@ -51,9 +51,10 @@ const STYLES = {
 
 function buildInvitationEmail(
   firstName: string,
+  email: string,
   salonName: string,
   role: string,
-  invitationLink: string,
+  loginLink: string,
   tempPassword: string,
   salonLogoUrl?: string
 ): string {
@@ -105,26 +106,36 @@ function buildInvitationEmail(
             You've been invited to join <strong>${salonName}</strong> as a <strong>${role}</strong>.
           </p>
           
+          <div style="background-color: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: ${STYLES.textMuted}; font-size: 14px; margin: 0 0 12px 0; font-family: ${STYLES.fontFamily};">
+              <strong>Your login credentials:</strong>
+            </p>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 8px 0; color: ${STYLES.textLight}; font-size: 14px;">Email:</td>
+                <td style="padding: 8px 0; color: ${STYLES.textColor}; font-size: 14px; font-family: monospace;">${email}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; color: ${STYLES.textLight}; font-size: 14px;">Temporary Password:</td>
+                <td style="padding: 8px 0; color: ${STYLES.textColor}; font-size: 16px; font-family: monospace; letter-spacing: 1px; background-color: #fff; padding: 8px 12px; border-radius: 4px;">
+                  ${tempPassword}
+                </td>
+              </tr>
+            </table>
+          </div>
+          
           <div style="text-align: center; margin: 32px 0;">
-            <a href="${invitationLink}" 
+            <a href="${loginLink}" 
                style="background-color: ${STYLES.primaryColor}; color: white; padding: 14px 28px; 
                       text-decoration: none; border-radius: 8px; display: inline-block;
                       font-weight: 500; font-size: 16px; font-family: ${STYLES.fontFamily};">
-              Accept Invitation
+              Sign In Now
             </a>
           </div>
 
-          <div style="background-color: ${STYLES.surfaceColor}; padding: 16px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: ${STYLES.textMuted}; font-size: 14px; margin: 0 0 8px 0; font-family: ${STYLES.fontFamily};">
-              <strong>Your temporary password:</strong>
-            </p>
-            <p style="color: ${STYLES.textColor}; font-size: 18px; font-family: monospace; margin: 0; letter-spacing: 1px; background-color: #fff; padding: 8px 12px; border-radius: 4px; display: inline-block;">
-              ${tempPassword}
-            </p>
-            <p style="color: ${STYLES.textLight}; font-size: 12px; margin: 12px 0 0 0; font-family: ${STYLES.fontFamily};">
-              You'll be prompted to change this after your first login.
-            </p>
-          </div>
+          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; text-align: center; font-family: ${STYLES.fontFamily};">
+            You'll be prompted to set a permanent password on your first login.
+          </p>
           
           <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
             This invitation expires in 7 days.
@@ -188,11 +199,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
 
+    // Regular client for authenticated queries
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
+
+    // Service role client for admin operations (creating users)
+    const serviceRoleClient = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
@@ -248,11 +264,11 @@ const handler = async (req: Request): Promise<Response> => {
     const { firstName, lastName, email, role, invitationId, resend } = requestBody;
 
     let invitation: any;
-    let inviteToken: string;
     let tempPassword: string;
     let recipientEmail: string;
     let recipientFirstName: string;
     let recipientRole: string;
+    let createdUserId: string | null = null;
 
     if (resend && invitationId) {
       // Handle resend: lookup existing invitation
@@ -270,15 +286,13 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      // Generate new token, temp password, and extend expiry
-      inviteToken = crypto.randomUUID();
+      // Use existing temp password and extend expiry
       tempPassword = existingInvitation.temp_password || generateSecurePassword();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const { error: updateError } = await supabase
         .from("staff_invitations")
         .update({
-          token: inviteToken,
           expires_at: expiresAt.toISOString(),
           status: "pending",
           temp_password: tempPassword,
@@ -297,6 +311,18 @@ const handler = async (req: Request): Promise<Response> => {
       recipientEmail = existingInvitation.email;
       recipientFirstName = existingInvitation.first_name;
       recipientRole = existingInvitation.role;
+      createdUserId = existingInvitation.user_id;
+
+      // If user was already created, update their password
+      if (createdUserId) {
+        const { error: updatePasswordError } = await serviceRoleClient.auth.admin.updateUserById(
+          createdUserId,
+          { password: tempPassword }
+        );
+        if (updatePasswordError) {
+          console.error("Error updating user password:", updatePasswordError);
+        }
+      }
     } else {
       // Handle new invitation
       if (!firstName || !lastName || !email || !role) {
@@ -306,29 +332,100 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      inviteToken = crypto.randomUUID();
+      const normalizedEmail = email.toLowerCase();
       tempPassword = generateSecurePassword();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+      // Check if email already exists in auth.users
+      const { data: existingUsers } = await serviceRoleClient.auth.admin.listUsers();
+      const existingUser = existingUsers?.users?.find(
+        (u) => u.email?.toLowerCase() === normalizedEmail
+      );
+
+      if (existingUser) {
+        return new Response(
+          JSON.stringify({ error: "An account with this email already exists" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      // Create the user account immediately
+      const { data: userData, error: createError } = await serviceRoleClient.auth.admin.createUser({
+        email: normalizedEmail,
+        password: tempPassword,
+        email_confirm: true, // Auto-confirm since invitation proves ownership
+        user_metadata: {
+          first_name: firstName,
+          last_name: lastName,
+          full_name: `${firstName} ${lastName}`,
+          requires_password_change: true, // Flag for forced password change
+          invited_via: "staff_invitation",
+        },
+      });
+
+      if (createError || !userData.user) {
+        console.error("Error creating user:", createError);
+        return new Response(
+          JSON.stringify({ error: createError?.message || "Failed to create user account" }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      createdUserId = userData.user.id;
+
+      // Create profile
+      const { error: profileError } = await serviceRoleClient.from("profiles").insert({
+        user_id: createdUserId,
+        full_name: `${firstName} ${lastName}`,
+      });
+
+      if (profileError) {
+        console.error("Error creating profile:", profileError);
+        // Profile may be created by trigger, continue
+      }
+
+      // Create user role
+      const { error: roleError } = await serviceRoleClient.from("user_roles").insert({
+        user_id: createdUserId,
+        tenant_id: tenantId,
+        role: role,
+        is_active: true,
+      });
+
+      if (roleError) {
+        console.error("Error creating role:", roleError);
+        // Clean up created user
+        await serviceRoleClient.auth.admin.deleteUser(createdUserId);
+        return new Response(
+          JSON.stringify({ error: "Failed to assign role. Please try again." }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      // Create the invitation record
       const { data: newInvitation, error: insertError } = await supabase
         .from("staff_invitations")
         .insert({
           tenant_id: tenantId,
           first_name: firstName,
           last_name: lastName,
-          email: email.toLowerCase(),
+          email: normalizedEmail,
           role: role,
-          token: inviteToken,
+          token: crypto.randomUUID(), // Keep token for backwards compatibility
           expires_at: expiresAt.toISOString(),
           invited_by_id: userId,
           status: "pending",
           temp_password: tempPassword,
+          user_id: createdUserId, // Link to created user
         })
         .select()
         .single();
 
       if (insertError) {
         console.error("Error creating invitation:", insertError);
+        // Clean up created user and role
+        await serviceRoleClient.from("user_roles").delete().eq("user_id", createdUserId);
+        await serviceRoleClient.auth.admin.deleteUser(createdUserId);
         return new Response(
           JSON.stringify({ error: "Failed to create invitation" }),
           { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
@@ -336,54 +433,32 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       invitation = newInvitation;
-      recipientEmail = email;
+      recipientEmail = normalizedEmail;
       recipientFirstName = firstName;
       recipientRole = role;
     }
 
-    // Build invitation link
-    // IMPORTANT: Use the caller's origin when available so preview invites open in preview,
-    // and published invites open in production.
+    // Build login link - goes directly to /login, not accept-invite
     const baseUrl = Deno.env.get("APP_URL") || getBaseUrlFromRequest(req);
-    const invitationLink = `${baseUrl}/accept-invite?token=${inviteToken}`;
+    const loginLink = `${baseUrl}/login`;
 
-    console.log("Generated invitation link", {
+    console.log("Generated login link for staff invitation", {
       baseUrl,
       invitationId: invitation?.id,
-      tokenPrefix: inviteToken?.slice?.(0, 8),
+      createdUserId,
     });
 
-    // Get email template (or use default)
-    const { data: emailTemplate } = await supabase
-      .from("email_templates")
-      .select("subject, body_html")
-      .eq("tenant_id", tenantId)
-      .eq("template_type", "staff_invitation")
-      .single();
-
-    let subject = `You're invited to join ${tenant.name}`;
-    let htmlBody = buildInvitationEmail(
+    // Build email content
+    const subject = `You're invited to join ${tenant.name}`;
+    const htmlBody = buildInvitationEmail(
       recipientFirstName,
+      recipientEmail,
       tenant.name,
       recipientRole,
-      invitationLink,
+      loginLink,
       tempPassword,
       tenant.logo_url || undefined
     );
-
-    // Apply custom template if exists
-    if (emailTemplate) {
-      subject = emailTemplate.subject
-        .replace(/{{staff_name}}/g, recipientFirstName)
-        .replace(/{{salon_name}}/g, tenant.name)
-        .replace(/{{role}}/g, recipientRole);
-      
-      htmlBody = emailTemplate.body_html
-        .replace(/{{staff_name}}/g, recipientFirstName)
-        .replace(/{{salon_name}}/g, tenant.name)
-        .replace(/{{role}}/g, recipientRole)
-        .replace(/{{invitation_link}}/g, invitationLink);
-    }
 
     // Sanitize sender name
     const sanitizedSalonName = tenant.name.replace(/[<>"\\n\\r]/g, "").trim();
