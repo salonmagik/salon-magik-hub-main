@@ -15,13 +15,17 @@ export interface AppointmentWithDetails extends Appointment {
   staff_name?: string;
 }
 
+type PaymentStatus = Enums<"payment_status">;
+
 interface UseAppointmentsOptions {
-  date?: string;
-  status?: AppointmentStatus | "all";
+  startDate?: string;
+  endDate?: string;
+  bookingStatuses?: AppointmentStatus[];
+  paymentStatuses?: PaymentStatus[];
   locationId?: string;
   isUnscheduled?: boolean;
   isGifted?: boolean;
-  filterByBookingDate?: boolean; // Use created_at instead of scheduled_start
+  filterByBookingDate?: boolean;
 }
 
 export function useAppointments(options: UseAppointmentsOptions = {}) {
@@ -51,27 +55,32 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
         .eq("tenant_id", currentTenant.id)
         .order("scheduled_start", { ascending: true });
 
-      // Apply date filter
-      if (options.date) {
-        const startOfDay = `${options.date}T00:00:00`;
-        const endOfDay = `${options.date}T23:59:59`;
+      // Apply date range filter
+      if (options.startDate && options.endDate) {
+        const startOfRange = `${options.startDate}T00:00:00`;
+        const endOfRange = `${options.endDate}T23:59:59`;
         
         if (options.filterByBookingDate) {
           // Use created_at for unscheduled (booking date)
           query = query
-            .gte("created_at", startOfDay)
-            .lte("created_at", endOfDay);
+            .gte("created_at", startOfRange)
+            .lte("created_at", endOfRange);
         } else {
           // Use scheduled_start for scheduled
           query = query
-            .gte("scheduled_start", startOfDay)
-            .lte("scheduled_start", endOfDay);
+            .gte("scheduled_start", startOfRange)
+            .lte("scheduled_start", endOfRange);
         }
       }
 
-      // Apply status filter
-      if (options.status && options.status !== "all") {
-        query = query.eq("status", options.status);
+      // Apply booking status filter (multi-select)
+      if (options.bookingStatuses && options.bookingStatuses.length > 0) {
+        query = query.in("status", options.bookingStatuses);
+      }
+
+      // Apply payment status filter (multi-select)
+      if (options.paymentStatuses && options.paymentStatuses.length > 0) {
+        query = query.in("payment_status", options.paymentStatuses);
       }
 
       // Apply location filter
@@ -100,7 +109,17 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, options.date, options.status, options.locationId, options.isUnscheduled, options.isGifted, options.filterByBookingDate]);
+  }, [
+    currentTenant?.id, 
+    options.startDate, 
+    options.endDate, 
+    options.bookingStatuses?.join(","), 
+    options.paymentStatuses?.join(","), 
+    options.locationId, 
+    options.isUnscheduled, 
+    options.isGifted, 
+    options.filterByBookingDate
+  ]);
 
   useEffect(() => {
     fetchAppointments();
@@ -438,6 +457,7 @@ export function useAppointmentActions() {
           scheduled_start: newStart,
           scheduled_end: newEnd,
           status: "scheduled",
+          is_unscheduled: false, // Mark as scheduled now
           reschedule_count: supabase.rpc ? undefined : 1,
         })
         .eq("id", appointmentId)
@@ -445,7 +465,7 @@ export function useAppointmentActions() {
 
       if (error) throw error;
 
-      toast({ title: "Rescheduled", description: "Appointment has been rescheduled" });
+      toast({ title: "Scheduled", description: "Appointment has been scheduled" });
       
       // Send reschedule email with new date/time
       const newDate = new Date(newStart).toLocaleDateString("en-US", {
