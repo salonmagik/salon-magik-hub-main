@@ -1,9 +1,15 @@
 import { useState } from "react";
-import { format } from "date-fns";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { format, startOfDay } from "date-fns";
+import { CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -11,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BookingTimePicker } from "@/components/booking/BookingTimePicker";
 import { useAvailableDays, useAvailableSlots, type PublicTenant, type PublicLocation } from "@/hooks/booking";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +49,7 @@ export function SchedulingStep({
   totalDuration,
 }: SchedulingStepProps) {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // Get available days for calendar dots
   const { data: availableDays, isLoading: daysLoading } = useAvailableDays(
@@ -63,19 +71,30 @@ export function SchedulingStep({
     15
   );
 
-  const isDateAvailable = (date: Date): boolean => {
-    if (!availableDays) return false;
-    const dayInfo = availableDays.find(
-      (d) => format(d.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
-    );
-    return dayInfo?.available ?? false;
-  };
-
   // Check if a day is a closed day (salon not open)
   const isClosedDay = (date: Date): boolean => {
     if (!selectedLocation?.opening_days) return false;
     const dayName = format(date, "EEEE").toLowerCase();
     return !selectedLocation.opening_days.includes(dayName);
+  };
+
+  // Determine if date should be disabled
+  const isDateDisabled = (date: Date): boolean => {
+    const today = startOfDay(new Date());
+    // Disable past dates
+    if (date < today) return true;
+    // Disable closed days
+    if (isClosedDay(date)) return true;
+    return false;
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    onDateChange(date);
+    setDatePickerOpen(false);
+    // Clear time when date changes
+    if (date) {
+      onTimeChange(undefined);
+    }
   };
 
   return (
@@ -130,69 +149,55 @@ export function SchedulingStep({
             </div>
           )}
 
-          {/* Date Selection */}
-          <div className="space-y-2">
-            <Label>Select Date</Label>
-            <div className="flex justify-center w-full">
-              <CalendarComponent
-                mode="single"
-                selected={selectedDate}
-                onSelect={onDateChange}
-                month={calendarMonth}
-                onMonthChange={setCalendarMonth}
-                disabled={(date) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  // Disable past dates and closed days
-                  if (date < today) return true;
-                  return isClosedDay(date);
-                }}
-                modifiers={{
-                  available: (date) => isDateAvailable(date),
-                  closed: (date) => isClosedDay(date),
-                }}
-                modifiersClassNames={{
-                  available:
-                    "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1.5 after:w-1.5 after:rounded-full after:bg-[var(--brand-color,hsl(var(--primary)))]",
-                }}
-                className={cn("rounded-md border pointer-events-auto w-full max-w-[350px]")}
-              />
-            </div>
-            {daysLoading && (
-              <p className="text-xs text-muted-foreground text-center">Loading availability...</p>
-            )}
-          </div>
-
-          {/* Time Selection */}
-          {selectedDate && (
+          {/* Date and Time Selection - Compact Layout */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Select Time</Label>
-              {slotsLoading ? (
-                <div className="text-sm text-muted-foreground">Loading available times...</div>
-              ) : availableSlots && availableSlots.length > 0 ? (
-                <div className="grid grid-cols-4 gap-2">
-                  {availableSlots
-                    .filter((slot) => slot.available)
-                    .map((slot) => (
-                      <Button
-                        key={slot.time}
-                        variant={selectedTime === slot.time ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => onTimeChange(slot.time)}
-                        className={selectedTime === slot.time ? "text-[var(--brand-foreground,white)]" : ""}
-                        style={selectedTime === slot.time ? { backgroundColor: "var(--brand-color)" } : undefined}
-                      >
-                        {slot.time}
-                      </Button>
-                    ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  No available times for this date
-                </div>
+              <Label>Select Date</Label>
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "h-10 w-full justify-start text-left font-normal",
+                      !selectedDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">
+                      {selectedDate ? format(selectedDate, "MMM d, yyyy") : "Pick a date"}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={handleDateSelect}
+                    month={calendarMonth}
+                    onMonthChange={setCalendarMonth}
+                    disabled={isDateDisabled}
+                    initialFocus
+                    className="pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              {daysLoading && (
+                <p className="text-xs text-muted-foreground">Loading availability...</p>
               )}
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label>Select Time</Label>
+              <BookingTimePicker
+                availableSlots={availableSlots}
+                selectedTime={selectedTime}
+                onChange={onTimeChange}
+                isLoading={slotsLoading}
+                disabled={!selectedDate}
+                placeholder={!selectedDate ? "Select date first" : "Select time"}
+              />
+            </div>
+          </div>
         </>
       )}
 

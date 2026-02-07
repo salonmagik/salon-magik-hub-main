@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,17 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       images: [],
     });
   };
+
+  // Check if form is valid
+  const isFormValid = useMemo(() => {
+    return (
+      formData.name.trim() !== "" &&
+      formData.price !== "" &&
+      parseFloat(formData.price) > 0 &&
+      formData.duration !== "" &&
+      parseInt(formData.duration) > 0
+    );
+  }, [formData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,7 +293,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+            <Button type="submit" disabled={isSubmitting || !isFormValid} className="w-full sm:w-auto">
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Create service
             </Button>

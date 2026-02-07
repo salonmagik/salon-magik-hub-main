@@ -34,6 +34,14 @@ import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
 import { AddProductDialog } from "@/components/dialogs/AddProductDialog";
 import { AddVoucherDialog } from "@/components/dialogs/AddVoucherDialog";
+import { EditServiceDialog } from "@/components/dialogs/EditServiceDialog";
+import { EditProductDialog } from "@/components/dialogs/EditProductDialog";
+import { EditPackageDialog } from "@/components/dialogs/EditPackageDialog";
+import { EditVoucherDialog } from "@/components/dialogs/EditVoucherDialog";
+import { ServiceDetailDialog } from "@/components/dialogs/ServiceDetailDialog";
+import { ProductDetailDialog } from "@/components/dialogs/ProductDetailDialog";
+import { PackageDetailDialog } from "@/components/dialogs/PackageDetailDialog";
+import { VoucherDetailDialog } from "@/components/dialogs/VoucherDetailDialog";
 import { ProductFulfillmentTab } from "@/components/catalog/ProductFulfillmentTab";
 import { AddItemPopover } from "@/components/catalog/AddItemPopover";
 import { BulkActionsBar } from "@/components/catalog/BulkActionsBar";
@@ -89,6 +97,10 @@ export default function ServicesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [requestDeleteDialogOpen, setRequestDeleteDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // View/Edit dialog states
+  const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
+  const [editItem, setEditItem] = useState<CatalogItem | null>(null);
   
   // Pending deletion with undo
   const [pendingDeletions, setPendingDeletions] = useState<Map<string, { timer: NodeJS.Timeout; countdown: number; reason: string }>>(new Map());
@@ -594,6 +606,8 @@ export default function ServicesPage() {
                           isSelected={selectedItems.has(item.id)}
                           onSelect={handleSelectItem}
                           canEdit={canEdit}
+                          onViewDetails={() => setViewDetailItem(item)}
+                          onEdit={() => setEditItem(item)}
                         />
                       ))}
                     </div>
@@ -878,6 +892,51 @@ export default function ServicesPage() {
         onOpenChange={setVoucherDialogOpen}
         onSuccess={refetchVouchers}
       />
+
+      {/* View/Edit Dialogs */}
+      <EditServiceDialog
+        open={!!editItem && editItem.type === "service"}
+        onOpenChange={(open) => !open && setEditItem(null)}
+        service={editItem?.type === "service" ? services.find(s => s.id === editItem.id) || null : null}
+        onSuccess={refetchServices}
+      />
+      <EditProductDialog
+        open={!!editItem && editItem.type === "product"}
+        onOpenChange={(open) => !open && setEditItem(null)}
+        product={editItem?.type === "product" ? products.find(p => p.id === editItem.id) || null : null}
+        onSuccess={refetchProducts}
+      />
+      <EditPackageDialog
+        open={!!editItem && editItem.type === "package"}
+        onOpenChange={(open) => !open && setEditItem(null)}
+        pkg={editItem?.type === "package" ? packages.find(p => p.id === editItem.id) || null : null}
+        onSuccess={refetchPackages}
+      />
+
+      <ServiceDetailDialog
+        open={!!viewDetailItem && viewDetailItem.type === "service"}
+        onOpenChange={(open) => !open && setViewDetailItem(null)}
+        service={viewDetailItem?.type === "service" ? services.find(s => s.id === viewDetailItem.id) || null : null}
+        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
+        onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
+        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
+      />
+      <ProductDetailDialog
+        open={!!viewDetailItem && viewDetailItem.type === "product"}
+        onOpenChange={(open) => !open && setViewDetailItem(null)}
+        product={viewDetailItem?.type === "product" ? products.find(p => p.id === viewDetailItem.id) || null : null}
+        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
+        onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
+        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
+      />
+      <PackageDetailDialog
+        open={!!viewDetailItem && viewDetailItem.type === "package"}
+        onOpenChange={(open) => !open && setViewDetailItem(null)}
+        pkg={viewDetailItem?.type === "package" ? packages.find(p => p.id === viewDetailItem.id) || null : null}
+        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
+        onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
+        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
+      />
     </SalonSidebar>
   );
 }
@@ -932,6 +991,8 @@ function SelectableItemCard({
   isSelected = false,
   onSelect,
   canEdit = false,
+  onViewDetails,
+  onEdit,
 }: SelectableItemCardProps) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
@@ -1017,12 +1078,12 @@ function SelectableItemCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={onViewDetails}>
                   <Eye className="w-4 h-4 mr-2" />
                   View Details
                 </DropdownMenuItem>
                 {canEdit && (
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={onEdit}>
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
                   </DropdownMenuItem>

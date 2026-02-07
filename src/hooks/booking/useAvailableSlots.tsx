@@ -30,9 +30,12 @@ export function useAvailableSlots(
         return [];
       }
 
-      // Get opening and closing times
-      const openingTime = location.opening_time || "09:00";
-      const closingTime = location.closing_time || "18:00";
+      // Get opening and closing times - handle time format with seconds (HH:mm:ss)
+      const rawOpeningTime = location.opening_time || "09:00:00";
+      const rawClosingTime = location.closing_time || "18:00:00";
+      // Extract HH:mm from potential HH:mm:ss format
+      const openingTime = rawOpeningTime.substring(0, 5);
+      const closingTime = rawClosingTime.substring(0, 5);
 
       // Parse times
       const baseDate = format(date, "yyyy-MM-dd");
@@ -53,8 +56,9 @@ export function useAvailableSlots(
         .in("status", ["scheduled", "started", "paused"]);
 
       if (error) {
-        console.error("Error fetching appointments:", error);
-        throw error;
+        console.error("Error fetching appointments for slots:", error);
+        // Don't throw - return all slots as available if we can't fetch appointments
+        // This provides better UX than showing "no times available"
       }
 
       // Calculate effective service duration (use provided or default to slot duration)

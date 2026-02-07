@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -221,6 +221,16 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   const savingsPercent = originalPrice > 0 ? Math.round((savings / originalPrice) * 100) : 0;
 
   const totalItemsSelected = selectedServices.length + selectedProducts.length;
+
+  // Check if form is valid
+  const isFormValid = useMemo(() => {
+    return (
+      formData.name.trim() !== "" &&
+      formData.price !== "" &&
+      parseFloat(formData.price) > 0 &&
+      totalItemsSelected > 0
+    );
+  }, [formData, totalItemsSelected]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -478,7 +488,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
             <Button
               type="submit"
               className="gap-2 w-full sm:w-auto"
-              disabled={isSubmitting || totalItemsSelected === 0}
+              disabled={isSubmitting || !isFormValid}
             >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Create Package

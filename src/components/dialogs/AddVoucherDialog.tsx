@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,15 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
   const regenerateCode = () => {
     setFormData((prev) => ({ ...prev, code: generateVoucherCode() }));
   };
+
+  // Check if form is valid
+  const isFormValid = useMemo(() => {
+    return (
+      formData.code.trim() !== "" &&
+      formData.amount !== "" &&
+      parseFloat(formData.amount) > 0
+    );
+  }, [formData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +161,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting}>
+            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || !isFormValid}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Create Voucher
             </Button>
