@@ -1,8 +1,8 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -24,7 +24,6 @@ import {
   Users,
   Calendar,
   Coins,
-  Download,
   PieChart,
   BarChart3,
   ArrowUp,
@@ -34,6 +33,7 @@ import {
 import { useReports } from "@/hooks/useReports";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { ExportDropdown } from "@/components/ExportDropdown";
 import {
   LineChart,
   Line,
@@ -101,18 +101,29 @@ export default function ReportsPage() {
 
   const hasInsights = stats.busiestDay || stats.topService || stats.peakHour || stats.retentionRate;
 
-  const handleExportCSV = () => {
-    // Generate CSV for revenue data
-    const headers = ["Date", "Revenue"];
-    const rows = stats.dailyRevenue.map((d) => [d.date, d.revenue.toString()]);
-    const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
-    
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `revenue-report-${period}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  const handleExport = (fileFormat: "csv" | "xlsx") => {
+    const data = stats.dailyRevenue.map((d) => ({
+      Date: d.date,
+      Revenue: d.revenue,
+    }));
+
+    if (fileFormat === "csv") {
+      const headers = ["Date", "Revenue"];
+      const rows = stats.dailyRevenue.map((d) => [d.date, d.revenue.toString()]);
+      const csvContent = [headers, ...rows].map((row) => row.join(",")).join("\n");
+      
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `revenue-report-${period}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } else {
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Revenue");
+      XLSX.writeFile(workbook, `revenue-report-${period}.xlsx`);
+    }
     
     toast({
       title: "Export Complete",
@@ -142,10 +153,7 @@ export default function ReportsPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
-              <Download className="w-4 h-4" />
-              Export
-            </Button>
+            <ExportDropdown onExport={handleExport} disabled={stats.dailyRevenue.length === 0} />
           </div>
         </div>
 

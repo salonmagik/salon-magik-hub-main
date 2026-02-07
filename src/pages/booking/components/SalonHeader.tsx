@@ -62,7 +62,14 @@ export function SalonHeader({ salon, locations }: SalonHeaderProps) {
 
       {/* Status Message */}
       {salon.booking_status_message && (
-        <div className="p-4 rounded-lg bg-muted border">
+        <div 
+          className="p-4 rounded-lg bg-muted"
+          style={{ 
+            borderWidth: "1px",
+            borderStyle: "solid",
+            borderColor: salon.brand_color || "#2563EB" 
+          }}
+        >
           <p className="text-sm text-muted-foreground">{salon.booking_status_message}</p>
         </div>
       )}

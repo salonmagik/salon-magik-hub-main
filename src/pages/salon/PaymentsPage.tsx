@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,6 @@ import {
   ArrowDownLeft,
   Wallet,
   Search,
-  Download,
   TrendingUp,
   AlertCircle,
   Clock,
@@ -44,6 +44,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { RequestRefundDialog } from "@/components/dialogs/RequestRefundDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
+import { ExportDropdown } from "@/components/ExportDropdown";
 
 const methodLabels: Record<string, string> = {
   card: "Card",
@@ -153,29 +154,47 @@ export default function PaymentsPage() {
     return matchesSearch;
   });
 
-  // CSV Export
-  const handleExport = () => {
-    const csvContent = [
-      ["Date", "Customer", "Type", "Method", "Amount", "Status"],
-      ...filteredTransactions.map((txn) => [
-        format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
-        txn.customer?.full_name || "Guest",
-        txn.type,
-        txn.method,
-        Number(txn.amount).toFixed(2),
-        txn.status,
-      ]),
-    ]
-      .map((row) => row.join(","))
-      .join("\n");
+  // CSV/XLS Export
+  const handleExport = (fileFormat: "csv" | "xlsx") => {
+    const data = filteredTransactions.map((txn) => ({
+      Date: fileFormat === "csv" 
+        ? format(new Date(txn.created_at), "yyyy-MM-dd HH:mm")
+        : new Date(txn.created_at),
+      Customer: txn.customer?.full_name || "Guest",
+      Type: txn.type,
+      Method: txn.method,
+      Amount: Number(txn.amount),
+      Status: txn.status,
+    }));
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `transactions-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (fileFormat === "csv") {
+      const csvContent = [
+        ["Date", "Customer", "Type", "Method", "Amount", "Status"],
+        ...filteredTransactions.map((txn) => [
+          format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
+          txn.customer?.full_name || "Guest",
+          txn.type,
+          txn.method,
+          Number(txn.amount).toFixed(2),
+          txn.status,
+        ]),
+      ]
+        .map((row) => row.join(","))
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `transactions-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions");
+      XLSX.writeFile(workbook, `transactions-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    }
   };
 
   // Get empty state message based on active tab
@@ -227,10 +246,7 @@ export default function PaymentsPage() {
               Track transactions, manage refunds, and monitor customer balances.
             </p>
           </div>
-          <Button variant="outline" className="gap-2" onClick={handleExport} disabled={filteredTransactions.length === 0}>
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
+          <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
         </div>
 
         {/* Stats Cards */}

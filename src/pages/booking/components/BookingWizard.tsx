@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, ShoppingCart } from "lucide-react";
+import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, ShoppingCart, Wallet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import { SchedulingStep } from "./SchedulingStep";
 import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
 import { GiftRecipientsStep } from "./GiftRecipientsStep";
 import { ReviewStep, type PaymentOption } from "./ReviewStep";
+import { PaymentStep, type PaymentGateway } from "./PaymentStep";
 import { type AppliedVoucher } from "@/components/booking/VoucherInput";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "@/hooks/use-toast";
@@ -27,7 +28,7 @@ interface BookingWizardProps {
   locations: PublicLocation[];
 }
 
-type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "confirmation";
+type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "payment" | "confirmation";
 
 export function BookingWizard({ open, onOpenChange, salon, locations }: BookingWizardProps) {
   const { items, getTotal, getTotalDuration, clearCart, getGiftItems, getItemCount } = useBookingCart();
@@ -56,6 +57,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   // Payment state
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("stripe");
   const [purseAmount, setPurseAmount] = useState(0);
 
   // Sync location when locations load
@@ -113,6 +115,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     }
 
     steps.push({ key: "review", label: "Review", icon: <CreditCard className="h-4 w-4" /> });
+    
+    // Add payment step if payment is required
+    if (amountDueNow > 0) {
+      steps.push({ key: "payment", label: "Payment", icon: <Wallet className="h-4 w-4" /> });
+    }
+    
     steps.push({ key: "confirmation", label: "Done", icon: <CheckCircle className="h-4 w-4" /> });
 
     return steps;
@@ -202,13 +210,84 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setStep("booker");
     } else if (step === "review") {
       setStep(giftItems.length > 0 ? "gifts" : "booker");
+    } else if (step === "payment") {
+      setStep("review");
     }
   };
 
-  const handleSubmit = async () => {
+  // Called from review step to proceed to payment
+  const handleProceedToPayment = () => {
+    if (amountDueNow > 0) {
+      setStep("payment");
+    } else {
+      handleSubmitBooking();
+    }
+  };
+
+  // Called from payment step to submit with payment
+  const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
     try {
       // Call edge function to create booking
+      const { data, error } = await supabase.functions.invoke("create-public-booking", {
+        body: {
+          tenantId: salon.id,
+          locationId: selectedLocation?.id,
+          scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
+          scheduledTime: leaveUnscheduled ? null : selectedTime,
+          customer: bookerInfo,
+          isUnscheduled: leaveUnscheduled,
+          items: items.map((item) => ({
+            ...item,
+            giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
+          })),
+          payAtSalon: false,
+          voucherCode: appliedVoucher?.code || null,
+          voucherDiscount: voucherDiscount,
+          purseAmount: purseAmount,
+          depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+        },
+      });
+
+      if (error) throw error;
+
+      // Redirect to selected payment gateway
+      const paymentResponse = await supabase.functions.invoke("create-payment-session", {
+        body: {
+          tenantId: salon.id,
+          appointmentId: data.appointmentId,
+          amount: amountDueNow,
+          currency: salon.currency,
+          customerEmail: bookerInfo.email,
+          customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
+          description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
+          isDeposit: paymentOption === "pay_deposit",
+          successUrl: window.location.href,
+          cancelUrl: window.location.href,
+          preferredGateway: selectedGateway,
+        },
+      });
+
+      if (paymentResponse.data?.checkoutUrl) {
+        window.location.href = paymentResponse.data.checkoutUrl;
+        return;
+      }
+    } catch (err: any) {
+      console.error("Payment error:", err);
+      toast({
+        title: "Payment failed",
+        description: err.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Called when no payment required or pay at salon
+  const handleSubmitBooking = async () => {
+    setIsSubmitting(true);
+    try {
       const { data, error } = await supabase.functions.invoke("create-public-booking", {
         body: {
           tenantId: salon.id,
@@ -230,30 +309,6 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       });
 
       if (error) throw error;
-
-      // If payment is required now, redirect to payment
-      if (amountDueNow > 0 && data.appointmentId) {
-        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
-          body: {
-            tenantId: salon.id,
-            appointmentId: data.appointmentId,
-            amount: amountDueNow,
-            currency: salon.currency,
-            customerEmail: bookerInfo.email,
-            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
-            description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
-            isDeposit: paymentOption === "pay_deposit",
-            successUrl: window.location.href,
-            cancelUrl: window.location.href,
-          },
-        });
-
-        if (paymentResponse.data?.checkoutUrl) {
-          // Redirect to payment gateway
-          window.location.href = paymentResponse.data.checkoutUrl;
-          return; // Stop here - don't proceed to confirmation until payment is complete
-        }
-      }
 
       setBookingReference(data.reference || "CONFIRMED");
       setStep("confirmation");
@@ -414,6 +469,18 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               />
             )}
 
+            {step === "payment" && (
+              <PaymentStep
+                amountDue={amountDueNow}
+                currency={salon.currency}
+                country={salon.country || "US"}
+                onGatewaySelect={setSelectedGateway}
+                onSubmit={handlePaymentSubmit}
+                isSubmitting={isSubmitting}
+                brandColor={brandColor}
+              />
+            )}
+
             {step === "confirmation" && (
               <div className="text-center py-8 space-y-4">
                 <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
@@ -436,7 +503,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         </div>
 
         {/* Footer Actions */}
-        {step !== "confirmation" && (
+        {step !== "confirmation" && step !== "payment" && (
           <div className="border-t bg-background shrink-0">
             <div className="p-4 flex items-center justify-between">
               <Button
@@ -449,7 +516,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
               {step === "review" ? (
                 <Button
-                  onClick={handleSubmit}
+                  onClick={handleProceedToPayment}
                   disabled={isSubmitting}
                   className="border-0"
                   style={{ 
@@ -460,7 +527,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   {isSubmitting
                     ? "Submitting..."
                     : amountDueNow > 0
-                    ? `Pay ${formatCurrency(amountDueNow, salon.currency)}`
+                    ? "Continue to Payment"
                     : "Confirm Booking"}
                 </Button>
               ) : (

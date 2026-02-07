@@ -118,6 +118,8 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const stripeWebhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
     const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Determine gateway from headers
@@ -279,7 +281,7 @@ Deno.serve(async (req) => {
         // Get appointment details for transaction
         const { data: appointment } = await supabase
           .from("appointments")
-          .select("tenant_id, customer_id, total_amount")
+          .select("tenant_id, customer_id, total_amount, location_id")
           .eq("id", appointmentId)
           .single();
 
@@ -304,16 +306,141 @@ Deno.serve(async (req) => {
 
           await supabase.from("transactions").insert(transactionData);
 
-          // Create notification for salon
+          // Get customer details
+          const { data: customer } = await supabase
+            .from("customers")
+            .select("full_name, email")
+            .eq("id", appointment.customer_id)
+            .single();
+
+          // Get tenant details
+          const { data: tenant } = await supabase
+            .from("tenants")
+            .select("name, contact_email, currency")
+            .eq("id", appointment.tenant_id)
+            .single();
+
+          // Create urgent in-app notification for salon (new booking)
           await supabase.from("notifications").insert({
             tenant_id: appointment.tenant_id,
-            type: "payment_received",
-            title: "Payment Received",
-            description: `Payment of ${amount} received for booking`,
+            type: "new_booking",
+            title: "New Paid Booking",
+            description: `${customer?.full_name || "A customer"} completed payment of ${tenant?.currency || ""} ${amount} for their booking`,
             entity_type: "appointment",
             entity_id: appointmentId,
-            urgent: false,
+            urgent: true,
           });
+
+          // Send confirmation email to customer
+          try {
+            await fetch(
+              `${supabaseUrl}/functions/v1/send-appointment-notification`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${supabaseServiceKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  appointmentId: appointmentId,
+                  action: "scheduled",
+                }),
+              }
+            );
+          } catch (emailError) {
+            console.error("Error sending customer notification:", emailError);
+          }
+
+          // Send email to salon owners
+          if (resendApiKey && tenant) {
+            const { data: owners } = await supabase
+              .from("user_roles")
+              .select("user_id")
+              .eq("tenant_id", appointment.tenant_id)
+              .eq("role", "owner");
+
+            if (owners && owners.length > 0) {
+              for (const owner of owners) {
+                const { data: profile } = await supabase
+                  .from("profiles")
+                  .select("email")
+                  .eq("user_id", owner.user_id)
+                  .single();
+
+                if (profile?.email) {
+                  try {
+                    await fetch("https://api.resend.com/emails", {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${resendApiKey}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        from: resendFromEmail,
+                        to: profile.email,
+                        subject: `New Paid Booking at ${tenant.name}`,
+                        html: `
+                          <h2>New Paid Booking</h2>
+                          <p>A customer has just completed payment for a booking.</p>
+                          <ul>
+                            <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
+                            <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
+                            <li><strong>Gateway:</strong> ${event.gateway}</li>
+                          </ul>
+                          <p>Please review the booking in your dashboard.</p>
+                        `,
+                      }),
+                    });
+                  } catch (ownerEmailError) {
+                    console.error("Error sending owner notification:", ownerEmailError);
+                  }
+                }
+              }
+            }
+          }
+
+          // Generate invoice
+          try {
+            // Generate invoice number
+            const { data: invoiceCount } = await supabase
+              .from("invoices")
+              .select("id", { count: "exact", head: true })
+              .eq("tenant_id", appointment.tenant_id);
+
+            const count = (invoiceCount as unknown as number) || 0;
+            const prefix = tenant?.name?.substring(0, 3).toUpperCase() || "INV";
+            const invoiceNumber = `${prefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(count + 1).padStart(4, "0")}`;
+
+            const { data: invoice } = await supabase
+              .from("invoices")
+              .insert({
+                tenant_id: appointment.tenant_id,
+                customer_id: appointment.customer_id,
+                appointment_id: appointmentId,
+                invoice_number: invoiceNumber,
+                currency: tenant?.currency || "USD",
+                subtotal: amount,
+                total: amount,
+                status: "paid",
+                paid_at: new Date().toISOString(),
+              })
+              .select("id")
+              .single();
+
+            // Send invoice email
+            if (invoice?.id) {
+              await fetch(`${supabaseUrl}/functions/v1/send-invoice`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${supabaseServiceKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ invoiceId: invoice.id }),
+              });
+            }
+          } catch (invoiceError) {
+            console.error("Error generating invoice:", invoiceError);
+          }
         }
 
         // Update payment intent status

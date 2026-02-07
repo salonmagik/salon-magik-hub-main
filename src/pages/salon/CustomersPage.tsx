@@ -17,7 +17,7 @@ import {
   Tag,
   UserPlus,
   Calendar,
-  Upload,
+  Download,
   Search,
   Mail,
   Phone,
@@ -34,9 +34,11 @@ import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
 import { FlagCustomerDialog } from "@/components/dialogs/FlagCustomerDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
+import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDialog";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { toast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Customer = Tables<"customers">;
@@ -48,6 +50,7 @@ export default function CustomersPage() {
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   
   // Action dialogs
   const [flagDialogCustomer, setFlagDialogCustomer] = useState<Customer | null>(null);
@@ -139,6 +142,21 @@ export default function CustomersPage() {
     setDeleteDialogCustomer(null);
   };
 
+  const CUSTOMER_TEMPLATE: TemplateColumn[] = [
+    { header: "full_name", example: "John Doe", required: true },
+    { header: "email", example: "john@example.com", required: true },
+    { header: "phone", example: "+2348012345678", required: false },
+    { header: "notes", example: "VIP customer", required: false },
+  ];
+
+  const handleImport = async (file: File) => {
+    // TODO: Implement actual import logic
+    toast({
+      title: "Import started",
+      description: `Processing ${file.name}...`,
+    });
+  };
+
   return (
     <SalonSidebar>
       <div className="space-y-6">
@@ -149,8 +167,8 @@ export default function CustomersPage() {
             <p className="text-muted-foreground">Manage customer relationships and celebrate key moments.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline">
-              <Upload className="w-4 h-4 mr-2" />
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              <Download className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Import</span>
               <span className="sm:hidden">Import</span>
             </Button>
@@ -425,6 +443,16 @@ export default function CustomersPage() {
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDeleteCustomer}
+      />
+
+      {/* Import Dialog */}
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        title="Import Customers"
+        templateColumns={CUSTOMER_TEMPLATE}
+        templateFileName="customers"
+        onImport={handleImport}
       />
     </SalonSidebar>
   );
