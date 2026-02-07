@@ -29,3 +29,9 @@ verify_jwt = false
 
 [functions.create-public-booking]
 verify_jwt = false
+
+[functions.validate-staff-invitation]
+verify_jwt = false
+
+[functions.verify-email]
+verify_jwt = false

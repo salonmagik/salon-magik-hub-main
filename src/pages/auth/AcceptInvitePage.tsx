@@ -38,7 +38,7 @@ export default function AcceptInvitePage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Validate token on mount
+  // Validate token on mount using edge function
   useEffect(() => {
     async function validateToken() {
       if (!token) {
@@ -48,41 +48,24 @@ export default function AcceptInvitePage() {
       }
 
       try {
-        // Fetch invitation by token
-        const { data, error } = await supabase
-          .from("staff_invitations")
-          .select("*, tenants(name)")
-          .eq("token", token)
-          .single();
-
-        if (error || !data) {
-          setValidationError("Invalid or expired invitation");
-          setIsValidating(false);
-          return;
-        }
-
-        // Check status
-        if (data.status !== "pending") {
-          setValidationError(
-            data.status === "accepted"
-              ? "This invitation has already been accepted"
-              : "This invitation is no longer valid"
-          );
-          setIsValidating(false);
-          return;
-        }
-
-        // Check expiry
-        if (new Date(data.expires_at) < new Date()) {
-          setValidationError("This invitation has expired");
-          setIsValidating(false);
-          return;
-        }
-
-        setInvitation({
-          ...data,
-          tenant_name: (data.tenants as any)?.name || "Unknown Salon",
+        // Use edge function to validate token (bypasses RLS)
+        const { data, error } = await supabase.functions.invoke("validate-staff-invitation", {
+          body: { token },
         });
+
+        if (error) {
+          setValidationError(error.message || "Invalid or expired invitation");
+          setIsValidating(false);
+          return;
+        }
+
+        if (data?.error) {
+          setValidationError(data.error);
+          setIsValidating(false);
+          return;
+        }
+
+        setInvitation(data as InvitationDetails);
       } catch (err) {
         console.error("Validation error:", err);
         setValidationError("Failed to validate invitation");

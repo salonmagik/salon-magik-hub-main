@@ -3,15 +3,24 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 
 interface ScheduledStats {
-  todayCount: number;
+  rangeCount: number;
   giftedCount: number;
   cancelledCount: number;
   rescheduledCount: number;
+  amountDue: number;
 }
 
 interface UnscheduledStats {
   totalCount: number;
   giftedCount: number;
+  paidCount: number;
+  unpaidCount: number;
+  partialCount: number;
+}
+
+interface UseAppointmentStatsOptions {
+  startDate?: string;
+  endDate?: string;
 }
 
 interface UseAppointmentStatsResult {
@@ -21,17 +30,21 @@ interface UseAppointmentStatsResult {
   refetch: () => void;
 }
 
-export function useAppointmentStats(): UseAppointmentStatsResult {
+export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): UseAppointmentStatsResult {
   const { currentTenant } = useAuth();
   const [scheduledStats, setScheduledStats] = useState<ScheduledStats>({
-    todayCount: 0,
+    rangeCount: 0,
     giftedCount: 0,
     cancelledCount: 0,
     rescheduledCount: 0,
+    amountDue: 0,
   });
   const [unscheduledStats, setUnscheduledStats] = useState<UnscheduledStats>({
     totalCount: 0,
     giftedCount: 0,
+    paidCount: 0,
+    unpaidCount: 0,
+    partialCount: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,55 +56,76 @@ export function useAppointmentStats(): UseAppointmentStatsResult {
 
     setIsLoading(true);
 
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).toISOString();
+    // Use provided date range or default to today
+    const startOfRange = options.startDate 
+      ? `${options.startDate}T00:00:00` 
+      : new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+    const endOfRange = options.endDate 
+      ? `${options.endDate}T23:59:59.999` 
+      : new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
 
     try {
-      // Fetch scheduled stats (today's appointments)
+      // Fetch scheduled stats (appointments in date range)
       const [
-        todayResult,
+        rangeResult,
         giftedResult,
         cancelledResult,
         rescheduledResult,
+        amountDueResult,
         unscheduledTotalResult,
         unscheduledGiftedResult,
+        unscheduledPaidResult,
+        unscheduledUnpaidResult,
+        unscheduledPartialResult,
       ] = await Promise.all([
-        // Today's scheduled appointments
+        // Scheduled appointments in range
         supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", false)
-          .gte("scheduled_start", startOfDay)
-          .lte("scheduled_start", endOfDay),
+          .gte("scheduled_start", startOfRange)
+          .lte("scheduled_start", endOfRange),
         
-        // Today's gifted appointments
+        // Gifted appointments in range
         supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_gifted", true)
-          .gte("scheduled_start", startOfDay)
-          .lte("scheduled_start", endOfDay),
+          .eq("is_unscheduled", false)
+          .gte("scheduled_start", startOfRange)
+          .lte("scheduled_start", endOfRange),
         
-        // Today's cancelled appointments
+        // Cancelled appointments in range
         supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("status", "cancelled")
-          .gte("scheduled_start", startOfDay)
-          .lte("scheduled_start", endOfDay),
+          .eq("is_unscheduled", false)
+          .gte("scheduled_start", startOfRange)
+          .lte("scheduled_start", endOfRange),
         
-        // Today's rescheduled appointments (reschedule_count > 0)
+        // Rescheduled appointments in range (reschedule_count > 0)
         supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .gt("reschedule_count", 0)
-          .gte("scheduled_start", startOfDay)
-          .lte("scheduled_start", endOfDay),
+          .eq("is_unscheduled", false)
+          .gte("scheduled_start", startOfRange)
+          .lte("scheduled_start", endOfRange),
+        
+        // Amount due for scheduled appointments in range (not fully paid)
+        supabase
+          .from("appointments")
+          .select("total_amount, amount_paid")
+          .eq("tenant_id", currentTenant.id)
+          .eq("is_unscheduled", false)
+          .neq("payment_status", "fully_paid")
+          .gte("scheduled_start", startOfRange)
+          .lte("scheduled_start", endOfRange),
         
         // Total unscheduled
         supabase
@@ -107,25 +141,58 @@ export function useAppointmentStats(): UseAppointmentStatsResult {
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", true)
           .eq("is_gifted", true),
+
+        // Unscheduled + fully paid
+        supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", currentTenant.id)
+          .eq("is_unscheduled", true)
+          .eq("payment_status", "fully_paid"),
+
+        // Unscheduled + unpaid
+        supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", currentTenant.id)
+          .eq("is_unscheduled", true)
+          .eq("payment_status", "unpaid"),
+
+        // Unscheduled + deposit paid (partial)
+        supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", currentTenant.id)
+          .eq("is_unscheduled", true)
+          .eq("payment_status", "deposit_paid"),
       ]);
 
+      // Calculate amount due
+      const amountDue = amountDueResult.data?.reduce((sum, apt) => {
+        return sum + ((apt.total_amount || 0) - (apt.amount_paid || 0));
+      }, 0) || 0;
+
       setScheduledStats({
-        todayCount: todayResult.count || 0,
+        rangeCount: rangeResult.count || 0,
         giftedCount: giftedResult.count || 0,
         cancelledCount: cancelledResult.count || 0,
         rescheduledCount: rescheduledResult.count || 0,
+        amountDue,
       });
 
       setUnscheduledStats({
         totalCount: unscheduledTotalResult.count || 0,
         giftedCount: unscheduledGiftedResult.count || 0,
+        paidCount: unscheduledPaidResult.count || 0,
+        unpaidCount: unscheduledUnpaidResult.count || 0,
+        partialCount: unscheduledPartialResult.count || 0,
       });
     } catch (error) {
       console.error("Error fetching appointment stats:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [currentTenant?.id, options.startDate, options.endDate]);
 
   useEffect(() => {
     fetchStats();
