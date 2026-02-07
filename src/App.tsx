@@ -19,7 +19,6 @@ import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
-import AcceptInvitePage from "./pages/auth/AcceptInvitePage";
 import InvitationExpiredPage from "./pages/auth/InvitationExpiredPage";
 import VerifyEmailPage from "./pages/auth/VerifyEmailPage";
 
@@ -128,7 +127,6 @@ const App = () => (
             />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/accept-invite" element={<AcceptInvitePage />} />
             <Route path="/invitation-expired" element={<InvitationExpiredPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
 

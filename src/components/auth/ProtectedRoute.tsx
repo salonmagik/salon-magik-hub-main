@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
+import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -19,7 +20,7 @@ function LoadingScreen() {
 }
 
 export function ProtectedRoute({ children, requireOnboarding = true }: ProtectedRouteProps) {
-  const { isLoading, isAuthenticated, hasCompletedOnboarding, user, profile } = useAuth();
+  const { isLoading, isAuthenticated, hasCompletedOnboarding, user, profile, requiresPasswordChange, clearPasswordChangeFlag } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -36,6 +37,7 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
   }
 
   // Check if user needs to reset password (invited staff with temp password)
+  // Legacy check for requires_password_reset metadata
   const requiresPasswordReset = user?.user_metadata?.requires_password_reset === true;
   if (requiresPasswordReset && location.pathname !== "/reset-password") {
     return <Navigate to="/reset-password?first_login=true" replace />;
@@ -46,7 +48,16 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
     return <Navigate to="/onboarding" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {/* Force password change dialog for invited staff */}
+      <ForcePasswordChangeDialog
+        open={requiresPasswordChange}
+        onPasswordChanged={clearPasswordChangeFlag}
+      />
+      {children}
+    </>
+  );
 }
 
 // For routes that should NOT be accessible after login (login, signup, etc.)
