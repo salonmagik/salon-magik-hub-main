@@ -30,7 +30,7 @@ export function useServices() {
     setError(null);
 
     try {
-      // Fetch services with categories
+      // Fetch services with categories (exclude soft-deleted)
       const { data: servicesData, error: servicesError } = await supabase
         .from("services")
         .select(`
@@ -39,6 +39,7 @@ export function useServices() {
         `)
         .eq("tenant_id", currentTenant.id)
         .eq("status", "active")
+        .is("deleted_at", null)
         .order("name", { ascending: true });
 
       if (servicesError) throw servicesError;

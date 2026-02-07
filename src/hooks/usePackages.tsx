@@ -58,6 +58,7 @@ export function usePackages() {
         `)
         .eq("tenant_id", currentTenant.id)
         .neq("status", "archived")
+        .is("deleted_at", null)
         .order("name", { ascending: true });
 
       if (fetchError) throw fetchError;
