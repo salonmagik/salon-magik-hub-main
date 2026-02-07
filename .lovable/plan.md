@@ -1,496 +1,497 @@
 
+# Extended Catalog Multi-Select & Actions Enhancement Plan
 
-# Comprehensive Booking & Catalog Enhancement Plan
+## Summary of New Additions
 
-## Summary
+Building on the existing plan, this adds:
 
-This plan consolidates all requested enhancements into a single implementation roadmap covering:
-
-1. **Payment Flow Fixes** - Fix skipped payments, add provider selection (Stripe/Paystack), implement escrow logic
-2. **Calendar Improvements** - Fix "No available times" bug, improve UI with availability indicators
-3. **Booking Page Visuals** - Item card images with hover slider, banner carousel, contact info display
-4. **Catalog Multi-Select & Bulk Actions** - Checkbox selection, floating action bar, package creation from selected items
-5. **Promotions & Referrals** - Salon-side promo code and referral management
+1. **Maker-Checker for Deletions** - Only owners can directly delete; other roles request deletion requiring owner approval
+2. **Status Chips on Cards** - Visual badges showing Active/Archived/Flagged status on each item
+3. **Soft Delete with 7-Day Bin** - Deleted items go to a "Bin" in Settings for 7 days before permanent deletion
+4. **5-Second Undo Countdown** - After delete action, 5-second window to undo before item moves to bin
+5. **Booking Exclusion** - Soft deleted, permanently deleted, and archived items are excluded from booking
 
 ---
 
-## Part 1: Payment Flow Fixes
+## Part 1: Maker-Checker Deletion Workflow
 
-### Problem
-In `BookingWizard.tsx`, after receiving `checkoutUrl` from the payment session, the code shows a toast and skips to confirmation instead of redirecting to the payment gateway.
+### Behavior by Role
 
-### Solution
+| Role | Delete Action | Workflow |
+|------|---------------|----------|
+| Owner | Direct delete | Immediately soft-deletes to bin |
+| Manager | Request delete | Creates pending deletion request → Owner approves/rejects |
+| Supervisor | Request delete | Creates pending deletion request → Owner approves/rejects |
+| Receptionist | No delete | Delete action hidden |
+| Staff | No delete | Delete action hidden |
 
-#### A. Fix Payment Redirect
-```typescript
-// Current broken code (lines 251-256):
-if (paymentResponse.data?.checkoutUrl) {
-  toast({ title: "Payment would be required", ... }); // Shows toast
-}
-setStep("confirmation"); // Skips payment!
+### Database: Deletion Requests Table
 
-// Fixed code:
-if (paymentResponse.data?.checkoutUrl) {
-  window.location.href = paymentResponse.data.checkoutUrl;
-  return; // Stop here - don't go to confirmation yet
-}
-```
-
-#### B. Add Payment Provider Selection Step
-
-New step between "review" and "confirmation":
-
-```
-Review Step → Payment Step (NEW) → Confirmation Step
-```
-
-**New Component: `PaymentStep.tsx`**
-- Tabs for Stripe (International) and Paystack (Africa)
-- Display available payment methods per provider:
-  - **Stripe:** Card, Apple Pay, Google Pay, Bank transfers
-  - **Paystack:** Card, Bank Transfer, USSD, Mobile Money
-- Recommend provider based on currency/region (user can override)
-- Amount summary with currency
-
-```
-+--------------------------------------------------+
-|  Select Payment Method                           |
-|                                                  |
-|  [Stripe ✓ Recommended] [Paystack]              |
-|                                                  |
-|  Payment Methods:                                |
-|  [Card] [Apple Pay] [Google Pay]                |
-|                                                  |
-|  Amount Due: $150.00                            |
-|                                                  |
-|  [Pay Now]                                      |
-+--------------------------------------------------+
-```
-
-#### C. Escrow Logic for Manual Confirmation
-
-**Database Changes:**
 ```sql
-ALTER TABLE payment_intents
-ADD COLUMN funds_status TEXT DEFAULT 'pending' 
-  CHECK (funds_status IN ('pending', 'held', 'released', 'refunded')),
-ADD COLUMN released_at TIMESTAMP WITH TIME ZONE,
-ADD COLUMN refunded_at TIMESTAMP WITH TIME ZONE;
-
-ALTER TABLE appointments
-ADD COLUMN confirmation_status TEXT DEFAULT 'auto' 
-  CHECK (confirmation_status IN ('auto', 'pending', 'confirmed', 'rejected'));
-
-CREATE TABLE reschedule_requests (
+CREATE TABLE catalog_deletion_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  appointment_id UUID REFERENCES appointments(id) ON DELETE CASCADE,
-  proposed_date DATE NOT NULL,
-  proposed_time TIME NOT NULL,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
-  requested_by TEXT NOT NULL CHECK (requested_by IN ('salon', 'customer')),
-  responded_at TIMESTAMP WITH TIME ZONE,
+  tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  item_id UUID NOT NULL,
+  item_type TEXT NOT NULL CHECK (item_type IN ('service', 'product', 'package', 'voucher')),
+  item_name TEXT NOT NULL,
+  requested_by_id UUID NOT NULL REFERENCES auth.users(id),
+  requested_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  reason TEXT NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  reviewed_by_id UUID REFERENCES auth.users(id),
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  rejection_reason TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
+
+-- RLS policies
+ALTER TABLE catalog_deletion_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read tenant deletion requests"
+  ON catalog_deletion_requests FOR SELECT
+  USING (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
+
+CREATE POLICY "Users can create deletion requests"
+  ON catalog_deletion_requests FOR INSERT
+  WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids(auth.uid())));
+
+CREATE POLICY "Owners can update deletion requests"
+  ON catalog_deletion_requests FOR UPDATE
+  USING (is_tenant_owner(auth.uid(), tenant_id));
 ```
 
-**Payment Webhook Logic:**
+### UI Flow for Non-Owners
+
+When a non-owner clicks "Delete":
+
 ```
-Payment Success
-      │
-      ▼
-┌─────────────────┐
-│ Check tenant's  │
-│ auto_confirm    │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    │         │
-   ON        OFF
-    │         │
-    ▼         ▼
-┌────────┐  ┌──────────────┐
-│Release │  │Hold funds    │
-│funds   │  │(escrow)      │
-│Invoice │  │Notify salon  │
-│Confirm │  │with actions: │
-└────────┘  │• Confirm     │
-            │• Reject      │
-            │• Reschedule  │
-            │• Contact     │
-            └──────────────┘
++------------------------------------------+
+| Request Deletion                         |
++------------------------------------------+
+| You're requesting deletion of:           |
+|                                          |
+| • Swedish Massage ($50)                  |
+| • Deep Tissue Massage ($75)              |
+|                                          |
+| Reason for deletion *                    |
+| [No longer offered at this location   ]  |
+|                                          |
+| Note: An owner must approve this request |
+| before the items are removed.            |
+|                                          |
+|     [Cancel]  [Submit Request]           |
++------------------------------------------+
 ```
 
-**Salon Action Handlers:**
-- **Confirm:** Release funds, generate invoice, send confirmation email
-- **Reject:** Process automatic refund, notify booker
-- **Reschedule:** Create proposal, send to customer for acceptance
-- **Contact:** Copy customer phone with country code
+### Notification to Owner
 
-#### D. Update Edge Functions
-
-**`create-payment-session/index.ts`:**
-- Add `preferredGateway` parameter to allow user selection
-- Update CORS headers to include all required headers
-
-**`payment-webhook/index.ts`:**
-- Add escrow logic based on `auto_confirm_bookings` setting
-- Generate and send invoices on confirmation
-- Send gift notifications if applicable
-
-**New: `process-booking-decision/index.ts`:**
-- Handle confirm/reject/reschedule/contact actions from salon
+When deletion request is created:
+- Notification sent to all owners
+- Appears in notification panel with "Approve" / "Reject" actions
+- Links to new "Pending Actions" section in Settings (or dedicated review page)
 
 ---
 
-## Part 2: Calendar Improvements
+## Part 2: Status Chips on Catalog Cards
 
-### Problem
-"No available times for this date" error caused by:
-1. Weekend dates selected when salon is Mon-Fri
-2. Timezone bug: `date.toISOString()` causing day shifts
+### Visual Status Indicators
 
-### Solution
+Each `SelectableItemCard` displays a status badge:
 
-#### A. Fix Date Query Keys
-```typescript
-// In useAvailableSlots.tsx and useAvailableDays.tsx
-// Change from:
-queryKey: ["available-slots", tenantId, location?.id, date?.toISOString(), ...]
+| Status | Badge Style | Visible To |
+|--------|-------------|------------|
+| Active | Green, "Active" | All (default, often hidden as it's implied) |
+| Flagged | Yellow/Orange, "Flagged" with icon | All staff |
+| Archived | Gray, "Archived" | Staff only (not visible to customers) |
+| Deleted (In Bin) | Red/Muted, "In Bin" | Staff in bin view only |
 
-// To:
-queryKey: ["available-slots", tenantId, location?.id, date ? format(date, "yyyy-MM-dd") : undefined, ...]
-```
+### Implementation
 
-#### B. Improve Calendar UI
+Update `SelectableItemCard` to accept and display status:
 
-**Visual Day States:**
-- **Unavailable (closed/past):** Grayed out, unclickable
-- **Has Bookings:** Shows brand-colored dot, still clickable
-- **Fully Available:** Normal styling, clickable
-- **Selected:** Highlighted with brand color
+```tsx
+interface CatalogItem {
+  id: string;
+  type: "service" | "product" | "package" | "voucher";
+  name: string;
+  description: string;
+  price: number;
+  status: "active" | "inactive" | "archived" | "deleted";
+  is_flagged?: boolean;
+  // ... other fields
+}
 
-```typescript
-const getDayModifiers = () => ({
-  disabled: (date: Date) => {
-    if (date < today) return true;
-    const dayName = format(date, "EEEE").toLowerCase();
-    return !selectedLocation?.opening_days?.includes(dayName);
-  },
-  hasAvailability: (date: Date) => isDateAvailable(date),
-  hasBookings: (date: Date) => {
-    const dayInfo = availableDays?.find(d => 
-      format(d.date, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+// Status chip render logic
+function getStatusChip(status: string, isFlagged: boolean) {
+  if (isFlagged) {
+    return (
+      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+        <Flag className="w-3 h-3 mr-1" />
+        Flagged
+      </Badge>
     );
-    return dayInfo?.hasSlots && dayInfo?.bookedCount > 0;
-  },
-});
+  }
+  
+  switch (status) {
+    case "archived":
+      return (
+        <Badge variant="secondary" className="bg-gray-100 text-gray-600">
+          <Archive className="w-3 h-3 mr-1" />
+          Archived
+        </Badge>
+      );
+    case "deleted":
+      return (
+        <Badge variant="destructive" className="bg-red-50 text-red-700">
+          <Trash2 className="w-3 h-3 mr-1" />
+          In Bin
+        </Badge>
+      );
+    case "active":
+    default:
+      return null; // Active is default, no badge needed
+  }
+}
 ```
 
-**CSS for availability dot:**
-```css
-.day-available::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--brand-color);
-}
+### Card Layout with Status
+
+```
++------------------------------------------------+
+| [✓] | [IMG] | Swedish Massage      | [Flagged] |
+|     |       | 60 min • Relaxing... |   $50.00  |
++------------------------------------------------+
 ```
 
 ---
 
-## Part 3: Booking Page Visuals
+## Part 3: Soft Delete with 7-Day Bin
 
-### A. Item Card Images with Hover Slider
+### Database: Soft Delete Columns
 
-**Problem:** `ItemCard` receives `imageUrl` prop but never renders it.
+Add to all catalog tables:
 
-**Solution:** Add `ImageSlider` component to item cards:
-
-```
-+-------------------------------------------+
-| Service                           $50.00  |
-| +----------------+                        |
-| |                |  Swedish Massage       |
-| |   [IMAGE]      |  Relaxing full body    |
-| |   ← →  • •     |  massage treatment     |
-| +----------------+                        |
-| [60 min]                     [Add]        |
-+-------------------------------------------+
-```
-
-**Features:**
-- Shows first image by default
-- Navigation arrows appear on hover (when multiple images)
-- Dot indicators show current position
-- Placeholder icon when no images
-
-```typescript
-function ImageSlider({ images, alt }: { images: string[]; alt: string }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [isHovering, setIsHovering] = useState(false);
-  
-  return (
-    <div 
-      className="relative aspect-square rounded-lg overflow-hidden"
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
-    >
-      <img src={images[activeIndex]} alt={alt} className="w-full h-full object-cover" />
-      
-      {images.length > 1 && isHovering && (
-        <>
-          <button onClick={goPrev} className="absolute left-1 top-1/2 ...">
-            <ChevronLeft />
-          </button>
-          <button onClick={goNext} className="absolute right-1 top-1/2 ...">
-            <ChevronRight />
-          </button>
-        </>
-      )}
-      
-      {images.length > 1 && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-          {images.map((_, i) => (
-            <div className={cn("w-1.5 h-1.5 rounded-full", 
-              i === activeIndex ? "bg-white" : "bg-white/50"
-            )} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-### B. Banner Carousel with Auto-Rotate
-
-**Features:**
-- Auto-advances every 30 seconds
-- Manual navigation arrows (visible on hover)
-- Dot indicators for position
-- Smooth crossfade transitions
-- Pauses auto-advance on hover
-
-```typescript
-function BannerCarousel({ bannerUrls, salonName, autoPlayInterval = 30000 }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [isHovering, setIsHovering] = useState(false);
-  
-  // Auto-advance timer
-  useEffect(() => {
-    if (bannerUrls.length <= 1 || isHovering) return;
-    const timer = setInterval(goNext, autoPlayInterval);
-    return () => clearInterval(timer);
-  }, [bannerUrls.length, isHovering, autoPlayInterval]);
-  
-  return (
-    <div className="relative h-48 md:h-64 rounded-xl overflow-hidden"
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}>
-      
-      {/* Images with crossfade */}
-      {bannerUrls.map((url, i) => (
-        <img
-          key={url}
-          src={url}
-          className={cn("absolute inset-0 w-full h-full object-cover transition-opacity duration-500",
-            i === activeIndex ? "opacity-100" : "opacity-0"
-          )}
-        />
-      ))}
-      
-      {/* Navigation & indicators */}
-      {bannerUrls.length > 1 && isHovering && (
-        <> <PrevButton /> <NextButton /> </>
-      )}
-      <DotIndicators />
-    </div>
-  );
-}
-```
-
-### C. Salon Contact Info Display
-
-**Database Changes:**
 ```sql
-ALTER TABLE tenants
-ADD COLUMN contact_phone TEXT,
-ADD COLUMN show_contact_on_booking BOOLEAN DEFAULT false;
+ALTER TABLE services 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID REFERENCES auth.users(id),
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
 
-ALTER TABLE locations
-ADD COLUMN phone TEXT;
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID REFERENCES auth.users(id),
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+ALTER TABLE packages 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID REFERENCES auth.users(id),
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+ALTER TABLE vouchers 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID REFERENCES auth.users(id),
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
 ```
 
-**Settings Page Toggle:**
-```tsx
-<div className="flex items-center justify-between">
-  <div>
-    <Label>Show Contact Info on Booking Page</Label>
-    <p className="text-sm text-muted-foreground">
-      Display your phone number and address to customers
-    </p>
-  </div>
-  <Switch checked={showContactOnBooking} onCheckedChange={setShowContactOnBooking} />
-</div>
+### Query Updates
+
+Update all hooks to exclude deleted items by default:
+
+```typescript
+// useServices.tsx
+const { data } = await supabase
+  .from("services")
+  .select("*")
+  .eq("tenant_id", tenantId)
+  .is("deleted_at", null) // Exclude soft-deleted
+  .order("name");
+
+// New: useBinItems.tsx for fetching deleted items
+const { data } = await supabase
+  .from("services")
+  .select("*")
+  .eq("tenant_id", tenantId)
+  .not("deleted_at", "is", null) // Only deleted items
+  .order("deleted_at", { ascending: false });
 ```
 
-**Booking Page Display:**
-```tsx
-{salon.show_contact_on_booking && (
-  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-    {salon.contact_phone && (
-      <a href={`tel:${salon.contact_phone}`} className="flex items-center gap-1.5">
-        <Phone className="h-4 w-4" />
-        {salon.contact_phone}
-      </a>
-    )}
-    {location?.address && (
-      <div className="flex items-center gap-1.5">
-        <MapPin className="h-4 w-4" />
-        {location.address}, {location.city}
-      </div>
-    )}
-  </div>
-)}
-```
+### Bin Tab in Settings
 
----
-
-## Part 4: Catalog Multi-Select & Bulk Actions
-
-### Tab Reorder & Rename
-- Module: "Services & Products"
-- Tab order: All, Services, Products, Packages, Vouchers
-
-### Multi-Select Implementation
-
-Replace `ItemCard` with `SelectableItemCard` across all tabs:
-
-```tsx
-<SelectableItemCard
-  item={...}
-  isSelected={selectedItems.has(item.id)}
-  onSelect={(id) => handleSelectItem(id, "service")}
-/>
-```
-
-### Floating Bulk Actions Bar
+Add new "Bin" section to Settings page (or as sub-tab under catalog):
 
 ```
 +--------------------------------------------------+
-| [3 items selected]  [Package] [Flag] [Archive] [Delete]  [Clear] |
+| Bin                                              |
+| Items deleted in the last 7 days appear here.    |
+| After 7 days, items are permanently removed.     |
+|                                                  |
+| [Empty Bin] (destructive, confirms first)        |
++--------------------------------------------------+
+| [IMG] | Swedish Massage  | Deleted 2 days ago   |
+|       | Service • $50    | [Restore] [Delete]   |
++--------------------------------------------------+
+| [IMG] | Hair Gel         | Deleted 5 days ago   |
+|       | Product • $15    | Auto-deletes in 2d   |
+|       |                  | [Restore] [Delete]   |
 +--------------------------------------------------+
 ```
 
-**Actions by Item Type:**
+### Automatic Permanent Deletion
 
-| Action | Services | Products | Packages | Vouchers | Permission |
-|--------|----------|----------|----------|----------|------------|
-| Create Package | ✓ | ✓ | ✗ | ✗ | Any staff |
-| Flag | ✓ | ✓ | ✓ | ✓ | Any staff |
-| Archive | ✓ | ✓ | ✓ | ✗ | Owner/Manager |
-| Discontinue | ✗ | ✗ | ✗ | ✓ | Owner/Manager |
-| Delete | ✓ | ✓ | ✓ | ✓ | Owner only |
+A scheduled job (or Edge Function cron) permanently deletes items older than 7 days:
 
-### Item Usage Check (Before Delete/Archive)
-
-```typescript
-export async function checkItemUsage(itemIds: string[], itemType: string) {
-  // Check if services are in packages
-  // Check if products are in pending deliveries
-  // Check if items have active appointments
-  
-  return {
-    hasUsage: boolean,
-    packageNames: string[],
-    appointmentCount: number,
-    deliveryCount: number,
-  };
-}
-```
-
-If item is in use, show `ItemInUseDialog` explaining where it's used and suggesting Archive instead.
-
-### Database Changes for Flagging
 ```sql
-ALTER TABLE services ADD COLUMN is_flagged BOOLEAN DEFAULT false;
-ALTER TABLE products ADD COLUMN is_flagged BOOLEAN DEFAULT false;
-ALTER TABLE packages ADD COLUMN is_flagged BOOLEAN DEFAULT false;
-ALTER TABLE vouchers ADD COLUMN is_flagged BOOLEAN DEFAULT false;
+-- Run daily via pg_cron or Edge Function
+DELETE FROM services WHERE deleted_at < now() - interval '7 days';
+DELETE FROM products WHERE deleted_at < now() - interval '7 days';
+DELETE FROM packages WHERE deleted_at < now() - interval '7 days';
+DELETE FROM vouchers WHERE deleted_at < now() - interval '7 days';
 ```
+
+Alternative: Client-side check on bin load to filter and trigger permanent deletion.
 
 ---
 
-## Part 5: Promotions & Referrals
+## Part 4: 5-Second Undo Countdown
 
-### New Settings Tab: "Promotions"
+### UX Flow
 
-**Sections:**
-1. **Referral Program**
-   - Display salon's unique referral code
-   - Generate new codes
-   - List of codes with status (consumed/available)
-   - Show referral discounts earned
+When user confirms deletion:
 
-2. **Available Discounts**
-   - Waitlist discount (months 1-6, 12% off)
-   - Referral discounts with expiry dates
-   - Invoice discount history
+1. **Toast appears** with 5-second countdown
+2. **Item visually marked** as pending deletion (slightly faded)
+3. **User can click "Undo"** to cancel
+4. **After 5 seconds**, toast changes to "Sent to Bin"
 
-3. **Customer Promo Codes** (stretch)
-   - Create codes for booking checkout
-   - Set percentage or fixed discounts
-   - Validity periods and usage limits
+### Implementation
 
----
-
-## Part 6: Brand Theming Fix
-
-### Problem
-"Continue" button white-on-white for light brand colors.
-
-### Solution
-
-**New utility: `src/lib/color.ts`**
-```typescript
-export function hexToRgb(hex: string): { r: number; g: number; b: number };
-export function isLightColor(hex: string): boolean;
-export function getContrastTextColor(hex: string): string; // "white" or "black"
-```
-
-**Apply at document root:**
-```typescript
-useEffect(() => {
-  if (!salon?.brand_color) return;
-  
-  const root = document.documentElement;
-  const textColor = isLightColor(salon.brand_color) ? '#1a1a1a' : '#ffffff';
-  
-  root.style.setProperty('--brand-color', salon.brand_color);
-  root.style.setProperty('--brand-foreground', textColor);
-  
-  return () => {
-    root.style.removeProperty('--brand-color');
-    root.style.removeProperty('--brand-foreground');
-  };
-}, [salon?.brand_color]);
-```
-
-**Update button styling:**
 ```tsx
-<Button
-  style={{ 
-    backgroundColor: "var(--brand-color)",
-    color: "var(--brand-foreground)" 
-  }}
->
-  Continue
-</Button>
+// In ServicesPage.tsx
+const [pendingDeletions, setPendingDeletions] = useState<Map<string, NodeJS.Timeout>>(new Map());
+const [undoCountdowns, setUndoCountdowns] = useState<Map<string, number>>(new Map());
+
+const handleSoftDelete = async (itemIds: string[], reason: string) => {
+  // Start countdown for each item
+  itemIds.forEach(id => {
+    let countdown = 5;
+    setUndoCountdowns(prev => new Map(prev).set(id, countdown));
+    
+    const interval = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) {
+        clearInterval(interval);
+        executeSoftDelete(id, reason);
+        setUndoCountdowns(prev => {
+          const next = new Map(prev);
+          next.delete(id);
+          return next;
+        });
+      } else {
+        setUndoCountdowns(prev => new Map(prev).set(id, countdown));
+      }
+    }, 1000);
+    
+    setPendingDeletions(prev => new Map(prev).set(id, interval));
+  });
+  
+  // Show toast with undo action
+  toast({
+    title: `Deleting ${itemIds.length} item(s)...`,
+    description: "Click Undo to cancel",
+    action: (
+      <Button variant="outline" size="sm" onClick={() => handleUndo(itemIds)}>
+        Undo ({undoCountdowns.get(itemIds[0]) || 5}s)
+      </Button>
+    ),
+    duration: 6000, // Slightly longer than countdown
+  });
+};
+
+const handleUndo = (itemIds: string[]) => {
+  itemIds.forEach(id => {
+    const timer = pendingDeletions.get(id);
+    if (timer) {
+      clearInterval(timer);
+    }
+    setPendingDeletions(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    setUndoCountdowns(prev => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  });
+  
+  toast({ title: "Deletion cancelled" });
+};
+
+const executeSoftDelete = async (itemId: string, reason: string) => {
+  const itemType = getItemType(itemId);
+  await supabase
+    .from(getTableName(itemType))
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by_id: user.id,
+      deletion_reason: reason,
+    })
+    .eq("id", itemId);
+  
+  toast({ title: "Item sent to bin", description: "Can be restored within 7 days" });
+  refetchAll();
+};
+```
+
+### Toast UI
+
+```
++--------------------------------------------------+
+| Deleting 2 item(s)...                      [X]   |
+| Click Undo to cancel                             |
+|                                                  |
+| [Undo (3s)]                                      |
++--------------------------------------------------+
+           ↓ (after 5 seconds)
++--------------------------------------------------+
+| ✓ Sent to Bin                              [X]   |
+| 2 items moved to bin. Restore within 7 days.     |
++--------------------------------------------------+
+```
+
+---
+
+## Part 5: Booking Exclusion Logic
+
+### Which Items Are Excluded from Booking
+
+| Status | Available for Booking? | Reasoning |
+|--------|------------------------|-----------|
+| Active | ✅ Yes | Normal state |
+| Inactive | ❌ No | Temporarily unavailable |
+| Archived | ❌ No | Permanently hidden but data preserved |
+| Deleted (In Bin) | ❌ No | Pending permanent deletion |
+| Permanently Deleted | ❌ N/A | No longer exists |
+| Flagged + Active | ✅ Yes | Internal marker, still bookable |
+| Flagged + Archived | ❌ No | Archived takes precedence |
+
+### Update Public Booking Views
+
+Update the `public_booking_*` views and RLS policies:
+
+```sql
+-- Services available for booking
+CREATE OR REPLACE VIEW public.bookable_services AS
+SELECT * FROM services
+WHERE status = 'active'
+  AND deleted_at IS NULL
+  AND tenant_id IN (
+    SELECT id FROM tenants 
+    WHERE online_booking_enabled = true 
+    AND slug IS NOT NULL
+  );
+
+-- Products available for booking
+CREATE OR REPLACE VIEW public.bookable_products AS
+SELECT * FROM products
+WHERE status = 'active'
+  AND deleted_at IS NULL
+  AND tenant_id IN (
+    SELECT id FROM tenants 
+    WHERE online_booking_enabled = true 
+    AND slug IS NOT NULL
+  );
+
+-- Packages available for booking
+CREATE OR REPLACE VIEW public.bookable_packages AS
+SELECT * FROM packages
+WHERE status = 'active'
+  AND deleted_at IS NULL
+  AND tenant_id IN (
+    SELECT id FROM tenants 
+    WHERE online_booking_enabled = true 
+    AND slug IS NOT NULL
+  );
+```
+
+### Update `usePublicCatalog` Hook
+
+```typescript
+// Exclude archived and deleted items
+const { data: services } = await supabase
+  .from("services")
+  .select("*")
+  .eq("tenant_id", tenantId)
+  .eq("status", "active")
+  .is("deleted_at", null);
+```
+
+---
+
+## Part 6: New Permissions
+
+### Add Catalog Permissions
+
+```typescript
+// In DEFAULT_ROLE_PERMISSIONS
+"catalog:delete": true,      // owner only - direct delete
+"catalog:request_delete": true,  // manager, supervisor - request deletion
+"catalog:archive": true,     // owner, manager
+"catalog:flag": true,        // all staff
+"catalog:edit": true,        // owner, manager + overrides
+```
+
+```sql
+-- Add new permission rows
+INSERT INTO role_permissions (tenant_id, role, module, allowed)
+SELECT DISTINCT tenant_id, 'owner', 'catalog:delete', true FROM role_permissions;
+
+INSERT INTO role_permissions (tenant_id, role, module, allowed)
+SELECT DISTINCT tenant_id, 'manager', 'catalog:request_delete', true FROM role_permissions;
+
+INSERT INTO role_permissions (tenant_id, role, module, allowed)
+SELECT DISTINCT tenant_id, 'manager', 'catalog:delete', false FROM role_permissions;
+```
+
+---
+
+## Database Migration Summary
+
+```sql
+-- 1. Soft delete columns
+ALTER TABLE services 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID,
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+ALTER TABLE products 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID,
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+ALTER TABLE packages 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID,
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+ALTER TABLE vouchers 
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+ADD COLUMN IF NOT EXISTS deleted_by_id UUID,
+ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+
+-- 2. Deletion requests table
+CREATE TABLE catalog_deletion_requests (...);
+
+-- 3. Reason columns for flag/archive (from previous plan)
+ALTER TABLE services ADD COLUMN IF NOT EXISTS flag_reason TEXT;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS archive_reason TEXT;
+-- (repeat for products, packages, vouchers)
+
+-- 4. Update views to exclude deleted items
+CREATE OR REPLACE VIEW public.bookable_services AS ...;
+CREATE OR REPLACE VIEW public.bookable_products AS ...;
+CREATE OR REPLACE VIEW public.bookable_packages AS ...;
 ```
 
 ---
@@ -499,98 +500,135 @@ useEffect(() => {
 
 | File | Action | Description |
 |------|--------|-------------|
-| **Payment Flow** | | |
-| `src/pages/booking/components/PaymentStep.tsx` | CREATE | Payment provider selection |
-| `src/pages/booking/components/BookingWizard.tsx` | EDIT | Add payment step, fix redirect |
-| `supabase/functions/create-payment-session/index.ts` | EDIT | Add preferred gateway, CORS |
-| `supabase/functions/payment-webhook/index.ts` | EDIT | Escrow logic, auto-confirm |
-| `supabase/functions/process-booking-decision/index.ts` | CREATE | Confirm/reject/reschedule |
-| **Calendar** | | |
-| `src/hooks/booking/useAvailableSlots.tsx` | EDIT | Fix date query key |
-| `src/hooks/booking/useAvailableDays.tsx` | EDIT | Fix date query key |
-| `src/pages/booking/components/SchedulingStep.tsx` | EDIT | Improved calendar UI |
-| **Visuals** | | |
-| `src/pages/booking/components/ItemCard.tsx` | EDIT | Add image slider |
-| `src/pages/booking/components/SalonHeader.tsx` | EDIT | Banner carousel + contact |
-| `src/pages/booking/components/CatalogView.tsx` | EDIT | Pass full imageUrls array |
-| **Catalog** | | |
-| `src/pages/salon/ServicesPage.tsx` | EDIT | Multi-select, bulk actions |
-| `src/components/catalog/SelectablePackageCard.tsx` | CREATE | Selectable package card |
-| `src/components/catalog/SelectableVoucherCard.tsx` | CREATE | Selectable voucher card |
-| `src/lib/catalog-utils.ts` | CREATE | Item usage checking |
-| **Promotions** | | |
-| `src/pages/salon/SettingsPage.tsx` | EDIT | Add Promotions tab |
-| **Theming** | | |
-| `src/lib/color.ts` | CREATE | Color contrast utilities |
-| `src/pages/booking/BookingPage.tsx` | EDIT | Global brand theme |
+| `src/pages/salon/ServicesPage.tsx` | EDIT | Status chips, 5-sec undo, maker-checker logic |
+| `src/components/catalog/BulkActionsBar.tsx` | EDIT | Conditional delete based on role |
+| `src/pages/salon/SettingsPage.tsx` | EDIT | Add Bin tab with restore/delete actions |
+| `src/hooks/useBinItems.tsx` | CREATE | Fetch soft-deleted items |
+| `src/hooks/useDeletionRequests.tsx` | CREATE | Manage deletion requests |
+| `src/components/dialogs/RequestDeleteDialog.tsx` | CREATE | Non-owner delete request modal |
+| `src/components/dialogs/DeleteConfirmDialog.tsx` | EDIT | Add undo countdown logic |
+| `src/hooks/usePublicCatalog.tsx` | EDIT | Exclude archived/deleted items |
+| `src/hooks/useServices.tsx` | EDIT | Filter out deleted_at IS NOT NULL |
+| `src/hooks/useProducts.tsx` | EDIT | Filter out deleted_at IS NOT NULL |
+| `src/hooks/usePackages.tsx` | EDIT | Filter out deleted_at IS NOT NULL |
+| `src/hooks/usePermissions.tsx` | EDIT | Add catalog:delete, catalog:request_delete |
+| Database migration | CREATE | Add soft delete columns, deletion requests table |
 
 ---
 
-## Database Migrations
+## UI Flow Diagrams
 
-```sql
--- Payment escrow
-ALTER TABLE payment_intents
-ADD COLUMN funds_status TEXT DEFAULT 'pending',
-ADD COLUMN released_at TIMESTAMP WITH TIME ZONE,
-ADD COLUMN refunded_at TIMESTAMP WITH TIME ZONE;
+### Owner Delete Flow
+```
+Owner clicks Delete
+         │
+         ▼
+┌─────────────────────┐
+│ Delete Confirmation │
+│ (type name/DELETE)  │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│ Toast: Deleting...  │
+│ [Undo (5s)]         │
+└─────────┬───────────┘
+          │ (5 seconds)
+          ▼
+┌─────────────────────┐
+│ Item → Bin          │
+│ "Sent to Bin"       │
+└─────────────────────┘
+```
 
-ALTER TABLE appointments
-ADD COLUMN confirmation_status TEXT DEFAULT 'auto';
+### Non-Owner Delete Flow
+```
+Manager clicks Delete
+         │
+         ▼
+┌─────────────────────────┐
+│ Request Deletion Dialog │
+│ • Enter reason          │
+│ • Submit to owner       │
+└─────────────┬───────────┘
+              │
+              ▼
+┌─────────────────────────┐
+│ Notification to Owners  │
+│ • View request details  │
+│ • [Approve] [Reject]    │
+└─────────────┬───────────┘
+              │
+    ┌─────────┴─────────┐
+    │                   │
+ Approve             Reject
+    │                   │
+    ▼                   ▼
+┌────────────┐    ┌────────────┐
+│ Item → Bin │    │ Request    │
+│            │    │ cancelled  │
+└────────────┘    └────────────┘
+```
 
--- Reschedule requests
-CREATE TABLE reschedule_requests (...);
-
--- Contact info
-ALTER TABLE tenants
-ADD COLUMN contact_phone TEXT,
-ADD COLUMN show_contact_on_booking BOOLEAN DEFAULT false;
-
-ALTER TABLE locations ADD COLUMN phone TEXT;
-
--- Flagging support
-ALTER TABLE services ADD COLUMN is_flagged BOOLEAN DEFAULT false;
-ALTER TABLE products ADD COLUMN is_flagged BOOLEAN DEFAULT false;
-ALTER TABLE packages ADD COLUMN is_flagged BOOLEAN DEFAULT false;
-ALTER TABLE vouchers ADD COLUMN is_flagged BOOLEAN DEFAULT false;
+### Bin Lifecycle
+```
+Item Soft Deleted
+         │
+         ▼
+┌─────────────────────┐
+│ BIN (7 days)        │
+│ • Can be restored   │
+│ • Can be deleted    │
+│   permanently       │
+└─────────────────────┘
+         │
+    ┌────┴────┐
+    │         │
+ Restore   7 days pass / Empty Bin
+    │         │
+    ▼         ▼
+┌────────┐  ┌────────────────────┐
+│ Active │  │ PERMANENTLY DELETED │
+│        │  │ (unrecoverable)     │
+└────────┘  └────────────────────┘
 ```
 
 ---
 
 ## Testing Checklist
 
-### Payment Flow
-- [ ] User can select Stripe or Paystack
-- [ ] Payment redirects to correct gateway
-- [ ] Successful payment with auto-confirm releases funds
-- [ ] Successful payment without auto-confirm holds funds
-- [ ] Salon can confirm/reject/reschedule/contact
-- [ ] Rejection triggers automatic refund
-- [ ] Failed payment shows clear error message
+### Maker-Checker
+- [ ] Owner can delete directly (goes to bin)
+- [ ] Manager sees "Request Deletion" instead of direct delete
+- [ ] Supervisor sees "Request Deletion"
+- [ ] Receptionist and Staff do not see delete option
+- [ ] Deletion request creates notification for owners
+- [ ] Owner can approve/reject deletion requests
+- [ ] Approved request moves item to bin
+- [ ] Rejected request notifies requester
 
-### Calendar
-- [ ] Closed days are grayed out and unclickable
-- [ ] Available days show brand-colored dot
-- [ ] Selecting valid date shows available times
-- [ ] No timezone-related date shift issues
+### Status Chips
+- [ ] Active items show no status chip (or green "Active")
+- [ ] Flagged items show yellow "Flagged" badge
+- [ ] Archived items show gray "Archived" badge
+- [ ] Deleted items in bin show red "In Bin" badge
 
-### Visuals
-- [ ] Item cards show images with hover slider
-- [ ] Banner auto-rotates every 30 seconds
-- [ ] Banner navigation appears on hover
-- [ ] Contact info shows when toggle enabled
-- [ ] Phone number is clickable (tel: link)
+### Soft Delete & Bin
+- [ ] Deleted items appear in Settings > Bin
+- [ ] Bin shows deletion date and countdown to permanent delete
+- [ ] "Restore" returns item to active status
+- [ ] "Delete Permanently" removes from database
+- [ ] "Empty Bin" clears all items (with confirmation)
+- [ ] Items auto-delete after 7 days
 
-### Catalog
-- [ ] Checkboxes appear on all item cards
-- [ ] Selecting items shows floating action bar
-- [ ] "Create Package" pre-fills package dialog
-- [ ] In-use items show warning dialog
-- [ ] Only owners can delete
-- [ ] Only owners/managers can archive
+### 5-Second Undo
+- [ ] Toast appears with countdown
+- [ ] Clicking "Undo" cancels deletion
+- [ ] After 5 seconds, item moves to bin
+- [ ] Toast changes to "Sent to Bin"
 
-### Theming
-- [ ] Continue button visible for light brand colors
-- [ ] Continue button visible for dark brand colors
-- [ ] All primary elements use brand color
-
+### Booking Exclusion
+- [ ] Active items appear on booking page
+- [ ] Archived items do not appear on booking page
+- [ ] Deleted items do not appear on booking page
+- [ ] Flagged + Active items still appear on booking page
