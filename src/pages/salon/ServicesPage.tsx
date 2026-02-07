@@ -255,6 +255,21 @@ export default function ServicesPage() {
     }).filter(Boolean) as Array<{ id: string; name: string; type: ItemType }>;
   }, [selectedItems, services, packages, products, vouchers]);
 
+  // Get selected items with prices for package creation
+  const preSelectedPackageItems = useMemo(() => {
+    return Array.from(selectedItems).map((id) => {
+      const service = services.find((s) => s.id === id);
+      if (service) {
+        return { id, type: "service" as const, name: service.name, price: Number(service.price) };
+      }
+      const product = products.find((p) => p.id === id);
+      if (product) {
+        return { id, type: "product" as const, name: product.name, price: Number(product.price) };
+      }
+      return null;
+    }).filter(Boolean) as Array<{ id: string; type: "service" | "product"; name: string; price: number }>;
+  }, [selectedItems, services, products]);
+
   // Handle Flag
   const handleFlag = async (reason: string) => {
     setIsProcessing(true);
@@ -846,8 +861,12 @@ export default function ServicesPage() {
       />
       <AddPackageDialog
         open={packageDialogOpen}
-        onOpenChange={setPackageDialogOpen}
+        onOpenChange={(isOpen) => {
+          setPackageDialogOpen(isOpen);
+          if (!isOpen) clearSelection();
+        }}
         onSuccess={refetchPackages}
+        preSelectedItems={preSelectedPackageItems}
       />
       <AddProductDialog
         open={productDialogOpen}

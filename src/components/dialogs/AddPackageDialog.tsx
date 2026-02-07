@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,19 +6,29 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Gift, Loader2, Save, Plus, Minus } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Gift, Loader2, Save, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useServices } from "@/hooks/useServices";
+import { useProducts } from "@/hooks/useProducts";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { formatCurrency, getCurrencySymbol } from "@/lib/currency";
 
+interface PreSelectedItem {
+  id: string;
+  type: "service" | "product";
+  name: string;
+  price: number;
+}
+
 interface AddPackageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  preSelectedItems?: PreSelectedItem[];
 }
 
 interface SelectedService {
@@ -28,11 +38,20 @@ interface SelectedService {
   quantity: number;
 }
 
-export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDialogProps) {
+interface SelectedProduct {
+  productId: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
+export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedItems = [] }: AddPackageDialogProps) {
   const { currentTenant } = useAuth();
   const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const { services, isLoading: servicesLoading } = useServices();
+  const { products, isLoading: productsLoading } = useProducts();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<"services" | "products">("services");
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -40,8 +59,46 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
     images: [] as string[],
   });
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
 
-  const originalPrice = selectedServices.reduce((sum, s) => sum + s.price * s.quantity, 0);
+  // Calculate original price from both services and products
+  const originalPrice = 
+    selectedServices.reduce((sum, s) => sum + s.price * s.quantity, 0) +
+    selectedProducts.reduce((sum, p) => sum + p.price * p.quantity, 0);
+
+  // Initialize with pre-selected items when dialog opens
+  useEffect(() => {
+    if (open && preSelectedItems.length > 0) {
+      const preSelectedServices: SelectedService[] = [];
+      const preSelectedProductsList: SelectedProduct[] = [];
+
+      preSelectedItems.forEach((item) => {
+        if (item.type === "service") {
+          preSelectedServices.push({
+            serviceId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: 1,
+          });
+        } else if (item.type === "product") {
+          preSelectedProductsList.push({
+            productId: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: 1,
+          });
+        }
+      });
+
+      setSelectedServices(preSelectedServices);
+      setSelectedProducts(preSelectedProductsList);
+      
+      // Switch to products tab if only products are selected
+      if (preSelectedServices.length === 0 && preSelectedProductsList.length > 0) {
+        setActiveTab("products");
+      }
+    }
+  }, [open, preSelectedItems]);
 
   const resetForm = () => {
     setFormData({
@@ -51,6 +108,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
       images: [],
     });
     setSelectedServices([]);
+    setSelectedProducts([]);
+    setActiveTab("services");
   };
 
   const toggleService = (service: { id: string; name: string; price: number }) => {
@@ -65,9 +124,27 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
     }
   };
 
-  const updateQuantity = (serviceId: string, delta: number) => {
+  const toggleProduct = (product: { id: string; name: string; price: number }) => {
+    const exists = selectedProducts.find((p) => p.productId === product.id);
+    if (exists) {
+      setSelectedProducts((prev) => prev.filter((p) => p.productId !== product.id));
+    } else {
+      setSelectedProducts((prev) => [
+        ...prev,
+        { productId: product.id, name: product.name, price: Number(product.price), quantity: 1 },
+      ]);
+    }
+  };
+
+  const updateServiceQuantity = (serviceId: string, delta: number) => {
     setSelectedServices((prev) =>
       prev.map((s) => (s.serviceId === serviceId ? { ...s, quantity: Math.max(1, s.quantity + delta) } : s)),
+    );
+  };
+
+  const updateProductQuantity = (productId: string, delta: number) => {
+    setSelectedProducts((prev) =>
+      prev.map((p) => (p.productId === productId ? { ...p, quantity: Math.max(1, p.quantity + delta) } : p)),
     );
   };
 
@@ -79,8 +156,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
       return;
     }
 
-    if (selectedServices.length === 0) {
-      toast({ title: "Error", description: "Please select at least one service", variant: "destructive" });
+    if (selectedServices.length === 0 && selectedProducts.length === 0) {
+      toast({ title: "Error", description: "Please select at least one service or product", variant: "destructive" });
       return;
     }
 
@@ -103,16 +180,30 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
 
       if (pkgError) throw pkgError;
 
-      // Create package items
-      const items = selectedServices.map((s) => ({
-        package_id: pkg.id,
-        service_id: s.serviceId,
-        quantity: s.quantity,
-      }));
+      // Create package items for services
+      if (selectedServices.length > 0) {
+        const serviceItems = selectedServices.map((s) => ({
+          package_id: pkg.id,
+          service_id: s.serviceId,
+          quantity: s.quantity,
+        }));
 
-      const { error: itemsError } = await supabase.from("package_items").insert(items);
+        const { error: serviceItemsError } = await supabase.from("package_items").insert(serviceItems);
+        if (serviceItemsError) throw serviceItemsError;
+      }
 
-      if (itemsError) throw itemsError;
+      // Create package items for products
+      if (selectedProducts.length > 0) {
+        const productItems = selectedProducts.map((p) => ({
+          package_id: pkg.id,
+          service_id: selectedServices[0]?.serviceId || services[0]?.id, // Fallback required by schema
+          product_id: p.productId,
+          quantity: p.quantity,
+        }));
+
+        const { error: productItemsError } = await supabase.from("package_items").insert(productItems);
+        if (productItemsError) throw productItemsError;
+      }
 
       toast({ title: "Success", description: "Package created successfully" });
       resetForm();
@@ -129,8 +220,13 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
   const savings = originalPrice - parseFloat(formData.price || "0");
   const savingsPercent = originalPrice > 0 ? Math.round((savings / originalPrice) * 100) : 0;
 
+  const totalItemsSelected = selectedServices.length + selectedProducts.length;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) resetForm();
+      onOpenChange(isOpen);
+    }}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
@@ -138,7 +234,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
           </div>
           <div>
             <DialogTitle className="text-xl">Create Package</DialogTitle>
-            <p className="text-sm text-muted-foreground">Bundle services together at a special price</p>
+            <p className="text-sm text-muted-foreground">Bundle services and products together at a special price</p>
           </div>
         </DialogHeader>
 
@@ -156,70 +252,164 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
             />
           </div>
 
-          {/* Select Services */}
+          {/* Select Items - Tabbed Interface */}
           <div className="space-y-2">
             <Label>
-              Included Services <span className="text-destructive">*</span>
-            </Label>
-            <ScrollArea className="h-48 rounded-md border p-2">
-              {servicesLoading ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                  Loading services...
-                </div>
-              ) : services.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                  No services available. Create some first.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {services.map((service) => {
-                    const selected = selectedServices.find((s) => s.serviceId === service.id);
-                    return (
-                      <div
-                        key={service.id}
-                        className={cn(
-                          "flex items-center justify-between p-2 rounded-lg border transition-colors",
-                          selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50",
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Checkbox checked={!!selected} onCheckedChange={() => toggleService(service)} />
-                          <div>
-                            <p className="font-medium text-sm">{service.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatCurrency(Number(service.price), currentTenant?.currency || "USD")} • {service.duration_minutes} mins
-                            </p>
-                          </div>
-                        </div>
-                        {selected && (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQuantity(service.id, -1)}
-                            >
-                              <Minus className="w-3 h-3" />
-                            </Button>
-                            <span className="w-8 text-center text-sm font-medium">{selected.quantity}</span>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => updateQuantity(service.id, 1)}
-                            >
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              Included Items <span className="text-destructive">*</span>
+              {totalItemsSelected > 0 && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({totalItemsSelected} selected)
+                </span>
               )}
-            </ScrollArea>
+            </Label>
+            
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "services" | "products")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="services" className="flex items-center gap-2">
+                  <Scissors className="w-4 h-4" />
+                  Services
+                  {selectedServices.length > 0 && (
+                    <span className="ml-1 text-xs bg-primary/20 px-1.5 py-0.5 rounded-full">
+                      {selectedServices.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="products" className="flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4" />
+                  Products
+                  {selectedProducts.length > 0 && (
+                    <span className="ml-1 text-xs bg-primary/20 px-1.5 py-0.5 rounded-full">
+                      {selectedProducts.length}
+                    </span>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="services" className="mt-2">
+                <ScrollArea className="h-48 rounded-md border p-2">
+                  {servicesLoading ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      Loading services...
+                    </div>
+                  ) : services.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      No services available. Create some first.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {services.map((service) => {
+                        const selected = selectedServices.find((s) => s.serviceId === service.id);
+                        return (
+                          <div
+                            key={service.id}
+                            className={cn(
+                              "flex items-center justify-between p-2 rounded-lg border transition-colors",
+                              selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50",
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Checkbox checked={!!selected} onCheckedChange={() => toggleService(service)} />
+                              <div>
+                                <p className="font-medium text-sm">{service.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatCurrency(Number(service.price), currentTenant?.currency || "USD")} • {service.duration_minutes} mins
+                                </p>
+                              </div>
+                            </div>
+                            {selected && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateServiceQuantity(service.id, -1)}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <span className="w-8 text-center text-sm font-medium">{selected.quantity}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateServiceQuantity(service.id, 1)}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="products" className="mt-2">
+                <ScrollArea className="h-48 rounded-md border p-2">
+                  {productsLoading ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      Loading products...
+                    </div>
+                  ) : products.length === 0 ? (
+                    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                      No products available. Create some first.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {products.map((product) => {
+                        const selected = selectedProducts.find((p) => p.productId === product.id);
+                        return (
+                          <div
+                            key={product.id}
+                            className={cn(
+                              "flex items-center justify-between p-2 rounded-lg border transition-colors",
+                              selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50",
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <Checkbox checked={!!selected} onCheckedChange={() => toggleProduct(product)} />
+                              <div>
+                                <p className="font-medium text-sm">{product.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatCurrency(Number(product.price), currentTenant?.currency || "USD")}
+                                  {product.stock_quantity !== undefined && ` • ${product.stock_quantity} in stock`}
+                                </p>
+                              </div>
+                            </div>
+                            {selected && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateProductQuantity(product.id, -1)}
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <span className="w-8 text-center text-sm font-medium">{selected.quantity}</span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => updateProductQuantity(product.id, 1)}
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Pricing Row */}
@@ -233,7 +423,6 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
                 Package Price ({currencySymbol}) <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
-                {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
                 <Input
                   type="number"
                   placeholder="0.00"
@@ -289,7 +478,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess }: AddPackageDi
             <Button
               type="submit"
               className="gap-2 w-full sm:w-auto"
-              disabled={isSubmitting || selectedServices.length === 0}
+              disabled={isSubmitting || totalItemsSelected === 0}
             >
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Create Package
