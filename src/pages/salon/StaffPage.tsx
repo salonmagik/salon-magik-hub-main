@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,17 +15,24 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle } from "lucide-react";
+import { 
+  UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
+  User, History, XCircle, CheckCircle, Trash, UserCog, Copy
+} from "lucide-react";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
+import { StaffDetailDialog } from "@/components/dialogs/StaffDetailDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
+import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PermissionsTab } from "@/components/staff/PermissionsTab";
@@ -55,9 +63,13 @@ function getInitials(name: string | undefined): string {
 }
 
 export default function StaffPage() {
+  const navigate = useNavigate();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedInvitationId, setSelectedInvitationId] = useState<string | null>(null);
+  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
+  const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [staffToDeactivate, setStaffToDeactivate] = useState<StaffMember | null>(null);
   const { staff, isLoading, refetch } = useStaff();
   const {
     invitations,
@@ -67,7 +79,7 @@ export default function StaffPage() {
     resendInvitation,
     canResend,
   } = useStaffInvitations();
-  const { user } = useAuth();
+  const { user, currentTenant } = useAuth();
 
   const currentUserIsOwner = staff.some(
     (s) => s.userId === user?.id && s.role === "owner"
@@ -89,6 +101,55 @@ export default function StaffPage() {
 
   const handleResend = async (id: string) => {
     await resendInvitation(id);
+  };
+
+  const handleDeactivateClick = (member: StaffMember) => {
+    setStaffToDeactivate(member);
+    setDeactivateDialogOpen(true);
+  };
+
+  const handleConfirmDeactivate = async () => {
+    if (!staffToDeactivate || !currentTenant?.id) return;
+    
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ is_active: false })
+        .eq("user_id", staffToDeactivate.userId)
+        .eq("tenant_id", currentTenant.id);
+
+      if (error) throw error;
+      
+      toast({ title: "Success", description: "Staff member deactivated" });
+      await refetch();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to deactivate", variant: "destructive" });
+    }
+    setStaffToDeactivate(null);
+  };
+
+  const handleReactivate = async (member: StaffMember) => {
+    if (!currentTenant?.id) return;
+    
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ is_active: true })
+        .eq("user_id", member.userId)
+        .eq("tenant_id", currentTenant.id);
+
+      if (error) throw error;
+      
+      toast({ title: "Success", description: "Staff member reactivated" });
+      await refetch();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to reactivate", variant: "destructive" });
+    }
+  };
+
+  const copyTempPassword = (password: string) => {
+    navigator.clipboard.writeText(password);
+    toast({ title: "Copied", description: "Temporary password copied to clipboard" });
   };
 
   return (
@@ -235,8 +296,14 @@ export default function StaffPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {staff.map((member) => (
-                          <TableRow key={member.userId}>
+                        {staff.map((member) => {
+                          const isActive = (member as any).isActive !== false;
+                          return (
+                          <TableRow 
+                            key={member.userId}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setSelectedStaff(member)}
+                          >
                             <TableCell>
                               <div className="flex items-center gap-3">
                                 <Avatar className="w-9 h-9">
@@ -262,11 +329,18 @@ export default function StaffPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={roleVariants[member.role]}>
-                                {roleLabels[member.role]}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={roleVariants[member.role]}>
+                                  {roleLabels[member.role]}
+                                </Badge>
+                                {!isActive && (
+                                  <Badge variant="outline" className="text-muted-foreground">
+                                    Inactive
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
                               {currentUserIsOwner && member.role !== "owner" && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -275,8 +349,42 @@ export default function StaffPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>Change Role</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setSelectedStaff(member)}>
+                                      <User className="w-4 h-4 mr-2" />
+                                      View Details
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => navigate(`/salon/audit-log?userId=${member.userId}`)}>
+                                      <History className="w-4 h-4 mr-2" />
+                                      View Activities
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem>
+                                      <Shield className="w-4 h-4 mr-2" />
+                                      Review Permissions
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem>
+                                      <UserCog className="w-4 h-4 mr-2" />
+                                      Change Role
+                                    </DropdownMenuItem>
+                                    {isActive ? (
+                                      <DropdownMenuItem 
+                                        onClick={() => handleDeactivateClick(member)}
+                                        className="text-destructive"
+                                      >
+                                        <XCircle className="w-4 h-4 mr-2" />
+                                        Deactivate
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem 
+                                        onClick={() => handleReactivate(member)}
+                                        className="text-success"
+                                      >
+                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                        Reactivate
+                                      </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem className="text-destructive">
+                                      <Trash className="w-4 h-4 mr-2" />
                                       Remove from Team
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -284,7 +392,8 @@ export default function StaffPage() {
                               )}
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -430,6 +539,22 @@ export default function StaffPage() {
         confirmLabel="Cancel Invitation"
         variant="destructive"
         onConfirm={handleConfirmCancel}
+      />
+
+      <ConfirmActionDialog
+        open={deactivateDialogOpen}
+        onOpenChange={setDeactivateDialogOpen}
+        title="Deactivate Staff Member"
+        description={`Are you sure you want to deactivate ${staffToDeactivate?.profile?.full_name || "this staff member"}? They will no longer be able to access the system.`}
+        confirmLabel="Deactivate"
+        variant="destructive"
+        onConfirm={handleConfirmDeactivate}
+      />
+
+      <StaffDetailDialog
+        open={!!selectedStaff}
+        onOpenChange={(open) => !open && setSelectedStaff(null)}
+        staff={selectedStaff}
       />
     </SalonSidebar>
   );

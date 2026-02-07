@@ -118,65 +118,29 @@ export default function AcceptInvitePage() {
     setIsLoading(true);
 
     try {
-      // 1. Create the user account
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: invitation.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/salon`,
-          data: {
-            first_name: invitation.first_name,
-            last_name: invitation.last_name,
-            full_name: `${invitation.first_name} ${invitation.last_name}`,
-          },
+      // Use the accept-staff-invitation edge function to create user with auto-confirmed email
+      const { data, error } = await supabase.functions.invoke("accept-staff-invitation", {
+        body: {
+          token: token,
+          password: formData.password,
         },
       });
 
-      if (signUpError) {
-        // User might already exist - try to sign in
-        if (signUpError.message.includes("already registered")) {
-          toast({
-            title: "Account exists",
-            description: "An account with this email already exists. Please sign in instead.",
-            variant: "destructive",
-          });
-          navigate(`/login?email=${encodeURIComponent(invitation.email)}`);
-          return;
-        }
-        throw signUpError;
+      if (error) {
+        throw new Error(error.message || "Failed to create account");
       }
 
-      const userId = signUpData.user?.id;
-      if (!userId) throw new Error("Failed to create account");
-
-      // 2. Create user role
-      const { error: roleError } = await supabase.from("user_roles").insert({
-        user_id: userId,
-        tenant_id: invitation.tenant_id,
-        role: invitation.role as any,
-      });
-
-      if (roleError) {
-        console.error("Role creation error:", roleError);
-        // Continue anyway - role might exist or will be created later
-      }
-
-      // 3. Update invitation status
-      const { error: updateError } = await supabase
-        .from("staff_invitations")
-        .update({ status: "accepted", accepted_at: new Date().toISOString() })
-        .eq("id", invitation.id);
-
-      if (updateError) {
-        console.error("Invitation update error:", updateError);
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
       toast({
         title: "Account created!",
-        description: "Please check your email to verify your account.",
+        description: "You can now sign in with your credentials.",
       });
 
-      navigate("/login");
+      // Redirect to login with email pre-filled
+      navigate(`/login?email=${encodeURIComponent(invitation.email)}`);
     } catch (error: any) {
       console.error("Accept invite error:", error);
       toast({

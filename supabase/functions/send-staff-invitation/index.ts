@@ -18,6 +18,25 @@ interface InvitationRequest {
   resend?: boolean;
 }
 
+// Generate secure temporary password
+function generateSecurePassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const specials = "!@#$%&*";
+  let password = "";
+  
+  // 8 alphanumeric chars
+  for (let i = 0; i < 8; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  
+  // 2 special chars
+  for (let i = 0; i < 2; i++) {
+    password += specials.charAt(Math.floor(Math.random() * specials.length));
+  }
+  
+  return password;
+}
+
 // Salon Magik Design System
 const STYLES = {
   primaryColor: "#2563EB",
@@ -35,6 +54,7 @@ function buildInvitationEmail(
   salonName: string,
   role: string,
   invitationLink: string,
+  tempPassword: string,
   salonLogoUrl?: string
 ): string {
   // Header with salon branding if available
@@ -92,6 +112,18 @@ function buildInvitationEmail(
                       font-weight: 500; font-size: 16px; font-family: ${STYLES.fontFamily};">
               Accept Invitation
             </a>
+          </div>
+
+          <div style="background-color: ${STYLES.surfaceColor}; padding: 16px; border-radius: 8px; margin: 24px 0;">
+            <p style="color: ${STYLES.textMuted}; font-size: 14px; margin: 0 0 8px 0; font-family: ${STYLES.fontFamily};">
+              <strong>Your temporary password:</strong>
+            </p>
+            <p style="color: ${STYLES.textColor}; font-size: 18px; font-family: monospace; margin: 0; letter-spacing: 1px; background-color: #fff; padding: 8px 12px; border-radius: 4px; display: inline-block;">
+              ${tempPassword}
+            </p>
+            <p style="color: ${STYLES.textLight}; font-size: 12px; margin: 12px 0 0 0; font-family: ${STYLES.fontFamily};">
+              You'll be prompted to change this after your first login.
+            </p>
           </div>
           
           <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
@@ -194,6 +226,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     let invitation: any;
     let inviteToken: string;
+    let tempPassword: string;
     let recipientEmail: string;
     let recipientFirstName: string;
     let recipientRole: string;
@@ -214,8 +247,9 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      // Generate new token and extend expiry
+      // Generate new token, temp password, and extend expiry
       inviteToken = crypto.randomUUID();
+      tempPassword = existingInvitation.temp_password || generateSecurePassword();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const { error: updateError } = await supabase
@@ -224,6 +258,7 @@ const handler = async (req: Request): Promise<Response> => {
           token: inviteToken,
           expires_at: expiresAt.toISOString(),
           status: "pending",
+          temp_password: tempPassword,
         })
         .eq("id", invitationId);
 
@@ -249,6 +284,7 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       inviteToken = crypto.randomUUID();
+      tempPassword = generateSecurePassword();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       const { data: newInvitation, error: insertError } = await supabase
@@ -263,6 +299,7 @@ const handler = async (req: Request): Promise<Response> => {
           expires_at: expiresAt.toISOString(),
           invited_by_id: userId,
           status: "pending",
+          temp_password: tempPassword,
         })
         .select()
         .single();
@@ -299,6 +336,7 @@ const handler = async (req: Request): Promise<Response> => {
       tenant.name,
       recipientRole,
       invitationLink,
+      tempPassword,
       tenant.logo_url || undefined
     );
 

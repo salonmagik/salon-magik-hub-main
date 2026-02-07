@@ -58,7 +58,6 @@ const settingsTabs = [
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "promotions", label: "Promotions", icon: Gift },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "roles", label: "Roles & Permissions", icon: Shield },
   { id: "subscription", label: "Subscription", icon: Zap },
 ];
 
