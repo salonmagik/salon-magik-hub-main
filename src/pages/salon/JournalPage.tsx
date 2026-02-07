@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,6 @@ import {
   Filter,
   Plus,
   MoreHorizontal,
-  Download,
   Check,
   X,
   Link2,
@@ -48,6 +48,7 @@ import {
 import { useJournal, JournalDirection, JournalCategory, JournalStatus, PaymentMethod } from "@/hooks/useJournal";
 import { useAuth } from "@/hooks/useAuth";
 import { AddJournalEntryDialog } from "@/components/dialogs/AddJournalEntryDialog";
+import { ExportDropdown } from "@/components/ExportDropdown";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -104,27 +105,47 @@ export default function JournalPage() {
 
   const currency = currentTenant?.currency || "USD";
 
-  const handleExport = () => {
-    const csvContent = [
-      ["Date", "Direction", "Amount", "Category", "Payment Method", "Description", "Customer", "Status"].join(","),
-      ...entries.map((entry) => [
-        format(new Date(entry.occurred_at), "yyyy-MM-dd HH:mm"),
-        entry.direction,
-        entry.amount,
-        entry.category,
-        entry.payment_method,
-        `"${entry.description || ""}"`,
-        entry.customer?.full_name || "",
-        entry.status,
-      ].join(","))
-    ].join("\n");
+  const handleExport = (format: "csv" | "xlsx") => {
+    const data = entries.map((entry) => ({
+      Date: format === "csv" 
+        ? new Date(entry.occurred_at).toISOString() 
+        : new Date(entry.occurred_at),
+      Direction: entry.direction,
+      Amount: entry.amount,
+      Category: entry.category,
+      "Payment Method": entry.payment_method,
+      Description: entry.description || "",
+      Customer: entry.customer?.full_name || "",
+      Status: entry.status,
+    }));
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `journal-export-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    a.click();
+    if (format === "csv") {
+      const csvContent = [
+        ["Date", "Direction", "Amount", "Category", "Payment Method", "Description", "Customer", "Status"].join(","),
+        ...entries.map((entry) => [
+          new Date(entry.occurred_at).toISOString().slice(0, 16).replace("T", " "),
+          entry.direction,
+          entry.amount,
+          entry.category,
+          entry.payment_method,
+          `"${entry.description || ""}"`,
+          entry.customer?.full_name || "",
+          entry.status,
+        ].join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `journal-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+    } else {
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Journal");
+      XLSX.writeFile(workbook, `journal-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
   };
 
   return (
@@ -139,10 +160,7 @@ export default function JournalPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
+            <ExportDropdown onExport={handleExport} disabled={entries.length === 0} />
             <Button onClick={() => setAddDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add Entry
