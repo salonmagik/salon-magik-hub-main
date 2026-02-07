@@ -232,6 +232,7 @@ export type Database = {
           amount_paid: number
           assigned_staff_id: string | null
           cancellation_reason: string | null
+          confirmation_status: string | null
           created_at: string
           created_by_id: string | null
           customer_id: string
@@ -260,6 +261,7 @@ export type Database = {
           amount_paid?: number
           assigned_staff_id?: string | null
           cancellation_reason?: string | null
+          confirmation_status?: string | null
           created_at?: string
           created_by_id?: string | null
           customer_id: string
@@ -288,6 +290,7 @@ export type Database = {
           amount_paid?: number
           assigned_staff_id?: string | null
           cancellation_reason?: string | null
+          confirmation_status?: string | null
           created_at?: string
           created_by_id?: string | null
           customer_id?: string
@@ -1156,6 +1159,7 @@ export type Database = {
           name: string
           opening_days: string[]
           opening_time: string
+          phone: string | null
           tenant_id: string
           timezone: string
           updated_at: string
@@ -1172,6 +1176,7 @@ export type Database = {
           name: string
           opening_days?: string[]
           opening_time?: string
+          phone?: string | null
           tenant_id: string
           timezone?: string
           updated_at?: string
@@ -1188,6 +1193,7 @@ export type Database = {
           name?: string
           opening_days?: string[]
           opening_time?: string
+          phone?: string | null
           tenant_id?: string
           timezone?: string
           updated_at?: string
@@ -1493,6 +1499,7 @@ export type Database = {
           description: string | null
           id: string
           image_urls: string[] | null
+          is_flagged: boolean | null
           name: string
           original_price: number | null
           price: number
@@ -1505,6 +1512,7 @@ export type Database = {
           description?: string | null
           id?: string
           image_urls?: string[] | null
+          is_flagged?: boolean | null
           name: string
           original_price?: number | null
           price: number
@@ -1517,6 +1525,7 @@ export type Database = {
           description?: string | null
           id?: string
           image_urls?: string[] | null
+          is_flagged?: boolean | null
           name?: string
           original_price?: number | null
           price?: number
@@ -1576,6 +1585,7 @@ export type Database = {
           currency: string
           customer_email: string
           customer_name: string | null
+          funds_status: string | null
           gateway: string
           gateway_reference: string | null
           id: string
@@ -1583,6 +1593,8 @@ export type Database = {
           metadata: Json | null
           paystack_access_code: string | null
           paystack_reference: string | null
+          refunded_at: string | null
+          released_at: string | null
           status: string
           stripe_session_id: string | null
           tenant_id: string
@@ -1595,6 +1607,7 @@ export type Database = {
           currency?: string
           customer_email: string
           customer_name?: string | null
+          funds_status?: string | null
           gateway: string
           gateway_reference?: string | null
           id?: string
@@ -1602,6 +1615,8 @@ export type Database = {
           metadata?: Json | null
           paystack_access_code?: string | null
           paystack_reference?: string | null
+          refunded_at?: string | null
+          released_at?: string | null
           status?: string
           stripe_session_id?: string | null
           tenant_id: string
@@ -1614,6 +1629,7 @@ export type Database = {
           currency?: string
           customer_email?: string
           customer_name?: string | null
+          funds_status?: string | null
           gateway?: string
           gateway_reference?: string | null
           id?: string
@@ -1621,6 +1637,8 @@ export type Database = {
           metadata?: Json | null
           paystack_access_code?: string | null
           paystack_reference?: string | null
+          refunded_at?: string | null
+          released_at?: string | null
           status?: string
           stripe_session_id?: string | null
           tenant_id?: string
@@ -1848,6 +1866,7 @@ export type Database = {
           description: string | null
           id: string
           image_urls: string[] | null
+          is_flagged: boolean | null
           name: string
           price: number
           status: Database["public"]["Enums"]["service_status"]
@@ -1860,6 +1879,7 @@ export type Database = {
           description?: string | null
           id?: string
           image_urls?: string[] | null
+          is_flagged?: boolean | null
           name: string
           price: number
           status?: Database["public"]["Enums"]["service_status"]
@@ -1872,6 +1892,7 @@ export type Database = {
           description?: string | null
           id?: string
           image_urls?: string[] | null
+          is_flagged?: boolean | null
           name?: string
           price?: number
           status?: Database["public"]["Enums"]["service_status"]
@@ -2006,6 +2027,47 @@ export type Database = {
           },
         ]
       }
+      reschedule_requests: {
+        Row: {
+          appointment_id: string
+          created_at: string | null
+          id: string
+          proposed_date: string
+          proposed_time: string
+          requested_by: string
+          responded_at: string | null
+          status: string | null
+        }
+        Insert: {
+          appointment_id: string
+          created_at?: string | null
+          id?: string
+          proposed_date: string
+          proposed_time: string
+          requested_by: string
+          responded_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          appointment_id?: string
+          created_at?: string | null
+          id?: string
+          proposed_date?: string
+          proposed_time?: string
+          requested_by?: string
+          responded_at?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reschedule_requests_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       role_permissions: {
         Row: {
           allowed: boolean
@@ -2107,6 +2169,7 @@ export type Database = {
           duration_minutes: number
           id: string
           image_urls: string[] | null
+          is_flagged: boolean | null
           name: string
           price: number
           status: Database["public"]["Enums"]["service_status"]
@@ -2123,6 +2186,7 @@ export type Database = {
           duration_minutes?: number
           id?: string
           image_urls?: string[] | null
+          is_flagged?: boolean | null
           name: string
           price: number
           status?: Database["public"]["Enums"]["service_status"]
@@ -2139,6 +2203,7 @@ export type Database = {
           duration_minutes?: number
           id?: string
           image_urls?: string[] | null
+          is_flagged?: boolean | null
           name?: string
           price?: number
           status?: Database["public"]["Enums"]["service_status"]
@@ -2458,6 +2523,7 @@ export type Database = {
           booking_status_message: string | null
           brand_color: string | null
           cancellation_grace_hours: number | null
+          contact_phone: string | null
           country: string
           created_at: string
           currency: string
@@ -2471,6 +2537,7 @@ export type Database = {
           pay_at_salon_enabled: boolean
           paystack_customer_code: string | null
           plan: Database["public"]["Enums"]["subscription_plan"]
+          show_contact_on_booking: boolean | null
           slot_capacity_default: number
           slug: string | null
           stripe_customer_id: string | null
@@ -2486,6 +2553,7 @@ export type Database = {
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
+          contact_phone?: string | null
           country: string
           created_at?: string
           currency?: string
@@ -2499,6 +2567,7 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
+          show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
           slug?: string | null
           stripe_customer_id?: string | null
@@ -2514,6 +2583,7 @@ export type Database = {
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
+          contact_phone?: string | null
           country?: string
           created_at?: string
           currency?: string
@@ -2527,6 +2597,7 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
+          show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
           slug?: string | null
           stripe_customer_id?: string | null
@@ -2707,6 +2778,7 @@ export type Database = {
           created_at: string
           expires_at: string | null
           id: string
+          is_flagged: boolean | null
           purchased_by_customer_id: string | null
           redeemed_by_customer_id: string | null
           status: string
@@ -2720,6 +2792,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          is_flagged?: boolean | null
           purchased_by_customer_id?: string | null
           redeemed_by_customer_id?: string | null
           status?: string
@@ -2733,6 +2806,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          is_flagged?: boolean | null
           purchased_by_customer_id?: string | null
           redeemed_by_customer_id?: string | null
           status?: string
@@ -2855,10 +2929,12 @@ export type Database = {
     Views: {
       public_booking_tenants: {
         Row: {
+          auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
           booking_status_message: string | null
           brand_color: string | null
           cancellation_grace_hours: number | null
+          contact_phone: string | null
           country: string | null
           currency: string | null
           default_deposit_percentage: number | null
@@ -2868,15 +2944,18 @@ export type Database = {
           name: string | null
           online_booking_enabled: boolean | null
           pay_at_salon_enabled: boolean | null
+          show_contact_on_booking: boolean | null
           slot_capacity_default: number | null
           slug: string | null
           timezone: string | null
         }
         Insert: {
+          auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
+          contact_phone?: never
           country?: string | null
           currency?: string | null
           default_deposit_percentage?: number | null
@@ -2886,15 +2965,18 @@ export type Database = {
           name?: string | null
           online_booking_enabled?: boolean | null
           pay_at_salon_enabled?: boolean | null
+          show_contact_on_booking?: boolean | null
           slot_capacity_default?: number | null
           slug?: string | null
           timezone?: string | null
         }
         Update: {
+          auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
+          contact_phone?: never
           country?: string | null
           currency?: string | null
           default_deposit_percentage?: number | null
@@ -2904,6 +2986,7 @@ export type Database = {
           name?: string | null
           online_booking_enabled?: boolean | null
           pay_at_salon_enabled?: boolean | null
+          show_contact_on_booking?: boolean | null
           slot_capacity_default?: number | null
           slug?: string | null
           timezone?: string | null

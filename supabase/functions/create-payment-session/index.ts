@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface PaymentRequest {
@@ -16,6 +16,7 @@ interface PaymentRequest {
   isDeposit: boolean;
   successUrl: string;
   cancelUrl: string;
+  preferredGateway?: "stripe" | "paystack"; // Allow user to select gateway
 }
 
 Deno.serve(async (req) => {
@@ -42,6 +43,7 @@ Deno.serve(async (req) => {
       isDeposit,
       successUrl,
       cancelUrl,
+      preferredGateway,
     } = body;
 
     // Validate required fields
@@ -66,9 +68,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Determine gateway based on region (Paystack for NG/GH, Stripe otherwise)
-    const usePaystack = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
+    // Determine gateway based on user preference or region
+    // User preference takes precedence, otherwise auto-detect
+    const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
                         ["NGN", "GHS"].includes(currency.toUpperCase());
+    const usePaystack = preferredGateway 
+      ? preferredGateway === "paystack" 
+      : isPaystackRegion;
 
     // Generate unique reference
     const reference = `sm_${appointmentId.substring(0, 8)}_${Date.now()}`;

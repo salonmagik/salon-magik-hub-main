@@ -5,6 +5,7 @@ import { useBookingCart } from "@/hooks/booking";
 import { formatCurrency } from "@/lib/currency";
 import { toast } from "@/hooks/use-toast";
 import { QuantityControl } from "./QuantityControl";
+import { ImageSlider } from "@/components/booking/ImageSlider";
 
 interface ItemCardProps {
   type: "service" | "package" | "product";
@@ -14,7 +15,7 @@ interface ItemCardProps {
   price: number;
   originalPrice?: number;
   currency: string;
-  imageUrl?: string | null;
+  imageUrls?: string[];
   durationMinutes?: number;
   stockQuantity?: number;
 }
@@ -27,6 +28,7 @@ export function ItemCard({
   price,
   originalPrice,
   currency,
+  imageUrls = [],
   durationMinutes,
   stockQuantity,
 }: ItemCardProps) {
@@ -90,36 +92,47 @@ export function ItemCard({
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
 
   return (
-    <div className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[160px]">
-      {/* Header: Type + Price */}
-      <div className="flex items-start justify-between mb-2">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          {typeLabel}
-        </span>
-        <div className="text-right">
-          <span className="font-bold text-base">
-            {formatCurrency(price, currency)}
-          </span>
-          {hasDiscount && (
-            <div className="flex items-center gap-1.5 justify-end mt-0.5">
-              <span className="text-xs text-muted-foreground line-through">
-                {formatCurrency(originalPrice, currency)}
+    <div className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px]">
+      {/* Image + Content Row */}
+      <div className="flex gap-3 mb-3">
+        {/* Image Slider */}
+        <div className="w-20 h-20 shrink-0">
+          <ImageSlider images={imageUrls} alt={name} className="w-20 h-20" />
+        </div>
+        
+        {/* Header + Name */}
+        <div className="flex-1 min-w-0">
+          {/* Type + Price */}
+          <div className="flex items-start justify-between mb-1">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              {typeLabel}
+            </span>
+            <div className="text-right">
+              <span className="font-bold text-base">
+                {formatCurrency(price, currency)}
               </span>
-              <Badge variant="destructive" className="text-xs px-1 py-0">
-                -{discountPercent}%
-              </Badge>
+              {hasDiscount && (
+                <div className="flex items-center gap-1.5 justify-end mt-0.5">
+                  <span className="text-xs text-muted-foreground line-through">
+                    {formatCurrency(originalPrice, currency)}
+                  </span>
+                  <Badge variant="destructive" className="text-xs px-1 py-0">
+                    -{discountPercent}%
+                  </Badge>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Name */}
+          <h3 className="font-semibold text-base line-clamp-1">{name}</h3>
+
+          {/* Description */}
+          {description && (
+            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{description}</p>
           )}
         </div>
       </div>
-
-      {/* Name */}
-      <h3 className="font-semibold text-base line-clamp-1">{name}</h3>
-
-      {/* Description */}
-      {description && (
-        <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{description}</p>
-      )}
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -157,8 +170,11 @@ export function ItemCard({
             size="sm"
             onClick={handleAddToCart}
             disabled={isOutOfStock}
-            className="gap-1.5 shrink-0 text-white border-0"
-            style={{ backgroundColor: isOutOfStock ? undefined : 'var(--brand-color)' }}
+            className="gap-1.5 shrink-0 border-0"
+            style={{ 
+              backgroundColor: isOutOfStock ? undefined : 'var(--brand-color)',
+              color: isOutOfStock ? undefined : 'var(--brand-foreground, white)',
+            }}
           >
             <ShoppingBag className="h-4 w-4" />
             Add

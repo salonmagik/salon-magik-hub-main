@@ -28,7 +28,7 @@ type CatalogItem = {
   description: string | null;
   price: number;
   originalPrice?: number;
-  imageUrl?: string | null;
+  imageUrls: string[];
   durationMinutes?: number;
   stockQuantity?: number;
   type: "service" | "package" | "product";
@@ -54,7 +54,7 @@ export function CatalogView({
       name: s.name,
       description: s.description,
       price: Number(s.price),
-      imageUrl: s.image_urls?.[0],
+      imageUrls: s.image_urls || [],
       durationMinutes: s.duration_minutes,
       type: "service" as const,
       categoryId: s.category_id,
@@ -66,7 +66,7 @@ export function CatalogView({
       description: p.description,
       price: Number(p.price),
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
-      imageUrl: p.image_urls?.[0],
+      imageUrls: p.image_urls || [],
       type: "package" as const,
     }));
 
@@ -75,7 +75,7 @@ export function CatalogView({
       name: p.name,
       description: p.description,
       price: Number(p.price),
-      imageUrl: p.image_urls?.[0],
+      imageUrls: p.image_urls || [],
       stockQuantity: p.stock_quantity,
       type: "product" as const,
     }));
@@ -160,7 +160,7 @@ export function CatalogView({
             price={item.price}
             originalPrice={item.originalPrice}
             currency={currency}
-            imageUrl={item.imageUrl}
+            imageUrls={item.imageUrls}
             durationMinutes={item.durationMinutes}
             stockQuantity={item.stockQuantity}
           />

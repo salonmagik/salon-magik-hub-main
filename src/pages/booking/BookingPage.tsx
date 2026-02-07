@@ -10,6 +10,7 @@ import { SalonHeader } from "./components/SalonHeader";
 import { CatalogView } from "./components/CatalogView";
 import { BookingWizard } from "./components/BookingWizard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { isLightColor } from "@/lib/color";
 
 function BookingPageContent() {
   const { slug } = useParams<{ slug: string }>();
@@ -31,6 +32,23 @@ function BookingPageContent() {
       document.title = "SalonMagik";
     };
   }, [salon?.name]);
+
+  // Apply brand color theming with proper contrast
+  useEffect(() => {
+    if (!salon?.brand_color) return;
+
+    const root = document.documentElement;
+    const brandColor = salon.brand_color;
+    const textColor = isLightColor(brandColor) ? '#1a1a1a' : '#ffffff';
+    
+    root.style.setProperty('--brand-color', brandColor);
+    root.style.setProperty('--brand-foreground', textColor);
+    
+    return () => {
+      root.style.removeProperty('--brand-color');
+      root.style.removeProperty('--brand-foreground');
+    };
+  }, [salon?.brand_color]);
 
   if (isLoading) {
     return (

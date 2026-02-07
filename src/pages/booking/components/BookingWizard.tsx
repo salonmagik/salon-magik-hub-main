@@ -249,10 +249,9 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         });
 
         if (paymentResponse.data?.checkoutUrl) {
-          toast({
-            title: "Payment would be required",
-            description: `Amount: ${formatCurrency(amountDueNow, salon.currency)}. Payment integration coming soon.`,
-          });
+          // Redirect to payment gateway
+          window.location.href = paymentResponse.data.checkoutUrl;
+          return; // Stop here - don't proceed to confirmation until payment is complete
         }
       }
 
@@ -452,8 +451,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting}
-                  className="text-white border-0"
-                  style={{ backgroundColor: "var(--brand-color)" }}
+                  className="border-0"
+                  style={{ 
+                    backgroundColor: "var(--brand-color)",
+                    color: "var(--brand-foreground, white)",
+                  }}
                 >
                   {isSubmitting
                     ? "Submitting..."
@@ -465,8 +467,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 <Button
                   onClick={handleNext}
                   disabled={step === "cart" && items.length === 0}
-                  className="text-white border-0"
-                  style={{ backgroundColor: "var(--brand-color)" }}
+                  className="border-0"
+                  style={{ 
+                    backgroundColor: "var(--brand-color)",
+                    color: "var(--brand-foreground, white)",
+                  }}
                 >
                   Continue
                   <ChevronRight className="h-4 w-4 ml-1" />
