@@ -1,496 +1,162 @@
 
-# Staff Invitation Overhaul, Add Salon Flow & Hardcoded Data Fix Plan
+# Staff Invitation Flow Redesign Plan
 
-## Summary of All Changes
+## Current Problem
 
-1. **Staff email confirmation uses Salon Magik backend** - Replace Supabase's default confirm email with custom branded flow
-2. **Temporary password for staff invitations** - Generate a temp password, display on pending invitation, invalidate after password change
-3. **Skip onboarding for invited staff** - Direct to dashboard after password update
-4. **Add Salon from Salons Overview** - "Add a Salon" CTA with tier/quota validation and Stripe billing upgrade flow
-5. **Fix hardcoded values** - Communication credits, trial countdown, user name/email in sidebar
-6. **Remove "Roles & Permissions" from Settings** - Already exists in Staff module
-7. **Team member details modal and actions** - View details, deactivate, view activities, review permissions
+The current implementation sends invited staff to `/accept-invite?token=...` which validates the invitation token. However:
+1. The token validation is failing due to environment/URL mismatches
+2. The flow is overly complex - staff shouldn't need to "accept" anything
+3. The temp password is already the validation mechanism
+
+## Desired Flow (Per User Requirements)
+
+```text
++------------------+     +------------------+     +------------------+     +------------------+
+| Staff receives   | --> | Staff goes to    | --> | Login with temp  | --> | Forced password  |
+| invitation email |     | /login directly  |     | password works   |     | change prompt    |
++------------------+     +------------------+     +------------------+     +------------------+
+                                                         |
+                                                         v
+                                               +------------------+
+                                               | Full access to   |
+                                               | salon dashboard  |
+                                               +------------------+
+```
+
+Key changes:
+1. **Email link goes to `/login`** (not `/accept-invite`)
+2. **User account created at invitation time** (not on accept)
+3. **Login validates temp password** with 7-day expiry
+4. **Forced password change** after first login with temp password
+5. **No token validation page needed** - temp password IS the validation
 
 ---
 
-## Part 1: Custom Email Confirmation for Staff
+## Implementation Details
 
-### Problem
-Staff currently receive Supabase/Lovable's default confirmation email when accepting invitations, not Salon Magik branded emails.
+### 1. Modify `send-staff-invitation` Edge Function
 
-### Solution
-Modify the invitation acceptance flow to:
-1. Create user without requiring email verification (since they received the invitation email as proof of ownership)
-2. OR trigger custom `send-email-verification` edge function with Salon Magik branding
+When creating an invitation:
+- **Create the user account immediately** via `supabase.auth.admin.createUser()`
+- Set temp password as the actual password
+- Auto-confirm email (invitation proves ownership)
+- Create profile and user_role records
+- Set `user_metadata.requires_password_change = true`
 
-### Implementation
+The email then simply directs them to `/login` with credentials pre-filled (or just shares the temp password).
 
-**Option A (Recommended): Skip email verification for invited staff**
-
-Since the staff received the invitation email, that acts as verification of email ownership. We can:
-1. Create the user account
-2. Auto-confirm their email via admin API
-3. Sign them in immediately
-
-Update `AcceptInvitePage.tsx`:
+**Changes:**
 ```typescript
-// Use service role to auto-confirm email for invited users
-// The invitation email itself is proof of email ownership
-const { data, error } = await supabase.functions.invoke("accept-staff-invitation", {
-  body: {
-    token: invitationToken,
-    password: formData.password,
+// In send-staff-invitation/index.ts
+
+// After generating temp password, CREATE the user immediately
+const { data: userData, error: createError } = await serviceRoleClient.auth.admin.createUser({
+  email: recipientEmail,
+  password: tempPassword,
+  email_confirm: true,
+  user_metadata: {
+    first_name: firstName,
+    last_name: lastName,
+    full_name: `${firstName} ${lastName}`,
+    requires_password_change: true, // Flag for forced password change
+    invited_via: 'staff_invitation',
   },
 });
-```
 
-**New Edge Function: `accept-staff-invitation`**
-- Uses service role to create user
-- Auto-confirms email via `supabase.auth.admin.updateUserById()`
-- Creates user_role and profile
-- Updates invitation status
-- Returns session for auto-login
+// Create profile
+await serviceRoleClient.from("profiles").insert({
+  user_id: userData.user.id,
+  full_name: `${firstName} ${lastName}`,
+});
 
----
+// Create role
+await serviceRoleClient.from("user_roles").insert({
+  user_id: userData.user.id,
+  tenant_id: tenantId,
+  role: role,
+  is_active: true,
+});
 
-## Part 2: Temporary Password System for Staff Invitations
-
-### Current Flow
-1. Invite sent with link
-2. Staff clicks link and creates password
-3. Staff must verify email (Supabase default)
-4. Staff logs in
-
-### New Flow
-1. Invite sent with link AND temporary password
-2. Staff can log in with temp password immediately
-3. On first login with temp password, forced to change password
-4. After password change, temp password is invalidated
-5. No email verification needed (invitation is proof)
-
-### Database Changes
-
-Add columns to `staff_invitations` table:
-```sql
-ALTER TABLE staff_invitations
-ADD COLUMN temp_password_hash TEXT,
-ADD COLUMN temp_password_used BOOLEAN DEFAULT false,
-ADD COLUMN password_changed_at TIMESTAMP WITH TIME ZONE;
-```
-
-### Implementation
-
-**Update `send-staff-invitation` edge function:**
-```typescript
-// Generate random temporary password
-const tempPassword = generateSecurePassword(); // e.g., "S@l0n!X7k9"
-
-// Hash it for storage (don't store plain text)
-const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
-
-// Store in invitation record
+// Update invitation with user_id reference
 await supabase.from("staff_invitations").update({
-  temp_password_hash: tempPasswordHash,
+  user_id: userData.user.id, // Link invitation to created user
 }).eq("id", invitation.id);
-
-// Include in email (plain text for user to copy)
-// Also return in response for UI display
 ```
 
-**Update Pending Invitations UI:**
-```tsx
-// Show temp password with copy button if not yet used
-{!invitation.temp_password_used && invitation.temp_password && (
-  <div className="flex items-center gap-2 mt-2">
-    <span className="text-xs font-mono bg-muted px-2 py-1 rounded">
-      {invitation.temp_password}
-    </span>
-    <Button size="sm" variant="ghost" onClick={() => copyToClipboard(invitation.temp_password)}>
-      <Copy className="w-3 h-3" />
-    </Button>
-  </div>
-)}
+### 2. Update Email Template
 
-{invitation.password_changed_at && (
-  <Badge variant="outline" className="text-xs text-muted-foreground">
-    Password updated
-  </Badge>
-)}
-```
-
-**New Login Flow for Temp Passwords:**
-1. Staff logs in with email + temp password
-2. Backend validates temp password against hash
-3. If valid, creates session BUT marks `requiresPasswordChange: true`
-4. Frontend detects this flag and shows password change modal
-5. After password change, `password_changed_at` is set and temp password becomes invalid
-
-**Password Change Enforcement:**
-```tsx
-// In useAuth or ProtectedRoute
-if (session?.user?.user_metadata?.requires_password_change) {
-  // Show forced password change dialog
-  return <ForcePasswordChangeDialog />;
-}
-```
-
----
-
-## Part 3: Skip Onboarding for Invited Staff
-
-### Current Flow
-Invited staff go through the same onboarding as new users creating their own salon.
-
-### New Flow
-1. Invited staff accepts invitation
-2. User account is created with role already assigned
-3. Staff is redirected directly to dashboard (not onboarding)
-4. If using temp password, shown password change dialog first
-
-### Implementation
-
-**Check in `ProtectedRoute.tsx` or `App.tsx`:**
-```typescript
-// Check if user has any tenant roles
-const { data: roles } = await supabase
-  .from("user_roles")
-  .select("tenant_id")
-  .eq("user_id", user.id);
-
-// If user has roles, they were invited - skip onboarding
-if (roles && roles.length > 0) {
-  navigate("/salon");
-} else {
-  // No roles = new user needs onboarding
-  navigate("/onboarding");
-}
-```
-
-**Update `AcceptInvitePage.tsx`:**
-```typescript
-// After successful invitation acceptance
-toast({ title: "Welcome!", description: "Your account has been set up." });
-
-// Redirect to salon (not onboarding)
-navigate("/salon");
-```
-
----
-
-## Part 4: Add Salon from Salons Overview
-
-### Current State
-Salons Overview page shows existing locations but no way to add new ones.
-
-### New Flow
-1. "Add a Salon" button on Salons Overview
-2. Check current plan limits (solo: 1, studio: 1, chain: X)
-3. If at limit:
-   - Solo/Studio: Show upgrade modal to select Chain tier
-   - Chain at limit: Show add-on purchase for more locations
-4. Payment via Stripe Checkout
-5. On success: Show invoice, unlock location slot
-6. On failure: Show retry with card update option
-
-### Implementation
-
-**UI Components:**
-
-1. **AddSalonButton** in `SalonsOverviewPage.tsx`:
-```tsx
-<Button onClick={handleAddSalon} className="gap-2">
-  <Plus className="w-4 h-4" />
-  Add a Salon
-</Button>
-```
-
-2. **AddSalonDialog** (or modal):
-   - Checks `currentTenant.plan` and current location count
-   - If can add: Show location form
-   - If at limit: Show upgrade prompt
-
-3. **UpgradePlanModal**:
-   - For Solo/Studio: Select Chain plan
-   - For Chain: Select additional locations (e.g., +1, +3, +5)
-   - Shows pricing breakdown
-   - Confirms billing details
-
-4. **Stripe Checkout Integration**:
-```typescript
-// Create checkout session for plan upgrade or location add-on
-const { data } = await supabase.functions.invoke("create-checkout-session", {
-  body: {
-    type: "plan_upgrade", // or "location_addon"
-    targetPlan: "chain",
-    additionalLocations: 2, // for add-ons
-  },
-});
-
-// Redirect to Stripe
-window.location.href = data.url;
-```
-
-**Edge Function: `create-checkout-session`**
-
-Already exists - may need updates to handle:
-- Plan upgrades
-- Location add-on purchases
-
-**Webhook Handler Updates:**
-- On successful upgrade: Update `tenants.plan`
-- On location add-on: Increment `plan_limits.max_locations` for tenant or track in separate table
-
-### Plan Limit Checking
+Change the invitation link from `/accept-invite?token=...` to `/login`:
 
 ```typescript
-const { data: planLimits } = await supabase
-  .from("plan_limits")
-  .select("max_locations")
-  .eq("plan_id", currentPlanId)
-  .single();
+const invitationLink = `${baseUrl}/login`;
 
-const { count: currentLocations } = await supabase
-  .from("locations")
-  .select("id", { count: "exact", head: true })
-  .eq("tenant_id", currentTenant.id);
-
-const canAddLocation = currentLocations < planLimits.max_locations;
+// Email now says:
+// "Your login email: staff@example.com"
+// "Your temporary password: XyZ123#$"
+// "Click here to sign in: [Login Button]"
+// "You'll be prompted to set a permanent password on first login."
 ```
 
----
+### 3. Add Database Column
 
-## Part 5: Fix Hardcoded Values
+Add `user_id` column to `staff_invitations` to track the created user:
 
-### 5.1 Communication Credits in Sidebar/Dashboard
-
-**Current State:** Some displays show hardcoded values.
-
-**Fix:** All credit displays already use `useMessagingCredits` hook which fetches from database. Verify:
-- `MessagingPage.tsx` ✓ (uses `stats.creditsRemaining`)
-- `SalonDashboard.tsx` ✓ (uses `stats.communicationCredits`)
-
-### 5.2 Trial Countdown in Sidebar
-
-**Current State:** `SalonSidebar.tsx` already fetches from `currentTenant.trial_ends_at`:
-```typescript
-const daysLeft = Math.ceil(
-  (new Date(currentTenant.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-);
-return { emoji: "⏰", label: `Trial (${daysLeft}d)` };
-```
-✓ Already dynamic
-
-### 5.3 Name and Email in Sidebar
-
-**Current State:** Hardcoded as "Agatha Ambrose" and "agathambrose@gmail.com":
-```tsx
-// Lines 323-334 in SalonSidebar.tsx
-<div className="w-8 h-8 bg-white/20 text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
-  A
-</div>
-{(isExpanded || isMobileOpen) && (
-  <div className="flex-1 min-w-0">
-    <p className="text-sm font-medium truncate text-white">
-      Agatha Ambrose  // HARDCODED
-    </p>
-    <p className="text-xs text-white/70 truncate">
-      agathambrose@gmail.com  // HARDCODED
-    </p>
-  </div>
-)}
-```
-
-**Fix:** Use `profile` and `user` from `useAuth`:
-```tsx
-const { user, profile } = useAuth();
-
-const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
-const displayEmail = user?.email || "";
-const initials = displayName
-  .split(" ")
-  .map((n) => n[0])
-  .join("")
-  .toUpperCase()
-  .slice(0, 2);
-
-// In JSX:
-<div className="w-8 h-8 bg-white/20 text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
-  {initials}
-</div>
-{(isExpanded || isMobileOpen) && (
-  <div className="flex-1 min-w-0">
-    <p className="text-sm font-medium truncate text-white">{displayName}</p>
-    <p className="text-xs text-white/70 truncate">{displayEmail}</p>
-  </div>
-)}
-```
-
----
-
-## Part 6: Remove "Roles & Permissions" from Settings
-
-### Current State
-Settings has a "Roles & Permissions" tab that duplicates functionality in Staff module.
-
-### Fix
-Remove from `settingsTabs` array in `SettingsPage.tsx`:
-
-```typescript
-// REMOVE this line:
-{ id: "roles", label: "Roles & Permissions", icon: Shield },
-
-// REMOVE the renderRolesTab function (lines 1259-1293)
-```
-
-Update the tab rendering logic to skip the roles case.
-
----
-
-## Part 7: Team Member Details & Actions
-
-### Current State
-Team members table has minimal actions (Change Role, Remove from Team).
-
-### New Features
-
-1. **Details Modal** - Click row to open full profile view
-2. **Actions Menu** (3-dot):
-   - View Details
-   - View Activities (audit log filtered by user)
-   - Review Permissions (add/remove access)
-   - Deactivate (soft-disable account)
-
-### Implementation
-
-**StaffDetailDialog.tsx:**
-```tsx
-interface StaffDetailDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  staff: StaffMember;
-}
-
-export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Team Member Details</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          {/* Avatar and name */}
-          <div className="flex items-center gap-4">
-            <Avatar className="w-16 h-16">
-              <AvatarImage src={staff.profile?.avatar_url} />
-              <AvatarFallback>{getInitials(staff.profile?.full_name)}</AvatarFallback>
-            </Avatar>
-            <div>
-              <h3 className="font-semibold text-lg">{staff.profile?.full_name}</h3>
-              <Badge>{roleLabels[staff.role]}</Badge>
-            </div>
-          </div>
-          
-          {/* Contact info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Email</p>
-              <p>{staff.email || "—"}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Phone</p>
-              <p>{staff.profile?.phone || "—"}</p>
-            </div>
-          </div>
-          
-          {/* Status */}
-          <div>
-            <p className="text-sm text-muted-foreground">Status</p>
-            <Badge variant={staff.isActive ? "success" : "destructive"}>
-              {staff.isActive ? "Active" : "Deactivated"}
-            </Badge>
-          </div>
-          
-          {/* Activity summary */}
-          <div>
-            <p className="text-sm text-muted-foreground">Last Activity</p>
-            <p>{staff.lastActivityAt ? formatDistanceToNow(new Date(staff.lastActivityAt)) : "Never"}</p>
-          </div>
-        </div>
-        
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-```
-
-**Updated Actions Menu:**
-```tsx
-<DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="ghost" size="icon" className="h-8 w-8">
-      <MoreHorizontal className="w-4 h-4" />
-    </Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent align="end">
-    <DropdownMenuItem onClick={() => setSelectedStaff(member)}>
-      <User className="w-4 h-4 mr-2" />
-      View Details
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => navigate(`/salon/audit-log?userId=${member.userId}`)}>
-      <History className="w-4 h-4 mr-2" />
-      View Activities
-    </DropdownMenuItem>
-    <DropdownMenuItem onClick={() => openPermissionsReview(member)}>
-      <Shield className="w-4 h-4 mr-2" />
-      Review Permissions
-    </DropdownMenuItem>
-    <DropdownMenuSeparator />
-    <DropdownMenuItem onClick={() => handleRoleChange(member)}>
-      <UserCog className="w-4 h-4 mr-2" />
-      Change Role
-    </DropdownMenuItem>
-    <DropdownMenuItem 
-      onClick={() => handleDeactivate(member)}
-      className={member.isActive ? "text-destructive" : "text-success"}
-    >
-      {member.isActive ? (
-        <>
-          <XCircle className="w-4 h-4 mr-2" />
-          Deactivate
-        </>
-      ) : (
-        <>
-          <CheckCircle className="w-4 h-4 mr-2" />
-          Reactivate
-        </>
-      )}
-    </DropdownMenuItem>
-    <DropdownMenuItem className="text-destructive" onClick={() => handleRemove(member)}>
-      <Trash className="w-4 h-4 mr-2" />
-      Remove from Team
-    </DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>
-```
-
-**Row Click Handler:**
-```tsx
-<TableRow 
-  key={member.userId} 
-  className="cursor-pointer hover:bg-muted/50"
-  onClick={() => setSelectedStaff(member)}
->
-```
-
-### Database: Staff Deactivation
-
-Add `is_active` column to `user_roles` or create separate tracking:
 ```sql
-ALTER TABLE user_roles ADD COLUMN is_active BOOLEAN DEFAULT true;
+ALTER TABLE staff_invitations ADD COLUMN user_id uuid REFERENCES auth.users(id);
 ```
+
+### 4. Create Forced Password Change Flow
+
+**New Component: `ForcePasswordChangeDialog.tsx`**
+- Modal that appears when `user_metadata.requires_password_change === true`
+- Cannot be dismissed until password is changed
+- On success: Clears the flag via edge function
+
+**Changes to `useAuth.tsx`:**
+```typescript
+// Add to AuthState interface
+requiresPasswordChange: boolean;
+
+// In auth state change handler
+requiresPasswordChange: session.user.user_metadata?.requires_password_change === true,
+```
+
+**New Edge Function: `complete-password-change`**
+- Validates new password meets requirements
+- Updates user password via admin API
+- Clears `requires_password_change` flag from metadata
+- Updates `staff_invitations.password_changed_at`
+
+### 5. Handle Temp Password Expiry
+
+On login failure, check if the user was invited but temp password expired:
+
+```typescript
+// In LoginPage.tsx handleEmailSubmit
+if (error?.message === "Invalid login credentials") {
+  // Check if this email has an expired invitation
+  const { data } = await supabase.functions.invoke("check-temp-password-status", {
+    body: { email }
+  });
+  
+  if (data?.expired) {
+    toast({
+      title: "Temporary password expired",
+      description: "Your invitation has expired. Please contact your salon administrator for a new invitation.",
+      variant: "destructive",
+    });
+    return;
+  }
+}
+```
+
+### 6. Mark Invitation as Accepted
+
+When user successfully logs in with temp password and changes it:
+- `staff_invitations.status` = 'accepted'
+- `staff_invitations.accepted_at` = now()
+- `staff_invitations.password_changed_at` = now()
+- `staff_invitations.temp_password_used` = true
 
 ---
 
@@ -498,91 +164,65 @@ ALTER TABLE user_roles ADD COLUMN is_active BOOLEAN DEFAULT true;
 
 | File | Action | Description |
 |------|--------|-------------|
-| `supabase/functions/accept-staff-invitation/index.ts` | CREATE | Handle invitation acceptance with auto-confirm |
-| `supabase/functions/send-staff-invitation/index.ts` | EDIT | Generate and store temp password |
-| `src/pages/auth/AcceptInvitePage.tsx` | EDIT | Use new edge function, redirect to salon |
-| `src/components/layout/SalonSidebar.tsx` | EDIT | Fix hardcoded name/email |
-| `src/pages/salon/SettingsPage.tsx` | EDIT | Remove Roles & Permissions tab |
-| `src/pages/salon/SalonsOverviewPage.tsx` | EDIT | Add "Add a Salon" button and flow |
-| `src/pages/salon/StaffPage.tsx` | EDIT | Add details modal, enhanced actions |
-| `src/components/dialogs/StaffDetailDialog.tsx` | CREATE | Staff member detail view |
-| `src/components/dialogs/AddSalonDialog.tsx` | CREATE | Add new salon form with tier checking |
-| `src/components/dialogs/UpgradePlanModal.tsx` | CREATE | Plan upgrade/location purchase flow |
-| `src/hooks/useStaffInvitations.tsx` | EDIT | Include temp password fields |
-| `src/hooks/useAuth.tsx` | EDIT | Check for requires_password_change flag |
-| `supabase/migrations/YYYYMMDDHHMMSS_add_temp_password_to_invitations.sql` | CREATE | Add temp password columns |
+| `supabase/functions/send-staff-invitation/index.ts` | EDIT | Create user account at invitation time, change email link to `/login` |
+| `supabase/functions/accept-staff-invitation/index.ts` | DELETE | No longer needed - user created at invite time |
+| `supabase/functions/validate-staff-invitation/index.ts` | DELETE | No longer needed - no token validation required |
+| `supabase/functions/complete-password-change/index.ts` | CREATE | Handle forced password change |
+| `src/pages/auth/AcceptInvitePage.tsx` | DELETE | No longer needed |
+| `src/App.tsx` | EDIT | Remove `/accept-invite` route |
+| `src/pages/auth/LoginPage.tsx` | EDIT | Check for expired temp password on login failure |
+| `src/hooks/useAuth.tsx` | EDIT | Add `requiresPasswordChange` to state |
+| `src/components/auth/ForcePasswordChangeDialog.tsx` | CREATE | Modal for mandatory password change |
+| `src/components/auth/ProtectedRoute.tsx` | EDIT | Show password change dialog when required |
+| `supabase/migrations/xxx_add_user_id_to_invitations.sql` | CREATE | Add user_id column |
 
 ---
 
-## Technical Notes
+## Updated Email Template Content
 
-### Password Generation
-```typescript
-function generateSecurePassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  const specials = "!@#$%&*";
-  let password = "";
-  
-  // 8 alphanumeric chars
-  for (let i = 0; i < 8; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  
-  // 2 special chars
-  for (let i = 0; i < 2; i++) {
-    password += specials.charAt(Math.floor(Math.random() * specials.length));
-  }
-  
-  return password; // e.g., "S@lon7Xk&9"
-}
+```html
+<h2>Join Our Team</h2>
+<p>Hi {firstName},</p>
+<p>You've been invited to join <strong>{salonName}</strong> as a <strong>{role}</strong>.</p>
+
+<div style="background-color: #f5f7fa; padding: 16px; border-radius: 8px; margin: 24px 0;">
+  <p><strong>Your login credentials:</strong></p>
+  <p>Email: <code>{email}</code></p>
+  <p>Temporary Password: <code>{tempPassword}</code></p>
+</div>
+
+<p style="text-align: center; margin: 32px 0;">
+  <a href="{loginLink}" style="...">Sign In Now</a>
+</p>
+
+<p>You'll be prompted to set a permanent password on your first login.</p>
+<p>This invitation expires in 7 days.</p>
 ```
 
-### Plan Limit Enforcement
-```typescript
-const planLimits = {
-  solo: { maxLocations: 1 },
-  studio: { maxLocations: 1 },
-  chain: { maxLocations: 5 }, // base, can purchase more
-};
-```
+---
 
-### Temp Password Security
-- Stored as bcrypt hash in database
-- Never logged in plain text
-- Invalidated immediately after password change
-- 7-day expiry (same as invitation)
+## Security Considerations
+
+1. **Temp password is stored plain text** in `staff_invitations.temp_password` for display in pending invitations UI - this is acceptable since:
+   - Only owners/managers can view pending invitations
+   - Password is only valid for 7 days
+   - Password is invalidated after first use
+
+2. **User account created immediately** means the email exists in auth.users - if invitation is cancelled, we should also delete the user account
+
+3. **7-day expiry** is enforced by the `expires_at` on the invitation record - need to add a scheduled job or check on login to handle expired accounts
 
 ---
 
 ## Testing Checklist
 
-### Staff Invitation Flow
-- [ ] Send invitation generates temp password
-- [ ] Temp password visible on pending invitation card
-- [ ] Copy temp password works
-- [ ] Staff can login with temp password
-- [ ] Password change dialog appears on first login
-- [ ] After password change, temp password no longer works
-- [ ] Copy password button disabled after password changed
-
-### Staff Skip Onboarding
-- [ ] Invited staff redirected to dashboard (not onboarding)
-- [ ] New users (no invitation) go to onboarding
-
-### Add Salon
-- [ ] Solo/Studio users see upgrade prompt
-- [ ] Chain users at limit see add-on purchase
-- [ ] Stripe checkout works
-- [ ] Successful payment unlocks new location slot
-- [ ] Failed payment shows retry option
-
-### Hardcoded Values
-- [ ] Sidebar shows actual user name and email
-- [ ] Sidebar shows actual trial days from database
-- [ ] Messaging page shows actual credit balance
-
-### Settings & Staff Module
-- [ ] Roles & Permissions tab removed from Settings
-- [ ] Team member row click opens details modal
-- [ ] Actions menu has all options (View Details, Activities, Permissions, Deactivate)
-- [ ] Deactivate/Reactivate toggles correctly
+- [ ] Invite new staff member
+- [ ] Verify email received with credentials (not token link)
+- [ ] Login with temp password works
+- [ ] Password change dialog appears immediately after login
+- [ ] Cannot dismiss dialog or access app until password changed
+- [ ] After password change, full access granted
+- [ ] Temp password no longer works after change
+- [ ] Pending invitation shows temp password with copy button
+- [ ] Accepted invitation no longer shows in pending list
+- [ ] Invitation older than 7 days shows expired message on login attempt
