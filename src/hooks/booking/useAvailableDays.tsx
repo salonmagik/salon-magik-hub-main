@@ -29,7 +29,7 @@ export function useAvailableDays(
   bufferMinutes: number = 0
 ) {
   return useQuery({
-    queryKey: ["available-days", tenantId, location?.id, month?.toISOString(), slotCapacity, serviceDurationMinutes],
+    queryKey: ["available-days", tenantId, location?.id, month ? format(month, "yyyy-MM") : undefined, slotCapacity, serviceDurationMinutes],
     queryFn: async (): Promise<DayAvailability[]> => {
       if (!tenantId || !location || !month) return [];
 

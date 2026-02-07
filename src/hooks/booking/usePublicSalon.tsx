@@ -21,6 +21,9 @@ export type PublicTenant = Pick<
   | "pay_at_salon_enabled"
 > & {
   brand_color?: string | null;
+  contact_phone?: string | null;
+  show_contact_on_booking?: boolean;
+  auto_confirm_bookings?: boolean;
 };
 
 export type PublicLocation = Pick<

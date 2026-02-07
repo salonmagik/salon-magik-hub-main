@@ -19,7 +19,7 @@ export function useAvailableSlots(
   bufferMinutes: number = 0
 ) {
   return useQuery({
-    queryKey: ["available-slots", tenantId, location?.id, date?.toISOString(), slotCapacity, serviceDurationMinutes],
+    queryKey: ["available-slots", tenantId, location?.id, date ? format(date, "yyyy-MM-dd") : undefined, slotCapacity, serviceDurationMinutes],
     queryFn: async (): Promise<SlotInfo[]> => {
       if (!tenantId || !location || !date) return [];
 

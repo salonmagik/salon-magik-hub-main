@@ -71,6 +71,13 @@ export function SchedulingStep({
     return dayInfo?.available ?? false;
   };
 
+  // Check if a day is a closed day (salon not open)
+  const isClosedDay = (date: Date): boolean => {
+    if (!selectedLocation?.opening_days) return false;
+    const dayName = format(date, "EEEE").toLowerCase();
+    return !selectedLocation.opening_days.includes(dayName);
+  };
+
   return (
     <div className="space-y-6">
       {/* Leave Unscheduled Option */}
@@ -136,14 +143,17 @@ export function SchedulingStep({
                 disabled={(date) => {
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
-                  return date < today;
+                  // Disable past dates and closed days
+                  if (date < today) return true;
+                  return isClosedDay(date);
                 }}
                 modifiers={{
                   available: (date) => isDateAvailable(date),
+                  closed: (date) => isClosedDay(date),
                 }}
                 modifiersClassNames={{
                   available:
-                    "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
+                    "relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1.5 after:w-1.5 after:rounded-full after:bg-[var(--brand-color,hsl(var(--primary)))]",
                 }}
                 className={cn("rounded-md border pointer-events-auto w-full max-w-[350px]")}
               />
@@ -169,6 +179,8 @@ export function SchedulingStep({
                         variant={selectedTime === slot.time ? "default" : "outline"}
                         size="sm"
                         onClick={() => onTimeChange(slot.time)}
+                        className={selectedTime === slot.time ? "text-[var(--brand-foreground,white)]" : ""}
+                        style={selectedTime === slot.time ? { backgroundColor: "var(--brand-color)" } : undefined}
                       >
                         {slot.time}
                       </Button>
