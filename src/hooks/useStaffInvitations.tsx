@@ -20,6 +20,9 @@ export interface StaffInvitation {
   last_resent_at: string | null;
   resend_count: number;
   invited_via: string | null;
+  temp_password: string | null;
+  temp_password_used: boolean;
+  password_changed_at: string | null;
 }
 
 const RESEND_THROTTLE_MINUTES = 30;
@@ -147,8 +150,13 @@ export function useStaffInvitations() {
     }
   };
 
-  const pendingInvitations = invitations.filter((i) => i.status === "pending");
-  const acceptedInvitations = invitations.filter((i) => i.status === "accepted");
+  // Filter pending invitations - exclude those with accepted_at even if status wasn't updated
+  const pendingInvitations = invitations.filter(
+    (i) => i.status === "pending" && !i.accepted_at
+  );
+  const acceptedInvitations = invitations.filter(
+    (i) => i.status === "accepted" || i.accepted_at
+  );
   const expiredInvitations = pendingInvitations.filter(
     (i) => new Date(i.expires_at) < new Date()
   );

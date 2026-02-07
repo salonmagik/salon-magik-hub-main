@@ -452,12 +452,12 @@ export default function StaffPage() {
                                 <Mail className="w-5 h-5 text-primary" />
                               )}
                             </div>
-                            <div>
+                            <div className="flex-1">
                               <p className="font-medium">
                                 {invitation.first_name} {invitation.last_name}
                               </p>
                               <p className="text-sm text-muted-foreground">{invitation.email}</p>
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs">
                                   {roleLabels[invitation.role]}
                                 </Badge>
@@ -476,6 +476,31 @@ export default function StaffPage() {
                                   </span>
                                 )}
                               </div>
+                              {/* Temporary Password Display */}
+                              {invitation.temp_password && !invitation.password_changed_at && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Lock className="w-3 h-3 text-muted-foreground" />
+                                  <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
+                                    {invitation.temp_password}
+                                  </code>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 px-2"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      copyTempPassword(invitation.temp_password!);
+                                    }}
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              )}
+                              {invitation.password_changed_at && (
+                                <Badge variant="outline" className="mt-2 text-xs text-muted-foreground">
+                                  Password updated
+                                </Badge>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
