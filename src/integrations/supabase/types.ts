@@ -2351,9 +2351,12 @@ export type Database = {
           invited_via: string | null
           last_name: string
           last_resent_at: string | null
+          password_changed_at: string | null
           resend_count: number | null
           role: Database["public"]["Enums"]["app_role"]
           status: string
+          temp_password: string | null
+          temp_password_used: boolean | null
           tenant_id: string
           token: string
         }
@@ -2368,9 +2371,12 @@ export type Database = {
           invited_via?: string | null
           last_name: string
           last_resent_at?: string | null
+          password_changed_at?: string | null
           resend_count?: number | null
           role?: Database["public"]["Enums"]["app_role"]
           status?: string
+          temp_password?: string | null
+          temp_password_used?: boolean | null
           tenant_id: string
           token: string
         }
@@ -2385,9 +2391,12 @@ export type Database = {
           invited_via?: string | null
           last_name?: string
           last_resent_at?: string | null
+          password_changed_at?: string | null
           resend_count?: number | null
           role?: Database["public"]["Enums"]["app_role"]
           status?: string
+          temp_password?: string | null
+          temp_password_used?: boolean | null
           tenant_id?: string
           token?: string
         }
@@ -2840,6 +2849,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_active: boolean | null
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string
           user_id: string
@@ -2847,6 +2857,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_active?: boolean | null
           role: Database["public"]["Enums"]["app_role"]
           tenant_id: string
           user_id: string
@@ -2854,6 +2865,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_active?: boolean | null
           role?: Database["public"]["Enums"]["app_role"]
           tenant_id?: string
           user_id?: string

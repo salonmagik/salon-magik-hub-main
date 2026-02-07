@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.verify-email]
 verify_jwt = false
+
+[functions.accept-staff-invitation]
+verify_jwt = false

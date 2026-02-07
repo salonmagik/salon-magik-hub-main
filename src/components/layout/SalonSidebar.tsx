@@ -44,6 +44,44 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+// User profile section component
+function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
+  const { user, profile } = useAuth();
+  
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
+  const displayEmail = user?.email || "";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "U";
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 mt-2",
+        !isExpanded && !isMobileOpen && "justify-center"
+      )}
+    >
+      <div className="w-8 h-8 bg-white/20 text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
+        {initials}
+      </div>
+      {(isExpanded || isMobileOpen) && (
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate text-white">
+            {displayName}
+          </p>
+          <p className="text-xs text-white/70 truncate">
+            {displayEmail}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface NavItem {
   label: string;
   icon: React.ElementType;
@@ -314,26 +352,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         ))}
 
         {/* User Info */}
-        <div
-          className={cn(
-            "flex items-center gap-3 px-3 py-2.5 mt-2",
-            !isExpanded && !isMobileOpen && "justify-center"
-          )}
-        >
-          <div className="w-8 h-8 bg-white/20 text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
-            A
-          </div>
-          {(isExpanded || isMobileOpen) && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate text-white">
-                Agatha Ambrose
-              </p>
-              <p className="text-xs text-white/70 truncate">
-                agathambrose@gmail.com
-              </p>
-            </div>
-          )}
-        </div>
+        <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} />
 
         <button
           onClick={handleLogout}

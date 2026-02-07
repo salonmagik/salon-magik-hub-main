@@ -34,16 +34,19 @@ import {
   Activity,
   Star,
   AlertCircle,
+  Plus,
 } from "lucide-react";
 import { useSalonsOverview, type LocationPerformance } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/currency";
 import { Link } from "react-router-dom";
+import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 
 type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
+  const [addSalonOpen, setAddSalonOpen] = useState(false);
   const { currentTenant } = useAuth();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
 
@@ -98,16 +101,22 @@ export default function SalonsOverviewPage() {
               Multi-location performance dashboard for your salon chain
             </p>
           </div>
-          <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">This Week</SelectItem>
-              <SelectItem value="month">This Month</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => setAddSalonOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Add Salon</span>
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -328,6 +337,13 @@ export default function SalonsOverviewPage() {
             </Card>
           </>
         )}
+
+        {/* Add Salon Dialog */}
+        <AddSalonDialog 
+          open={addSalonOpen} 
+          onOpenChange={setAddSalonOpen} 
+          onSuccess={() => refetch()}
+        />
       </div>
     </SalonSidebar>
   );
