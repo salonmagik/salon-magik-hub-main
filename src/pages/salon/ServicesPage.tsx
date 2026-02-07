@@ -31,6 +31,7 @@ import { useVouchers } from "@/hooks/useVouchers";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
@@ -271,7 +272,14 @@ export default function ServicesPage() {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {filteredItems.map((item) => (
-                        <ItemCard key={item.id} item={item} currency={currency} formatCurrency={formatCurrency} />
+                        <SelectableItemCard 
+                          key={item.id} 
+                          item={item} 
+                          currency={currency} 
+                          formatCurrency={formatCurrency}
+                          isSelected={selectedItems.has(item.id)}
+                          onSelect={handleSelectItem}
+                        />
                       ))}
                     </div>
                   )}
@@ -290,7 +298,7 @@ export default function ServicesPage() {
                             (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())
                         )
                         .map((s) => (
-                          <ItemCard
+                          <SelectableItemCard
                             key={s.id}
                             item={{
                               id: s.id,
@@ -303,6 +311,8 @@ export default function ServicesPage() {
                             }}
                             currency={currency}
                             formatCurrency={formatCurrency}
+                            isSelected={selectedItems.has(s.id)}
+                            onSelect={handleSelectItem}
                           />
                         ))}
                     </div>
@@ -322,7 +332,7 @@ export default function ServicesPage() {
                             (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
                         )
                         .map((p) => (
-                          <ItemCard
+                          <SelectableItemCard
                             key={p.id}
                             item={{
                               id: p.id,
@@ -335,6 +345,8 @@ export default function ServicesPage() {
                             }}
                             currency={currency}
                             formatCurrency={formatCurrency}
+                            isSelected={selectedItems.has(p.id)}
+                            onSelect={handleSelectItem}
                           />
                         ))}
                     </div>
@@ -367,7 +379,7 @@ export default function ServicesPage() {
                                 (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
                             )
                             .map((p) => (
-                              <ItemCard
+                              <SelectableItemCard
                                 key={p.id}
                                 item={{
                                   id: p.id,
@@ -380,6 +392,8 @@ export default function ServicesPage() {
                                 }}
                                 currency={currency}
                                 formatCurrency={formatCurrency}
+                                isSelected={selectedItems.has(p.id)}
+                                onSelect={handleSelectItem}
                               />
                             ))}
                         </div>
@@ -456,6 +470,48 @@ export default function ServicesPage() {
           </div>
         </Tabs>
       </div>
+
+      {/* Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedCount={selectedItems.size}
+        itemType={selectionType || "service"}
+        onCreatePackage={() => {
+          // Pre-fill package dialog with selected items
+          setPackageDialogOpen(true);
+        }}
+        onFlag={() => {
+          toast({
+            title: "Flag items",
+            description: `Flagging ${selectedItems.size} items for review`,
+          });
+          clearSelection();
+        }}
+        onArchive={canManage ? () => {
+          toast({
+            title: "Archive items", 
+            description: `Archiving ${selectedItems.size} items`,
+          });
+          clearSelection();
+        } : undefined}
+        onDelete={isOwner ? () => {
+          toast({
+            title: "Delete items",
+            description: `Deleting ${selectedItems.size} items`,
+            variant: "destructive",
+          });
+          clearSelection();
+        } : undefined}
+        onDiscontinue={canManage ? () => {
+          toast({
+            title: "Discontinue vouchers",
+            description: `Discontinuing ${selectedItems.size} vouchers`,
+          });
+          clearSelection();
+        } : undefined}
+        onClear={clearSelection}
+        canDelete={isOwner}
+        canArchive={canManage}
+      />
 
       {/* Dialogs */}
       <AddServiceDialog

@@ -56,6 +56,7 @@ export function ItemCard({
       durationMinutes: type === "service" ? durationMinutes : undefined,
       isGift: false,
       fulfillmentType: type === "product" ? "pickup" : undefined,
+      imageUrl: imageUrls?.[0] || undefined,
     });
 
     toast({

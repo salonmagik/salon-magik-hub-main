@@ -38,11 +38,15 @@ import {
   X,
   Image as ImageIcon,
   Link2,
+  Gift,
+  Share2,
+  Ticket,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
 import { useNotificationSettings } from "@/hooks/useNotificationSettings";
+import { useMyReferralCodes, useMyReferralDiscounts, useGenerateReferralCode } from "@/hooks/useReferrals";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { differenceInDays, format } from "date-fns";
@@ -52,6 +56,7 @@ const settingsTabs = [
   { id: "hours", label: "Business Hours", icon: Clock },
   { id: "booking", label: "Booking Settings", icon: User },
   { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "promotions", label: "Promotions", icon: Gift },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "roles", label: "Roles & Permissions", icon: Shield },
   { id: "subscription", label: "Subscription", icon: Zap },
@@ -1368,6 +1373,178 @@ export default function SettingsPage() {
     );
   };
 
+  const { data: referralCodes, isLoading: codesLoading } = useMyReferralCodes();
+  const { data: referralDiscounts, isLoading: discountsLoading } = useMyReferralDiscounts();
+  const generateCodeMutation = useGenerateReferralCode();
+
+  const renderPromotionsTab = () => {
+    const bookingUrl = currentTenant?.slug ? `${window.location.origin}/b/${currentTenant.slug}` : null;
+    
+    return (
+      <div className="space-y-6">
+        {/* Referral Program */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Share2 className="w-5 h-5" />
+              Referral Program
+            </CardTitle>
+            <CardDescription>
+              Share your referral link and earn discounts when other salons sign up.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Referral Link */}
+            {bookingUrl && (
+              <div className="space-y-2">
+                <Label>Your Referral Link</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={`${window.location.origin}/signup?ref=${currentTenant?.slug || ""}`}
+                    readOnly
+                    className="bg-muted font-mono text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `${window.location.origin}/signup?ref=${currentTenant?.slug || ""}`
+                      );
+                      toast({ title: "Copied!", description: "Referral link copied to clipboard" });
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When someone signs up using this link, you both get a discount!
+                </p>
+              </div>
+            )}
+
+            {/* Referral Codes */}
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="font-medium">Your Referral Codes</p>
+                  <p className="text-sm text-muted-foreground">
+                    Generate codes to share with other salon owners
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateCodeMutation.mutate()}
+                  disabled={generateCodeMutation.isPending}
+                >
+                  {generateCodeMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Ticket className="w-4 h-4 mr-2" />
+                      Generate Code
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {codesLoading ? (
+                <div className="space-y-2">
+                  {[1, 2].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : referralCodes && referralCodes.length > 0 ? (
+                <div className="space-y-2">
+                  {referralCodes.map((code) => (
+                    <div
+                      key={code.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
+                    >
+                      <div className="flex items-center gap-3">
+                        <code className="font-mono font-semibold">{code.code}</code>
+                        <Badge variant={code.consumed ? "secondary" : "default"}>
+                          {code.consumed ? "Used" : "Available"}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          navigator.clipboard.writeText(code.code);
+                          toast({ title: "Copied!", description: "Referral code copied" });
+                        }}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Ticket className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No referral codes yet</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Available Discounts */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5" />
+              Your Discounts
+            </CardTitle>
+            <CardDescription>
+              Active discounts earned from referrals and promotions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {discountsLoading ? (
+              <div className="space-y-2">
+                {[1, 2].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : referralDiscounts && referralDiscounts.length > 0 ? (
+              <div className="space-y-3">
+                {referralDiscounts.map((discount) => (
+                  <div
+                    key={discount.id}
+                    className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/20"
+                  >
+                    <div>
+                      <p className="font-semibold">{discount.percentage}% Off</p>
+                      <p className="text-sm text-muted-foreground">
+                        {discount.source === "referrer" ? "Referral reward" : "New user discount"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <Badge variant="outline">
+                        Expires {format(new Date(discount.expires_at), "MMM d, yyyy")}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Gift className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <p className="font-medium">No active discounts</p>
+                <p className="text-sm mt-1">
+                  Refer other salons to earn discounts on your subscription
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   const renderPlaceholderTab = () => (
     <Card>
       <CardContent className="p-12 text-center">
@@ -1469,6 +1646,7 @@ export default function SettingsPage() {
             {activeTab === "hours" && renderHoursTab()}
             {activeTab === "booking" && renderBookingTab()}
             {activeTab === "payments" && renderPaymentsTab()}
+            {activeTab === "promotions" && renderPromotionsTab()}
             {activeTab === "notifications" && renderNotificationsTab()}
             {activeTab === "roles" && renderRolesTab()}
             {activeTab === "subscription" && renderSubscriptionTab()}
