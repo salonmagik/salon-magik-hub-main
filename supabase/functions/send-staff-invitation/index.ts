@@ -147,6 +147,29 @@ function buildInvitationEmail(
 </html>`;
 }
 
+function getBaseUrlFromRequest(req: Request): string {
+  const origin = req.headers.get("origin");
+  if (origin && /^https?:\/\//i.test(origin)) return origin;
+
+  const referer = req.headers.get("referer");
+  if (referer) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      // ignore
+    }
+  }
+
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  // Last-resort fallback
+  return "https://salonmagik.lovable.app";
+}
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -318,11 +341,17 @@ const handler = async (req: Request): Promise<Response> => {
       recipientRole = role;
     }
 
-    // Build invitation link - use published app URL for production emails
-    const appUrl = Deno.env.get("APP_URL") || "https://salonmagik.lovable.app";
-    const invitationLink = `${appUrl}/accept-invite?token=${inviteToken}`;
-    
-    console.log("Generated invitation link with token:", inviteToken);
+    // Build invitation link
+    // IMPORTANT: Use the caller's origin when available so preview invites open in preview,
+    // and published invites open in production.
+    const baseUrl = Deno.env.get("APP_URL") || getBaseUrlFromRequest(req);
+    const invitationLink = `${baseUrl}/accept-invite?token=${inviteToken}`;
+
+    console.log("Generated invitation link", {
+      baseUrl,
+      invitationId: invitation?.id,
+      tokenPrefix: inviteToken?.slice?.(0, 8),
+    });
 
     // Get email template (or use default)
     const { data: emailTemplate } = await supabase
