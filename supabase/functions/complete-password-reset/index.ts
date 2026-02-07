@@ -99,10 +99,34 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Password validation
+    // Password validation (must match Supabase's requirements)
     if (password.length < 8) {
       return new Response(
         JSON.stringify({ success: false, error: "Password must be at least 8 characters" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    if (!/[a-z]/.test(password)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Password must contain at least one lowercase letter" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    if (!/[A-Z]/.test(password)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Password must contain at least one uppercase letter" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    if (!/[0-9]/.test(password)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Password must contain at least one number" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Password must contain at least one special character (!@#$%^&*...)" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }

@@ -134,13 +134,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (session?.user) {
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
-              const profile = await fetchProfile(session.user.id);
+              let profile = await fetchProfile(session.user.id);
               
-              // If profile doesn't exist, the user was likely deleted - force sign out
+              // If profile doesn't exist, try to create it from auth metadata
               if (!profile) {
-                console.log("Auth state change: profile not found - account may have been deleted");
-                await forceSignOut();
-                return;
+                console.log("Auth state change: profile not found - attempting to create");
+                const { data: newProfile, error: createError } = await supabase
+                  .from("profiles")
+                  .insert({
+                    user_id: session.user.id,
+                    full_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "User",
+                    phone: session.user.user_metadata?.phone || null,
+                  })
+                  .select()
+                  .single();
+                
+                if (createError) {
+                  console.error("Failed to create profile:", createError);
+                  await forceSignOut();
+                  return;
+                }
+                profile = newProfile;
               }
               
               const { tenants, roles } = await fetchTenantsAndRoles(session.user.id);
@@ -169,15 +183,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        const profile = await fetchProfile(session.user.id);
+        let profile = await fetchProfile(session.user.id);
         
-        // If profile doesn't exist, the user was likely deleted - force sign out
+        // If profile doesn't exist, try to create it from auth metadata
         if (!profile) {
-          console.log("Session exists but profile not found - account may have been deleted");
-          await forceSignOut();
-          return () => {
-            subscription.unsubscribe();
-          };
+          console.log("Session exists but profile not found - attempting to create");
+          const { data: newProfile, error: createError } = await supabase
+            .from("profiles")
+            .insert({
+              user_id: session.user.id,
+              full_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "User",
+              phone: session.user.user_metadata?.phone || null,
+            })
+            .select()
+            .single();
+          
+          if (createError) {
+            console.error("Failed to create profile on init:", createError);
+            await forceSignOut();
+            return () => {
+              subscription.unsubscribe();
+            };
+          }
+          profile = newProfile;
         }
         
         const { tenants, roles } = await fetchTenantsAndRoles(session.user.id);
