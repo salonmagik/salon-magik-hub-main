@@ -10,10 +10,12 @@ const corsHeaders = {
 };
 
 interface InvitationRequest {
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  role?: string;
+  invitationId?: string;
+  resend?: boolean;
 }
 
 // Salon Magik Design System
@@ -187,43 +189,96 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const { firstName, lastName, email, role }: InvitationRequest = await req.json();
+    const requestBody: InvitationRequest = await req.json();
+    const { firstName, lastName, email, role, invitationId, resend } = requestBody;
 
-    // Validate required fields
-    if (!firstName || !lastName || !email || !role) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+    let invitation: any;
+    let inviteToken: string;
+    let recipientEmail: string;
+    let recipientFirstName: string;
+    let recipientRole: string;
 
-    // Generate secure token
-    const inviteToken = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    if (resend && invitationId) {
+      // Handle resend: lookup existing invitation
+      const { data: existingInvitation, error: lookupError } = await supabase
+        .from("staff_invitations")
+        .select("*")
+        .eq("id", invitationId)
+        .eq("tenant_id", tenantId)
+        .single();
 
-    // Create invitation record
-    const { data: invitation, error: insertError } = await supabase
-      .from("staff_invitations")
-      .insert({
-        tenant_id: tenantId,
-        first_name: firstName,
-        last_name: lastName,
-        email: email.toLowerCase(),
-        role: role,
-        token: inviteToken,
-        expires_at: expiresAt.toISOString(),
-        invited_by_id: userId,
-        status: "pending",
-      })
-      .select()
-      .single();
+      if (lookupError || !existingInvitation) {
+        return new Response(
+          JSON.stringify({ error: "Invitation not found" }),
+          { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
 
-    if (insertError) {
-      console.error("Error creating invitation:", insertError);
-      return new Response(
-        JSON.stringify({ error: "Failed to create invitation" }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      // Generate new token and extend expiry
+      inviteToken = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const { error: updateError } = await supabase
+        .from("staff_invitations")
+        .update({
+          token: inviteToken,
+          expires_at: expiresAt.toISOString(),
+          status: "pending",
+        })
+        .eq("id", invitationId);
+
+      if (updateError) {
+        console.error("Error updating invitation:", updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to update invitation" }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      invitation = existingInvitation;
+      recipientEmail = existingInvitation.email;
+      recipientFirstName = existingInvitation.first_name;
+      recipientRole = existingInvitation.role;
+    } else {
+      // Handle new invitation
+      if (!firstName || !lastName || !email || !role) {
+        return new Response(
+          JSON.stringify({ error: "Missing required fields" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      inviteToken = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const { data: newInvitation, error: insertError } = await supabase
+        .from("staff_invitations")
+        .insert({
+          tenant_id: tenantId,
+          first_name: firstName,
+          last_name: lastName,
+          email: email.toLowerCase(),
+          role: role,
+          token: inviteToken,
+          expires_at: expiresAt.toISOString(),
+          invited_by_id: userId,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Error creating invitation:", insertError);
+        return new Response(
+          JSON.stringify({ error: "Failed to create invitation" }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      invitation = newInvitation;
+      recipientEmail = email;
+      recipientFirstName = firstName;
+      recipientRole = role;
     }
 
     // Build invitation link
@@ -240,9 +295,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     let subject = `You're invited to join ${tenant.name}`;
     let htmlBody = buildInvitationEmail(
-      firstName,
+      recipientFirstName,
       tenant.name,
-      role,
+      recipientRole,
       invitationLink,
       tenant.logo_url || undefined
     );
@@ -250,14 +305,14 @@ const handler = async (req: Request): Promise<Response> => {
     // Apply custom template if exists
     if (emailTemplate) {
       subject = emailTemplate.subject
-        .replace(/{{staff_name}}/g, firstName)
+        .replace(/{{staff_name}}/g, recipientFirstName)
         .replace(/{{salon_name}}/g, tenant.name)
-        .replace(/{{role}}/g, role);
+        .replace(/{{role}}/g, recipientRole);
       
       htmlBody = emailTemplate.body_html
-        .replace(/{{staff_name}}/g, firstName)
+        .replace(/{{staff_name}}/g, recipientFirstName)
         .replace(/{{salon_name}}/g, tenant.name)
-        .replace(/{{role}}/g, role)
+        .replace(/{{role}}/g, recipientRole)
         .replace(/{{invitation_link}}/g, invitationLink);
     }
 
@@ -273,7 +328,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         from: `${sanitizedSalonName} <${fromEmail}>`,
-        to: [email],
+        to: [recipientEmail],
         subject: subject,
         html: htmlBody,
       }),
@@ -286,7 +341,7 @@ const handler = async (req: Request): Promise<Response> => {
     await supabase.from("message_logs").insert({
       tenant_id: tenantId,
       channel: "email",
-      recipient: email,
+      recipient: recipientEmail,
       template_type: "staff_invitation",
       status: "sent",
       credits_used: 1,
@@ -296,8 +351,8 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(
       JSON.stringify({ 
         success: true, 
-        invitation: { id: invitation.id, email, role },
-        message: `Invitation sent to ${email}` 
+        invitation: { id: invitation.id, email: recipientEmail, role: recipientRole },
+        message: resend ? `Invitation resent to ${recipientEmail}` : `Invitation sent to ${recipientEmail}` 
       }),
       {
         status: 200,
