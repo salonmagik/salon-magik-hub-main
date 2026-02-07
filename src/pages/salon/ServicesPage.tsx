@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Scissors,
   Package,
   ShoppingBag,
@@ -16,6 +22,13 @@ import {
   Search,
   Clock,
   Truck,
+  MoreVertical,
+  Eye,
+  Edit,
+  Flag,
+  Archive,
+  Trash2,
+  Undo2,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -24,18 +37,38 @@ import { AddVoucherDialog } from "@/components/dialogs/AddVoucherDialog";
 import { ProductFulfillmentTab } from "@/components/catalog/ProductFulfillmentTab";
 import { AddItemPopover } from "@/components/catalog/AddItemPopover";
 import { BulkActionsBar } from "@/components/catalog/BulkActionsBar";
+import { ReasonConfirmDialog } from "@/components/dialogs/ReasonConfirmDialog";
+import { DeleteConfirmDialog } from "@/components/dialogs/DeleteConfirmDialog";
+import { RequestDeleteDialog } from "@/components/dialogs/RequestDeleteDialog";
 import { useServices } from "@/hooks/useServices";
 import { usePackages } from "@/hooks/usePackages";
 import { useProducts } from "@/hooks/useProducts";
 import { useVouchers } from "@/hooks/useVouchers";
+import { useDeletionRequests } from "@/hooks/useDeletionRequests";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
 type ProductSubTab = "inventory" | "fulfillment";
+type ItemType = "service" | "product" | "package" | "voucher";
+
+interface CatalogItem {
+  id: string;
+  type: ItemType;
+  name: string;
+  description: string;
+  price: number;
+  duration?: number;
+  originalPrice?: number;
+  stock?: number;
+  images?: string[];
+  status?: string;
+  is_flagged?: boolean;
+}
 
 export default function ServicesPage() {
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
@@ -46,20 +79,38 @@ export default function ServicesPage() {
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
   
-  // Multi-select state
+  // Multi-select state - supports mixed selection in "All" tab
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [selectionType, setSelectionType] = useState<"service" | "product" | "package" | "voucher" | null>(null);
+  const [selectedTypes, setSelectedTypes] = useState<Set<ItemType>>(new Set());
+  
+  // Dialog states
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [requestDeleteDialogOpen, setRequestDeleteDialogOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Pending deletion with undo
+  const [pendingDeletions, setPendingDeletions] = useState<Map<string, { timer: NodeJS.Timeout; countdown: number; reason: string }>>(new Map());
+  const undoRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  const { currentTenant } = useAuth();
-  const { isOwner, currentRole } = usePermissions();
+  const { currentTenant, user } = useAuth();
+  const { isOwner, currentRole, hasPermission } = usePermissions();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
+  const { createRequest } = useDeletionRequests();
 
   const currency = currentTenant?.currency || "USD";
   const isLoading = servicesLoading || packagesLoading || productsLoading;
-  const canManage = isOwner || currentRole === "manager";
+  
+  // Permission checks
+  const canEdit = hasPermission("catalog:edit");
+  const canDelete = hasPermission("catalog:delete");
+  const canRequestDelete = hasPermission("catalog:request_delete");
+  const canArchive = hasPermission("catalog:archive");
+  const canFlag = hasPermission("catalog:flag");
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = {
@@ -72,7 +123,7 @@ export default function ServicesPage() {
     return `${symbols[currency] || ""}${Number(amount).toLocaleString()}`;
   };
 
-  // Build unified items list
+  // Build unified items list with status
   const allItems = useMemo(() => [
     ...services.map((s) => ({
       id: s.id,
@@ -82,6 +133,8 @@ export default function ServicesPage() {
       price: Number(s.price),
       duration: s.duration_minutes,
       images: s.image_urls || [],
+      status: s.status,
+      is_flagged: s.is_flagged,
     })),
     ...packages.map((p) => ({
       id: p.id,
@@ -91,6 +144,8 @@ export default function ServicesPage() {
       price: Number(p.price),
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
       images: p.image_urls || [],
+      status: p.status,
+      is_flagged: (p as any).is_flagged || false,
     })),
     ...products.map((p) => ({
       id: p.id,
@@ -100,6 +155,8 @@ export default function ServicesPage() {
       price: Number(p.price),
       stock: p.stock_quantity,
       images: p.image_urls || [],
+      status: p.status,
+      is_flagged: (p as any).is_flagged,
     })),
   ], [services, packages, products]);
 
@@ -110,20 +167,53 @@ export default function ServicesPage() {
     return matchesSearch;
   });
 
-  // Handle selection
-  const handleSelectItem = (id: string, type: "service" | "product" | "package" | "voucher") => {
+  // Get item info by id
+  const getItemInfo = (id: string): { name: string; type: ItemType } | null => {
+    const service = services.find((s) => s.id === id);
+    if (service) return { name: service.name, type: "service" };
+    const pkg = packages.find((p) => p.id === id);
+    if (pkg) return { name: pkg.name, type: "package" };
+    const product = products.find((p) => p.id === id);
+    if (product) return { name: product.name, type: "product" };
+    const voucher = vouchers.find((v) => v.id === id);
+    if (voucher) return { name: voucher.code, type: "voucher" };
+    return null;
+  };
+
+  // Handle selection - allows mixed service+product in All tab
+  const handleSelectItem = (id: string, type: ItemType) => {
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
+      
       if (newSet.has(id)) {
         newSet.delete(id);
-        if (newSet.size === 0) setSelectionType(null);
+        // Recalculate selected types
+        const remainingTypes = new Set<ItemType>();
+        newSet.forEach((itemId) => {
+          const info = getItemInfo(itemId);
+          if (info) remainingTypes.add(info.type);
+        });
+        setSelectedTypes(remainingTypes);
       } else {
-        // Clear selection if switching types
-        if (selectionType && selectionType !== type) {
-          newSet.clear();
+        // In "All" tab, allow mixed service+product selection
+        if (activeTab === "all") {
+          if (type === "package" || type === "voucher") {
+            // Selecting package/voucher clears service/product selection
+            if (selectedTypes.has("service") || selectedTypes.has("product")) {
+              newSet.clear();
+            }
+          } else if (selectedTypes.has("package") || selectedTypes.has("voucher")) {
+            // Selecting service/product clears package/voucher selection
+            newSet.clear();
+          }
+        } else {
+          // In specific tabs, only same-type selection
+          if (selectedTypes.size > 0 && !selectedTypes.has(type)) {
+            newSet.clear();
+          }
         }
         newSet.add(id);
-        setSelectionType(type);
+        setSelectedTypes((prev) => new Set([...prev, type]));
       }
       return newSet;
     });
@@ -131,7 +221,7 @@ export default function ServicesPage() {
 
   const clearSelection = () => {
     setSelectedItems(new Set());
-    setSelectionType(null);
+    setSelectedTypes(new Set());
   };
 
   // Clear selection on tab change
@@ -140,7 +230,211 @@ export default function ServicesPage() {
     clearSelection();
   };
 
-  const handleAddFromPopover = (type: "service" | "product" | "package" | "voucher") => {
+  // Determine bulk action availability
+  const canCreatePackage = 
+    (selectedTypes.has("service") || selectedTypes.has("product")) &&
+    !selectedTypes.has("package") && 
+    !selectedTypes.has("voucher");
+
+  const showCreatePackage = activeTab === "all" || activeTab === "services" || activeTab === "products";
+  const showDeleteOption = (canDelete || canRequestDelete) && activeTab !== "packages" && activeTab !== "vouchers";
+
+  // Refetch all data
+  const refetchAll = () => {
+    refetchServices();
+    refetchPackages();
+    refetchProducts();
+    refetchVouchers();
+  };
+
+  // Get selected items info for dialogs
+  const selectedItemsInfo = useMemo(() => {
+    return Array.from(selectedItems).map((id) => {
+      const info = getItemInfo(id);
+      return info ? { id, name: info.name, type: info.type } : null;
+    }).filter(Boolean) as Array<{ id: string; name: string; type: ItemType }>;
+  }, [selectedItems, services, packages, products, vouchers]);
+
+  // Handle Flag
+  const handleFlag = async (reason: string) => {
+    setIsProcessing(true);
+    try {
+      for (const item of selectedItemsInfo) {
+        const updateData = { is_flagged: true, flag_reason: reason };
+        switch (item.type) {
+          case "service":
+            await supabase.from("services").update(updateData).eq("id", item.id);
+            break;
+          case "product":
+            await supabase.from("products").update(updateData).eq("id", item.id);
+            break;
+          case "package":
+            await supabase.from("packages").update(updateData).eq("id", item.id);
+            break;
+        }
+      }
+      toast({ title: "Items Flagged", description: `${selectedItems.size} item(s) flagged for review` });
+      clearSelection();
+      refetchAll();
+    } catch (err) {
+      console.error("Error flagging items:", err);
+      toast({ title: "Error", description: "Failed to flag items", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+      setFlagDialogOpen(false);
+    }
+  };
+
+  // Handle Archive
+  const handleArchive = async (reason: string) => {
+    setIsProcessing(true);
+    try {
+      for (const item of selectedItemsInfo) {
+        const updateData = { status: "archived" as const, archive_reason: reason };
+        switch (item.type) {
+          case "service":
+            await supabase.from("services").update(updateData).eq("id", item.id);
+            break;
+          case "product":
+            await supabase.from("products").update(updateData).eq("id", item.id);
+            break;
+          case "package":
+            await supabase.from("packages").update(updateData).eq("id", item.id);
+            break;
+        }
+      }
+      toast({ title: "Items Archived", description: `${selectedItems.size} item(s) archived` });
+      clearSelection();
+      refetchAll();
+    } catch (err) {
+      console.error("Error archiving items:", err);
+      toast({ title: "Error", description: "Failed to archive items", variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+      setArchiveDialogOpen(false);
+    }
+  };
+
+  // Handle Delete (Owner only - soft delete with 5-sec undo)
+  const handleDelete = () => {
+    if (!user?.id) return;
+    
+    const itemsToDelete = Array.from(selectedItemsInfo);
+    const itemIds = itemsToDelete.map((i) => i.id);
+    
+    // Close dialog and clear selection
+    setDeleteDialogOpen(false);
+    clearSelection();
+    
+    // Start countdown for batch
+    let countdown = 5;
+    const batchId = Date.now().toString();
+    
+    const showUndoToast = () => {
+      toast({
+        title: `Deleting ${itemsToDelete.length} item(s)...`,
+        description: `Click Undo to cancel (${countdown}s)`,
+        duration: 1500,
+        action: (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleUndo(batchId, itemIds)}
+          >
+            <Undo2 className="w-4 h-4 mr-1" />
+            Undo
+          </Button>
+        ),
+      });
+    };
+    
+    showUndoToast();
+    
+    const interval = setInterval(() => {
+      countdown--;
+      if (countdown <= 0) {
+        clearInterval(interval);
+        undoRef.current.delete(batchId);
+        executeSoftDelete(itemsToDelete);
+      } else {
+        showUndoToast();
+      }
+    }, 1000);
+    
+    undoRef.current.set(batchId, interval);
+  };
+
+  const handleUndo = (batchId: string, itemIds: string[]) => {
+    const interval = undoRef.current.get(batchId);
+    if (interval) {
+      clearInterval(interval);
+      undoRef.current.delete(batchId);
+      toast({ title: "Deletion Cancelled", description: "Items were not deleted" });
+    }
+  };
+
+  const executeSoftDelete = async (items: Array<{ id: string; name: string; type: ItemType }>) => {
+    try {
+      for (const item of items) {
+        const updateData = {
+          deleted_at: new Date().toISOString(),
+          deleted_by_id: user?.id,
+          deletion_reason: "Direct deletion by owner",
+        };
+        
+        switch (item.type) {
+          case "service":
+            await supabase.from("services").update(updateData).eq("id", item.id);
+            break;
+          case "product":
+            await supabase.from("products").update(updateData).eq("id", item.id);
+            break;
+          case "package":
+            await supabase.from("packages").update(updateData).eq("id", item.id);
+            break;
+          case "voucher":
+            await supabase.from("vouchers").update(updateData).eq("id", item.id);
+            break;
+        }
+      }
+      
+      toast({ 
+        title: "Sent to Bin", 
+        description: `${items.length} item(s) moved to bin. Can be restored within 7 days.` 
+      });
+      refetchAll();
+    } catch (err) {
+      console.error("Error deleting items:", err);
+      toast({ title: "Error", description: "Failed to delete items", variant: "destructive" });
+    }
+  };
+
+  // Handle deletion request (non-owners)
+  const handleRequestDelete = async (reason: string) => {
+    setIsProcessing(true);
+    try {
+      for (const item of selectedItemsInfo) {
+        await createRequest(item.id, item.type, item.name, reason);
+      }
+      clearSelection();
+    } catch (err) {
+      console.error("Error creating deletion requests:", err);
+    } finally {
+      setIsProcessing(false);
+      setRequestDeleteDialogOpen(false);
+    }
+  };
+
+  // Handle bulk action button clicks
+  const handleBulkDelete = () => {
+    if (canDelete) {
+      setDeleteDialogOpen(true);
+    } else if (canRequestDelete) {
+      setRequestDeleteDialogOpen(true);
+    }
+  };
+
+  const handleAddFromPopover = (type: ItemType) => {
     switch (type) {
       case "service":
         setServiceDialogOpen(true);
@@ -171,8 +465,6 @@ export default function ServicesPage() {
       case "vouchers":
         setVoucherDialogOpen(true);
         break;
-      default:
-        break;
     }
   };
 
@@ -192,6 +484,13 @@ export default function ServicesPage() {
   };
 
   const addButtonLabel = getAddButtonLabel();
+
+  // Cleanup intervals on unmount
+  useEffect(() => {
+    return () => {
+      undoRef.current.forEach((interval) => clearInterval(interval));
+    };
+  }, []);
 
   return (
     <SalonSidebar>
@@ -214,7 +513,7 @@ export default function ServicesPage() {
           )}
         </div>
 
-        {/* Tabs - Reordered: All, Services, Products, Packages, Vouchers */}
+        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabValue)}>
           <TabsList className="flex-wrap">
             <TabsTrigger value="all">All</TabsTrigger>
@@ -279,6 +578,7 @@ export default function ServicesPage() {
                           formatCurrency={formatCurrency}
                           isSelected={selectedItems.has(item.id)}
                           onSelect={handleSelectItem}
+                          canEdit={canEdit}
                         />
                       ))}
                     </div>
@@ -308,11 +608,14 @@ export default function ServicesPage() {
                               price: Number(s.price),
                               duration: s.duration_minutes,
                               images: s.image_urls || [],
+                              status: s.status,
+                              is_flagged: s.is_flagged,
                             }}
                             currency={currency}
                             formatCurrency={formatCurrency}
                             isSelected={selectedItems.has(s.id)}
                             onSelect={handleSelectItem}
+                            canEdit={canEdit}
                           />
                         ))}
                     </div>
@@ -342,11 +645,14 @@ export default function ServicesPage() {
                               price: Number(p.price),
                               originalPrice: p.original_price ? Number(p.original_price) : undefined,
                               images: p.image_urls || [],
+                              status: p.status,
+                              is_flagged: (p as any).is_flagged || false,
                             }}
                             currency={currency}
                             formatCurrency={formatCurrency}
                             isSelected={selectedItems.has(p.id)}
                             onSelect={handleSelectItem}
+                            canEdit={canEdit}
                           />
                         ))}
                     </div>
@@ -389,11 +695,14 @@ export default function ServicesPage() {
                                   price: Number(p.price),
                                   stock: p.stock_quantity,
                                   images: p.image_urls || [],
+                                  status: p.status,
+                                  is_flagged: (p as any).is_flagged,
                                 }}
                                 currency={currency}
                                 formatCurrency={formatCurrency}
                                 isSelected={selectedItems.has(p.id)}
                                 onSelect={handleSelectItem}
+                                canEdit={canEdit}
                               />
                             ))}
                         </div>
@@ -474,43 +783,59 @@ export default function ServicesPage() {
       {/* Bulk Actions Bar */}
       <BulkActionsBar
         selectedCount={selectedItems.size}
-        itemType={selectionType || "service"}
-        onCreatePackage={() => {
-          // Pre-fill package dialog with selected items
-          setPackageDialogOpen(true);
-        }}
-        onFlag={() => {
-          toast({
-            title: "Flag items",
-            description: `Flagging ${selectedItems.size} items for review`,
-          });
-          clearSelection();
-        }}
-        onArchive={canManage ? () => {
-          toast({
-            title: "Archive items", 
-            description: `Archiving ${selectedItems.size} items`,
-          });
-          clearSelection();
-        } : undefined}
-        onDelete={isOwner ? () => {
-          toast({
-            title: "Delete items",
-            description: `Deleting ${selectedItems.size} items`,
-            variant: "destructive",
-          });
-          clearSelection();
-        } : undefined}
-        onDiscontinue={canManage ? () => {
-          toast({
-            title: "Discontinue vouchers",
-            description: `Discontinuing ${selectedItems.size} vouchers`,
-          });
-          clearSelection();
-        } : undefined}
+        itemType={selectedTypes.size === 1 ? Array.from(selectedTypes)[0] : "service"}
+        onCreatePackage={showCreatePackage && canCreatePackage ? () => setPackageDialogOpen(true) : undefined}
+        onFlag={canFlag ? () => setFlagDialogOpen(true) : undefined}
+        onArchive={canArchive && activeTab !== "vouchers" ? () => setArchiveDialogOpen(true) : undefined}
+        onDelete={(canDelete || canRequestDelete) && showDeleteOption ? handleBulkDelete : undefined}
+        onDiscontinue={activeTab === "vouchers" && canArchive ? () => setArchiveDialogOpen(true) : undefined}
         onClear={clearSelection}
-        canDelete={isOwner}
-        canArchive={canManage}
+        canDelete={canDelete || canRequestDelete}
+        canArchive={canArchive}
+      />
+
+      {/* Confirmation Dialogs */}
+      <ReasonConfirmDialog
+        open={flagDialogOpen}
+        onOpenChange={setFlagDialogOpen}
+        title={`Flag ${selectedItems.size} Item${selectedItems.size !== 1 ? "s" : ""}?`}
+        description="Flagged items are marked for internal review but remain visible on the booking platform."
+        actionLabel="Flag Items"
+        reasonLabel="Reason for flagging"
+        reasonPlaceholder="e.g., Pricing needs review, Quality issue..."
+        onConfirm={handleFlag}
+        isLoading={isProcessing}
+        itemsList={selectedItemsInfo.map((i) => i.name)}
+      />
+
+      <ReasonConfirmDialog
+        open={archiveDialogOpen}
+        onOpenChange={setArchiveDialogOpen}
+        title={`Archive ${selectedItems.size} Item${selectedItems.size !== 1 ? "s" : ""}?`}
+        description="Archived items are hidden from customers and cannot be booked."
+        actionLabel="Archive Items"
+        reasonLabel="Reason for archiving"
+        reasonPlaceholder="e.g., Seasonal item, Low demand, Discontinued..."
+        onConfirm={handleArchive}
+        isLoading={isProcessing}
+        itemsList={selectedItemsInfo.map((i) => i.name)}
+      />
+
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        itemName={selectedItemsInfo[0]?.name || ""}
+        itemCount={selectedItems.size}
+        onConfirm={handleDelete}
+        isLoading={isProcessing}
+      />
+
+      <RequestDeleteDialog
+        open={requestDeleteDialogOpen}
+        onOpenChange={setRequestDeleteDialogOpen}
+        items={selectedItemsInfo}
+        onSubmit={handleRequestDelete}
+        isLoading={isProcessing}
       />
 
       {/* Dialogs */}
@@ -547,16 +872,27 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-interface CatalogItem {
-  id: string;
-  type: "service" | "package" | "product";
-  name: string;
-  description: string;
-  price: number;
-  duration?: number;
-  originalPrice?: number;
-  stock?: number;
-  images?: string[];
+// Status chip component
+function StatusChip({ status, isFlagged }: { status?: string; isFlagged?: boolean }) {
+  if (isFlagged) {
+    return (
+      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-xs">
+        <Flag className="w-3 h-3 mr-1" />
+        Flagged
+      </Badge>
+    );
+  }
+  
+  if (status === "archived") {
+    return (
+      <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">
+        <Archive className="w-3 h-3 mr-1" />
+        Archived
+      </Badge>
+    );
+  }
+  
+  return null;
 }
 
 interface SelectableItemCardProps {
@@ -564,7 +900,10 @@ interface SelectableItemCardProps {
   currency: string;
   formatCurrency: (amount: number) => string;
   isSelected?: boolean;
-  onSelect?: (id: string, type: "service" | "product" | "package" | "voucher") => void;
+  onSelect?: (id: string, type: ItemType) => void;
+  canEdit?: boolean;
+  onViewDetails?: () => void;
+  onEdit?: () => void;
 }
 
 function SelectableItemCard({
@@ -573,6 +912,7 @@ function SelectableItemCard({
   formatCurrency,
   isSelected = false,
   onSelect,
+  canEdit = false,
 }: SelectableItemCardProps) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
@@ -584,7 +924,7 @@ function SelectableItemCard({
 
   return (
     <Card className={cn(
-      "hover:shadow-md transition-all cursor-pointer",
+      "hover:shadow-md transition-all",
       isSelected && "ring-2 ring-primary"
     )}>
       <CardContent className="p-4">
@@ -593,7 +933,7 @@ function SelectableItemCard({
           {onSelect && (
             <Checkbox
               checked={isSelected}
-              onCheckedChange={() => onSelect(item.id, item.type as "service" | "product" | "package")}
+              onCheckedChange={() => onSelect(item.id, item.type)}
               className="mt-1"
             />
           )}
@@ -614,9 +954,12 @@ function SelectableItemCard({
           )}
 
           <div className="flex-1 min-w-0">
-            <p className={`text-xs font-medium uppercase tracking-wider ${typeInfo.color}`}>
-              {typeInfo.label}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className={`text-xs font-medium uppercase tracking-wider ${typeInfo.color}`}>
+                {typeInfo.label}
+              </p>
+              <StatusChip status={item.status} isFlagged={item.is_flagged} />
+            </div>
             <h3 className="font-semibold mt-1 truncate">{item.name}</h3>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
               {item.description || "No description"}
@@ -637,35 +980,39 @@ function SelectableItemCard({
             </div>
           </div>
 
-          <div className="text-right flex-shrink-0 ml-4">
-            <p className="font-semibold text-lg">{formatCurrency(item.price)}</p>
-            {item.originalPrice && (
-              <p className="text-sm text-muted-foreground line-through">
-                {formatCurrency(item.originalPrice)}
-              </p>
-            )}
+          <div className="flex items-start gap-2">
+            <div className="text-right flex-shrink-0">
+              <p className="font-semibold text-lg">{formatCurrency(item.price)}</p>
+              {item.originalPrice && (
+                <p className="text-sm text-muted-foreground line-through">
+                  {formatCurrency(item.originalPrice)}
+                </p>
+              )}
+            </div>
+
+            {/* Three-dot menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <Eye className="w-4 h-4 mr-2" />
+                  View Details
+                </DropdownMenuItem>
+                {canEdit && (
+                  <DropdownMenuItem>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-// Legacy ItemCard for backward compatibility
-function ItemCard({
-  item,
-  currency,
-  formatCurrency,
-}: {
-  item: CatalogItem;
-  currency: string;
-  formatCurrency: (amount: number) => string;
-}) {
-  return (
-    <SelectableItemCard
-      item={item}
-      currency={currency}
-      formatCurrency={formatCurrency}
-    />
   );
 }

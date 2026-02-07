@@ -41,6 +41,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     staff: true,
     audit_log: true,
     settings: true,
+    "catalog:edit": true,
+    "catalog:delete": true,
+    "catalog:request_delete": true,
+    "catalog:archive": true,
+    "catalog:flag": true,
   },
   manager: {
     dashboard: true,
@@ -60,6 +65,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     staff: true,
     audit_log: false,
     settings: false,
+    "catalog:edit": true,
+    "catalog:delete": false,
+    "catalog:request_delete": true,
+    "catalog:archive": true,
+    "catalog:flag": true,
   },
   supervisor: {
     dashboard: true,
@@ -79,6 +89,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     staff: false,
     audit_log: false,
     settings: false,
+    "catalog:edit": false,
+    "catalog:delete": false,
+    "catalog:request_delete": true,
+    "catalog:archive": false,
+    "catalog:flag": true,
   },
   receptionist: {
     dashboard: true,
@@ -98,6 +113,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     staff: false,
     audit_log: false,
     settings: false,
+    "catalog:edit": false,
+    "catalog:delete": false,
+    "catalog:request_delete": false,
+    "catalog:archive": false,
+    "catalog:flag": false,
   },
   staff: {
     dashboard: false,
@@ -117,6 +137,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     staff: false,
     audit_log: false,
     settings: false,
+    "catalog:edit": false,
+    "catalog:delete": false,
+    "catalog:request_delete": false,
+    "catalog:archive": false,
+    "catalog:flag": false,
   },
 };
 
@@ -138,6 +163,11 @@ export const MODULE_LABELS: Record<string, string> = {
   staff: "Staff Management",
   audit_log: "Audit Log",
   settings: "Settings",
+  "catalog:edit": "Edit Catalog Items",
+  "catalog:delete": "Delete Catalog Items",
+  "catalog:request_delete": "Request Catalog Deletion",
+  "catalog:archive": "Archive Catalog Items",
+  "catalog:flag": "Flag Catalog Items",
 };
 
 export function usePermissions() {

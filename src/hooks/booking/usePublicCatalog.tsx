@@ -44,7 +44,8 @@ export function usePublicCatalog(tenantId: string | undefined) {
            deposit_required, deposit_amount, deposit_percentage`
         )
         .eq("tenant_id", tenantId)
-        .eq("status", "active");
+        .eq("status", "active")
+        .is("deleted_at", null);
 
       if (error) {
         console.error("Error fetching services:", error);
@@ -65,7 +66,8 @@ export function usePublicCatalog(tenantId: string | undefined) {
         .from("packages")
         .select("id, name, description, price, original_price, image_urls")
         .eq("tenant_id", tenantId)
-        .eq("status", "active");
+        .eq("status", "active")
+        .is("deleted_at", null);
 
       if (error) {
         console.error("Error fetching packages:", error);
@@ -86,7 +88,8 @@ export function usePublicCatalog(tenantId: string | undefined) {
         .from("products")
         .select("id, name, description, price, image_urls, stock_quantity")
         .eq("tenant_id", tenantId)
-        .eq("status", "active");
+        .eq("status", "active")
+        .is("deleted_at", null);
 
       if (error) {
         console.error("Error fetching products:", error);

@@ -38,6 +38,7 @@ export function useVouchers() {
         .from("vouchers")
         .select("*")
         .eq("tenant_id", currentTenant.id)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (fetchError) throw fetchError;

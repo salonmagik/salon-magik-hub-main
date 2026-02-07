@@ -515,6 +515,69 @@ export type Database = {
         }
         Relationships: []
       }
+      catalog_deletion_requests: {
+        Row: {
+          created_at: string | null
+          id: string
+          item_id: string
+          item_name: string
+          item_type: string
+          reason: string
+          rejection_reason: string | null
+          requested_at: string | null
+          requested_by_id: string
+          reviewed_at: string | null
+          reviewed_by_id: string | null
+          status: string | null
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          item_id: string
+          item_name: string
+          item_type: string
+          reason: string
+          rejection_reason?: string | null
+          requested_at?: string | null
+          requested_by_id: string
+          reviewed_at?: string | null
+          reviewed_by_id?: string | null
+          status?: string | null
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          item_id?: string
+          item_name?: string
+          item_type?: string
+          reason?: string
+          rejection_reason?: string | null
+          requested_at?: string | null
+          requested_by_id?: string
+          reviewed_at?: string | null
+          reviewed_by_id?: string | null
+          status?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_deletion_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_deletion_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       communication_credits: {
         Row: {
           balance: number
@@ -1495,7 +1558,11 @@ export type Database = {
       }
       packages: {
         Row: {
+          archive_reason: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by_id: string | null
+          deletion_reason: string | null
           description: string | null
           id: string
           image_urls: string[] | null
@@ -1508,7 +1575,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archive_reason?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
           description?: string | null
           id?: string
           image_urls?: string[] | null
@@ -1521,7 +1592,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archive_reason?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
           description?: string | null
           id?: string
           image_urls?: string[] | null
@@ -1862,8 +1937,13 @@ export type Database = {
       }
       products: {
         Row: {
+          archive_reason: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by_id: string | null
+          deletion_reason: string | null
           description: string | null
+          flag_reason: string | null
           id: string
           image_urls: string[] | null
           is_flagged: boolean | null
@@ -1875,8 +1955,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archive_reason?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
           description?: string | null
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -1888,8 +1973,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archive_reason?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
           description?: string | null
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -2160,13 +2250,18 @@ export type Database = {
       }
       services: {
         Row: {
+          archive_reason: string | null
           category_id: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by_id: string | null
+          deletion_reason: string | null
           deposit_amount: number | null
           deposit_percentage: number | null
           deposit_required: boolean
           description: string | null
           duration_minutes: number
+          flag_reason: string | null
           id: string
           image_urls: string[] | null
           is_flagged: boolean | null
@@ -2177,13 +2272,18 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archive_reason?: string | null
           category_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
           deposit_amount?: number | null
           deposit_percentage?: number | null
           deposit_required?: boolean
           description?: string | null
           duration_minutes?: number
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -2194,13 +2294,18 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archive_reason?: string | null
           category_id?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
           deposit_amount?: number | null
           deposit_percentage?: number | null
           deposit_required?: boolean
           description?: string | null
           duration_minutes?: number
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -2776,6 +2881,10 @@ export type Database = {
           balance: number
           code: string
           created_at: string
+          deleted_at: string | null
+          deleted_by_id: string | null
+          deletion_reason: string | null
+          discontinue_reason: string | null
           expires_at: string | null
           id: string
           is_flagged: boolean | null
@@ -2790,6 +2899,10 @@ export type Database = {
           balance: number
           code: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
+          discontinue_reason?: string | null
           expires_at?: string | null
           id?: string
           is_flagged?: boolean | null
@@ -2804,6 +2917,10 @@ export type Database = {
           balance?: number
           code?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by_id?: string | null
+          deletion_reason?: string | null
+          discontinue_reason?: string | null
           expires_at?: string | null
           id?: string
           is_flagged?: boolean | null
