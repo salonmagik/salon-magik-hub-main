@@ -9,21 +9,11 @@ import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 
 // Password strength validation (same as SignupPage)
+import { isValidPassword } from "@/lib/form-utils";
+
 const validatePasswordStrength = (password: string): string | null => {
-  if (password.length < 8) {
-    return "Password must be at least 8 characters";
-  }
-  if (!/[a-zA-Z]/.test(password)) {
-    return "Password must contain at least one letter";
-  }
-  if (!/[0-9]/.test(password)) {
-    return "Password must contain at least one number";
-  }
-  const simplePatterns = ["12345678", "abcdefgh", "qwertyui", "password", "11111111", "00000000"];
-  if (simplePatterns.some(pattern => password.toLowerCase().includes(pattern))) {
-    return "Password is too simple";
-  }
-  return null;
+  const result = isValidPassword(password);
+  return result.valid ? null : result.error || "Invalid password";
 };
 
 type PageState = "loading" | "invalid" | "form" | "success";
@@ -241,8 +231,10 @@ export default function ResetPasswordPage() {
             <p>Password must:</p>
             <ul className="list-disc list-inside space-y-0.5 ml-2">
               <li>Be at least 8 characters long</li>
-              <li>Contain at least one letter</li>
+              <li>Contain at least one lowercase letter</li>
+              <li>Contain at least one uppercase letter</li>
               <li>Contain at least one number</li>
+              <li>Contain at least one special character (!@#$%^&*...)</li>
               <li>Not be a simple pattern</li>
             </ul>
           </div>

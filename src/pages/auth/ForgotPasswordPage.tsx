@@ -16,22 +16,12 @@ import {
 } from "@/components/ui/input-otp";
 import { Lock } from "lucide-react";
 
+import { isValidPassword } from "@/lib/form-utils";
+
 // Password strength validation
 const validatePasswordStrength = (password: string): string | null => {
-  if (password.length < 8) {
-    return "Password must be at least 8 characters";
-  }
-  if (!/[a-zA-Z]/.test(password)) {
-    return "Password must contain at least one letter";
-  }
-  if (!/[0-9]/.test(password)) {
-    return "Password must contain at least one number";
-  }
-  const simplePatterns = ["12345678", "abcdefgh", "qwertyui", "password", "11111111", "00000000"];
-  if (simplePatterns.some(pattern => password.toLowerCase().includes(pattern))) {
-    return "Password is too simple";
-  }
-  return null;
+  const result = isValidPassword(password);
+  return result.valid ? null : result.error || "Invalid password";
 };
 
 type PhoneFlowStep = "phone" | "otp" | "newPassword";
@@ -501,8 +491,10 @@ export default function ForgotPasswordPage() {
                   <p>Password must:</p>
                   <ul className="list-disc list-inside space-y-0.5 ml-2">
                     <li>Be at least 8 characters long</li>
-                    <li>Contain at least one letter</li>
+                    <li>Contain at least one lowercase letter</li>
+                    <li>Contain at least one uppercase letter</li>
                     <li>Contain at least one number</li>
+                    <li>Contain at least one special character (!@#$%^&*...)</li>
                   </ul>
                 </div>
 

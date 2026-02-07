@@ -34,11 +34,17 @@ export function isValidPassword(password: string): { valid: boolean; error?: str
   if (password.length < 8) {
     return { valid: false, error: "Password must be at least 8 characters" };
   }
-  if (!/[a-zA-Z]/.test(password)) {
-    return { valid: false, error: "Password must contain at least one letter" };
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, error: "Password must contain at least one lowercase letter" };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: "Password must contain at least one uppercase letter" };
   }
   if (!/[0-9]/.test(password)) {
     return { valid: false, error: "Password must contain at least one number" };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) {
+    return { valid: false, error: "Password must contain at least one special character (!@#$%^&*...)" };
   }
   
   const simplePatterns = ["12345678", "abcdefgh", "qwertyui", "password", "11111111", "00000000"];
