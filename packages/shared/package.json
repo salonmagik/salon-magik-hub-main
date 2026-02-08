@@ -1,0 +1,21 @@
+{
+  "name": "@salonmagik/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "lint": "eslint ."
+  },
+  "peerDependencies": {
+    "react": "^18"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
