@@ -1,4 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  wrapEmailTemplate,
+  heading,
+  paragraph,
+  smallText,
+  getSenderName,
+} from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -115,47 +122,19 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: fromEmail,
+          from: `${getSenderName({ mode: "product" })} <${fromEmail}>`,
           to: superAdminEmail,
           subject: "🔐 Salon Magik BackOffice - Super Admin Credentials",
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <title>Super Admin Credentials</title>
-            </head>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 40px 20px; background: #f4f4f5;">
-              <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                <div style="text-align: center; margin-bottom: 30px;">
-                  <div style="display: inline-block; background: #ef4444; color: white; padding: 12px; border-radius: 10px; margin-bottom: 16px;">
-                    <span style="font-size: 24px;">🛡️</span>
-                  </div>
-                  <h1 style="color: #111; font-size: 24px; margin: 0;">BackOffice Super Admin</h1>
-                </div>
-                
-                <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-                  Your Salon Magik BackOffice Super Admin account has been created. Use the credentials below to log in:
-                </p>
-                
-                <div style="background: #f9fafb; border-radius: 8px; padding: 20px; margin: 24px 0;">
-                  <p style="margin: 0 0 12px 0;"><strong>Email:</strong> ${superAdminEmail}</p>
-                  <p style="margin: 0;"><strong>Password:</strong> <code style="background: #e5e7eb; padding: 4px 8px; border-radius: 4px;">${password}</code></p>
-                </div>
-                
-                <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 4px; margin: 24px 0;">
-                  <p style="color: #92400e; font-size: 14px; margin: 0;">
-                    <strong>⚠️ Important:</strong> Please set up 2FA immediately after logging in. Change your password after first login.
-                  </p>
-                </div>
-                
-                <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">
-                  This is an automated message. Do not share these credentials.
-                </p>
-              </div>
-            </body>
-            </html>
-          `,
+          html: wrapEmailTemplate(
+            `
+              ${heading("BackOffice Super Admin created")}
+              ${paragraph("Your Salon Magik BackOffice super admin account has been created.")}
+              ${paragraph(`<strong>Email:</strong> ${superAdminEmail}`)}
+              ${paragraph(`<strong>Password:</strong> <code style=\"background:#e5e7eb;padding:4px 8px;border-radius:4px;\">${password}</code>`)}
+              ${smallText("⚠️ Please set up 2FA immediately and change your password after first login.")}
+            `,
+            { mode: "product" }
+          ),
         }),
       });
 

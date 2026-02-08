@@ -1,5 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  wrapEmailTemplate,
+  paragraph,
+  heading,
+  createButton,
+  smallText,
+  getSenderName,
+} from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,98 +110,20 @@ serve(async (req) => {
       )
       .join("");
 
-    const emailHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-    <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-      <!-- Header -->
-      <div style="background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%); padding: 32px; text-align: center;">
-        <h1 style="margin: 0; color: white; font-size: 24px; font-weight: 600;">${tenant?.name || "Salon"}</h1>
-        <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Invoice</p>
-      </div>
-      
-      <!-- Invoice Details -->
-      <div style="padding: 32px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 24px;">
-          <div>
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Invoice Number</p>
-            <p style="margin: 0; font-weight: 600; color: #111827;">${invoice.invoice_number}</p>
-          </div>
-          <div style="text-align: right;">
-            <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Date</p>
-            <p style="margin: 0; font-weight: 600; color: #111827;">${new Date(invoice.created_at).toLocaleDateString()}</p>
-          </div>
-        </div>
-        
-        <div style="margin-bottom: 24px;">
-          <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Bill To</p>
-          <p style="margin: 0; font-weight: 600; color: #111827;">${customer.full_name}</p>
-          <p style="margin: 4px 0 0 0; color: #6b7280;">${customer.email}</p>
-        </div>
-        
-        <!-- Line Items -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-          <thead>
-            <tr style="background: #f9fafb;">
-              <th style="padding: 12px; text-align: left; font-size: 12px; color: #6b7280; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Description</th>
-              <th style="padding: 12px; text-align: center; font-size: 12px; color: #6b7280; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Qty</th>
-              <th style="padding: 12px; text-align: right; font-size: 12px; color: #6b7280; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Price</th>
-              <th style="padding: 12px; text-align: right; font-size: 12px; color: #6b7280; text-transform: uppercase; border-bottom: 2px solid #e5e7eb;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${lineItemsHtml}
-          </tbody>
-        </table>
-        
-        <!-- Totals -->
-        <div style="border-top: 2px solid #e5e7eb; padding-top: 16px;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span style="color: #6b7280;">Subtotal</span>
-            <span style="font-weight: 500;">${formatCurrency(invoice.subtotal, currency)}</span>
-          </div>
-          ${invoice.discount > 0 ? `
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span style="color: #6b7280;">Discount</span>
-            <span style="font-weight: 500; color: #10b981;">-${formatCurrency(invoice.discount, currency)}</span>
-          </div>
-          ` : ""}
-          ${invoice.tax > 0 ? `
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span style="color: #6b7280;">Tax</span>
-            <span style="font-weight: 500;">${formatCurrency(invoice.tax, currency)}</span>
-          </div>
-          ` : ""}
-          <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-            <span style="font-size: 18px; font-weight: 600;">Total</span>
-            <span style="font-size: 18px; font-weight: 600; color: #7c3aed;">${formatCurrency(invoice.total, currency)}</span>
-          </div>
-        </div>
-        
-        ${invoice.notes ? `
-        <div style="margin-top: 24px; padding: 16px; background: #f9fafb; border-radius: 8px;">
-          <p style="margin: 0 0 4px 0; font-size: 12px; color: #6b7280; text-transform: uppercase;">Notes</p>
-          <p style="margin: 0; color: #374151;">${invoice.notes}</p>
-        </div>
-        ` : ""}
-      </div>
-      
-      <!-- Footer -->
-      <div style="padding: 24px 32px; background: #f9fafb; text-align: center;">
-        <p style="margin: 0; font-size: 14px; color: #6b7280;">Thank you for your business!</p>
-        <p style="margin: 8px 0 0 0; font-size: 12px; color: #9ca3af;">Powered by Salon Magik</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
+    const content = `
+      ${heading(`Invoice ${invoice.invoice_number}`)}
+      ${paragraph(`Hi ${customer.full_name},`)}
+      ${paragraph(`Here is your invoice from <strong>${tenant?.name || "Salon"}</strong>.`)}
+      ${paragraph(`Total: <strong>${formatCurrency(invoice.total, currency)}</strong>`)}
+      ${createButton("View & pay invoice", invoice.payment_link || `${Deno.env.get("APP_URL") || ""}/invoices/${invoice.id}`)}
+      ${smallText("If you have any questions, reply to this email and we’ll help.")} 
     `;
+
+    const emailHtml = wrapEmailTemplate(content, {
+      mode: "salon",
+      salonName: tenant?.name || "Salon",
+      salonLogoUrl: tenant?.logo_url || undefined,
+    });
 
     // Send email via Resend
     const emailResponse = await fetch("https://api.resend.com/emails", {
@@ -203,7 +133,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: fromEmail,
+        from: `${getSenderName({ mode: "salon", salonName: tenant?.name || "Salon" }).replace(/[<>"\n\r]/g, "").trim()} <${fromEmail}>`,
         to: customer.email,
         subject: `Invoice ${invoice.invoice_number} from ${tenant?.name || "Salon"}`,
         html: emailHtml,

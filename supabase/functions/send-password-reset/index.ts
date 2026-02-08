@@ -1,5 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  wrapEmailTemplate,
+  createButton,
+  paragraph,
+  heading,
+  getSenderName,
+} from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -14,76 +21,20 @@ interface PasswordResetRequest {
   origin: string;
 }
 
-// Salon Magik Design System
-const STYLES = {
-  primaryColor: "#2563EB",
-  textColor: "#1f2937",
-  textMuted: "#4b5563",
-  textLight: "#6b7280",
-  textLighter: "#9ca3af",
-  surfaceColor: "#f5f7fa",
-  borderColor: "#e5e7eb",
-  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-};
-
 const defaultTemplate = {
   subject: "Reset your Salon Magik password",
-  body_html: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: ${STYLES.surfaceColor}; font-family: ${STYLES.fontFamily};">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: ${STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 32px; font-family: ${STYLES.fontFamily};">Salon Magik</h1>
-          </div>
-          
-          <h2 style="color: ${STYLES.textColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Reset Your Password</h2>
-          
-          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi there,</p>
-          
-          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            We received a request to reset your password. Click the button below to create a new password:
-          </p>
-          
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="{{reset_link}}" 
-               style="background-color: ${STYLES.primaryColor}; color: white; padding: 14px 28px; 
-                      text-decoration: none; border-radius: 8px; display: inline-block;
-                      font-weight: 500; font-size: 16px; font-family: ${STYLES.fontFamily};">
-              Reset Password
-            </a>
-          </div>
-          
-          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            This link expires in 1 hour. If you didn't request this, you can safely ignore this email.
-          </p>
-          
-          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            If the button doesn't work, copy and paste this link into your browser:<br/>
-            <a href="{{reset_link}}" style="color: ${STYLES.primaryColor}; word-break: break-all;">{{reset_link}}</a>
-          </p>
-          
-          <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
-          
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily};">
-            © 2026 Salon Magik. All rights reserved.
-          </p>
-        </div>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`,
+  build: (resetLink: string) => {
+    const content = `
+      ${heading("Reset your password")}
+      ${paragraph("We received a request to reset your password. Click below to create a new one.")}
+      ${createButton("Reset password", resetLink)}
+      ${paragraph("This link expires in 1 hour. If you didn’t request this, you can ignore this email.")}
+      ${paragraph(
+        `If the button doesn't work, copy and paste this link:<br/><a href="${resetLink}" style="color: #2563EB; word-break: break-all;">${resetLink}</a>`
+      )}
+    `;
+    return wrapEmailTemplate(content, { mode: "product" });
+  },
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -145,11 +96,9 @@ const handler = async (req: Request): Promise<Response> => {
     // Build reset link
     const resetLink = `${origin}/reset-password?token=${token}`;
 
-    // Replace variables in template
-    const htmlBody = defaultTemplate.body_html.replace(/\{\{reset_link\}\}/g, resetLink);
+    const htmlBody = defaultTemplate.build(resetLink);
 
-    // Sanitize sender name for email headers
-    const sanitizedFromName = "Salon Magik".replace(/[<>"\\n\\r]/g, "");
+    const sanitizedFromName = getSenderName({ mode: "product" }).replace(/[<>"\\n\\r]/g, "");
 
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {

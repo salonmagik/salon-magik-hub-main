@@ -1,5 +1,13 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import {
+  wrapEmailTemplate,
+  heading,
+  paragraph,
+  smallText,
+  createButton,
+  getSenderName,
+} from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -37,18 +45,6 @@ function generateSecurePassword(): string {
   return password;
 }
 
-// Salon Magik Design System
-const STYLES = {
-  primaryColor: "#2563EB",
-  textColor: "#1f2937",
-  textMuted: "#4b5563",
-  textLight: "#6b7280",
-  textLighter: "#9ca3af",
-  surfaceColor: "#f5f7fa",
-  borderColor: "#e5e7eb",
-  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-};
-
 function buildInvitationEmail(
   firstName: string,
   email: string,
@@ -58,104 +54,21 @@ function buildInvitationEmail(
   tempPassword: string,
   salonLogoUrl?: string
 ): string {
-  // Header with salon branding if available
-  let headerSection = `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <h1 style="color: ${STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 32px; font-family: ${STYLES.fontFamily};">Salon Magik</h1>
-    </div>
+  const content = `
+    ${heading("Join our team")}
+    ${paragraph(`Hi ${firstName},`)}
+    ${paragraph(`You've been invited to join <strong>${salonName}</strong> as a <strong>${role}</strong>.`)}
+    ${paragraph(`Your login email: <strong>${email}</strong>`)}
+    ${paragraph(`Temporary password (you’ll set a new one on first login): <strong>${tempPassword}</strong>`)}
+    ${createButton("Sign in now", loginLink)}
+    ${smallText("This invitation expires in 7 days. If you weren't expecting this, you can ignore the email.")} 
   `;
 
-  if (salonLogoUrl) {
-    headerSection = `
-      <div style="text-align: center; margin-bottom: 32px;">
-        <img src="${salonLogoUrl}" alt="${salonName} Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;" />
-        <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
-      </div>
-    `;
-  } else {
-    headerSection = `
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: ${STYLES.primaryColor}; margin: 0 0 8px 0; font-size: 28px; font-family: ${STYLES.fontFamily};">${salonName}</h1>
-        <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
-      </div>
-    `;
-  }
-
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: ${STYLES.surfaceColor}; font-family: ${STYLES.fontFamily};">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          ${headerSection}
-          
-          <h2 style="color: ${STYLES.textColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Join Our Team</h2>
-          
-          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi ${firstName},</p>
-          
-          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            You've been invited to join <strong>${salonName}</strong> as a <strong>${role}</strong>.
-          </p>
-          
-          <div style="background-color: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0;">
-            <p style="color: ${STYLES.textMuted}; font-size: 14px; margin: 0 0 12px 0; font-family: ${STYLES.fontFamily};">
-              <strong>Your login credentials:</strong>
-            </p>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 8px 0; color: ${STYLES.textLight}; font-size: 14px;">Email:</td>
-                <td style="padding: 8px 0; color: ${STYLES.textColor}; font-size: 14px; font-family: monospace;">${email}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; color: ${STYLES.textLight}; font-size: 14px;">Temporary Password:</td>
-                <td style="padding: 8px 0; color: ${STYLES.textColor}; font-size: 16px; font-family: monospace; letter-spacing: 1px; background-color: #fff; padding: 8px 12px; border-radius: 4px;">
-                  ${tempPassword}
-                </td>
-              </tr>
-            </table>
-          </div>
-          
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${loginLink}" 
-               style="background-color: ${STYLES.primaryColor}; color: white; padding: 14px 28px; 
-                      text-decoration: none; border-radius: 8px; display: inline-block;
-                      font-weight: 500; font-size: 16px; font-family: ${STYLES.fontFamily};">
-              Sign In Now
-            </a>
-          </div>
-
-          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; text-align: center; font-family: ${STYLES.fontFamily};">
-            You'll be prompted to set a permanent password on your first login.
-          </p>
-          
-          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            This invitation expires in 7 days.
-          </p>
-          
-          <p style="color: ${STYLES.textLight}; font-size: 14px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            If you didn't expect this invitation, you can safely ignore this email.
-          </p>
-          
-          <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
-          
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily};">
-            © 2026 Salon Magik. All rights reserved.
-          </p>
-        </div>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+  return wrapEmailTemplate(content, {
+    mode: "salon",
+    salonName,
+    salonLogoUrl,
+  });
 }
 
 function getBaseUrlFromRequest(req: Request): string {
@@ -460,8 +373,7 @@ const handler = async (req: Request): Promise<Response> => {
       tenant.logo_url || undefined
     );
 
-    // Sanitize sender name
-    const sanitizedSalonName = tenant.name.replace(/[<>"\\n\\r]/g, "").trim();
+    const sanitizedSalonName = getSenderName({ mode: "salon", salonName: tenant.name }).replace(/[<>"\\n\\r]/g, "").trim();
 
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {

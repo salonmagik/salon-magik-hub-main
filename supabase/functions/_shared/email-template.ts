@@ -15,12 +15,38 @@ export const EMAIL_STYLES = {
 };
 
 // Salon Magik logo URL (hosted publicly)
-export const SALON_MAGIK_LOGO_URL = "https://salonmagik.lovable.app/favicon.png";
+export const SALON_MAGIK_LOGO_URL = "https://salonmagik.com/favicon.png";
+
+export type BrandingMode = "product" | "salon";
 
 interface EmailWrapperOptions {
+  /**
+   * product  -> Salon Magik system emails (auth, billing, product news)
+   * salon    -> Emails triggered by a tenant for their customers (reminders, credits, receipts)
+   */
+  mode?: BrandingMode;
   salonName?: string;
   salonLogoUrl?: string;
-  showSalonBranding?: boolean; // For salon-specific emails (customer emails from salons)
+  /** @deprecated use mode === "salon" */
+  showSalonBranding?: boolean;
+  privacyUrl?: string;
+  helpUrl?: string;
+}
+
+/**
+ * Returns a sender display name consistent with branding rules.
+ * product emails -> "Salon Magik"
+ * salon emails   -> "<Salon Name> via Salon Magik" (or "Salon Magik" if name missing)
+ */
+export function getSenderName(options: {
+  mode?: BrandingMode;
+  salonName?: string;
+}): string {
+  const mode = options.mode ?? "product";
+  if (mode === "salon" && options.salonName) {
+    return `${options.salonName} via Salon Magik`;
+  }
+  return "Salon Magik";
 }
 
 /**
@@ -29,15 +55,24 @@ interface EmailWrapperOptions {
  * - For salon-specific customer emails: Shows salon's logo (or name + "Powered by Salon Magik")
  */
 export function wrapEmailTemplate(
-  content: string, 
+  content: string,
   options: EmailWrapperOptions = {}
 ): string {
-  const { salonName, salonLogoUrl, showSalonBranding = false } = options;
-  
+  const {
+    salonName,
+    salonLogoUrl,
+    showSalonBranding = false,
+    mode: explicitMode,
+    privacyUrl = "https://salonmagik.com/privacy",
+    helpUrl = "mailto:support@salonmagik.com",
+  } = options;
+
+  const mode: BrandingMode = explicitMode ?? (showSalonBranding ? "salon" : "product");
+
   let headerSection: string;
-  
+
   // If showing salon branding (emails sent to customers from salons)
-  if (showSalonBranding && salonLogoUrl) {
+  if (mode === "salon" && salonLogoUrl) {
     // Salon has a logo - show it with "Powered by" text
     headerSection = `
       <div style="text-align: center; margin-bottom: 32px;">
@@ -45,7 +80,7 @@ export function wrapEmailTemplate(
         ${salonName ? `<p style="color: ${EMAIL_STYLES.textMuted}; font-size: 14px; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">Powered by Salon Magik</p>` : ''}
       </div>
     `;
-  } else if (showSalonBranding && salonName) {
+  } else if (mode === "salon" && salonName) {
     // Salon branding without logo - show salon name prominently
     headerSection = `
       <div style="text-align: center; margin-bottom: 32px;">
@@ -84,16 +119,21 @@ export function wrapEmailTemplate(
       <td align="center" style="padding: 40px 20px;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: ${EMAIL_STYLES.backgroundColor}; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
           ${headerSection}
-          
+
           <div style="font-family: ${EMAIL_STYLES.fontFamily}; color: ${EMAIL_STYLES.textColor};">
             ${content}
           </div>
-          
+
           <hr style="border: none; border-top: 1px solid ${EMAIL_STYLES.borderColor}; margin: 32px 0;" />
-          
-          <p style="color: ${EMAIL_STYLES.textLighter}; font-size: 12px; text-align: center; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">
-            © 2026 Salon Magik. All rights reserved.
-          </p>
+
+          <div style="color: ${EMAIL_STYLES.textLighter}; font-size: 12px; text-align: center; line-height: 1.6; font-family: ${EMAIL_STYLES.fontFamily};">
+            <p style="margin: 0 0 6px 0;">© 2026 Salon Magik. All rights reserved.</p>
+            <p style="margin: 0 0 6px 0;">You’re receiving this because you requested access or use Salon Magik. We never share your data without consent.</p>
+            <p style="margin: 0;">
+              <a href="${privacyUrl}" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none;">Privacy Policy</a>
+              ${helpUrl ? ` · <a href="${helpUrl}" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none;">Support</a>` : ""}
+            </p>
+          </div>
         </div>
       </td>
     </tr>
@@ -109,14 +149,14 @@ export function wrapEmailTemplate(
 export function createButton(text: string, href: string): string {
   return `
     <div style="text-align: center; margin: 32px 0;">
-      <a href="${href}" 
-         style="background-color: ${EMAIL_STYLES.primaryColor}; 
-                color: white; 
-                padding: 14px 28px; 
-                text-decoration: none; 
-                border-radius: 8px; 
+      <a href="${href}"
+         style="background-color: ${EMAIL_STYLES.primaryColor};
+                color: white;
+                padding: 14px 28px;
+                text-decoration: none;
+                border-radius: 8px;
                 display: inline-block;
-                font-weight: 500; 
+                font-weight: 500;
                 font-size: 16px;
                 font-family: ${EMAIL_STYLES.fontFamily};">
         ${text}
@@ -146,7 +186,7 @@ export function createAlertBox(content: string, type: 'warning' | 'info' | 'succ
     success: { bg: '#dcfce7', border: '#16a34a', text: '#166534' },
   };
   const c = colors[type];
-  
+
   return `
     <div style="background: ${c.bg}; border-radius: 8px; padding: 16px; margin: 24px 0; border-left: 4px solid ${c.border};">
       <p style="color: ${c.text}; margin: 0; font-size: 14px; font-family: ${EMAIL_STYLES.fontFamily};">
