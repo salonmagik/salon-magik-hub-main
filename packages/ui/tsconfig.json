@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "..",
+    "tsBuildInfoFile": "/tmp/salon-magik-ui.tsbuildinfo",
+    "baseUrl": "./",
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "strict": false,
+    "paths": {
+      "@ui/*": ["src/*", "src/ui/*"],
+      "@shared/*": ["../shared/src/*"]
+    }
+  },
+  "include": ["src", "../shared/src"],
+  "exclude": ["dist", "node_modules"]
+}

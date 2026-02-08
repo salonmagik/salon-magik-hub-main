@@ -1,16 +1,13 @@
 {
   "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }],
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "noImplicitAny": false,
-    "noUnusedParameters": false,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "noUnusedLocals": false,
-    "strictNullChecks": false
-  }
+  "references": [
+    { "path": "apps/salon-admin/tsconfig.app.json" },
+    { "path": "apps/backoffice/tsconfig.app.json" },
+    { "path": "apps/client-portal/tsconfig.app.json" },
+    { "path": "apps/public-booking/tsconfig.app.json" },
+    { "path": "apps/marketing/tsconfig.app.json" },
+    { "path": "packages/ui/tsconfig.json" },
+    { "path": "packages/shared/tsconfig.json" },
+    { "path": "packages/supabase-client/tsconfig.json" }
+  ]
 }

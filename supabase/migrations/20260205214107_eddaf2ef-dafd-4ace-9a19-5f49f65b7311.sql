@@ -1,5 +1,6 @@
 -- Fix RLS Policy: communication_credits INSERT should require tenant membership
 DROP POLICY IF EXISTS "Authenticated users can create communication credits" ON public.communication_credits;
+DROP POLICY IF EXISTS "Users can create communication credits for their tenants" ON public.communication_credits;
 CREATE POLICY "Users can create communication credits for their tenants"
 ON public.communication_credits
 FOR INSERT
@@ -10,6 +11,7 @@ WITH CHECK (
 
 -- Fix RLS Policy: locations INSERT should verify tenant ownership
 DROP POLICY IF EXISTS "Authenticated users can create locations" ON public.locations;
+DROP POLICY IF EXISTS "Users can create locations for their tenants" ON public.locations;
 CREATE POLICY "Users can create locations for their tenants"
 ON public.locations
 FOR INSERT
