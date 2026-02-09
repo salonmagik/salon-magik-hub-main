@@ -1,73 +1,76 @@
-# Welcome to your Lovable project
+# Salon Magik Hub (monorepo)
 
-## Project info
+Multi-app workspace for Salon Magik:
+- `apps/salon-admin` – salon owner/operator app
+- `apps/backoffice` – internal control panel
+- `apps/client-portal` – client-facing portal
+- `apps/public-booking` – public booking flow
+- `apps/marketing` – marketing/landing site
+- `packages/shared`, `packages/ui`, `packages/supabase-client` – shared code
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Prerequisites
+- Node 20.x (`nvm use 20`)
+- pnpm 10.x (`corepack enable` then `corepack prepare pnpm@10.29.1 --activate`)
+- Supabase CLI (for functions/migrations)
+- Docker running if you run Supabase functions locally
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
+## Setup
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+pnpm install
 ```
 
-**Edit a file directly in GitHub**
+## Running apps
+From repo root:
+```sh
+# Salon Admin
+pnpm --filter salon-admin dev
+# Backoffice
+pnpm --filter backoffice dev
+# Client Portal
+pnpm --filter client-portal dev
+# Public Booking
+pnpm --filter public-booking dev
+# Marketing
+pnpm --filter marketing dev
+```
+All apps use Vite; default ports are set in their `package.json`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Environment variables
+- Each app has its own `.env.local` (see `apps/*/.env.local` for keys you already use).
+- Shared Supabase settings usually include `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- Email (Resend): `RESEND_API_KEY`, `RESEND_FROM_EMAIL`.
+- Stripe/Paystack webhook secrets as needed in functions.
 
-**Use GitHub Codespaces**
+## Supabase
+- Functions live in `supabase/functions`.
+- Deploy selected functions:
+  ```sh
+  supabase functions deploy <name1> <name2> ...
+  ```
+- Migrations/policies are managed via Supabase CLI; ensure Docker is running if you run them locally.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Scripts (Turbo)
+```sh
+pnpm dev     # runs turbo dev across workspace
+pnpm build   # turbo build
+pnpm lint    # turbo lint
+pnpm test    # turbo test
+```
 
-## What technologies are used for this project?
+## Deployment
+- Vercel is used per app; point each project to its app directory and use the workspace root `pnpm-lock.yaml`.
+- Root `engines` pins Node 20; set Vercel project to 20.x.
+- Turbo schema uses `turbo.json` at the root.
 
-This project is built with:
+## Email branding helpers
+- Shared HTML helpers: `supabase/functions/_shared/email-template.ts`.
+- Use `wrapEmailTemplate` and `getSenderName` in functions for consistent branding (Salon Magik vs. Salon-branded).
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Cleaning caches
+Generated artifacts (e.g., `.vite`, `supabase/.temp`) are gitignored. If needed:
+```sh
+pnpm clean # (add your own script) or manually remove .vite/.turbo
+```
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Notes
+- Use feature branch `development-only` for PRs into `main`.
