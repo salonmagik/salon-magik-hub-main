@@ -12,7 +12,7 @@ export const DOMAIN_CONFIG = {
   apex: "salonmagik.com",
   dns: {
     aRecord: "185.158.133.1",
-    txtVerification: "lovable-domain-verify=salonmagik",
+    txtVerification: "",
   },
   status: "pending" as "pending" | "verified" | "active",
 };

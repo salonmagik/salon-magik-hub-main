@@ -91,7 +91,7 @@ function getBaseUrlFromRequest(req: Request): string {
   }
 
   // Last-resort fallback
-  return "https://salonmagik.lovable.app";
+  return "https://app.salonmagik.com";
 }
 
 const handler = async (req: Request): Promise<Response> => {
