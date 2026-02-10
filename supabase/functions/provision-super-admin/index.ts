@@ -29,11 +29,20 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
+    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL");
+
+    const superAdminEmail = Deno.env.get("ADMIN_EMAIL");
+    if (!superAdminEmail || !superAdminEmail.trim()) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "ADMIN_EMAIL is not set. Add it as a secret and redeploy before running this function.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
+      );
+    }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-    const superAdminEmail = "tech@salonmagik.com";
 
     // Check if already seeded
     const { data: existingSetting } = await supabase
