@@ -102,7 +102,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Build reset link - note the /backoffice path
-    const resetLink = `${origin}/backoffice/reset-password?token=${token}`;
+    const resetLink = `${origin}/reset-password?token=${token}`;
 
     const htmlBody = emailTemplate.build(resetLink);
 

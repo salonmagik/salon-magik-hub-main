@@ -95,7 +95,7 @@ export default function BackofficeForgotPasswordPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Try another email
               </Button>
-              <Link to="/backoffice/login">
+              <Link to="/login">
                 <Button variant="ghost" className="w-full">
                   Back to sign in
                 </Button>
@@ -144,7 +144,7 @@ export default function BackofficeForgotPasswordPage() {
           </form>
           <p className="mt-6 text-center text-sm text-muted-foreground">
             <Link
-              to="/backoffice/login"
+              to="/login"
               className="text-primary hover:underline inline-flex items-center gap-1"
             >
               <ArrowLeft size={14} />

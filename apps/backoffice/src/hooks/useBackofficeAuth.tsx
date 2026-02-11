@@ -6,16 +6,17 @@
  type BackofficeUser = Tables<"backoffice_users">;
  type Profile = Tables<"profiles">;
  
- interface BackofficeAuthState {
-   user: User | null;
-   session: Session | null;
-   profile: Profile | null;
-   backofficeUser: BackofficeUser | null;
-   isLoading: boolean;
-   isAuthenticated: boolean;
-   isTotpVerified: boolean;
-   requiresTotpSetup: boolean;
- }
+interface BackofficeAuthState {
+  user: User | null;
+  session: Session | null;
+  profile: Profile | null;
+  backofficeUser: BackofficeUser | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  isTotpVerified: boolean;
+  requiresTotpSetup: boolean;
+  requiresPasswordChange: boolean;
+}
  
  interface BackofficeAuthContextType extends BackofficeAuthState {
    signOut: () => Promise<void>;
@@ -27,16 +28,17 @@
  const BackofficeAuthContext = createContext<BackofficeAuthContextType | undefined>(undefined);
  
  export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
-   const [state, setState] = useState<BackofficeAuthState>({
-     user: null,
-     session: null,
-     profile: null,
-     backofficeUser: null,
-     isLoading: true,
-     isAuthenticated: false,
-     isTotpVerified: false,
-     requiresTotpSetup: false,
-   });
+  const [state, setState] = useState<BackofficeAuthState>({
+    user: null,
+    session: null,
+    profile: null,
+    backofficeUser: null,
+    isLoading: true,
+    isAuthenticated: false,
+    isTotpVerified: false,
+    requiresTotpSetup: false,
+    requiresPasswordChange: false,
+  });
  
    // Check if email domain is allowed
    const checkDomainAllowed = async (email: string): Promise<boolean> => {
@@ -53,36 +55,41 @@
    };
  
    // Fetch or create backoffice user
-   const fetchBackofficeUser = async (userId: string, email: string): Promise<BackofficeUser | null> => {
-     // First, check if user exists in backoffice_users
-     const { data: existing, error: fetchError } = await supabase
-       .from("backoffice_users")
-       .select("*")
-       .eq("user_id", userId)
-       .maybeSingle();
- 
-     if (fetchError && fetchError.code !== "PGRST116") {
-       console.error("Error fetching backoffice user:", fetchError);
-       return null;
-     }
- 
-     if (existing) return existing;
- 
-     // User doesn't exist, check if domain is allowed
-     const domain = email.split("@")[1]?.toLowerCase();
-     const domainAllowed = await checkDomainAllowed(email);
- 
-     if (!domainAllowed) {
-       console.log("Domain not allowed for backoffice:", domain);
-       return null;
-     }
- 
-     // Create new backoffice user (will have totp_enabled = false, needs setup)
-     // Note: This insert will fail if they don't have INSERT policy, which is intentional
-     // BackOffice users should be pre-provisioned by super admins
-     console.log("User has allowed domain but no backoffice record - must be provisioned by admin");
-     return null;
-   };
+  const fetchBackofficeUser = async (userId: string, email: string): Promise<BackofficeUser | null> => {
+    const trySelect = async () =>
+      supabase
+        .from("backoffice_users")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    let { data: existing, error: fetchError } = await trySelect();
+
+    // Retry once on spurious AbortError that can happen in dev/StrictMode
+    if (fetchError && (fetchError.message?.includes("AbortError") || (fetchError as any).name === "AbortError")) {
+      ({ data: existing, error: fetchError } = await trySelect());
+    }
+
+    if (fetchError && fetchError.code !== "PGRST116") {
+      console.error("Error fetching backoffice user:", fetchError);
+      return null;
+    }
+
+    if (existing) return existing;
+
+    // User doesn't exist, check if domain is allowed
+    const domain = email.split("@")[1]?.toLowerCase();
+    const domainAllowed = await checkDomainAllowed(email);
+
+    if (!domainAllowed) {
+      console.log("Domain not allowed for backoffice:", domain);
+      return null;
+    }
+
+    // Not auto-creating here; super admin must provision. Return null to trigger Access Denied.
+    console.log("User has allowed domain but no backoffice record - must be provisioned by admin");
+    return null;
+  };
  
    // Fetch profile
    const fetchProfile = async (userId: string): Promise<Profile | null> => {
@@ -147,8 +154,10 @@
               profile,
               backofficeUser,
               isAuthenticated: !!backofficeUser,
-              isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : false,
-              requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
+              isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : true,
+              // Only force setup when totp_required is true (not merely because it's disabled)
+              requiresTotpSetup: !!backofficeUser && backofficeUser.totp_required,
+              requiresPasswordChange: !!backofficeUser?.temp_password_required,
             }));
           }
         }
@@ -179,8 +188,9 @@
           backofficeUser,
           isLoading: false,
           isAuthenticated: !!backofficeUser,
-          isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : false,
-          requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
+          isTotpVerified: backofficeUser?.totp_enabled ? totpVerifiedInSession : true,
+          requiresTotpSetup: !!backofficeUser && backofficeUser.totp_required,
+          requiresPasswordChange: !!backofficeUser?.temp_password_required,
         });
       } else {
         setState(prev => ({ ...prev, isLoading: false }));
@@ -275,16 +285,17 @@
      }
    };
  
-   const refreshBackofficeUser = async () => {
-     if (!state.user) return;
-     const backofficeUser = await fetchBackofficeUser(state.user.id, state.user.email || "");
-     setState(prev => ({
-       ...prev,
-       backofficeUser,
-       isAuthenticated: !!backofficeUser,
-       requiresTotpSetup: !!backofficeUser && !backofficeUser.totp_enabled,
-     }));
-   };
+  const refreshBackofficeUser = async () => {
+    if (!state.user) return;
+    const backofficeUser = await fetchBackofficeUser(state.user.id, state.user.email || "");
+    setState(prev => ({
+      ...prev,
+      backofficeUser,
+      isAuthenticated: !!backofficeUser,
+      requiresTotpSetup: !!backofficeUser && backofficeUser.totp_required,
+      requiresPasswordChange: !!backofficeUser?.temp_password_required,
+    }));
+  };
  
    return (
      <BackofficeAuthContext.Provider

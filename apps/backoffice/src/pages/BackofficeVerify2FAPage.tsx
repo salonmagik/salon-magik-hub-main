@@ -6,21 +6,21 @@ import { useBackofficeAuth } from "@/hooks";
  import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
  import { useToast } from "@ui/ui/use-toast";
  import { Loader2, Shield, KeyRound } from "lucide-react";
- 
+
  export default function BackofficeVerify2FAPage() {
    const navigate = useNavigate();
    const { toast } = useToast();
    const { verifyTotp, signOut, profile } = useBackofficeAuth();
    const [code, setCode] = useState("");
    const [isLoading, setIsLoading] = useState(false);
- 
+
    const handleVerify = async () => {
      if (code.length !== 6) return;
-     
+
      setIsLoading(true);
      try {
        const success = await verifyTotp(code);
-       
+
        if (success) {
          navigate("/backoffice", { replace: true });
        } else {
@@ -35,12 +35,12 @@ import { useBackofficeAuth } from "@/hooks";
        setIsLoading(false);
      }
    };
- 
+
    const handleSignOut = async () => {
      await signOut();
-     navigate("/backoffice/login", { replace: true });
+     navigate("/login", { replace: true });
    };
- 
+
    return (
      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
        <Card className="w-full max-w-md">
@@ -73,22 +73,22 @@ import { useBackofficeAuth } from "@/hooks";
                </InputOTPGroup>
              </InputOTP>
            </div>
- 
-           <Button 
-             onClick={handleVerify} 
-             className="w-full" 
+
+           <Button
+             onClick={handleVerify}
+             className="w-full"
              disabled={isLoading || code.length !== 6}
            >
              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
              Verify
            </Button>
- 
+
            <div className="flex items-center justify-center">
              <Button variant="link" onClick={handleSignOut} className="text-muted-foreground">
                Use a different account
              </Button>
            </div>
- 
+
            <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
              <Shield className="h-3 w-3" />
              <span>Protected by 2FA</span>

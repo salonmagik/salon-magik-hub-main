@@ -6,7 +6,7 @@ import { useBackofficeAuth } from "@/hooks";
  import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
  import { useToast } from "@ui/ui/use-toast";
  import { Loader2, Shield, Smartphone, Copy, Check } from "lucide-react";
- 
+
 // Generate a random base32 secret - exactly 16 characters for Google Authenticator compatibility
 function generateSecret(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -18,7 +18,7 @@ function generateSecret(): string {
   }
   return secret;
 }
- 
+
  export default function BackofficeSetup2FAPage() {
    const navigate = useNavigate();
    const { toast } = useToast();
@@ -27,38 +27,38 @@ function generateSecret(): string {
    const [code, setCode] = useState("");
    const [isLoading, setIsLoading] = useState(false);
    const [copied, setCopied] = useState(false);
- 
+
    // Redirect if not authenticated or doesn't need 2FA setup
    useEffect(() => {
      if (!isAuthenticated) {
-       navigate("/backoffice/login", { replace: true });
+       navigate("/login", { replace: true });
      } else if (!requiresTotpSetup) {
-       navigate("/backoffice", { replace: true });
+       navigate("/", { replace: true });
      }
    }, [isAuthenticated, requiresTotpSetup, navigate]);
- 
+
    // Generate secret on mount
    useEffect(() => {
      if (!secret) {
        setSecret(generateSecret());
      }
    }, [secret]);
- 
+
    const otpauthUrl = `otpauth://totp/SalonMagik:${user?.email}?secret=${secret}&issuer=SalonMagik&algorithm=SHA1&digits=6&period=30`;
- 
+
    const handleCopySecret = async () => {
      await navigator.clipboard.writeText(secret);
      setCopied(true);
      setTimeout(() => setCopied(false), 2000);
    };
- 
+
    const handleVerifyAndSetup = async () => {
      if (code.length !== 6) return;
-     
+
      setIsLoading(true);
      try {
        const success = await setupTotp(secret);
-       
+
        if (success) {
          toast({
            title: "2FA enabled",
@@ -77,12 +77,12 @@ function generateSecret(): string {
        setIsLoading(false);
      }
    };
- 
+
    const handleSignOut = async () => {
      await signOut();
-     navigate("/backoffice/login", { replace: true });
+     navigate("/login", { replace: true });
    };
- 
+
    return (
      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
        <Card className="w-full max-w-md">
@@ -104,7 +104,7 @@ function generateSecret(): string {
                </div>
                <span className="font-medium">Add to your authenticator app</span>
              </div>
-             
+
               <div className="p-4 bg-muted rounded-lg text-center space-y-4">
                 {/* QR Code Image */}
                 <div className="flex justify-center">
@@ -121,9 +121,9 @@ function generateSecret(): string {
                  <code className="bg-background px-3 py-2 rounded text-sm font-mono break-all">
                    {secret.match(/.{1,4}/g)?.join(" ")}
                  </code>
-                 <Button 
-                   variant="ghost" 
-                   size="icon" 
+                 <Button
+                   variant="ghost"
+                   size="icon"
                    onClick={handleCopySecret}
                    className="shrink-0"
                  >
@@ -136,7 +136,7 @@ function generateSecret(): string {
                </div>
              </div>
            </div>
- 
+
            {/* Step 2: Enter code */}
            <div className="space-y-3">
              <div className="flex items-center gap-2">
@@ -145,7 +145,7 @@ function generateSecret(): string {
                </div>
                <span className="font-medium">Enter the 6-digit code</span>
              </div>
-             
+
              <div className="flex justify-center">
                <InputOTP
                  maxLength={6}
@@ -164,22 +164,22 @@ function generateSecret(): string {
                </InputOTP>
              </div>
            </div>
- 
-           <Button 
-             onClick={handleVerifyAndSetup} 
-             className="w-full" 
+
+           <Button
+             onClick={handleVerifyAndSetup}
+             className="w-full"
              disabled={isLoading || code.length !== 6}
            >
              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
              Enable 2FA
            </Button>
- 
+
            <div className="flex items-center justify-center">
              <Button variant="link" onClick={handleSignOut} className="text-muted-foreground">
                Cancel and sign out
              </Button>
            </div>
- 
+
            <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
              <Shield className="h-3 w-3" />
              <span>Save your secret key securely - you'll need it if you lose access</span>

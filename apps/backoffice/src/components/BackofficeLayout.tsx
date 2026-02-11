@@ -33,45 +33,45 @@ import { InactivityGuard } from "@/components/session/InactivityGuard";
   DollarSign,
   Eye,
  } from "lucide-react";
- 
+
  interface BackofficeLayoutProps {
    children: ReactNode;
  }
- 
+
 const navItems = [
-  { href: "/backoffice", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/backoffice/waitlist", label: "Waitlist", icon: Users },
-  { href: "/backoffice/tenants", label: "Tenants", icon: Building2 },
-  { href: "/backoffice/feature-flags", label: "Feature Flags", icon: Flag },
-  { href: "/backoffice/plans", label: "Plans", icon: DollarSign },
-  { href: "/backoffice/admins", label: "Admins", icon: Shield },
-  { href: "/backoffice/impersonation", label: "Impersonation", icon: Eye },
-  { href: "/backoffice/settings", label: "Settings", icon: Settings },
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/waitlist", label: "Waitlist", icon: Users },
+  { href: "/tenants", label: "Tenants", icon: Building2 },
+  { href: "/feature-flags", label: "Feature Flags", icon: Flag },
+  { href: "/plans", label: "Plans", icon: DollarSign },
+  { href: "/admins", label: "Admins", icon: Shield },
+  { href: "/impersonation", label: "Impersonation", icon: Eye },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
- 
+
  export function BackofficeLayout({ children }: BackofficeLayoutProps) {
    const location = useLocation();
    const navigate = useNavigate();
    const { profile, backofficeUser, signOut } = useBackofficeAuth();
- 
+
    const handleSignOut = async () => {
      await signOut();
-     navigate("/backoffice/login", { replace: true });
+     navigate("/login", { replace: true });
    };
- 
+
    const initials = profile?.full_name
      ?.split(" ")
      .map((n) => n[0])
      .join("")
      .toUpperCase()
      .slice(0, 2) || "BO";
- 
-   const roleBadge = backofficeUser?.role === "super_admin" 
-     ? "Super Admin" 
-     : backofficeUser?.role === "admin" 
-       ? "Admin" 
+
+   const roleBadge = backofficeUser?.role === "super_admin"
+     ? "Super Admin"
+     : backofficeUser?.role === "admin"
+       ? "Admin"
        : "Support";
- 
+
    return (
      <InactivityGuard warningMinutes={22} logoutMinutes={30}>
        <SidebarProvider>
@@ -88,12 +88,12 @@ const navItems = [
                  </div>
                </div>
              </SidebarHeader>
-             
+
              <SidebarContent className="px-2 py-4">
                <SidebarMenu>
                  {navItems.map((item) => {
-                   const isActive = location.pathname === item.href || 
-                     (item.href !== "/backoffice" && location.pathname.startsWith(item.href));
+                   const isActive = location.pathname === item.href ||
+                     (item.href !== "/" && location.pathname.startsWith(item.href));
                    return (
                      <SidebarMenuItem key={item.href}>
                        <SidebarMenuButton asChild isActive={isActive}>
@@ -107,7 +107,7 @@ const navItems = [
                  })}
                </SidebarMenu>
              </SidebarContent>
- 
+
              <SidebarFooter className="border-t p-4">
                <DropdownMenu>
                  <DropdownMenuTrigger asChild>
@@ -135,7 +135,7 @@ const navItems = [
                </DropdownMenu>
              </SidebarFooter>
            </Sidebar>
- 
+
            <SidebarInset className="flex-1">
              <main className="flex-1 overflow-auto">
                {children}

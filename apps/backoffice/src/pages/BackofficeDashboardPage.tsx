@@ -4,21 +4,21 @@ import { useWaitlist, useTenants } from "@/hooks";
  import { Button } from "@ui/button";
  import { Link } from "react-router-dom";
  import { Users, Building2, Clock, TrendingUp, ArrowRight } from "lucide-react";
- 
+
  export default function BackofficeDashboardPage() {
    const { data: pendingLeads } = useWaitlist("pending");
    const { data: tenants } = useTenants();
- 
+
    const activeCount = tenants?.filter(t => t.subscription_status === "active" || t.subscription_status === "trialing").length || 0;
    const pendingCount = pendingLeads?.length || 0;
- 
+
    const stats = [
      {
        title: "Pending Leads",
        value: pendingCount,
        description: "Awaiting review",
        icon: Clock,
-       href: "/backoffice/waitlist",
+       href: "/waitlist",
        color: "text-amber-500",
        bgColor: "bg-amber-500/10",
      },
@@ -27,7 +27,7 @@ import { useWaitlist, useTenants } from "@/hooks";
        value: activeCount,
        description: "Active or trialing",
        icon: Building2,
-       href: "/backoffice/tenants",
+       href: "/tenants",
        color: "text-emerald-500",
        bgColor: "bg-emerald-500/10",
      },
@@ -36,12 +36,12 @@ import { useWaitlist, useTenants } from "@/hooks";
        value: tenants?.length || 0,
        description: "All salons",
        icon: Users,
-       href: "/backoffice/tenants",
+       href: "/tenants",
        color: "text-blue-500",
        bgColor: "bg-blue-500/10",
      },
    ];
- 
+
    return (
      <BackofficeLayout>
        <div className="p-6 space-y-6">
@@ -51,7 +51,7 @@ import { useWaitlist, useTenants } from "@/hooks";
              Platform overview and quick actions
            </p>
          </div>
- 
+
          <div className="grid gap-4 md:grid-cols-3">
            {stats.map((stat) => (
              <Card key={stat.title}>
@@ -77,7 +77,7 @@ import { useWaitlist, useTenants } from "@/hooks";
              </Card>
            ))}
          </div>
- 
+
          {pendingCount > 0 && (
            <Card className="border-amber-200 bg-amber-50/50">
              <CardHeader>
@@ -91,7 +91,7 @@ import { useWaitlist, useTenants } from "@/hooks";
              </CardHeader>
              <CardContent>
                <Button asChild>
-                 <Link to="/backoffice/waitlist">Review Waitlist</Link>
+                 <Link to="/waitlist">Review Waitlist</Link>
                </Button>
              </CardContent>
            </Card>

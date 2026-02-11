@@ -13,13 +13,13 @@ export default function BackofficeResetPasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
   const [tokenValid, setTokenValid] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
-  
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -112,7 +112,7 @@ export default function BackofficeResetPasswordPage() {
         description: "You can now sign in with your new password",
       });
 
-      navigate("/backoffice/login", { replace: true });
+      navigate("/login", { replace: true });
     } catch (err: any) {
       toast({
         title: "Error",
@@ -148,7 +148,7 @@ export default function BackofficeResetPasswordPage() {
             <CardDescription>{tokenError}</CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Button onClick={() => navigate("/backoffice/forgot-password")} className="w-full">
+            <Button onClick={() => navigate("/forgot-password")} className="w-full">
               Request New Reset Link
             </Button>
           </CardContent>
