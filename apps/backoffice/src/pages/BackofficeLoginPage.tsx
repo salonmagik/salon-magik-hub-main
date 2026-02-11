@@ -7,7 +7,7 @@ import { useNavigate, Link } from "react-router-dom";
  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
  import { useToast } from "@ui/ui/use-toast";
  import { Loader2, Shield, Eye, EyeOff } from "lucide-react";
- 
+
  export default function BackofficeLoginPage() {
    const navigate = useNavigate();
    const { toast } = useToast();
@@ -15,21 +15,21 @@ import { useNavigate, Link } from "react-router-dom";
    const [password, setPassword] = useState("");
    const [showPassword, setShowPassword] = useState(false);
    const [isLoading, setIsLoading] = useState(false);
- 
+
    const handleLogin = async (e: React.FormEvent) => {
      e.preventDefault();
      setIsLoading(true);
- 
+
      try {
        const { error } = await supabase.auth.signInWithPassword({
          email: email.toLowerCase().trim(),
          password,
        });
- 
+
        if (error) {
          throw error;
        }
- 
+
        // Auth provider will handle redirect based on TOTP status
        navigate("/backoffice", { replace: true });
      } catch (error: any) {
@@ -43,7 +43,7 @@ import { useNavigate, Link } from "react-router-dom";
        setIsLoading(false);
      }
    };
- 
+
    return (
      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
        <Card className="w-full max-w-md">
@@ -104,7 +104,7 @@ import { useNavigate, Link } from "react-router-dom";
             </Button>
             <div className="text-center">
               <Link
-                to="/backoffice/forgot-password"
+                to="/forgot-password"
                 className="text-sm text-primary hover:underline"
               >
                 Forgot password?

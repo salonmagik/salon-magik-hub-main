@@ -4,6 +4,7 @@ import BackofficeForgotPasswordPage from "@/pages/BackofficeForgotPasswordPage";
 import BackofficeResetPasswordPage from "@/pages/BackofficeResetPasswordPage";
 import BackofficeVerify2FAPage from "@/pages/BackofficeVerify2FAPage";
 import BackofficeSetup2FAPage from "@/pages/BackofficeSetup2FAPage";
+import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import BackofficeDashboardPage from "@/pages/BackofficeDashboardPage";
 import WaitlistPage from "@/pages/WaitlistPage";
 import TenantsPage from "@/pages/TenantsPage";
@@ -47,8 +48,30 @@ function App() {
                 </BackofficePublicRoute>
               }
           />
-          <Route path="/verify-2fa" element={<BackofficeVerify2FAPage />} />
-          <Route path="/setup-2fa" element={<BackofficeSetup2FAPage />} />
+          <Route
+            path="/verify-2fa"
+            element={
+              <BackofficeProtectedRoute>
+                <BackofficeVerify2FAPage />
+              </BackofficeProtectedRoute>
+            }
+          />
+          <Route
+            path="/setup-2fa"
+            element={
+              <BackofficeProtectedRoute>
+                <BackofficeSetup2FAPage />
+              </BackofficeProtectedRoute>
+            }
+          />
+          <Route
+            path="/change-password"
+            element={
+              <BackofficeProtectedRoute>
+                <ChangePasswordPage />
+              </BackofficeProtectedRoute>
+            }
+          />
 
           <Route
             path="/"
