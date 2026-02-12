@@ -10,7 +10,7 @@ export default function ChangePasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const redirectTo = (location.state as any)?.from?.pathname || "/";
-  const { refreshBackofficeUser, signOut } = useBackofficeAuth();
+  const { refreshBackofficeUser, markPasswordChanged, signOut } = useBackofficeAuth();
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -56,6 +56,8 @@ export default function ChangePasswordPage() {
         .update({ temp_password_required: false, password_changed_at: new Date().toISOString() })
         .eq("user_id", userData.user.id);
       if (boErr) throw boErr;
+
+      markPasswordChanged();
 
       // Ensure auth context reflects the cleared temp-password flag before routing.
       // If refresh hangs (e.g., abort error after a hard refresh), fall back after 1.5s.

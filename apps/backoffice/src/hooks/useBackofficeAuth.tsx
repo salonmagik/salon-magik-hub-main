@@ -18,12 +18,13 @@ interface BackofficeAuthState {
   requiresPasswordChange: boolean;
 }
  
- interface BackofficeAuthContextType extends BackofficeAuthState {
-   signOut: () => Promise<void>;
-   verifyTotp: (token: string) => Promise<boolean>;
-   setupTotp: (secret: string) => Promise<boolean>;
-   refreshBackofficeUser: () => Promise<void>;
- }
+interface BackofficeAuthContextType extends BackofficeAuthState {
+  signOut: () => Promise<void>;
+  verifyTotp: (token: string) => Promise<boolean>;
+  setupTotp: (secret: string) => Promise<boolean>;
+  refreshBackofficeUser: () => Promise<void>;
+  markPasswordChanged: () => void;
+}
  
  const BackofficeAuthContext = createContext<BackofficeAuthContextType | undefined>(undefined);
  
@@ -296,6 +297,20 @@ interface BackofficeAuthState {
       requiresPasswordChange: !!backofficeUser?.temp_password_required,
     }));
   };
+
+  const markPasswordChanged = () => {
+    setState(prev => ({
+      ...prev,
+      requiresPasswordChange: false,
+      backofficeUser: prev.backofficeUser
+        ? {
+            ...prev.backofficeUser,
+            temp_password_required: false,
+            password_changed_at: new Date().toISOString(),
+          }
+        : prev.backofficeUser,
+    }));
+  };
  
    return (
      <BackofficeAuthContext.Provider
@@ -305,6 +320,7 @@ interface BackofficeAuthState {
          verifyTotp,
          setupTotp,
          refreshBackofficeUser,
+         markPasswordChanged,
        }}
      >
        {children}
