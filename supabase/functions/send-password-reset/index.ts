@@ -18,7 +18,7 @@ const corsHeaders = {
 
 interface PasswordResetRequest {
   email: string;
-  origin: string;
+  origin?: string;
 }
 
 const defaultTemplate = {
@@ -94,7 +94,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Build reset link
-    const resetLink = `${origin}/reset-password?token=${token}`;
+    const resolvedOrigin =
+      origin?.trim() ||
+      Deno.env.get("SALON_APP_URL") ||
+      Deno.env.get("BASE_URL") ||
+      "http://localhost:8080";
+    const resetLink = `${resolvedOrigin.replace(/\/+$/, "")}/reset-password?token=${token}`;
 
     const htmlBody = defaultTemplate.build(resetLink);
 

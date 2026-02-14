@@ -19,7 +19,7 @@ const corsHeaders = {
 
 interface PasswordResetRequest {
   email: string;
-  origin: string;
+  origin?: string;
 }
 
 const emailTemplate = {
@@ -102,7 +102,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Build reset link - note the /backoffice path
-    const resetLink = `${origin}/reset-password?token=${token}`;
+    const resolvedOrigin =
+      origin?.trim() ||
+      Deno.env.get("BACKOFFICE_APP_URL") ||
+      Deno.env.get("BASE_URL") ||
+      "http://localhost:3003";
+    const resetLink = `${resolvedOrigin.replace(/\/+$/, "")}/reset-password?token=${token}`;
 
     const htmlBody = emailTemplate.build(resetLink);
 

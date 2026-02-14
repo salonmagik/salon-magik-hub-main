@@ -59,20 +59,21 @@ function generateSecret(): string {
      try {
        const success = await setupTotp(secret);
 
-       if (success) {
-         toast({
-           title: "2FA enabled",
-           description: "Your account is now secured with two-factor authentication.",
-         });
-         navigate("/backoffice", { replace: true });
-       } else {
-         toast({
-           title: "Setup failed",
-           description: "Could not verify the code. Please try again.",
-           variant: "destructive",
-         });
-         setCode("");
-       }
+      if (success) {
+				toast({
+					title: "2FA enabled",
+					description:
+						"Your account is now secured with two-factor authentication.",
+				});
+				navigate("/", { replace: true });
+			} else {
+				toast({
+					title: "Setup failed",
+					description: "Could not verify the code. Please try again.",
+					variant: "destructive",
+				});
+				setCode("");
+			}
      } finally {
        setIsLoading(false);
      }

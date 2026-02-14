@@ -9,7 +9,18 @@ import { EyeIcon, EyeOffIcon } from "lucide-react";
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = (location.state as any)?.from?.pathname || "/";
+  const requestedRedirect = (location.state as any)?.from?.pathname as
+		| string
+		| undefined;
+	const invalidTargets = new Set([
+		"/backoffice",
+		"/dashboard",
+		"/change-password",
+	]);
+	const redirectTo =
+		requestedRedirect && !invalidTargets.has(requestedRedirect)
+			? requestedRedirect
+			: "/";
   const { refreshBackofficeUser, markPasswordChanged, signOut } = useBackofficeAuth();
 
   const [password, setPassword] = useState("");

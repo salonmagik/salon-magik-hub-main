@@ -29,28 +29,61 @@ export function useBackofficeUsers() {
       email: string;
       role: "super_admin" | "admin" | "support_agent";
     }) => {
-      // First check if user exists in auth
-      // Note: In production, this would be an edge function that creates the user
-      const domain = email.split("@")[1];
-
-      // Check if domain is allowed
-      const { data: allowedDomains } = await supabase
-        .from("backoffice_allowed_domains")
-        .select("domain")
-        .eq("domain", domain);
-
-      if (!allowedDomains || allowedDomains.length === 0) {
-        throw new Error(`Domain ${domain} is not in the allowed list`);
+      if (role === "super_admin") {
+        throw new Error("Use the provision-super-admin flow for super admin accounts");
       }
 
-      // For now, we'll just add to backoffice_users table
-      // The actual user creation should be done via edge function
-      toast.info("User invitation would be sent to " + email);
-      return { email, role };
+      const {
+				data: { session },
+				error: sessionError,
+			} = await supabase.auth.getSession();
+
+			if (sessionError || !session?.access_token) {
+				throw new Error(
+					"Your session is invalid or expired. Please sign in again.",
+				);
+			}
+
+			const { data, error } = await supabase.functions.invoke(
+				"create-backoffice-admin",
+				{
+					headers: {
+						Authorization: `Bearer ${session.access_token}`,
+					},
+					body: {
+						email,
+						role,
+						origin: window.location.origin,
+					},
+				},
+			);
+
+      if (error || data?.error) {
+				throw new Error(
+					data?.error || error?.message || "Failed to create backoffice admin",
+				);
+			}
+
+      return data as {
+				success: boolean;
+				email: string;
+				role: string;
+				emailSent: boolean;
+				tempPassword: string | null;
+			};
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["backoffice-users"] });
-      toast.success("BackOffice user added successfully");
+      if (data?.emailSent) {
+				toast.success(`BackOffice admin added. Invite sent to ${data.email}`);
+			} else {
+				toast.success("BackOffice admin added, but email failed to send");
+				if (data?.tempPassword) {
+					toast.info(
+						`Temporary password for ${data.email}: ${data.tempPassword}`,
+					);
+				}
+			}
     },
     onError: (error: Error) => {
       toast.error("Failed to add user: " + error.message);

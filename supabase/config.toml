@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.verify-email]
 verify_jwt = false
+
+[functions.verify-backoffice-totp]
+verify_jwt = false

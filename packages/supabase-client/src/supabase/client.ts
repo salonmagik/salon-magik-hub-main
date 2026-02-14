@@ -11,8 +11,29 @@ type AppStorageKey =
   | "sb-salonmagik-client"
   | "sb-salonmagik-backoffice";
 
+type SupabaseClientMap = Partial<
+  Record<AppStorageKey, ReturnType<typeof createClient<Database>>>
+>;
+
+const CLIENT_CACHE_KEY = "__salonmagik_supabase_clients__";
+
+function getClientCache(): SupabaseClientMap {
+  const globalObj = globalThis as typeof globalThis & {
+    [CLIENT_CACHE_KEY]?: SupabaseClientMap;
+  };
+  if (!globalObj[CLIENT_CACHE_KEY]) {
+    globalObj[CLIENT_CACHE_KEY] = {};
+  }
+  return globalObj[CLIENT_CACHE_KEY]!;
+}
+
 export function createSupabaseClient(storageKey: AppStorageKey) {
-  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  const cache = getClientCache();
+  if (cache[storageKey]) {
+    return cache[storageKey]!;
+  }
+
+  const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       storage: localStorage,
       storageKey,
@@ -20,6 +41,9 @@ export function createSupabaseClient(storageKey: AppStorageKey) {
       autoRefreshToken: true,
     },
   });
+
+  cache[storageKey] = client;
+  return client;
 }
 
 // Default export for salon-admin until per-app clients are wired

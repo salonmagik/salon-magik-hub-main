@@ -140,34 +140,44 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/salon`,
-          data: {
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            full_name: `${formData.firstName} ${formData.lastName}`,
-            phone: formData.phone,
-          },
+      const { data, error } = await supabase.functions.invoke("send-email-verification", {
+        body: {
+          mode: "signup",
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone || null,
+          password: formData.password,
+          origin: window.location.origin,
         },
       });
 
-      if (error) {
+      if (error || data?.error) {
+        let message = data?.error || error?.message || "Failed to create your account";
+
+        if (error && typeof error === "object" && "context" in error && error.context) {
+          try {
+            const parsed = await error.context.json();
+            message = parsed?.error || parsed?.message || message;
+          } catch {
+            // no-op: keep fallback message
+          }
+        }
+
         toast({
           title: "Signup failed",
-          description: error.message,
+          description: message,
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Check your email",
-          description:
-            "We've sent you a confirmation link. Please verify your email to continue.",
-        });
-        navigate("/login");
+        return;
       }
+
+      toast({
+        title: "Check your email",
+        description:
+          "We've sent you a confirmation link. Please verify your email to continue.",
+      });
+      navigate("/login");
     } catch (error) {
       toast({
         title: "Error",

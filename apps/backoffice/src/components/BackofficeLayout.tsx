@@ -2,6 +2,7 @@
  import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBackofficeAuth } from "@/hooks";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
+import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate";
  import {
    Sidebar,
    SidebarContent,
@@ -73,76 +74,92 @@ const navItems = [
        : "Support";
 
    return (
-     <InactivityGuard warningMinutes={22} logoutMinutes={30}>
-       <SidebarProvider>
-         <div className="flex min-h-screen w-full bg-background">
-           <Sidebar className="border-r">
-             <SidebarHeader className="border-b px-4 py-4">
-               <div className="flex items-center gap-2">
-                 <div className="rounded-lg bg-destructive/10 p-2">
-                   <Shield className="h-5 w-5 text-destructive" />
-                 </div>
-                 <div>
-                   <h1 className="font-semibold text-foreground">BackOffice</h1>
-                   <p className="text-xs text-muted-foreground">Salon Magik Admin</p>
-                 </div>
-               </div>
-             </SidebarHeader>
+			<InactivityGuard warningMinutes={22} logoutMinutes={30}>
+				<SidebarProvider>
+					<div className="flex min-h-screen w-full bg-background">
+						<Sidebar className="border-r border-white/10 [&_[data-sidebar=sidebar]]:bg-zinc-950 [&_[data-sidebar=sidebar]]:text-white">
+							<SidebarHeader className="border-b border-white/10 px-4 py-4">
+								<div className="flex items-center gap-2">
+									<div className="rounded-xl bg-red-600/20 p-2.5 ring-1 ring-red-500/60 shadow-[0_0_24px_rgba(239,68,68,0.25)]">
+										<Shield className="h-6 w-6 text-red-400" />
+									</div>
+									<div>
+										<h1 className="font-semibold text-white">BackOffice</h1>
+										<p className="text-xs text-white/70">Salon Magik Admin</p>
+									</div>
+								</div>
+							</SidebarHeader>
 
-             <SidebarContent className="px-2 py-4">
-               <SidebarMenu>
-                 {navItems.map((item) => {
-                   const isActive = location.pathname === item.href ||
-                     (item.href !== "/" && location.pathname.startsWith(item.href));
-                   return (
-                     <SidebarMenuItem key={item.href}>
-                       <SidebarMenuButton asChild isActive={isActive}>
-                         <Link to={item.href} className="flex items-center gap-3">
-                           <item.icon className="h-4 w-4" />
-                           <span>{item.label}</span>
-                         </Link>
-                       </SidebarMenuButton>
-                     </SidebarMenuItem>
-                   );
-                 })}
-               </SidebarMenu>
-             </SidebarContent>
+							<SidebarContent className="px-2 py-4">
+								<SidebarMenu>
+									{navItems.map((item) => {
+										const isActive =
+											location.pathname === item.href ||
+											(item.href !== "/" &&
+												location.pathname.startsWith(item.href));
+										return (
+											<SidebarMenuItem key={item.href}>
+												<SidebarMenuButton
+													asChild
+													isActive={isActive}
+													className="text-white/90 hover:text-white data-[active=true]:text-white"
+												>
+													<Link
+														to={item.href}
+														className="flex items-center gap-3"
+													>
+														<item.icon className="h-4 w-4" />
+														<span>{item.label}</span>
+													</Link>
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarContent>
 
-             <SidebarFooter className="border-t p-4">
-               <DropdownMenu>
-                 <DropdownMenuTrigger asChild>
-                   <Button variant="ghost" className="w-full justify-start gap-3 px-2">
-                     <Avatar className="h-8 w-8">
-                       <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                         {initials}
-                       </AvatarFallback>
-                     </Avatar>
-                     <div className="flex flex-1 flex-col items-start text-left">
-                       <span className="text-sm font-medium truncate max-w-[120px]">
-                         {profile?.full_name || "Admin"}
-                       </span>
-                       <span className="text-xs text-muted-foreground">{roleBadge}</span>
-                     </div>
-                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                   </Button>
-                 </DropdownMenuTrigger>
-                 <DropdownMenuContent align="start" className="w-56">
-                   <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                     <LogOut className="mr-2 h-4 w-4" />
-                     Sign out
-                   </DropdownMenuItem>
-                 </DropdownMenuContent>
-               </DropdownMenu>
-             </SidebarFooter>
-           </Sidebar>
+							<SidebarFooter className="border-t border-white/10 p-4">
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button
+											variant="ghost"
+											className="w-full justify-start gap-3 px-2 text-white hover:bg-white/10 hover:text-white"
+										>
+											<Avatar className="h-8 w-8">
+												<AvatarFallback className="bg-red-600/20 text-red-300 text-xs">
+													{initials}
+												</AvatarFallback>
+											</Avatar>
+											<div className="flex flex-1 flex-col items-start text-left">
+												<span className="text-sm font-medium truncate max-w-[120px]">
+													{profile?.full_name || "Admin"}
+												</span>
+												<span className="text-xs text-white/70">
+													{roleBadge}
+												</span>
+											</div>
+											<ChevronDown className="h-4 w-4 text-white/70" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="w-56">
+										<DropdownMenuItem
+											onClick={handleSignOut}
+											className="text-destructive"
+										>
+											<LogOut className="mr-2 h-4 w-4" />
+											Sign out
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</SidebarFooter>
+						</Sidebar>
 
-           <SidebarInset className="flex-1">
-             <main className="flex-1 overflow-auto">
-               {children}
-             </main>
-           </SidebarInset>
-         </div>
-       </SidebarProvider>
-     </InactivityGuard>
-   );
+						<SidebarInset className="flex-1">
+							<BackofficeOnboardingGate />
+							<main className="flex-1 overflow-auto">{children}</main>
+						</SidebarInset>
+					</div>
+				</SidebarProvider>
+			</InactivityGuard>
+		);
  }

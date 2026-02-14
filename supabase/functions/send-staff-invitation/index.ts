@@ -91,7 +91,7 @@ function getBaseUrlFromRequest(req: Request): string {
   }
 
   // Last-resort fallback
-  return "https://app.salonmagik.com";
+  return Deno.env.get("SALON_APP_URL") || Deno.env.get("BASE_URL") || "https://app.salonmagik.com";
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -352,7 +352,10 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Build login link - goes directly to /login, not accept-invite
-    const baseUrl = Deno.env.get("APP_URL") || getBaseUrlFromRequest(req);
+    const baseUrl =
+      Deno.env.get("SALON_APP_URL") ||
+      Deno.env.get("BASE_URL") ||
+      getBaseUrlFromRequest(req);
     const loginLink = `${baseUrl}/login`;
 
     console.log("Generated login link for staff invitation", {

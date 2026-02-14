@@ -40,6 +40,14 @@ All apps use Vite; default ports are set in their `package.json`.
 - Shared Supabase settings usually include `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - Email (Resend): `RESEND_API_KEY`, `RESEND_FROM_EMAIL`.
 - Stripe/Paystack webhook secrets as needed in functions.
+- URL settings used by edge functions:
+  - `SALON_APP_URL=https://app.salonmagik.com`
+  - `BACKOFFICE_APP_URL=https://backoffice.salonmagik.com`
+  - `PUBLIC_BOOKING_BASE_DOMAIN=salonmagik.com`
+  - `MANAGE_BOOKINGS_URL=https://bookings.salonmagik.com`
+  - `BASE_URL=https://salonmagik.com`
+- If you need URL values in Vite client code, set `VITE_` prefixed versions too
+  (for example `VITE_PUBLIC_BOOKING_BASE_DOMAIN`, `VITE_MANAGE_BOOKINGS_URL`).
 
 ## Supabase
 - Functions live in `supabase/functions`.
