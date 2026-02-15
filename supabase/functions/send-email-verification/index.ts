@@ -19,8 +19,12 @@ const corsHeaders = {
 interface EmailVerificationRequest {
   email: string;
   firstName: string;
-  userId: string;
-  origin: string;
+  lastName?: string;
+  phone?: string | null;
+  password?: string | null;
+  userId?: string | null;
+  origin?: string;
+  mode?: "signup" | "resend";
 }
 
 const welcomeTemplate = {
@@ -36,6 +40,42 @@ const welcomeTemplate = {
   },
 };
 
+type AuthUser = {
+  id: string;
+  email: string | null;
+  email_confirmed_at?: string | null;
+};
+
+async function findUserByEmail(
+  supabase: ReturnType<typeof createClient>,
+  email: string,
+): Promise<AuthUser | null> {
+  for (let page = 1; page <= 20; page += 1) {
+    const { data: usersData, error: usersError } = await supabase.auth.admin.listUsers({
+      page,
+      perPage: 1000,
+    });
+
+    if (usersError) {
+      console.error("Failed to list users:", usersError);
+      throw new Error("Failed to resolve user for verification email");
+    }
+
+    const matchedUser = usersData.users.find(
+      (u) => (u.email || "").toLowerCase() === email.toLowerCase(),
+    );
+    if (matchedUser) {
+      return matchedUser;
+    }
+
+    if (usersData.users.length < 1000) {
+      break;
+    }
+  }
+
+  return null;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -48,12 +88,111 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { email, firstName, userId, origin }: EmailVerificationRequest = await req.json();
+    const {
+      email,
+      firstName,
+      lastName,
+      phone,
+      password,
+      userId,
+      origin,
+      mode = "resend",
+    }: EmailVerificationRequest = await req.json();
 
-    if (!email || !firstName || !userId) {
+    if (!email || !firstName) {
       return new Response(
-        JSON.stringify({ error: "Email, firstName, and userId are required" }),
+        JSON.stringify({ error: "Email and firstName are required" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+    const userMetadata = {
+      first_name: firstName,
+      last_name: lastName || null,
+      full_name: fullName || firstName,
+      phone: phone || null,
+      email_verified: false,
+    };
+
+    let resolvedUserId = userId || null;
+
+    if (mode === "signup") {
+      if (!password) {
+        return new Response(
+          JSON.stringify({ error: "Password is required for signup" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
+      const existingUser = await findUserByEmail(supabase, normalizedEmail);
+
+      if (existingUser?.email_confirmed_at) {
+        return new Response(
+          JSON.stringify({ error: "An account with this email already exists. Please sign in." }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
+      if (existingUser) {
+        const { error: updateUserError } = await supabase.auth.admin.updateUserById(existingUser.id, {
+          password,
+          email_confirm: false,
+          user_metadata: userMetadata,
+        });
+        if (updateUserError) {
+          console.error("Failed to update existing unverified user:", updateUserError);
+          throw new Error("Failed to prepare account for email verification");
+        }
+        resolvedUserId = existingUser.id;
+      } else {
+        const { data: createdUser, error: createError } = await supabase.auth.admin.createUser({
+          email: normalizedEmail,
+          password,
+          email_confirm: false,
+          user_metadata: userMetadata,
+        });
+
+        if (createError) {
+          console.error("Failed to create signup user:", createError);
+          throw new Error(createError.message || "Failed to create account");
+        }
+
+        resolvedUserId = createdUser.user.id;
+      }
+    } else {
+      if (!resolvedUserId) {
+        const existingUser = await findUserByEmail(supabase, normalizedEmail);
+        resolvedUserId = existingUser?.id ?? null;
+      }
+
+      // Compatibility fallback for legacy clients that pass password but no userId.
+      if (!resolvedUserId && password) {
+        const { data: createdUser, error: createError } = await supabase.auth.admin.createUser({
+          email: normalizedEmail,
+          password,
+          email_confirm: false,
+          user_metadata: userMetadata,
+        });
+
+        if (createError) {
+          console.error("Failed to create fallback auth user:", createError);
+        } else {
+          resolvedUserId = createdUser.user.id;
+        }
+
+        if (!resolvedUserId) {
+          const existingUser = await findUserByEmail(supabase, normalizedEmail);
+          resolvedUserId = existingUser?.id ?? null;
+        }
+      }
+    }
+
+    if (!resolvedUserId) {
+      return new Response(
+        JSON.stringify({ error: "Could not find user for this email" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
@@ -61,7 +200,7 @@ const handler = async (req: Request): Promise<Response> => {
     await supabase
       .from("email_verification_tokens")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", resolvedUserId);
 
     // Generate secure token
     const token = crypto.randomUUID();
@@ -69,8 +208,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Store token
     const { error: insertError } = await supabase.from("email_verification_tokens").insert({
-      user_id: userId,
-      email: email.toLowerCase(),
+      user_id: resolvedUserId,
+      email: normalizedEmail,
       token,
       expires_at: expiresAt.toISOString(),
     });
@@ -81,7 +220,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Build verification link
-    const verificationLink = `${origin}/verify-email?token=${token}`;
+    const resolvedOrigin =
+      origin?.trim() ||
+      Deno.env.get("SALON_APP_URL") ||
+      Deno.env.get("BASE_URL") ||
+      "http://localhost:8080";
+    const verificationLink = `${resolvedOrigin.replace(/\/+$/, "")}/verify-email?token=${token}`;
 
     const htmlBody = welcomeTemplate.build(firstName, verificationLink);
 

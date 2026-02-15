@@ -115,6 +115,17 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to create backoffice user: ${boError.message}`);
     }
 
+    // Best effort for newer auth-flow flags (safe on older schemas).
+    await supabase
+      .from("backoffice_users")
+      .update({
+        temp_password_required: true,
+        password_changed_at: null,
+        totp_required: false,
+        totp_verified_at: null,
+      })
+      .eq("user_id", authUser.user.id);
+
     // Mark as seeded
     await supabase.from("platform_settings").upsert({
       key: "super_admin_seeded",

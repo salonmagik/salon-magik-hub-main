@@ -108,8 +108,12 @@ function buildInvitationEmail(name: string, invitationLink: string): string {
      }
  
      // Build invitation link
-     const baseUrl = req.headers.get("origin") || "https://salonmagik.app";
-     const invitationLink = `${baseUrl}/signup?invite=${lead.invitation_token}`;
+     const baseUrl =
+       req.headers.get("origin") ||
+       Deno.env.get("SALON_APP_URL") ||
+       Deno.env.get("BASE_URL") ||
+       "https://app.salonmagik.com";
+     const invitationLink = `${baseUrl.replace(/\/+$/, "")}/signup?invite=${lead.invitation_token}`;
  
      const firstName = lead.name.split(" ")[0];
  

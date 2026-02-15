@@ -21,16 +21,16 @@ import { useBackofficeAuth } from "@/hooks";
      try {
        const success = await verifyTotp(code);
 
-       if (success) {
-         navigate("/backoffice", { replace: true });
-       } else {
-         toast({
-           title: "Invalid code",
-           description: "Please check your authenticator app and try again.",
-           variant: "destructive",
-         });
-         setCode("");
-       }
+      if (success) {
+				navigate("/", { replace: true });
+			} else {
+				toast({
+					title: "Invalid code",
+					description: "Please check your authenticator app and try again.",
+					variant: "destructive",
+				});
+				setCode("");
+			}
      } finally {
        setIsLoading(false);
      }

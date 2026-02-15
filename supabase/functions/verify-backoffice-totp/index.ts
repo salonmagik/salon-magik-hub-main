@@ -3,9 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import * as OTPAuth from "npm:otpauth@9.2.2";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+	"Access-Control-Allow-Origin": "*",
+	"Access-Control-Allow-Headers":
+		"authorization, x-client-info, apikey, content-type, x-backoffice-access-token",
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -14,32 +14,53 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    const body = await req.json().catch(() => ({}));
+		const token = typeof body?.token === "string" ? body.token : "";
+		const bodyAccessToken =
+			typeof body?.accessToken === "string" ? body.accessToken : "";
+
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ valid: false, error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+    const customTokenHeader = req.headers.get("x-backoffice-access-token");
+		const bearerToken = authHeader?.startsWith("Bearer ")
+			? authHeader.slice("Bearer ".length).trim()
+			: null;
+		const accessToken =
+			bodyAccessToken.trim() || customTokenHeader?.trim() || bearerToken;
+
+		if (!accessToken) {
+			return new Response(
+				JSON.stringify({ valid: false, error: "Unauthorized" }),
+				{
+					status: 401,
+					headers: { "Content-Type": "application/json", ...corsHeaders },
+				},
+			);
+		}
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
-    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
-    const supabaseAuth = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    
+    const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
+
+    const {
+			data: { user },
+			error: userError,
+		} = await supabaseAuth.auth.getUser(accessToken);
+
     if (userError || !user) {
       return new Response(
-        JSON.stringify({ valid: false, error: "Unauthorized" }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+				JSON.stringify({
+					valid: false,
+					error: userError?.message || "Unauthorized",
+				}),
+				{
+					status: 401,
+					headers: { "Content-Type": "application/json", ...corsHeaders },
+				},
+			);
     }
-
-    const { token } = await req.json();
 
     if (!token || token.length !== 6) {
       return new Response(

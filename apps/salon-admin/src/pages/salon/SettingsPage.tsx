@@ -71,6 +71,29 @@ const weekDays = [
   { key: "sunday", label: "Sunday" },
 ];
 
+function buildPublicBookingUrl(slug?: string | null): string | null {
+  if (!slug) return null;
+
+  const publicBookingDomain = (
+    import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined
+  )
+    ?.replace(/^https?:\/\//i, "")
+    .replace(/^\*\./, "")
+    .replace(/\/+$/, "");
+
+  if (publicBookingDomain) {
+    return `https://${slug}.${publicBookingDomain}`;
+  }
+
+  const manageBookingsUrl = import.meta.env
+    .VITE_MANAGE_BOOKINGS_URL as string | undefined;
+  if (manageBookingsUrl) {
+    return `${manageBookingsUrl.replace(/\/+$/, "")}/b/${slug}`;
+  }
+
+  return `${window.location.origin}/b/${slug}`;
+}
+
 export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
@@ -212,7 +235,7 @@ export default function SettingsPage() {
     });
   };
 
-  const bookingUrl = currentTenant?.slug ? `${window.location.origin}/b/${currentTenant.slug}` : null;
+  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug);
 
   const handleCopyUrl = () => {
     if (bookingUrl) {
@@ -1377,7 +1400,7 @@ export default function SettingsPage() {
   const generateCodeMutation = useGenerateReferralCode();
 
   const renderPromotionsTab = () => {
-    const bookingUrl = currentTenant?.slug ? `${window.location.origin}/b/${currentTenant.slug}` : null;
+    const bookingUrl = buildPublicBookingUrl(currentTenant?.slug);
     
     return (
       <div className="space-y-6">

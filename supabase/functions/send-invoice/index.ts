@@ -110,12 +110,18 @@ serve(async (req) => {
       )
       .join("");
 
+    const manageBookingsUrl =
+      Deno.env.get("MANAGE_BOOKINGS_URL") ||
+      Deno.env.get("BASE_URL") ||
+      "";
+    const manageBookingsBase = manageBookingsUrl.replace(/\/+$/, "");
+
     const content = `
       ${heading(`Invoice ${invoice.invoice_number}`)}
       ${paragraph(`Hi ${customer.full_name},`)}
       ${paragraph(`Here is your invoice from <strong>${tenant?.name || "Salon"}</strong>.`)}
       ${paragraph(`Total: <strong>${formatCurrency(invoice.total, currency)}</strong>`)}
-      ${createButton("View & pay invoice", invoice.payment_link || `${Deno.env.get("APP_URL") || ""}/invoices/${invoice.id}`)}
+      ${createButton("View & pay invoice", invoice.payment_link || `${manageBookingsBase}/invoices/${invoice.id}`)}
       ${smallText("If you have any questions, reply to this email and we’ll help.")} 
     `;
 
