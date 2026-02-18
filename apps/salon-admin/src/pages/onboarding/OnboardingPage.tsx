@@ -7,6 +7,8 @@ import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { Button } from "@ui/button";
 import { Card } from "@ui/card";
 import { Progress } from "@ui/progress";
+import { Input } from "@ui/input";
+import { Label } from "@ui/label";
 import { ArrowLeft, ArrowRight, Loader2, Check } from "lucide-react";
 
 import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
@@ -17,6 +19,8 @@ import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/compon
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
 import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
+import { usePlans } from "@/hooks/usePlans";
+import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
@@ -24,8 +28,10 @@ export default function OnboardingPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, refreshTenants } = useAuth();
+  const { data: plans } = usePlans();
   const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
+  const [expectedChainLocations, setExpectedChainLocations] = useState(1);
 
   // Step data
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
@@ -66,11 +72,18 @@ export default function OnboardingPage() {
   // Determine step flow based on role and plan
   const isOwner = selectedRole === "owner";
   const isChain = selectedPlan === "chain";
+  const chainPlan = (plans || []).find((plan) => plan.slug === "chain");
 
   // Get currency based on selected country
   const currency = businessInfo.country 
     ? getCurrencyForCountry(businessInfo.country) 
     : "USD";
+
+  const { data: chainQuote } = useChainPriceQuote(
+    isChain ? chainPlan?.id || null : null,
+    currency,
+    expectedChainLocations,
+  );
 
   const getStepFlow = (): OnboardingStep[] => {
     const flow: OnboardingStep[] = ["role"];
@@ -98,7 +111,11 @@ export default function OnboardingPage() {
                businessInfo.city.trim() !== "" &&
                businessInfo.openingDays.length > 0;
       case "plan":
-        return selectedPlan !== null;
+        if (!selectedPlan) return false;
+        if (selectedPlan !== "chain") return true;
+        if (expectedChainLocations < 1) return false;
+        if (!chainQuote) return false;
+        return chainQuote?.requires_custom !== true;
       case "locations":
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
@@ -115,8 +132,9 @@ export default function OnboardingPage() {
       const next = stepFlow[currentIndex + 1];
       
       // Initialize locations when entering locations step
-      if (next === "locations" && locationsConfig.locations.length === 0) {
-        const initialLocation: LocationInfo = {
+      if (next === "locations" && locationsConfig.locations.length !== Math.max(1, expectedChainLocations)) {
+        const totalLocations = Math.max(1, expectedChainLocations);
+        const initialLocations: LocationInfo[] = Array.from({ length: totalLocations }).map((_, index) => ({
           id: crypto.randomUUID(),
           name: locationsConfig.sameName ? businessInfo.name : "",
           city: businessInfo.city,
@@ -126,9 +144,9 @@ export default function OnboardingPage() {
           openingTime: businessInfo.openingTime,
           closingTime: businessInfo.closingTime,
           openingDays: businessInfo.openingDays,
-          isDefault: true,
-        };
-        setLocationsConfig((prev) => ({ ...prev, locations: [initialLocation] }));
+          isDefault: index === 0,
+        }));
+        setLocationsConfig((prev) => ({ ...prev, locations: initialLocations }));
       }
       
       setStep(next);
@@ -203,6 +221,18 @@ export default function OnboardingPage() {
 
         const { error: locationsError } = await supabase.from("locations").insert(locationInserts);
         if (locationsError) throw locationsError;
+
+        if (!chainPlan?.id) {
+          throw new Error("Chain plan is not configured yet. Contact support.");
+        }
+        const { error: entitlementError } = await (supabase.rpc as any)("set_tenant_chain_entitlement", {
+          p_tenant_id: tenantId,
+          p_plan_id: chainPlan.id,
+          p_allowed_locations: Math.max(1, expectedChainLocations),
+          p_source: "onboarding",
+          p_reason: "Initial chain location entitlement from onboarding.",
+        });
+        if (entitlementError) throw entitlementError;
       } else {
         // Single location for Solo/Studio
         const { error: locationError } = await supabase.from("locations").insert({
@@ -350,11 +380,54 @@ export default function OnboardingPage() {
           )}
 
           {step === "plan" && (
-            <PlanStep
-              selectedPlan={selectedPlan}
-              onPlanSelect={setSelectedPlan}
-              currency={currency}
-            />
+            <>
+              <PlanStep
+                selectedPlan={selectedPlan}
+                onPlanSelect={setSelectedPlan}
+                currency={currency}
+              />
+              {isChain && (
+                <div className="px-6 pb-4 space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="expectedLocations">Expected total locations now</Label>
+                    <Input
+                      id="expectedLocations"
+                      type="number"
+                      min={1}
+                      value={expectedChainLocations}
+                      onChange={(event) =>
+                        setExpectedChainLocations(Math.max(1, Number(event.target.value || 1)))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Chain tiers apply to additional locations beyond the first.
+                    </p>
+                  </div>
+
+                  {chainQuote && (
+                    <div className="rounded-md border p-3 text-sm">
+                      <p className="font-medium">
+                        Estimated monthly total: {currency} {chainQuote.total_price.toLocaleString()}
+                      </p>
+                      {chainQuote.requires_custom ? (
+                        <p className="mt-2 text-destructive">
+                          11+ locations require custom pricing. Contact support/sales to continue.
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-1 text-muted-foreground">
+                          {chainQuote.breakdown.map((item, index) => (
+                            <li key={`${item.tier_label}-${index}`}>
+                              {item.tier_label}: {item.locations} location(s)
+                              {item.subtotal != null ? ` - ${currency} ${Number(item.subtotal).toLocaleString()}` : " - custom"}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {step === "locations" && (

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
@@ -141,6 +141,15 @@ interface EditPricingRow {
   annual_discount_pct: string;
 }
 
+interface ChainTierRowDraft {
+  localId: string;
+  tier_label: string;
+  tier_min: string;
+  tier_max: string;
+  price_per_location: string;
+  is_custom: boolean;
+}
+
 type RolloutMode = "now" | "schedule";
 
 const CURRENCIES: CurrencyCode[] = ["USD", "NGN", "GHS"];
@@ -207,6 +216,19 @@ const createPricingSectionDraft = (): PricingSectionDraft => ({
     NGN: { enabled: true, monthly_price: "", annual_discount_pct: "" },
     GHS: { enabled: true, monthly_price: "", annual_discount_pct: "" },
   },
+});
+
+const createChainTierRowDraft = (
+  tierMin = "2",
+  tierMax = "3",
+  isCustom = false,
+): ChainTierRowDraft => ({
+  localId: crypto.randomUUID(),
+  tier_label: tierMax ? `${tierMin}-${tierMax}` : `${tierMin}+`,
+  tier_min: tierMin,
+  tier_max: tierMax,
+  price_per_location: "",
+  is_custom: isCustom,
 });
 
 const errorToMessage = (error: unknown) => {
@@ -279,6 +301,13 @@ export default function PlansPage() {
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
   const [deletePlanReason, setDeletePlanReason] = useState("");
   const [deletePlanTotp, setDeletePlanTotp] = useState("");
+  const [chainTierReason, setChainTierReason] = useState("");
+  const [chainTierDrafts, setChainTierDrafts] = useState<Record<CurrencyCode, ChainTierRowDraft[]>>({
+    USD: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
+    NGN: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
+    GHS: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
+  });
+  const [chainTierDirty, setChainTierDirty] = useState(false);
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["backoffice-plans"],
@@ -322,7 +351,59 @@ export default function PlansPage() {
     },
   });
 
+  const chainPlan = useMemo(
+    () => (plans || []).find((plan) => plan.slug.trim().toLowerCase() === "chain") || null,
+    [plans],
+  );
+
+  const { data: chainTierPricing } = useQuery({
+    queryKey: ["backoffice-chain-tier-pricing", chainPlan?.id],
+    enabled: Boolean(chainPlan?.id),
+    queryFn: async () => {
+      if (!chainPlan?.id) return [];
+      const { data, error } = await (supabase.from as any)("additional_location_pricing")
+        .select("*")
+        .eq("plan_id", chainPlan.id)
+        .order("currency", { ascending: true })
+        .order("tier_min", { ascending: true });
+      if (error) throw error;
+      return (data || []) as Array<{
+        currency: CurrencyCode;
+        tier_label: string;
+        tier_min: number;
+        tier_max: number | null;
+        price_per_location: number | null;
+        is_custom: boolean;
+      }>;
+    },
+  });
+
   const isLoading = plansLoading || pricingLoading || limitsLoading || featuresLoading;
+
+  useEffect(() => {
+    if (!chainPlan?.id || chainTierDirty) return;
+    const grouped: Record<CurrencyCode, ChainTierRowDraft[]> = { USD: [], NGN: [], GHS: [] };
+    (chainTierPricing || []).forEach((row) => {
+      grouped[row.currency].push({
+        localId: crypto.randomUUID(),
+        tier_label: row.tier_label,
+        tier_min: String(row.tier_min),
+        tier_max: row.tier_max == null ? "" : String(row.tier_max),
+        price_per_location: row.price_per_location == null ? "" : String(row.price_per_location),
+        is_custom: Boolean(row.is_custom),
+      });
+    });
+    CURRENCIES.forEach((currency) => {
+      if (grouped[currency].length === 0) {
+        grouped[currency] = [
+          createChainTierRowDraft("2", "3"),
+          createChainTierRowDraft("4", "10"),
+          createChainTierRowDraft("11", "", true),
+        ];
+      }
+    });
+    setChainTierDrafts(grouped);
+  }, [chainPlan?.id, chainTierDirty, chainTierPricing]);
 
   const limitsByPlan = useMemo(() => {
     const map = new Map<string, PlanLimit>();
@@ -539,6 +620,84 @@ export default function PlansPage() {
 
     return { isValid: errors.length === 0, errors };
   }, [createPricingReason, createPricingSections]);
+
+  const validateChainCurrencyDrafts = (currency: CurrencyCode, rows: ChainTierRowDraft[]) => {
+    const errors: string[] = [];
+    if (!rows.length) {
+      errors.push(`${currency}: add at least one tier.`);
+      return errors;
+    }
+
+    const parsed = rows
+      .map((row) => ({
+        row,
+        label: row.tier_label.trim(),
+        min: Number(row.tier_min),
+        max: row.tier_max.trim() ? Number(row.tier_max) : null,
+        price: row.price_per_location.trim() ? Number(row.price_per_location) : null,
+      }))
+      .sort((a, b) => a.min - b.min);
+
+    const labels = new Set<string>();
+    let expectedMin = 2;
+    let openEndedCount = 0;
+
+    parsed.forEach((item) => {
+      if (!item.label) errors.push(`${currency}: tier label is required.`);
+      const normalizedLabel = item.label.toLowerCase();
+      if (labels.has(normalizedLabel)) {
+        errors.push(`${currency}: tier labels must be unique.`);
+      }
+      labels.add(normalizedLabel);
+
+      if (!Number.isFinite(item.min) || item.min < 2) {
+        errors.push(`${currency}: tier min must be 2 or greater.`);
+      }
+      if (item.max !== null && (!Number.isFinite(item.max) || item.max < item.min)) {
+        errors.push(`${currency}: tier max must be empty or >= tier min.`);
+      }
+      if (item.min !== expectedMin) {
+        errors.push(`${currency}: ranges must be contiguous and start at 2.`);
+      }
+      if (item.max === null) {
+        openEndedCount += 1;
+        if (!item.row.is_custom) {
+          errors.push(`${currency}: open-ended tier must be marked custom.`);
+        }
+        expectedMin = Number.MAX_SAFE_INTEGER;
+      } else {
+        expectedMin = item.max + 1;
+      }
+
+      if (item.row.is_custom) {
+        if (item.price !== null) {
+          errors.push(`${currency}: custom tier must not have a price.`);
+        }
+      } else if (item.price === null || !Number.isFinite(item.price) || item.price < 0) {
+        errors.push(`${currency}: non-custom tiers require price >= 0.`);
+      }
+    });
+
+    if (openEndedCount > 1) {
+      errors.push(`${currency}: only one open-ended tier is allowed.`);
+    }
+    return errors;
+  };
+
+  const chainTierValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!chainPlan?.id) {
+      errors.push("Chain plan not found.");
+      return { isValid: false, errors };
+    }
+    if (!chainTierReason.trim()) {
+      errors.push("Reason is required.");
+    }
+    CURRENCIES.forEach((currency) => {
+      errors.push(...validateChainCurrencyDrafts(currency, chainTierDrafts[currency]));
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [chainPlan?.id, chainTierDrafts, chainTierReason]);
 
   const createPlansMutation = useMutation({
     mutationFn: async (drafts: PlanDraft[]) => {
@@ -909,6 +1068,42 @@ export default function PlansPage() {
     },
   });
 
+  const saveChainTiersMutation = useMutation({
+    mutationFn: async () => {
+      if (!chainPlan?.id) {
+        throw new Error("Chain plan not found.");
+      }
+      const tiers = CURRENCIES.flatMap((currency) =>
+        chainTierDrafts[currency].map((row) => ({
+          currency,
+          tier_label: row.tier_label.trim(),
+          tier_min: Number(row.tier_min),
+          tier_max: row.tier_max.trim() ? Number(row.tier_max) : null,
+          price_per_location: row.is_custom
+            ? null
+            : Number(row.price_per_location),
+          is_custom: row.is_custom,
+        })),
+      );
+      const { error } = await (supabase.rpc as any)("backoffice_upsert_chain_location_pricing", {
+        p_plan_id: chainPlan.id,
+        p_tiers: tiers,
+        p_reason: chainTierReason.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Chain location tiers updated.");
+      setChainTierReason("");
+      setChainTierDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-chain-tier-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
   const openCreatePlansDialog = () => {
     if (remainingPlanSlots <= 0) {
       toast.error("Maximum of 4 plans reached.");
@@ -1115,10 +1310,46 @@ export default function PlansPage() {
     return plansWithoutActivePricing.filter((plan) => !selectedElsewhere.has(plan.id));
   };
 
+  const addChainTierRow = (currency: CurrencyCode) => {
+    setChainTierDirty(true);
+    setChainTierDrafts((prev) => {
+      const rows = prev[currency];
+      const sorted = [...rows].sort((a, b) => Number(a.tier_min || 0) - Number(b.tier_min || 0));
+      const last = sorted[sorted.length - 1];
+      const nextMin = last?.tier_max?.trim()
+        ? String(Number(last.tier_max) + 1)
+        : String(Number(last?.tier_min || "2") + 1);
+      const next = createChainTierRowDraft(nextMin, "");
+      return { ...prev, [currency]: [...rows, next] };
+    });
+  };
+
+  const updateChainTierRow = (
+    currency: CurrencyCode,
+    localId: string,
+    patch: Partial<ChainTierRowDraft>,
+  ) => {
+    setChainTierDirty(true);
+    setChainTierDrafts((prev) => ({
+      ...prev,
+      [currency]: prev[currency].map((row) => (row.localId === localId ? { ...row, ...patch } : row)),
+    }));
+  };
+
+  const removeChainTierRow = (currency: CurrencyCode, localId: string) => {
+    setChainTierDirty(true);
+    setChainTierDrafts((prev) => ({
+      ...prev,
+      [currency]: prev[currency].filter((row) => row.localId !== localId),
+    }));
+  };
+
   const canSubmitCreatePlans =
     isSuperAdmin && createPlansValidation.isValid && !createPlansMutation.isPending;
   const canSubmitCreatePricing =
     isSuperAdmin && createPricingValidation.isValid && !createPricingMutation.isPending;
+  const canSubmitChainTiers =
+    isSuperAdmin && chainTierValidation.isValid && !saveChainTiersMutation.isPending;
 
   const validateEditPlan = () => {
     const errors: string[] = [];
@@ -1357,52 +1588,189 @@ export default function PlansPage() {
           </TabsContent>
 
           <TabsContent value="pricing" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Active Pricing</CardTitle>
-                <CardDescription>One active row per plan/currency.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Plan</TableHead>
-                      {CURRENCIES.map((currency) => (
-                        <TableHead key={currency}>{currency}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(plans || []).map((plan) => (
-                      <TableRow key={plan.id}>
-                        <TableCell className="font-medium">{plan.name}</TableCell>
-                        {CURRENCIES.map((currency) => {
-                          const row = activePricingByPlan.get(plan.id)?.get(currency);
-                          return (
-                            <TableCell key={currency}>
-                              {row ? (
-                                <div className="text-sm">
-                                  <p>
-                                    {getCurrencySymbol(currency)}
-                                    {row.monthly_price.toLocaleString()}/mo
-                                  </p>
-                                  <p className="text-muted-foreground">
-                                    annual {getCurrencySymbol(currency)}
-                                    {row.annual_price.toLocaleString()}
-                                  </p>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                          );
-                        })}
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Pricing</CardTitle>
+                  <CardDescription>One active row per plan/currency.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Plan</TableHead>
+                        {CURRENCIES.map((currency) => (
+                          <TableHead key={currency}>{currency}</TableHead>
+                        ))}
                       </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(plans || []).map((plan) => (
+                        <TableRow key={plan.id}>
+                          <TableCell className="font-medium">{plan.name}</TableCell>
+                          {CURRENCIES.map((currency) => {
+                            const row = activePricingByPlan.get(plan.id)?.get(currency);
+                            return (
+                              <TableCell key={currency}>
+                                {row ? (
+                                  <div className="text-sm">
+                                    <p>
+                                      {getCurrencySymbol(currency)}
+                                      {row.monthly_price.toLocaleString()}/mo
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      annual {getCurrencySymbol(currency)}
+                                      {row.annual_price.toLocaleString()}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {chainPlan && isSuperAdmin && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Chain Location Tiers</CardTitle>
+                    <CardDescription>
+                      Configure additional-location pricing for Chain across USD, NGN, and GHS.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {chainTierValidation.errors.length > 0 && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                        <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                          {chainTierValidation.errors.slice(0, 8).map((error) => (
+                            <li key={error}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {CURRENCIES.map((currency) => (
+                      <div key={currency} className="rounded-md border p-3">
+                        <div className="mb-3 flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{currency}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Tiers are for additional locations (starting at 2).
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addChainTierRow(currency)}
+                          >
+                            <Plus className="mr-2 h-3.5 w-3.5" />
+                            Add tier
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {chainTierDrafts[currency].map((row) => (
+                            <div
+                              key={row.localId}
+                              className="grid gap-2 md:grid-cols-[1fr_110px_110px_150px_110px_70px]"
+                            >
+                              <Input
+                                placeholder="2-3"
+                                value={row.tier_label}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    tier_label: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                type="number"
+                                placeholder="2"
+                                value={row.tier_min}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    tier_min: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                type="number"
+                                placeholder="3"
+                                value={row.tier_max}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    tier_max: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Price per location"
+                                value={row.price_per_location}
+                                disabled={row.is_custom}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    price_per_location: event.target.value,
+                                  })
+                                }
+                              />
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={row.is_custom}
+                                  onCheckedChange={(checked) =>
+                                    updateChainTierRow(currency, row.localId, {
+                                      is_custom: checked,
+                                      price_per_location: checked ? "" : row.price_per_location,
+                                    })
+                                  }
+                                />
+                                <Label className="text-xs">Custom</Label>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => removeChainTierRow(currency, row.localId)}
+                                disabled={chainTierDrafts[currency].length <= 1}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+
+                    <div>
+                      <Label>Reason</Label>
+                      <Textarea
+                        value={chainTierReason}
+                        onChange={(event) => {
+                          setChainTierDirty(true);
+                          setChainTierReason(event.target.value);
+                        }}
+                        placeholder="Why are you updating chain location tiers?"
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button onClick={() => saveChainTiersMutation.mutate()} disabled={!canSubmitChainTiers}>
+                        {saveChainTiersMutation.isPending ? "Saving..." : "Save Chain Tiers"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
