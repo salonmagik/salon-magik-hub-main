@@ -73,29 +73,40 @@ Deno.serve(async (req) => {
       throw new Error("Missing Supabase environment configuration");
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const rawAuthHeader =
+			req.headers.get("authorization") ||
+			req.headers.get("Authorization") ||
+			"";
+		const accessToken = rawAuthHeader.replace(/^Bearer\s+/i, "").trim();
 
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+		if (!accessToken) {
+			return new Response(
+				JSON.stringify({
+					error: "Missing or invalid Authorization bearer token",
+				}),
+				{
+					status: 401,
+					headers: { ...corsHeaders, "Content-Type": "application/json" },
+				},
+			);
+		}
+
+    const userClient = createClient(supabaseUrl, anonKey);
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const {
-      data: { user: actor },
-      error: actorErr,
-    } = await userClient.auth.getUser();
+			data: { user: actor },
+			error: actorErr,
+		} = await userClient.auth.getUser(accessToken);
 
     if (actorErr || !actor) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+				JSON.stringify({ error: actorErr?.message || "Unauthorized" }),
+				{
+					status: 401,
+					headers: { ...corsHeaders, "Content-Type": "application/json" },
+				},
+			);
     }
 
     const { data: actorBackofficeUser } = await adminClient

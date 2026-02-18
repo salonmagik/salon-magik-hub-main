@@ -1,1241 +1,2868 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { useBackofficeAuth } from "@/hooks";
 import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@ui/card";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@ui/accordion";
+import { Badge } from "@ui/badge";
 import { Button } from "@ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { Badge } from "@ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@ui/dialog";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@ui/select";
+import { Separator } from "@ui/separator";
+import { Switch } from "@ui/switch";
 import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Textarea } from "@ui/textarea";
 import { toast } from "sonner";
-import { CreditCard, DollarSign, AlertTriangle, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  DollarSign,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
 
+type CurrencyCode = "USD" | "NGN" | "GHS";
+
 interface Plan {
-	id: string;
-	slug: string;
-	name: string;
-	description: string | null;
-	display_order: number;
-	is_active: boolean;
-	is_recommended: boolean;
-	trial_days: number;
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  display_order: number;
+  is_active: boolean;
+  is_recommended: boolean;
+  trial_days: number;
 }
 
 interface PlanPricing {
-	id: string;
-	plan_id: string;
-	currency: string;
-	monthly_price: number;
-	annual_price: number;
-	effective_monthly: number;
+  id: string;
+  plan_id: string;
+  currency: CurrencyCode;
+  monthly_price: number;
+  annual_price: number;
+  effective_monthly: number;
 }
 
 interface PlanLimit {
-	id: string;
-	plan_id: string;
-	max_locations: number;
-	max_staff: number;
-	max_services: number | null;
-	max_products: number | null;
-	monthly_messages: number;
+  id: string;
+  plan_id: string;
+  max_locations: number;
+  max_staff: number;
+  max_services: number | null;
+  max_products: number | null;
+  monthly_messages: number;
 }
 
-interface CreatePlanForm {
-	name: string;
-	slug: string;
-	description: string;
-	display_order: number;
-	trial_days: number;
-	is_active: boolean;
-	is_recommended: boolean;
-	max_locations: number;
-	max_staff: number;
-	max_services: number | null;
-	max_products: number | null;
-	monthly_messages: number;
-	reason: string;
+interface PlanFeature {
+  id: string;
+  plan_id: string;
+  feature_text: string;
+  sort_order: number;
 }
 
-interface CreatePricingForm {
-	plan_id: string;
-	currency: string;
-	monthly_price: number;
-	annual_price: number;
-	effective_monthly: number;
-	reason: string;
+interface FeatureDraft {
+  localId: string;
+  id?: string;
+  feature_text: string;
+  sort_order: number;
 }
 
-const CURRENCIES = ["USD", "NGN", "GHS"];
+interface PlanDraft {
+  localId: string;
+  name: string;
+  slug: string;
+  description: string;
+  display_order: number;
+  trial_days: number;
+  is_active: boolean;
+  is_recommended: boolean;
+  max_locations: number;
+  max_staff: number;
+  max_services: string;
+  max_products: string;
+  monthly_messages: number;
+  reason: string;
+  features: FeatureDraft[];
+}
+
+interface PricingCurrencyDraft {
+  enabled: boolean;
+  monthly_price: string;
+  annual_discount_pct: string;
+}
+
+interface PricingSectionDraft {
+  localId: string;
+  plan_id: string;
+  currencies: Record<CurrencyCode, PricingCurrencyDraft>;
+}
+
+interface EditPricingRow {
+  id: string;
+  currency: CurrencyCode;
+  monthly_price: string;
+  annual_discount_pct: string;
+}
+
+interface ChainTierRowDraft {
+  localId: string;
+  tier_label: string;
+  tier_min: string;
+  tier_max: string;
+  price_per_location: string;
+  is_custom: boolean;
+}
+
+type RolloutMode = "now" | "schedule";
+
+const CURRENCIES: CurrencyCode[] = ["USD", "NGN", "GHS"];
+const MAX_PLANS = 4;
+const MAX_BATCH_ITEMS = 3;
+
+const sanitizeSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+const parseNumericInput = (value: string) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : NaN;
+};
+
+const toFixedNumber = (value: number) => Number(value.toFixed(2));
+
+const deriveEffectiveMonthly = (monthly: number, annualDiscountPct: number) =>
+  toFixedNumber(monthly * (1 - annualDiscountPct / 100));
+
+const deriveAnnualTotal = (effectiveMonthly: number) =>
+  toFixedNumber(effectiveMonthly * 12);
+
+const deriveDiscountFromEffective = (monthly: number, effectiveMonthly: number) => {
+  if (monthly <= 0) return 0;
+  const pct = ((monthly - effectiveMonthly) / monthly) * 100;
+  if (!Number.isFinite(pct)) return 0;
+  return toFixedNumber(Math.max(0, Math.min(100, pct)));
+};
+
+const createFeatureDraft = (sortOrder = 0): FeatureDraft => ({
+  localId: crypto.randomUUID(),
+  feature_text: "",
+  sort_order: sortOrder,
+});
+
+const createPlanDraft = (displayOrder: number): PlanDraft => ({
+  localId: crypto.randomUUID(),
+  name: "",
+  slug: "",
+  description: "",
+  display_order: displayOrder,
+  trial_days: 14,
+  is_active: true,
+  is_recommended: false,
+  max_locations: 1,
+  max_staff: 1,
+  max_services: "",
+  max_products: "",
+  monthly_messages: 30,
+  reason: "",
+  features: [createFeatureDraft(0)],
+});
+
+const createPricingSectionDraft = (): PricingSectionDraft => ({
+  localId: crypto.randomUUID(),
+  plan_id: "",
+  currencies: {
+    USD: { enabled: true, monthly_price: "", annual_discount_pct: "" },
+    NGN: { enabled: true, monthly_price: "", annual_discount_pct: "" },
+    GHS: { enabled: true, monthly_price: "", annual_discount_pct: "" },
+  },
+});
+
+const createChainTierRowDraft = (
+  tierMin = "2",
+  tierMax = "3",
+  isCustom = false,
+): ChainTierRowDraft => ({
+  localId: crypto.randomUUID(),
+  tier_label: tierMax ? `${tierMin}-${tierMax}` : `${tierMin}+`,
+  tier_min: tierMin,
+  tier_max: tierMax,
+  price_per_location: "",
+  is_custom: isCustom,
+});
+
+const errorToMessage = (error: unknown) => {
+  if (!error || typeof error !== "object") return "An unexpected error occurred.";
+  const code = String((error as { code?: string }).code || "");
+  const message = String((error as { message?: string }).message || "");
+  const details = String((error as { details?: string }).details || "");
+  const normalized = `${code} ${message} ${details}`.toLowerCase();
+
+  if (normalized.includes("plan_cap_reached")) {
+    return "Maximum of 4 plans reached.";
+  }
+
+  if (
+    normalized.includes("idx_plans_name_lower_unique") ||
+    normalized.includes("idx_plans_slug_lower_unique") ||
+    normalized.includes("duplicate key")
+  ) {
+    return "Plan name or slug already exists.";
+  }
+
+  if (
+    normalized.includes("idx_plan_features_plan_feature_text_ci_unique") ||
+    normalized.includes("feature text must be unique")
+  ) {
+    return "Feature text must be unique per plan (case-insensitive).";
+  }
+
+  if (normalized.includes("idx_plan_pricing_active_unique")) {
+    return "Pricing already exists for this plan/currency. Edit existing pricing instead.";
+  }
+
+  if (normalized.includes("idx_plans_single_recommended_true")) {
+    return "Only one plan can be recommended at a time.";
+  }
+
+  if (normalized.includes("step_up")) {
+    return "Step-up verification failed. Enter a valid 2FA code and try again.";
+  }
+
+  return message || "An unexpected error occurred.";
+};
 
 export default function PlansPage() {
-	const queryClient = useQueryClient();
-	const { backofficeUser } = useBackofficeAuth();
-	const isSuperAdmin = backofficeUser?.role === "super_admin";
+  const queryClient = useQueryClient();
+  const { backofficeUser } = useBackofficeAuth();
+  const isSuperAdmin = backofficeUser?.role === "super_admin";
 
-	const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-	const [pricingDialogOpen, setPricingDialogOpen] = useState(false);
-	const [limitsDialogOpen, setLimitsDialogOpen] = useState(false);
-	const [createPlanDialogOpen, setCreatePlanDialogOpen] = useState(false);
-	const [createPricingDialogOpen, setCreatePricingDialogOpen] = useState(false);
-	const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-	const [confirmReason, setConfirmReason] = useState("");
-	const [pendingChange, setPendingChange] = useState<{
-		type: string;
-		data: unknown;
-	} | null>(null);
+  const [createPlanOpen, setCreatePlanOpen] = useState(false);
+  const [createPlanDrafts, setCreatePlanDrafts] = useState<PlanDraft[]>([]);
+  const [createPlanAccordion, setCreatePlanAccordion] = useState<string[]>([]);
 
-	const [editingPricing, setEditingPricing] = useState<
-		Record<string, PlanPricing>
-	>({});
-	const [editingLimits, setEditingLimits] = useState<PlanLimit | null>(null);
-	const [createPlanForm, setCreatePlanForm] = useState<CreatePlanForm>({
-		name: "",
-		slug: "",
-		description: "",
-		display_order: 1,
-		trial_days: 14,
-		is_active: true,
-		is_recommended: false,
-		max_locations: 1,
-		max_staff: 1,
-		max_services: null,
-		max_products: null,
-		monthly_messages: 30,
-		reason: "",
-	});
-	const [createPricingForm, setCreatePricingForm] = useState<CreatePricingForm>(
-		{
-			plan_id: "",
-			currency: "USD",
-			monthly_price: 0,
-			annual_price: 0,
-			effective_monthly: 0,
-			reason: "",
-		},
-	);
+  const [editPlanOpen, setEditPlanOpen] = useState(false);
+  const [editPlanDraft, setEditPlanDraft] = useState<PlanDraft | null>(null);
+  const [editPlanId, setEditPlanId] = useState<string | null>(null);
+  const [editPlanRolloutMode, setEditPlanRolloutMode] = useState<RolloutMode>("now");
+  const [editPlanRolloutAt, setEditPlanRolloutAt] = useState("");
 
-	const { data: plans, isLoading: plansLoading } = useQuery({
-		queryKey: ["backoffice-plans"],
-		queryFn: async () => {
-			const { data, error } = await supabase
-				.from("plans")
-				.select("*")
-				.order("display_order");
-			if (error) throw error;
-			return data as Plan[];
-		},
-	});
+  const [createPricingOpen, setCreatePricingOpen] = useState(false);
+  const [createPricingSections, setCreatePricingSections] = useState<PricingSectionDraft[]>([]);
+  const [createPricingReason, setCreatePricingReason] = useState("");
+  const [createPricingAccordion, setCreatePricingAccordion] = useState<string[]>([]);
 
-	const { data: pricing } = useQuery({
-		queryKey: ["backoffice-pricing"],
-		queryFn: async () => {
-			const { data, error } = await supabase
-				.from("plan_pricing")
-				.select("*")
-				.is("valid_until", null);
-			if (error) throw error;
-			return data as PlanPricing[];
-		},
-	});
+  const [editPricingOpen, setEditPricingOpen] = useState(false);
+  const [editPricingPlanId, setEditPricingPlanId] = useState<string | null>(null);
+  const [editPricingRows, setEditPricingRows] = useState<EditPricingRow[]>([]);
+  const [editPricingReason, setEditPricingReason] = useState("");
+  const editPlanSaveRef = useRef(false);
+  const [deletePlanOpen, setDeletePlanOpen] = useState(false);
+  const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
+  const [deletePlanReason, setDeletePlanReason] = useState("");
+  const [deletePlanTotp, setDeletePlanTotp] = useState("");
+  const [chainTierReason, setChainTierReason] = useState("");
+  const [chainTierDrafts, setChainTierDrafts] = useState<Record<CurrencyCode, ChainTierRowDraft[]>>({
+    USD: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
+    NGN: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
+    GHS: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
+  });
+  const [chainTierDirty, setChainTierDirty] = useState(false);
 
-	const { data: limits } = useQuery({
-		queryKey: ["backoffice-limits"],
-		queryFn: async () => {
-			const { data, error } = await supabase.from("plan_limits").select("*");
-			if (error) throw error;
-			return data as PlanLimit[];
-		},
-	});
+  const { data: plans, isLoading: plansLoading } = useQuery({
+    queryKey: ["backoffice-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("plans").select("*").order("display_order");
+      if (error) throw error;
+      return (data || []) as Plan[];
+    },
+  });
 
-	const updatePricingMutation = useMutation({
-		mutationFn: async ({
-			planId,
-			updates,
-			reason,
-		}: {
-			planId: string;
-			updates: Record<string, Partial<PlanPricing>>;
-			reason: string;
-		}) => {
-			for (const [currency, priceData] of Object.entries(updates)) {
-				const existingPrice = pricing?.find(
-					(p) => p.plan_id === planId && p.currency === currency,
-				);
+  const { data: pricing, isLoading: pricingLoading } = useQuery({
+    queryKey: ["backoffice-pricing"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plan_pricing")
+        .select("*")
+        .is("valid_until", null);
+      if (error) throw error;
+      return (data || []) as PlanPricing[];
+    },
+  });
 
-				if (existingPrice) {
-					const { error } = await supabase
-						.from("plan_pricing")
-						.update({
-							monthly_price: priceData.monthly_price,
-							annual_price: priceData.annual_price,
-							effective_monthly: priceData.effective_monthly,
-						})
-						.eq("id", existingPrice.id);
-					if (error) throw error;
-				} else {
-					const { error } = await supabase.from("plan_pricing").insert({
-						plan_id: planId,
-						currency,
-						monthly_price: priceData.monthly_price ?? 0,
-						annual_price: priceData.annual_price ?? 0,
-						effective_monthly: priceData.effective_monthly ?? 0,
-					});
-					if (error) throw error;
-				}
-			}
+  const { data: limits, isLoading: limitsLoading } = useQuery({
+    queryKey: ["backoffice-limits"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("plan_limits").select("*");
+      if (error) throw error;
+      return (data || []) as PlanLimit[];
+    },
+  });
 
-			await supabase.from("audit_logs").insert({
-				action: "pricing_updated",
-				entity_type: "plan",
-				entity_id: planId,
-				actor_user_id: backofficeUser?.user_id,
-				metadata: { reason, updates },
-			});
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
-			toast.success("Pricing updated successfully");
-			setPricingDialogOpen(false);
-			setConfirmDialogOpen(false);
-			setConfirmReason("");
-			setPendingChange(null);
-		},
-		onError: (error) => {
-			toast.error("Failed to update pricing: " + error.message);
-		},
-	});
+  const { data: features, isLoading: featuresLoading } = useQuery({
+    queryKey: ["backoffice-plan-features"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plan_features")
+        .select("*")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []) as PlanFeature[];
+    },
+  });
 
-	const updateLimitsMutation = useMutation({
-		mutationFn: async ({
-			planId,
-			limits: limitsData,
-			reason,
-		}: {
-			planId: string;
-			limits: Partial<PlanLimit>;
-			reason: string;
-		}) => {
-			const existingLimit = limits?.find((l) => l.plan_id === planId);
+  const chainPlan = useMemo(
+    () => (plans || []).find((plan) => plan.slug.trim().toLowerCase() === "chain") || null,
+    [plans],
+  );
 
-			if (existingLimit) {
-				const { error } = await supabase
-					.from("plan_limits")
-					.update(limitsData)
-					.eq("id", existingLimit.id);
-				if (error) throw error;
-			}
+  const { data: chainTierPricing } = useQuery({
+    queryKey: ["backoffice-chain-tier-pricing", chainPlan?.id],
+    enabled: Boolean(chainPlan?.id),
+    queryFn: async () => {
+      if (!chainPlan?.id) return [];
+      const { data, error } = await (supabase.from as any)("additional_location_pricing")
+        .select("*")
+        .eq("plan_id", chainPlan.id)
+        .order("currency", { ascending: true })
+        .order("tier_min", { ascending: true });
+      if (error) throw error;
+      return (data || []) as Array<{
+        currency: CurrencyCode;
+        tier_label: string;
+        tier_min: number;
+        tier_max: number | null;
+        price_per_location: number | null;
+        is_custom: boolean;
+      }>;
+    },
+  });
 
-			await supabase.from("audit_logs").insert({
-				action: "limits_updated",
-				entity_type: "plan",
-				entity_id: planId,
-				actor_user_id: backofficeUser?.user_id,
-				metadata: { reason, limits: limitsData },
-			});
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
-			toast.success("Limits updated successfully");
-			setLimitsDialogOpen(false);
-			setConfirmDialogOpen(false);
-			setConfirmReason("");
-			setPendingChange(null);
-		},
-		onError: (error) => {
-			toast.error("Failed to update limits: " + error.message);
-		},
-	});
+  const isLoading = plansLoading || pricingLoading || limitsLoading || featuresLoading;
 
-	const createPlanMutation = useMutation({
-		mutationFn: async ({ planData }: { planData: CreatePlanForm }) => {
-			const { data: createdPlan, error: planError } = await supabase
-				.from("plans")
-				.insert({
-					name: planData.name,
-					slug: planData.slug,
-					description: planData.description || null,
-					display_order: planData.display_order,
-					trial_days: planData.trial_days,
-					is_active: planData.is_active,
-					is_recommended: planData.is_recommended,
-				})
-				.select("id")
-				.single();
+  useEffect(() => {
+    if (!chainPlan?.id || chainTierDirty) return;
+    const grouped: Record<CurrencyCode, ChainTierRowDraft[]> = { USD: [], NGN: [], GHS: [] };
+    (chainTierPricing || []).forEach((row) => {
+      grouped[row.currency].push({
+        localId: crypto.randomUUID(),
+        tier_label: row.tier_label,
+        tier_min: String(row.tier_min),
+        tier_max: row.tier_max == null ? "" : String(row.tier_max),
+        price_per_location: row.price_per_location == null ? "" : String(row.price_per_location),
+        is_custom: Boolean(row.is_custom),
+      });
+    });
+    CURRENCIES.forEach((currency) => {
+      if (grouped[currency].length === 0) {
+        grouped[currency] = [
+          createChainTierRowDraft("2", "3"),
+          createChainTierRowDraft("4", "10"),
+          createChainTierRowDraft("11", "", true),
+        ];
+      }
+    });
+    setChainTierDrafts(grouped);
+  }, [chainPlan?.id, chainTierDirty, chainTierPricing]);
 
-			if (planError) throw planError;
+  const limitsByPlan = useMemo(() => {
+    const map = new Map<string, PlanLimit>();
+    (limits || []).forEach((row) => map.set(row.plan_id, row));
+    return map;
+  }, [limits]);
 
-			const { error: limitsError } = await supabase.from("plan_limits").insert({
-				plan_id: createdPlan.id,
-				max_locations: planData.max_locations,
-				max_staff: planData.max_staff,
-				max_services: planData.max_services,
-				max_products: planData.max_products,
-				monthly_messages: planData.monthly_messages,
-			});
-			if (limitsError) throw limitsError;
+  const featuresByPlan = useMemo(() => {
+    const map = new Map<string, PlanFeature[]>();
+    (features || []).forEach((row) => {
+      const items = map.get(row.plan_id) || [];
+      items.push(row);
+      map.set(row.plan_id, items);
+    });
+    map.forEach((items, key) =>
+      map.set(
+        key,
+        [...items].sort((a, b) => a.sort_order - b.sort_order),
+      ),
+    );
+    return map;
+  }, [features]);
 
-			await supabase.from("audit_logs").insert({
-				action: "plan_created",
-				entity_type: "plan",
-				entity_id: createdPlan.id,
-				actor_user_id: backofficeUser?.user_id,
-				metadata: {
-					reason: planData.reason,
-					name: planData.name,
-					slug: planData.slug,
-				},
-			});
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["backoffice-plans"] });
-			queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
-			toast.success("Plan created successfully");
-			setCreatePlanDialogOpen(false);
-			setCreatePlanForm((prev) => ({
-				...prev,
-				name: "",
-				slug: "",
-				description: "",
-				reason: "",
-			}));
-		},
-		onError: (error) => {
-			toast.error("Failed to create plan: " + error.message);
-		},
-	});
+  const activePricingByPlan = useMemo(() => {
+    const map = new Map<string, Map<CurrencyCode, PlanPricing>>();
+    (pricing || []).forEach((row) => {
+      const currMap = map.get(row.plan_id) || new Map<CurrencyCode, PlanPricing>();
+      currMap.set(row.currency, row);
+      map.set(row.plan_id, currMap);
+    });
+    return map;
+  }, [pricing]);
 
-	const createPricingMutation = useMutation({
-		mutationFn: async ({ pricingData }: { pricingData: CreatePricingForm }) => {
-			const existing = pricing?.find(
-				(p) =>
-					p.plan_id === pricingData.plan_id &&
-					p.currency === pricingData.currency,
-			);
-			if (existing)
-				throw new Error(
-					`${pricingData.currency} pricing already exists for this plan`,
-				);
+  const recommendedPlanId = useMemo(
+    () => (plans || []).find((plan) => plan.is_recommended)?.id || null,
+    [plans],
+  );
 
-			const { data: createdPricing, error } = await supabase
-				.from("plan_pricing")
-				.insert({
-					plan_id: pricingData.plan_id,
-					currency: pricingData.currency,
-					monthly_price: pricingData.monthly_price,
-					annual_price: pricingData.annual_price,
-					effective_monthly: pricingData.effective_monthly,
-				})
-				.select("id")
-				.single();
-			if (error) throw error;
+  const planCount = plans?.length || 0;
+  const remainingPlanSlots = Math.max(0, MAX_PLANS - planCount);
 
-			await supabase.from("audit_logs").insert({
-				action: "pricing_created",
-				entity_type: "plan_pricing",
-				entity_id: createdPricing.id,
-				actor_user_id: backofficeUser?.user_id,
-				metadata: {
-					reason: pricingData.reason,
-					plan_id: pricingData.plan_id,
-					currency: pricingData.currency,
-				},
-			});
-		},
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
-			toast.success("Pricing created successfully");
-			setCreatePricingDialogOpen(false);
-			setCreatePricingForm((prev) => ({
-				...prev,
-				monthly_price: 0,
-				annual_price: 0,
-				effective_monthly: 0,
-				reason: "",
-			}));
-		},
-		onError: (error) => {
-			toast.error("Failed to create pricing: " + error.message);
-		},
-	});
+  const plansWithoutActivePricing = useMemo(
+    () => (plans || []).filter((plan) => !activePricingByPlan.has(plan.id)),
+    [plans, activePricingByPlan],
+  );
 
-	const openPricingDialog = (plan: Plan) => {
-		setSelectedPlan(plan);
-		const planPricing: Record<string, PlanPricing> = {};
-		CURRENCIES.forEach((curr) => {
-			const existing = pricing?.find(
-				(p) => p.plan_id === plan.id && p.currency === curr,
-			);
-			if (existing) planPricing[curr] = { ...existing };
-		});
-		setEditingPricing(planPricing);
-		setPricingDialogOpen(true);
-	};
+  const getPlanName = (planId: string) =>
+    (plans || []).find((plan) => plan.id === planId)?.name || "Unnamed plan";
 
-	const openLimitsDialog = (plan: Plan) => {
-		setSelectedPlan(plan);
-		const existing = limits?.find((l) => l.plan_id === plan.id);
-		setEditingLimits(existing ? { ...existing } : null);
-		setLimitsDialogOpen(true);
-	};
+  const createPlanChangeBatchForPricing = async (
+    planId: string,
+    reason: string,
+    pricingRows: Array<{
+      currency: CurrencyCode;
+      monthly_price: number;
+      effective_monthly: number;
+      annual_price: number;
+    }>,
+  ) => {
+    const plan = (plans || []).find((item) => item.id === planId);
+    if (!plan) return;
+    const planLimit = limitsByPlan.get(planId);
+    const planFeatures = (featuresByPlan.get(planId) || []).map((feature) => ({
+      feature_text: feature.feature_text,
+      sort_order: feature.sort_order,
+    }));
+    await (supabase.rpc as any)("backoffice_create_plan_change_batch", {
+      p_plan_id: planId,
+      p_reason: reason,
+      p_plan_core_json: {
+        name: plan.name,
+        slug: plan.slug,
+        description: plan.description,
+        display_order: plan.display_order,
+        trial_days: plan.trial_days,
+        is_active: plan.is_active,
+        is_recommended: plan.is_recommended,
+      },
+      p_limits_json: {
+        max_locations: planLimit?.max_locations || 1,
+        max_staff: planLimit?.max_staff || 1,
+        max_services: planLimit?.max_services ?? null,
+        max_products: planLimit?.max_products ?? null,
+        monthly_messages: planLimit?.monthly_messages || 30,
+      },
+      p_pricing_json: pricingRows,
+      p_change_summary_json: {
+        plan_name: plan.name,
+        changes: ["pricing"],
+        features: planFeatures,
+      },
+      p_rollout_mode: "now",
+      p_rollout_at: null,
+    });
+  };
 
-	const openCreatePlanDialog = () => {
-		const nextDisplayOrder = plans?.length
-			? Math.max(...plans.map((p) => p.display_order)) + 1
-			: 1;
-		setCreatePlanForm((prev) => ({ ...prev, display_order: nextDisplayOrder }));
-		setCreatePlanDialogOpen(true);
-	};
+  const createPlansValidation = useMemo(() => {
+    const errors: string[] = [];
+    const drafts = createPlanDrafts;
 
-	const openCreatePricingDialog = () => {
-		setCreatePricingForm((prev) => ({
-			...prev,
-			plan_id: prev.plan_id || plans?.[0]?.id || "",
-			currency: prev.currency || "USD",
-		}));
-		setCreatePricingDialogOpen(true);
-	};
+    if (!drafts.length) {
+      errors.push("Add at least one plan.");
+      return { isValid: false, errors };
+    }
 
-	const handlePricingSave = () => {
-		setPendingChange({ type: "pricing", data: editingPricing });
-		setConfirmDialogOpen(true);
-	};
+    if (drafts.length > Math.min(MAX_BATCH_ITEMS, remainingPlanSlots)) {
+      errors.push("Too many plans in one batch.");
+    }
 
-	const handleLimitsSave = () => {
-		setPendingChange({ type: "limits", data: editingLimits });
-		setConfirmDialogOpen(true);
-	};
+    const nameSet = new Set<string>();
+    const slugSet = new Set<string>();
+    const existingNameSet = new Set((plans || []).map((p) => p.name.trim().toLowerCase()));
+    const existingSlugSet = new Set((plans || []).map((p) => p.slug.trim().toLowerCase()));
+    const recommendedCount = drafts.filter((draft) => draft.is_recommended).length;
 
-	const handleConfirmChange = () => {
-		if (!confirmReason.trim()) {
-			toast.error("Please provide a reason for this change");
-			return;
-		}
-		if (!selectedPlan) return;
+    if (recommendedCount > 1) {
+      errors.push("Only one new plan can be marked as recommended.");
+    }
 
-		if (pendingChange?.type === "pricing") {
-			updatePricingMutation.mutate({
-				planId: selectedPlan.id,
-				updates: pendingChange.data as Record<string, Partial<PlanPricing>>,
-				reason: confirmReason,
-			});
-		} else if (pendingChange?.type === "limits") {
-			updateLimitsMutation.mutate({
-				planId: selectedPlan.id,
-				limits: pendingChange.data as Partial<PlanLimit>,
-				reason: confirmReason,
-			});
-		}
-	};
+    drafts.forEach((draft, index) => {
+      const n = index + 1;
+      const name = draft.name.trim();
+      const slug = sanitizeSlug(draft.slug);
 
-	const getPlanPricing = (planId: string, currency: string) =>
-		pricing?.find((p) => p.plan_id === planId && p.currency === currency);
+      if (!name) errors.push(`Plan ${n}: name is required.`);
+      if (!slug) errors.push(`Plan ${n}: slug is required.`);
+      if (!draft.reason.trim()) errors.push(`Plan ${n}: reason is required.`);
 
-	const getPlanLimits = (planId: string) =>
-		limits?.find((l) => l.plan_id === planId);
+      if (name) {
+        const key = name.toLowerCase();
+        if (nameSet.has(key)) errors.push(`Plan ${n}: duplicate name in batch.`);
+        if (existingNameSet.has(key)) errors.push(`Plan ${n}: name already exists.`);
+        nameSet.add(key);
+      }
 
-	return (
-		<BackofficeLayout>
-			<div className="p-6 space-y-6">
-				<div>
-					<h1 className="text-2xl font-bold tracking-tight">Plans & Pricing</h1>
-					<p className="text-muted-foreground">
-						Manage subscription tiers, regional pricing, and resource limits
-					</p>
-				</div>
+      if (slug) {
+        const key = slug.toLowerCase();
+        if (slugSet.has(key)) errors.push(`Plan ${n}: duplicate slug in batch.`);
+        if (existingSlugSet.has(key)) errors.push(`Plan ${n}: slug already exists.`);
+        slugSet.add(key);
+      }
 
-				{isSuperAdmin && (
-					<div className="flex flex-wrap gap-2">
-						<Button variant="outline" onClick={openCreatePlanDialog}>
-							<Plus className="mr-2 h-4 w-4" />
-							Add Plan
-						</Button>
-						<Button variant="outline" onClick={openCreatePricingDialog}>
-							<Plus className="mr-2 h-4 w-4" />
-							Add Pricing
-						</Button>
-					</div>
-				)}
+      const nonEmptyFeatures = draft.features.filter((feature) => feature.feature_text.trim());
+      if (!nonEmptyFeatures.length) {
+        errors.push(`Plan ${n}: add at least one feature.`);
+      }
+      const featureSet = new Set<string>();
+      nonEmptyFeatures.forEach((feature) => {
+        const key = feature.feature_text.trim().toLowerCase();
+        if (featureSet.has(key)) {
+          errors.push(`Plan ${n}: feature text must be unique (case-insensitive).`);
+        }
+        featureSet.add(key);
+      });
+    });
 
-				{!isSuperAdmin && (
-					<Card className="border-amber-200 bg-amber-50/50">
-						<CardContent className="py-4">
-							<div className="flex items-center gap-2 text-amber-700">
-								<AlertTriangle className="h-4 w-4" />
-								<span className="text-sm">
-									Only Super Admins can modify pricing and limits. You have
-									read-only access.
-								</span>
-							</div>
-						</CardContent>
-					</Card>
-				)}
+    return { isValid: errors.length === 0, errors };
+  }, [createPlanDrafts, plans, remainingPlanSlots]);
 
-				<Tabs defaultValue="plans">
-					<TabsList>
-						<TabsTrigger value="plans">Plans</TabsTrigger>
-						<TabsTrigger value="pricing">Regional Pricing</TabsTrigger>
-					</TabsList>
+  const createPricingValidation = useMemo(() => {
+    const errors: string[] = [];
 
-					<TabsContent value="plans" className="space-y-4 mt-4">
-						{plansLoading ? (
-							<div className="text-center py-8 text-muted-foreground">
-								Loading...
-							</div>
-						) : (
-							<div className="grid gap-4 md:grid-cols-3">
-								{plans?.map((plan) => {
-									const planLimits = getPlanLimits(plan.id);
-									const usdPricing = getPlanPricing(plan.id, "USD");
+    if (!createPricingSections.length) {
+      errors.push("Add at least one pricing section.");
+      return { isValid: false, errors };
+    }
 
-									return (
-										<Card
-											key={plan.id}
-											className={plan.is_recommended ? "border-primary" : ""}
-										>
-											<CardHeader>
-												<div className="flex items-center justify-between">
-													<CardTitle>{plan.name}</CardTitle>
-													<div className="flex gap-1">
-														{plan.is_recommended && (
-															<Badge variant="default">Recommended</Badge>
-														)}
-														{!plan.is_active && (
-															<Badge variant="secondary">Inactive</Badge>
-														)}
-													</div>
-												</div>
-												<CardDescription>{plan.description}</CardDescription>
-											</CardHeader>
-											<CardContent className="space-y-4">
-												<div className="text-2xl font-bold">
-													${usdPricing?.monthly_price || 0}
-													<span className="text-sm font-normal text-muted-foreground">
-														/month
-													</span>
-												</div>
+    if (!createPricingReason.trim()) {
+      errors.push("Reason is required.");
+    }
 
-												<div className="text-sm space-y-1 text-muted-foreground">
-													<p>Locations: {planLimits?.max_locations || 1}</p>
-													<p>Staff: {planLimits?.max_staff || 1}</p>
-													<p>
-														Messages: {planLimits?.monthly_messages || 30}/mo
-													</p>
-													<p>Trial: {plan.trial_days} days</p>
-												</div>
+    const selectedPlanIds = new Set<string>();
+    let enabledRowCount = 0;
 
-												{isSuperAdmin && (
-													<div className="flex gap-2 pt-2">
-														<Button
-															variant="outline"
-															size="sm"
-															className="flex-1"
-															onClick={() => openPricingDialog(plan)}
-														>
-															<DollarSign className="mr-1 h-3 w-3" />
-															Pricing
-														</Button>
-														<Button
-															variant="outline"
-															size="sm"
-															className="flex-1"
-															onClick={() => openLimitsDialog(plan)}
-														>
-															<CreditCard className="mr-1 h-3 w-3" />
-															Limits
-														</Button>
-													</div>
-												)}
-											</CardContent>
-										</Card>
-									);
-								})}
-							</div>
-						)}
-					</TabsContent>
+    createPricingSections.forEach((section, idx) => {
+      const sectionNumber = idx + 1;
+      if (!section.plan_id) {
+        errors.push(`Section ${sectionNumber}: select a plan.`);
+      } else {
+        if (selectedPlanIds.has(section.plan_id)) {
+          errors.push(`Section ${sectionNumber}: plan is duplicated in this batch.`);
+        }
+        selectedPlanIds.add(section.plan_id);
+      }
 
-					<TabsContent value="pricing" className="mt-4">
-						<Card>
-							<CardHeader>
-								<CardTitle>Regional Pricing</CardTitle>
-								<CardDescription>
-									Pricing by currency for all active plans
-								</CardDescription>
-							</CardHeader>
-							<CardContent>
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>Plan</TableHead>
-											{CURRENCIES.map((curr) => (
-												<TableHead key={curr} className="text-center">
-													{curr}
-												</TableHead>
-											))}
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{plans?.map((plan) => (
-											<TableRow key={plan.id}>
-												<TableCell className="font-medium">
-													{plan.name}
-												</TableCell>
-												{CURRENCIES.map((curr) => {
-													const p = getPlanPricing(plan.id, curr);
-													return (
-														<TableCell key={curr} className="text-center">
-															{p ? (
-																<span>
-																	{getCurrencySymbol(curr)}
-																	{p.monthly_price}
-																</span>
-															) : (
-																<span className="text-muted-foreground">-</span>
-															)}
-														</TableCell>
-													);
-												})}
-											</TableRow>
-										))}
-									</TableBody>
-								</Table>
-							</CardContent>
-						</Card>
-					</TabsContent>
-				</Tabs>
+      let sectionHasEnabledRow = false;
+      CURRENCIES.forEach((currency) => {
+        const row = section.currencies[currency];
+        if (!row.enabled) return;
 
-				<Dialog
-					open={createPlanDialogOpen}
-					onOpenChange={setCreatePlanDialogOpen}
-				>
-					<DialogContent className="sm:max-w-[650px]">
-						<DialogHeader>
-							<DialogTitle>Create New Plan</DialogTitle>
-							<DialogDescription>
-								Add a new subscription plan and its default limits.
-							</DialogDescription>
-						</DialogHeader>
+        enabledRowCount += 1;
+        sectionHasEnabledRow = true;
 
-						<div className="grid gap-4 py-2">
-							<div className="grid grid-cols-2 gap-4">
-								<div>
-									<Label>Name</Label>
-									<Input
-										value={createPlanForm.name}
-										onChange={(e) => {
-											const name = e.target.value;
-											setCreatePlanForm((prev) => ({
-												...prev,
-												name,
-												slug:
-													prev.slug ||
-													name
-														.toLowerCase()
-														.trim()
-														.replace(/[^a-z0-9\s-]/g, "")
-														.replace(/\s+/g, "-"),
-											}));
-										}}
-										placeholder="Starter"
-									/>
-								</div>
-								<div>
-									<Label>Slug</Label>
-									<Input
-										value={createPlanForm.slug}
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												slug: e.target.value
-													.toLowerCase()
-													.trim()
-													.replace(/\s+/g, "-"),
-											}))
-										}
-										placeholder="starter"
-									/>
-								</div>
-							</div>
+        const monthly = parseNumericInput(row.monthly_price);
+        const discount = parseNumericInput(row.annual_discount_pct || "0");
 
-							<div>
-								<Label>Description</Label>
-								<Textarea
-									value={createPlanForm.description}
-									onChange={(e) =>
-										setCreatePlanForm((prev) => ({
-											...prev,
-											description: e.target.value,
-										}))
-									}
-								/>
-							</div>
+        if (!Number.isFinite(monthly) || monthly < 0) {
+          errors.push(`Section ${sectionNumber} ${currency}: monthly price must be 0 or greater.`);
+        }
 
-							<div className="grid grid-cols-3 gap-4">
-								<div>
-									<Label>Display Order</Label>
-									<Input
-										type="number"
-										value={createPlanForm.display_order}
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												display_order: parseInt(e.target.value) || 1,
-											}))
-										}
-									/>
-								</div>
-								<div>
-									<Label>Trial Days</Label>
-									<Input
-										type="number"
-										value={createPlanForm.trial_days}
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												trial_days: parseInt(e.target.value) || 0,
-											}))
-										}
-									/>
-								</div>
-								<div className="flex items-end gap-4 pb-2 text-sm">
-									<label className="flex items-center gap-2">
-										<input
-											type="checkbox"
-											checked={createPlanForm.is_active}
-											onChange={(e) =>
-												setCreatePlanForm((prev) => ({
-													...prev,
-													is_active: e.target.checked,
-												}))
-											}
-										/>
-										Active
-									</label>
-									<label className="flex items-center gap-2">
-										<input
-											type="checkbox"
-											checked={createPlanForm.is_recommended}
-											onChange={(e) =>
-												setCreatePlanForm((prev) => ({
-													...prev,
-													is_recommended: e.target.checked,
-												}))
-											}
-										/>
-										Recommended
-									</label>
-								</div>
-							</div>
+        if (!Number.isFinite(discount) || discount < 0 || discount > 100) {
+          errors.push(`Section ${sectionNumber} ${currency}: annual discount must be between 0 and 100.`);
+        }
+      });
 
-							<div className="grid grid-cols-2 gap-4">
-								<div>
-									<Label>Max Locations</Label>
-									<Input
-										type="number"
-										value={createPlanForm.max_locations}
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												max_locations: parseInt(e.target.value) || 1,
-											}))
-										}
-									/>
-								</div>
-								<div>
-									<Label>Max Staff</Label>
-									<Input
-										type="number"
-										value={createPlanForm.max_staff}
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												max_staff: parseInt(e.target.value) || 1,
-											}))
-										}
-									/>
-								</div>
-								<div>
-									<Label>Max Services (optional)</Label>
-									<Input
-										type="number"
-										value={createPlanForm.max_services ?? ""}
-										placeholder="Unlimited"
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												max_services: e.target.value
-													? parseInt(e.target.value)
-													: null,
-											}))
-										}
-									/>
-								</div>
-								<div>
-									<Label>Max Products (optional)</Label>
-									<Input
-										type="number"
-										value={createPlanForm.max_products ?? ""}
-										placeholder="Unlimited"
-										onChange={(e) =>
-											setCreatePlanForm((prev) => ({
-												...prev,
-												max_products: e.target.value
-													? parseInt(e.target.value)
-													: null,
-											}))
-										}
-									/>
-								</div>
-							</div>
+      if (!sectionHasEnabledRow) {
+        errors.push(`Section ${sectionNumber}: enable at least one currency row.`);
+      }
+    });
 
-							<div>
-								<Label>Monthly Messages</Label>
-								<Input
-									type="number"
-									value={createPlanForm.monthly_messages}
-									onChange={(e) =>
-										setCreatePlanForm((prev) => ({
-											...prev,
-											monthly_messages: parseInt(e.target.value) || 0,
-										}))
-									}
-								/>
-							</div>
+    if (enabledRowCount === 0) {
+      errors.push("Enable at least one pricing row.");
+    }
 
-							<div>
-								<Label>Reason for change</Label>
-								<Textarea
-									value={createPlanForm.reason}
-									onChange={(e) =>
-										setCreatePlanForm((prev) => ({
-											...prev,
-											reason: e.target.value,
-										}))
-									}
-									placeholder="Explain why this plan is being added..."
-								/>
-							</div>
-						</div>
+    return { isValid: errors.length === 0, errors };
+  }, [createPricingReason, createPricingSections]);
 
-						<DialogFooter>
-							<Button
-								variant="outline"
-								onClick={() => setCreatePlanDialogOpen(false)}
-							>
-								Cancel
-							</Button>
-							<Button
-								onClick={() => {
-									if (
-										!createPlanForm.name.trim() ||
-										!createPlanForm.slug.trim()
-									)
-										return toast.error("Plan name and slug are required");
-									if (!createPlanForm.reason.trim())
-										return toast.error(
-											"Please provide a reason for creating this plan",
-										);
-									createPlanMutation.mutate({ planData: createPlanForm });
-								}}
-								disabled={createPlanMutation.isPending}
-							>
-								Create Plan
-							</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+  const validateChainCurrencyDrafts = (currency: CurrencyCode, rows: ChainTierRowDraft[]) => {
+    const errors: string[] = [];
+    if (!rows.length) {
+      errors.push(`${currency}: add at least one tier.`);
+      return errors;
+    }
 
-				<Dialog
-					open={createPricingDialogOpen}
-					onOpenChange={setCreatePricingDialogOpen}
-				>
-					<DialogContent className="sm:max-w-[520px]">
-						<DialogHeader>
-							<DialogTitle>Create Pricing Entry</DialogTitle>
-							<DialogDescription>
-								Add a new currency pricing row for a plan.
-							</DialogDescription>
-						</DialogHeader>
+    const parsed = rows
+      .map((row) => ({
+        row,
+        label: row.tier_label.trim(),
+        min: Number(row.tier_min),
+        max: row.tier_max.trim() ? Number(row.tier_max) : null,
+        price: row.price_per_location.trim() ? Number(row.price_per_location) : null,
+      }))
+      .sort((a, b) => a.min - b.min);
 
-						<div className="grid gap-4 py-2">
-							<div>
-								<Label>Plan</Label>
-								<select
-									className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-									value={createPricingForm.plan_id}
-									onChange={(e) =>
-										setCreatePricingForm((prev) => ({
-											...prev,
-											plan_id: e.target.value,
-										}))
-									}
-								>
-									<option value="" disabled>
-										Select plan
-									</option>
-									{plans?.map((plan) => (
-										<option key={plan.id} value={plan.id}>
-											{plan.name}
-										</option>
-									))}
-								</select>
-							</div>
+    const labels = new Set<string>();
+    let expectedMin = 2;
+    let openEndedCount = 0;
 
-							<div>
-								<Label>Currency</Label>
-								<select
-									className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-									value={createPricingForm.currency}
-									onChange={(e) =>
-										setCreatePricingForm((prev) => ({
-											...prev,
-											currency: e.target.value,
-										}))
-									}
-								>
-									{CURRENCIES.map((curr) => (
-										<option key={curr} value={curr}>
-											{curr}
-										</option>
-									))}
-								</select>
-							</div>
+    parsed.forEach((item) => {
+      if (!item.label) errors.push(`${currency}: tier label is required.`);
+      const normalizedLabel = item.label.toLowerCase();
+      if (labels.has(normalizedLabel)) {
+        errors.push(`${currency}: tier labels must be unique.`);
+      }
+      labels.add(normalizedLabel);
 
-							<div className="grid grid-cols-3 gap-3">
-								<div>
-									<Label>Monthly</Label>
-									<Input
-										type="number"
-										value={createPricingForm.monthly_price}
-										onChange={(e) =>
-											setCreatePricingForm((prev) => ({
-												...prev,
-												monthly_price: parseFloat(e.target.value) || 0,
-											}))
-										}
-									/>
-								</div>
-								<div>
-									<Label>Annual</Label>
-									<Input
-										type="number"
-										value={createPricingForm.annual_price}
-										onChange={(e) =>
-											setCreatePricingForm((prev) => ({
-												...prev,
-												annual_price: parseFloat(e.target.value) || 0,
-											}))
-										}
-									/>
-								</div>
-								<div>
-									<Label>Eff. Monthly</Label>
-									<Input
-										type="number"
-										value={createPricingForm.effective_monthly}
-										onChange={(e) =>
-											setCreatePricingForm((prev) => ({
-												...prev,
-												effective_monthly: parseFloat(e.target.value) || 0,
-											}))
-										}
-									/>
-								</div>
-							</div>
+      if (!Number.isFinite(item.min) || item.min < 2) {
+        errors.push(`${currency}: tier min must be 2 or greater.`);
+      }
+      if (item.max !== null && (!Number.isFinite(item.max) || item.max < item.min)) {
+        errors.push(`${currency}: tier max must be empty or >= tier min.`);
+      }
+      if (item.min !== expectedMin) {
+        errors.push(`${currency}: ranges must be contiguous and start at 2.`);
+      }
+      if (item.max === null) {
+        openEndedCount += 1;
+        if (!item.row.is_custom) {
+          errors.push(`${currency}: open-ended tier must be marked custom.`);
+        }
+        expectedMin = Number.MAX_SAFE_INTEGER;
+      } else {
+        expectedMin = item.max + 1;
+      }
 
-							<div>
-								<Label>Reason for change</Label>
-								<Textarea
-									value={createPricingForm.reason}
-									onChange={(e) =>
-										setCreatePricingForm((prev) => ({
-											...prev,
-											reason: e.target.value,
-										}))
-									}
-									placeholder="Explain why this pricing row is being added..."
-								/>
-							</div>
-						</div>
+      if (item.row.is_custom) {
+        if (item.price !== null) {
+          errors.push(`${currency}: custom tier must not have a price.`);
+        }
+      } else if (item.price === null || !Number.isFinite(item.price) || item.price < 0) {
+        errors.push(`${currency}: non-custom tiers require price >= 0.`);
+      }
+    });
 
-						<DialogFooter>
-							<Button
-								variant="outline"
-								onClick={() => setCreatePricingDialogOpen(false)}
-							>
-								Cancel
-							</Button>
-							<Button
-								onClick={() => {
-									if (!createPricingForm.plan_id)
-										return toast.error("Please select a plan");
-									if (!createPricingForm.reason.trim())
-										return toast.error(
-											"Please provide a reason for creating this pricing",
-										);
-									createPricingMutation.mutate({
-										pricingData: createPricingForm,
-									});
-								}}
-								disabled={createPricingMutation.isPending}
-							>
-								Create Pricing
-							</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+    if (openEndedCount > 1) {
+      errors.push(`${currency}: only one open-ended tier is allowed.`);
+    }
+    return errors;
+  };
 
-				<Dialog open={pricingDialogOpen} onOpenChange={setPricingDialogOpen}>
-					<DialogContent className="sm:max-w-[600px]">
-						<DialogHeader>
-							<DialogTitle>Edit Pricing - {selectedPlan?.name}</DialogTitle>
-							<DialogDescription>
-								Update pricing for all regions. Changes are logged and require
-								confirmation.
-							</DialogDescription>
-						</DialogHeader>
-						<div className="space-y-4 py-4">
-							{CURRENCIES.map((curr) => {
-								const p = editingPricing[curr];
-								if (!p) return null;
-								return (
-									<div key={curr} className="grid grid-cols-4 gap-4 items-end">
-										<div>
-											<Label>{curr}</Label>
-											<Badge variant="outline" className="mt-1">
-												{getCurrencySymbol(curr)}
-											</Badge>
-										</div>
-										<div>
-											<Label>Monthly</Label>
-											<Input
-												type="number"
-												value={p.monthly_price}
-												onChange={(e) =>
-													setEditingPricing({
-														...editingPricing,
-														[curr]: {
-															...p,
-															monthly_price: parseFloat(e.target.value) || 0,
-														},
-													})
-												}
-											/>
-										</div>
-										<div>
-											<Label>Annual</Label>
-											<Input
-												type="number"
-												value={p.annual_price}
-												onChange={(e) =>
-													setEditingPricing({
-														...editingPricing,
-														[curr]: {
-															...p,
-															annual_price: parseFloat(e.target.value) || 0,
-														},
-													})
-												}
-											/>
-										</div>
-										<div>
-											<Label>Eff. Monthly</Label>
-											<Input
-												type="number"
-												value={p.effective_monthly}
-												onChange={(e) =>
-													setEditingPricing({
-														...editingPricing,
-														[curr]: {
-															...p,
-															effective_monthly:
-																parseFloat(e.target.value) || 0,
-														},
-													})
-												}
-											/>
-										</div>
-									</div>
-								);
-							})}
-						</div>
-						<DialogFooter>
-							<Button
-								variant="outline"
-								onClick={() => setPricingDialogOpen(false)}
-							>
-								Cancel
-							</Button>
-							<Button onClick={handlePricingSave}>Save Changes</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+  const chainTierValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!chainPlan?.id) {
+      errors.push("Chain plan not found.");
+      return { isValid: false, errors };
+    }
+    if (!chainTierReason.trim()) {
+      errors.push("Reason is required.");
+    }
+    CURRENCIES.forEach((currency) => {
+      errors.push(...validateChainCurrencyDrafts(currency, chainTierDrafts[currency]));
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [chainPlan?.id, chainTierDrafts, chainTierReason]);
 
-				<Dialog open={limitsDialogOpen} onOpenChange={setLimitsDialogOpen}>
-					<DialogContent className="sm:max-w-[500px]">
-						<DialogHeader>
-							<DialogTitle>Edit Limits - {selectedPlan?.name}</DialogTitle>
-							<DialogDescription>
-								Update resource limits for this plan.
-							</DialogDescription>
-						</DialogHeader>
-						{editingLimits && (
-							<div className="grid gap-4 py-4">
-								<div className="grid grid-cols-2 gap-4">
-									<div>
-										<Label>Max Locations</Label>
-										<Input
-											type="number"
-											value={editingLimits.max_locations}
-											onChange={(e) =>
-												setEditingLimits({
-													...editingLimits,
-													max_locations: parseInt(e.target.value) || 1,
-												})
-											}
-										/>
-									</div>
-									<div>
-										<Label>Max Staff</Label>
-										<Input
-											type="number"
-											value={editingLimits.max_staff}
-											onChange={(e) =>
-												setEditingLimits({
-													...editingLimits,
-													max_staff: parseInt(e.target.value) || 1,
-												})
-											}
-										/>
-									</div>
-								</div>
-								<div className="grid grid-cols-2 gap-4">
-									<div>
-										<Label>Max Services</Label>
-										<Input
-											type="number"
-											value={editingLimits.max_services || ""}
-											placeholder="Unlimited"
-											onChange={(e) =>
-												setEditingLimits({
-													...editingLimits,
-													max_services: e.target.value
-														? parseInt(e.target.value)
-														: null,
-												})
-											}
-										/>
-									</div>
-									<div>
-										<Label>Max Products</Label>
-										<Input
-											type="number"
-											value={editingLimits.max_products || ""}
-											placeholder="Unlimited"
-											onChange={(e) =>
-												setEditingLimits({
-													...editingLimits,
-													max_products: e.target.value
-														? parseInt(e.target.value)
-														: null,
-												})
-											}
-										/>
-									</div>
-								</div>
-								<div>
-									<Label>Monthly Messages</Label>
-									<Input
-										type="number"
-										value={editingLimits.monthly_messages}
-										onChange={(e) =>
-											setEditingLimits({
-												...editingLimits,
-												monthly_messages: parseInt(e.target.value) || 0,
-											})
-										}
-									/>
-								</div>
-							</div>
-						)}
-						<DialogFooter>
-							<Button
-								variant="outline"
-								onClick={() => setLimitsDialogOpen(false)}
-							>
-								Cancel
-							</Button>
-							<Button onClick={handleLimitsSave}>Save Changes</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
+  const createPlansMutation = useMutation({
+    mutationFn: async (drafts: PlanDraft[]) => {
+      for (const draft of drafts) {
+        const normalizedSlug = sanitizeSlug(draft.slug);
 
-				<Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-					<DialogContent>
-						<DialogHeader>
-							<DialogTitle className="flex items-center gap-2">
-								<AlertTriangle className="h-5 w-5 text-amber-500" />
-								Confirm Change
-							</DialogTitle>
-							<DialogDescription>
-								This change will be logged and audited. Please provide a reason.
-							</DialogDescription>
-						</DialogHeader>
-						<div className="py-4">
-							<Label htmlFor="reason">Reason for change</Label>
-							<Textarea
-								id="reason"
-								value={confirmReason}
-								onChange={(e) => setConfirmReason(e.target.value)}
-								placeholder="Explain why this change is being made..."
-								className="mt-2"
-							/>
-						</div>
-						<DialogFooter>
-							<Button
-								variant="outline"
-								onClick={() => setConfirmDialogOpen(false)}
-							>
-								Cancel
-							</Button>
-							<Button
-								onClick={handleConfirmChange}
-								disabled={
-									updatePricingMutation.isPending ||
-									updateLimitsMutation.isPending
-								}
-							>
-								Confirm & Save
-							</Button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
-			</div>
-		</BackofficeLayout>
-	);
+        const { data: createdPlan, error: planError } = await supabase
+          .from("plans")
+          .insert({
+            name: draft.name.trim(),
+            slug: normalizedSlug,
+            description: draft.description.trim() || null,
+            display_order: draft.display_order,
+            trial_days: draft.trial_days,
+            is_active: draft.is_active,
+            is_recommended: false,
+          })
+          .select("id")
+          .single();
+
+        if (planError) throw planError;
+
+        const { error: limitsError } = await supabase.from("plan_limits").insert({
+          plan_id: createdPlan.id,
+          max_locations: draft.max_locations,
+          max_staff: draft.max_staff,
+          max_services: draft.max_services.trim() ? Number(draft.max_services) : null,
+          max_products: draft.max_products.trim() ? Number(draft.max_products) : null,
+          monthly_messages: draft.monthly_messages,
+        });
+        if (limitsError) throw limitsError;
+
+        const featureRows = draft.features
+          .filter((feature) => feature.feature_text.trim())
+          .map((feature) => ({
+            plan_id: createdPlan.id,
+            feature_text: feature.feature_text.trim(),
+            sort_order: feature.sort_order,
+          }));
+
+        if (featureRows.length > 0) {
+          const { error: featuresError } = await supabase.from("plan_features").insert(featureRows);
+          if (featuresError) throw featuresError;
+        }
+
+        if (draft.is_recommended) {
+          const { error: unsetError } = await supabase
+            .from("plans")
+            .update({ is_recommended: false })
+            .neq("id", createdPlan.id);
+          if (unsetError) throw unsetError;
+
+          const { error: setError } = await supabase
+            .from("plans")
+            .update({ is_recommended: true })
+            .eq("id", createdPlan.id);
+          if (setError) throw setError;
+        }
+
+        const { error: auditError } = await supabase.from("audit_logs").insert({
+          action: "plan_created",
+          entity_type: "plan",
+          entity_id: createdPlan.id,
+          actor_user_id: backofficeUser?.user_id,
+          metadata: {
+            reason: draft.reason.trim(),
+            name: draft.name.trim(),
+            slug: normalizedSlug,
+            is_recommended: draft.is_recommended,
+          },
+        });
+        if (auditError) throw auditError;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backoffice-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-plan-features"] });
+      toast.success("Plans created successfully.");
+      setCreatePlanOpen(false);
+      setCreatePlanDrafts([]);
+      setCreatePlanAccordion([]);
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const updatePlanMutation = useMutation({
+    mutationFn: async ({ planId, draft }: { planId: string; draft: PlanDraft }) => {
+      const normalizedSlug = sanitizeSlug(draft.slug);
+      const featurePayload = draft.features
+        .filter((item) => item.feature_text.trim())
+        .map((item) => ({
+          feature_text: item.feature_text.trim(),
+          sort_order: item.sort_order,
+        }));
+      const pricingRows = Array.from(activePricingByPlan.get(planId)?.values() || []).map((row) => ({
+        currency: row.currency,
+        monthly_price: row.monthly_price,
+        effective_monthly: row.effective_monthly,
+        annual_price: row.annual_price,
+      }));
+
+      const rolloutAt =
+        editPlanRolloutMode === "schedule" && editPlanRolloutAt
+          ? new Date(editPlanRolloutAt).toISOString()
+          : null;
+
+      const { data, error } = await (supabase.rpc as any)("backoffice_create_plan_change_batch", {
+        p_plan_id: planId,
+        p_reason: draft.reason.trim(),
+        p_plan_core_json: {
+          name: draft.name.trim(),
+          slug: normalizedSlug,
+          description: draft.description.trim() || null,
+          display_order: draft.display_order,
+          trial_days: draft.trial_days,
+          is_active: draft.is_active,
+          is_recommended: draft.is_recommended,
+        },
+        p_limits_json: {
+          max_locations: draft.max_locations,
+          max_staff: draft.max_staff,
+          max_services: draft.max_services.trim() ? Number(draft.max_services) : null,
+          max_products: draft.max_products.trim() ? Number(draft.max_products) : null,
+          monthly_messages: draft.monthly_messages,
+        },
+        p_pricing_json: pricingRows,
+        p_change_summary_json: {
+          plan_name: draft.name.trim(),
+          changes: ["plan_core", "plan_limits", "plan_features"],
+          features: featurePayload,
+        },
+        p_rollout_mode: editPlanRolloutMode,
+        p_rollout_at: rolloutAt,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onMutate: () => {
+      editPlanSaveRef.current = true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backoffice-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-plan-features"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+      toast.success(editPlanRolloutMode === "schedule" ? "Plan changes scheduled." : "Plan changes rolled out.");
+      setEditPlanOpen(false);
+      setEditPlanDraft(null);
+      setEditPlanId(null);
+      setEditPlanRolloutMode("now");
+      setEditPlanRolloutAt("");
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+    onSettled: () => {
+      editPlanSaveRef.current = false;
+    },
+  });
+
+  const deletePlanMutation = useMutation({
+    mutationFn: async ({ planId, reason, totpCode }: { planId: string; reason: string; totpCode: string }) => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Missing session. Please sign in again.");
+      }
+
+      const verifyResponse = await supabase.functions.invoke("backoffice-verify-step-up-totp", {
+        body: {
+          token: totpCode,
+          action: "plan_delete",
+          resourceId: planId,
+          accessToken: session.access_token,
+        },
+      });
+
+      if (verifyResponse.error || !verifyResponse.data?.valid || !verifyResponse.data?.challengeId) {
+        throw verifyResponse.error || new Error(verifyResponse.data?.error || "Invalid 2FA code.");
+      }
+
+      const { data, error } = await (supabase.rpc as any)("backoffice_delete_or_archive_plan", {
+        p_plan_id: planId,
+        p_reason: reason,
+        p_challenge_id: verifyResponse.data.challengeId,
+      });
+      if (error) throw error;
+      return data as { status?: "deleted" | "archived" };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["backoffice-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-plan-features"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+      toast.success(result?.status === "archived" ? "Plan is in use and was archived instead." : "Plan deleted.");
+      setDeletePlanOpen(false);
+      setDeletePlanTarget(null);
+      setDeletePlanReason("");
+      setDeletePlanTotp("");
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const createPricingMutation = useMutation({
+    mutationFn: async (payload: { sections: PricingSectionDraft[]; reason: string }) => {
+      const rows: Array<{
+        plan_id: string;
+        currency: CurrencyCode;
+        monthly_price: number;
+        annual_price: number;
+        effective_monthly: number;
+      }> = [];
+
+      for (const section of payload.sections) {
+        const hasActivePricing = activePricingByPlan.has(section.plan_id);
+        if (hasActivePricing) {
+          throw new Error("Pricing already exists for this plan/currency. Edit existing pricing instead.");
+        }
+
+        for (const currency of CURRENCIES) {
+          const row = section.currencies[currency];
+          if (!row.enabled) continue;
+
+          const monthly = parseNumericInput(row.monthly_price);
+          const annualDiscountPct = parseNumericInput(row.annual_discount_pct || "0");
+          const effectiveMonthly = deriveEffectiveMonthly(monthly, annualDiscountPct);
+          const annualTotal = deriveAnnualTotal(effectiveMonthly);
+
+          rows.push({
+            plan_id: section.plan_id,
+            currency,
+            monthly_price: toFixedNumber(monthly),
+            effective_monthly: effectiveMonthly,
+            annual_price: annualTotal,
+          });
+        }
+      }
+
+      const { error: insertError } = await supabase.from("plan_pricing").insert(rows);
+      if (insertError) throw insertError;
+
+      const rowsByPlan = new Map<
+        string,
+        Array<{
+          currency: CurrencyCode;
+          monthly_price: number;
+          effective_monthly: number;
+          annual_price: number;
+        }>
+      >();
+      rows.forEach((row) => {
+        const list = rowsByPlan.get(row.plan_id) || [];
+        list.push({
+          currency: row.currency,
+          monthly_price: row.monthly_price,
+          effective_monthly: row.effective_monthly,
+          annual_price: row.annual_price,
+        });
+        rowsByPlan.set(row.plan_id, list);
+      });
+      for (const [planId, planRows] of rowsByPlan.entries()) {
+        await createPlanChangeBatchForPricing(planId, payload.reason.trim(), planRows);
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "pricing_created",
+        entity_type: "plan_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: payload.reason.trim(),
+          sections: payload.sections.map((section) => ({
+            plan_id: section.plan_id,
+            plan_name: getPlanName(section.plan_id),
+            currencies: CURRENCIES.filter((currency) => section.currencies[currency].enabled),
+          })),
+          row_count: rows.length,
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+      toast.success("Pricing created successfully.");
+      setCreatePricingOpen(false);
+      setCreatePricingSections([]);
+      setCreatePricingReason("");
+      setCreatePricingAccordion([]);
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const updatePricingMutation = useMutation({
+    mutationFn: async ({
+      planId,
+      rows,
+      reason,
+    }: {
+      planId: string;
+      rows: EditPricingRow[];
+      reason: string;
+    }) => {
+      const changedRows: Array<{
+        currency: CurrencyCode;
+        monthly_price: number;
+        effective_monthly: number;
+        annual_price: number;
+      }> = [];
+      for (const row of rows) {
+        const monthly = parseNumericInput(row.monthly_price);
+        const annualDiscountPct = parseNumericInput(row.annual_discount_pct || "0");
+        const effectiveMonthly = deriveEffectiveMonthly(monthly, annualDiscountPct);
+        const annualTotal = deriveAnnualTotal(effectiveMonthly);
+
+        const { error } = await supabase
+          .from("plan_pricing")
+          .update({
+            monthly_price: toFixedNumber(monthly),
+            effective_monthly: effectiveMonthly,
+            annual_price: annualTotal,
+          })
+          .eq("id", row.id);
+        if (error) throw error;
+
+        changedRows.push({
+          currency: row.currency,
+          monthly_price: toFixedNumber(monthly),
+          effective_monthly: effectiveMonthly,
+          annual_price: annualTotal,
+        });
+      }
+
+      await createPlanChangeBatchForPricing(planId, reason.trim(), changedRows);
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "pricing_updated",
+        entity_type: "plan_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: reason.trim(),
+          plan_id: planId,
+          currencies: rows.map((row) => row.currency),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+      toast.success("Pricing updated successfully.");
+      setEditPricingOpen(false);
+      setEditPricingPlanId(null);
+      setEditPricingRows([]);
+      setEditPricingReason("");
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const saveChainTiersMutation = useMutation({
+    mutationFn: async () => {
+      if (!chainPlan?.id) {
+        throw new Error("Chain plan not found.");
+      }
+      const tiers = CURRENCIES.flatMap((currency) =>
+        chainTierDrafts[currency].map((row) => ({
+          currency,
+          tier_label: row.tier_label.trim(),
+          tier_min: Number(row.tier_min),
+          tier_max: row.tier_max.trim() ? Number(row.tier_max) : null,
+          price_per_location: row.is_custom
+            ? null
+            : Number(row.price_per_location),
+          is_custom: row.is_custom,
+        })),
+      );
+      const { error } = await (supabase.rpc as any)("backoffice_upsert_chain_location_pricing", {
+        p_plan_id: chainPlan.id,
+        p_tiers: tiers,
+        p_reason: chainTierReason.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Chain location tiers updated.");
+      setChainTierReason("");
+      setChainTierDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-chain-tier-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const openCreatePlansDialog = () => {
+    if (remainingPlanSlots <= 0) {
+      toast.error("Maximum of 4 plans reached.");
+      return;
+    }
+    const nextDisplayOrder =
+      plans && plans.length ? Math.max(...plans.map((item) => item.display_order)) + 1 : 1;
+    const initialDraft = createPlanDraft(nextDisplayOrder);
+    setCreatePlanDrafts([initialDraft]);
+    setCreatePlanAccordion([initialDraft.localId]);
+    setCreatePlanOpen(true);
+  };
+
+  const addCreatePlanDraft = () => {
+    const maxCanAdd = Math.min(MAX_BATCH_ITEMS, remainingPlanSlots);
+    if (createPlanDrafts.length >= maxCanAdd) return;
+    const maxDisplayOrder =
+      Math.max(
+        ...(plans || []).map((plan) => plan.display_order),
+        ...createPlanDrafts.map((draft) => draft.display_order),
+        0,
+      ) + 1;
+    const draft = createPlanDraft(maxDisplayOrder);
+    setCreatePlanDrafts((prev) => [...prev, draft]);
+    setCreatePlanAccordion((prev) => [...prev, draft.localId]);
+  };
+
+  const removeCreatePlanDraft = (localId: string) => {
+    setCreatePlanDrafts((prev) => prev.filter((draft) => draft.localId !== localId));
+    setCreatePlanAccordion((prev) => prev.filter((id) => id !== localId));
+  };
+
+  const updateCreatePlanDraft = <K extends keyof PlanDraft>(
+    localId: string,
+    field: K,
+    value: PlanDraft[K],
+  ) => {
+    setCreatePlanDrafts((prev) =>
+      prev.map((draft) => {
+        if (draft.localId !== localId) return draft;
+        const nextDraft = { ...draft, [field]: value };
+        if (field === "name" && !draft.slug.trim()) {
+          nextDraft.slug = sanitizeSlug(String(value));
+        }
+        if (field === "slug") {
+          nextDraft.slug = sanitizeSlug(String(value));
+        }
+        return nextDraft;
+      }),
+    );
+  };
+
+  const addDraftFeature = (localId: string) => {
+    setCreatePlanDrafts((prev) =>
+      prev.map((draft) =>
+        draft.localId === localId
+          ? {
+              ...draft,
+              features: [...draft.features, createFeatureDraft(draft.features.length)],
+            }
+          : draft,
+      ),
+    );
+  };
+
+  const updateDraftFeature = (
+    localId: string,
+    featureLocalId: string,
+    patch: Partial<FeatureDraft>,
+  ) => {
+    setCreatePlanDrafts((prev) =>
+      prev.map((draft) =>
+        draft.localId === localId
+          ? {
+              ...draft,
+              features: draft.features.map((feature) =>
+                feature.localId === featureLocalId ? { ...feature, ...patch } : feature,
+              ),
+            }
+          : draft,
+      ),
+    );
+  };
+
+  const removeDraftFeature = (localId: string, featureLocalId: string) => {
+    setCreatePlanDrafts((prev) =>
+      prev.map((draft) =>
+        draft.localId === localId
+          ? {
+              ...draft,
+              features: draft.features.filter((feature) => feature.localId !== featureLocalId),
+            }
+          : draft,
+      ),
+    );
+  };
+
+  const openEditPlanDialog = (plan: Plan) => {
+    const planLimits = limitsByPlan.get(plan.id);
+    const planFeatures = featuresByPlan.get(plan.id) || [];
+    const draft: PlanDraft = {
+      localId: crypto.randomUUID(),
+      name: plan.name,
+      slug: plan.slug,
+      description: plan.description || "",
+      display_order: plan.display_order,
+      trial_days: plan.trial_days,
+      is_active: plan.is_active,
+      is_recommended: plan.is_recommended,
+      max_locations: planLimits?.max_locations || 1,
+      max_staff: planLimits?.max_staff || 1,
+      max_services: planLimits?.max_services?.toString() || "",
+      max_products: planLimits?.max_products?.toString() || "",
+      monthly_messages: planLimits?.monthly_messages || 30,
+      reason: "",
+      features:
+        planFeatures.length > 0
+          ? planFeatures.map((feature) => ({
+              localId: crypto.randomUUID(),
+              id: feature.id,
+              feature_text: feature.feature_text,
+              sort_order: feature.sort_order,
+            }))
+          : [createFeatureDraft(0)],
+    };
+
+    setEditPlanId(plan.id);
+    setEditPlanDraft(draft);
+    setEditPlanRolloutMode("now");
+    setEditPlanRolloutAt("");
+    setEditPlanOpen(true);
+  };
+
+  const openDeletePlanDialog = (plan: Plan) => {
+    setDeletePlanTarget(plan);
+    setDeletePlanReason("");
+    setDeletePlanTotp("");
+    setDeletePlanOpen(true);
+  };
+
+  const openEditPricingDialog = (plan: Plan) => {
+    const pricingRows = activePricingByPlan.get(plan.id);
+    if (!pricingRows || pricingRows.size === 0) {
+      toast.error("No active pricing found for this plan.");
+      return;
+    }
+
+    const rows = CURRENCIES.filter((currency) => pricingRows.has(currency)).map((currency) => {
+      const row = pricingRows.get(currency)!;
+      const discount = deriveDiscountFromEffective(row.monthly_price, row.effective_monthly);
+      return {
+        id: row.id,
+        currency,
+        monthly_price: String(row.monthly_price),
+        annual_discount_pct: String(discount),
+      } satisfies EditPricingRow;
+    });
+
+    setEditPricingPlanId(plan.id);
+    setEditPricingRows(rows);
+    setEditPricingReason("");
+    setEditPricingOpen(true);
+  };
+
+  const openCreatePricingDialog = () => {
+    if (plansWithoutActivePricing.length === 0) {
+      toast.error("All plans already have active pricing.");
+      return;
+    }
+    const section = createPricingSectionDraft();
+    setCreatePricingSections([section]);
+    setCreatePricingReason("");
+    setCreatePricingAccordion([section.localId]);
+    setCreatePricingOpen(true);
+  };
+
+  const addPricingSection = () => {
+    if (createPricingSections.length >= MAX_BATCH_ITEMS) return;
+    const section = createPricingSectionDraft();
+    setCreatePricingSections((prev) => [...prev, section]);
+    setCreatePricingAccordion((prev) => [...prev, section.localId]);
+  };
+
+  const removePricingSection = (localId: string) => {
+    setCreatePricingSections((prev) => prev.filter((section) => section.localId !== localId));
+    setCreatePricingAccordion((prev) => prev.filter((id) => id !== localId));
+  };
+
+  const updatePricingSection = (
+    localId: string,
+    updater: (section: PricingSectionDraft) => PricingSectionDraft,
+  ) => {
+    setCreatePricingSections((prev) =>
+      prev.map((section) => (section.localId === localId ? updater(section) : section)),
+    );
+  };
+
+  const getAvailablePlansForSection = (localId: string) => {
+    const selectedElsewhere = new Set(
+      createPricingSections
+        .filter((section) => section.localId !== localId && section.plan_id)
+        .map((section) => section.plan_id),
+    );
+    return plansWithoutActivePricing.filter((plan) => !selectedElsewhere.has(plan.id));
+  };
+
+  const addChainTierRow = (currency: CurrencyCode) => {
+    setChainTierDirty(true);
+    setChainTierDrafts((prev) => {
+      const rows = prev[currency];
+      const sorted = [...rows].sort((a, b) => Number(a.tier_min || 0) - Number(b.tier_min || 0));
+      const last = sorted[sorted.length - 1];
+      const nextMin = last?.tier_max?.trim()
+        ? String(Number(last.tier_max) + 1)
+        : String(Number(last?.tier_min || "2") + 1);
+      const next = createChainTierRowDraft(nextMin, "");
+      return { ...prev, [currency]: [...rows, next] };
+    });
+  };
+
+  const updateChainTierRow = (
+    currency: CurrencyCode,
+    localId: string,
+    patch: Partial<ChainTierRowDraft>,
+  ) => {
+    setChainTierDirty(true);
+    setChainTierDrafts((prev) => ({
+      ...prev,
+      [currency]: prev[currency].map((row) => (row.localId === localId ? { ...row, ...patch } : row)),
+    }));
+  };
+
+  const removeChainTierRow = (currency: CurrencyCode, localId: string) => {
+    setChainTierDirty(true);
+    setChainTierDrafts((prev) => ({
+      ...prev,
+      [currency]: prev[currency].filter((row) => row.localId !== localId),
+    }));
+  };
+
+  const canSubmitCreatePlans =
+    isSuperAdmin && createPlansValidation.isValid && !createPlansMutation.isPending;
+  const canSubmitCreatePricing =
+    isSuperAdmin && createPricingValidation.isValid && !createPricingMutation.isPending;
+  const canSubmitChainTiers =
+    isSuperAdmin && chainTierValidation.isValid && !saveChainTiersMutation.isPending;
+
+  const validateEditPlan = () => {
+    const errors: string[] = [];
+    if (!editPlanDraft || !editPlanId) return { isValid: false, errors: ["Plan form is empty."] };
+
+    const name = editPlanDraft.name.trim().toLowerCase();
+    const slug = sanitizeSlug(editPlanDraft.slug).toLowerCase();
+
+    if (!name) errors.push("Name is required.");
+    if (!slug) errors.push("Slug is required.");
+    if (!editPlanDraft.reason.trim()) errors.push("Reason is required.");
+    if (editPlanRolloutMode === "schedule" && !editPlanRolloutAt) {
+      errors.push("Scheduled rollout requires date and time.");
+    }
+
+    const duplicateName = (plans || []).some(
+      (plan) => plan.id !== editPlanId && plan.name.trim().toLowerCase() === name,
+    );
+    if (duplicateName) errors.push("Plan name already exists.");
+
+    const duplicateSlug = (plans || []).some(
+      (plan) => plan.id !== editPlanId && plan.slug.trim().toLowerCase() === slug,
+    );
+    if (duplicateSlug) errors.push("Plan slug already exists.");
+
+    const hasFeature = editPlanDraft.features.some((feature) => feature.feature_text.trim());
+    if (!hasFeature) errors.push("Add at least one feature.");
+    const featureSet = new Set<string>();
+    editPlanDraft.features
+      .filter((feature) => feature.feature_text.trim())
+      .forEach((feature) => {
+        const key = feature.feature_text.trim().toLowerCase();
+        if (featureSet.has(key)) {
+          errors.push("Feature text must be unique per plan (case-insensitive).");
+        }
+        featureSet.add(key);
+      });
+
+    return { isValid: errors.length === 0, errors };
+  };
+
+  const editPlanValidation = validateEditPlan();
+
+  const canSubmitEditPlan =
+    isSuperAdmin && editPlanValidation.isValid && !updatePlanMutation.isPending;
+
+  const editPricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!editPricingPlanId) errors.push("Missing plan.");
+    if (!editPricingReason.trim()) errors.push("Reason is required.");
+
+    editPricingRows.forEach((row) => {
+      const monthly = parseNumericInput(row.monthly_price);
+      const discount = parseNumericInput(row.annual_discount_pct || "0");
+      if (!Number.isFinite(monthly) || monthly < 0) {
+        errors.push(`${row.currency}: monthly price must be 0 or greater.`);
+      }
+      if (!Number.isFinite(discount) || discount < 0 || discount > 100) {
+        errors.push(`${row.currency}: annual discount must be between 0 and 100.`);
+      }
+    });
+
+    return { isValid: errors.length === 0, errors };
+  }, [editPricingPlanId, editPricingReason, editPricingRows]);
+
+  return (
+    <BackofficeLayout>
+      <div className="space-y-6 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Plans & Pricing</h1>
+            <p className="text-sm text-muted-foreground">
+              Manage plan catalog, pricing, limits, and display features.
+            </p>
+          </div>
+          {isSuperAdmin && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={openCreatePlansDialog} disabled={remainingPlanSlots <= 0}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Plans
+              </Button>
+              <Button variant="outline" onClick={openCreatePricingDialog}>
+                <DollarSign className="mr-2 h-4 w-4" />
+                Add Pricing
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <Card className="border-dashed">
+          <CardContent className="pt-4 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">
+                Plans {planCount}/{MAX_PLANS}
+              </Badge>
+              <Badge variant="secondary">
+                Remaining slots: {remainingPlanSlots}
+              </Badge>
+              <Badge variant="secondary">
+                Without active pricing: {plansWithoutActivePricing.length}
+              </Badge>
+              {recommendedPlanId ? (
+                <Badge variant="default">
+                  Recommended: {getPlanName(recommendedPlanId)}
+                </Badge>
+              ) : (
+                <Badge variant="outline">No recommended plan set</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {!isSuperAdmin && (
+          <Card className="border-amber-200 bg-amber-50/50">
+            <CardContent className="py-4">
+              <div className="flex items-center gap-2 text-amber-700">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="text-sm">
+                  You have read-only access. Super Admin role is required for changes.
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Tabs defaultValue="plans">
+          <TabsList>
+            <TabsTrigger value="plans">Plans</TabsTrigger>
+            <TabsTrigger value="pricing">Pricing Matrix</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="plans" className="mt-4">
+            {isLoading ? (
+              <div className="rounded-md border bg-card p-6 text-sm text-muted-foreground">
+                Loading plans...
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {(plans || []).map((plan) => {
+                  const limit = limitsByPlan.get(plan.id);
+                  const planFeatures = featuresByPlan.get(plan.id) || [];
+                  const activePricing = activePricingByPlan.get(plan.id);
+
+                  return (
+                    <Card key={plan.id} className={plan.is_recommended ? "border-primary" : ""}>
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <CardTitle className="text-lg">{plan.name}</CardTitle>
+                            <CardDescription>{plan.description || "No description"}</CardDescription>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            {plan.is_recommended && <Badge>Recommended</Badge>}
+                            {!plan.is_active && <Badge variant="secondary">Inactive</Badge>}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Slug</p>
+                            <p className="font-medium">{plan.slug}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Display Order</p>
+                            <p className="font-medium">{plan.display_order}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Trial</p>
+                            <p className="font-medium">{plan.trial_days} days</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Currencies</p>
+                            <p className="font-medium">{activePricing?.size || 0}/3 active</p>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-1 text-sm">
+                          <p className="font-medium">Limits</p>
+                          <p className="text-muted-foreground">
+                            {limit?.max_locations || 1} locations · {limit?.max_staff || 1} staff ·{" "}
+                            {limit?.monthly_messages || 30} messages/mo
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Features</p>
+                          <ul className="space-y-1 text-sm text-muted-foreground">
+                            {planFeatures.slice(0, 4).map((feature) => (
+                              <li key={feature.id} className="flex items-center gap-2">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                                <span>{feature.feature_text}</span>
+                              </li>
+                            ))}
+                            {planFeatures.length === 0 && <li>No features configured.</li>}
+                          </ul>
+                        </div>
+
+                        {isSuperAdmin && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditPlanDialog(plan)}
+                            >
+                              <Pencil className="mr-2 h-3.5 w-3.5" />
+                              Edit Plan
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditPricingDialog(plan)}
+                              disabled={!activePricing || activePricing.size === 0}
+                            >
+                              <DollarSign className="mr-2 h-3.5 w-3.5" />
+                              Edit Pricing
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openDeletePlanDialog(plan)}
+                            >
+                              <Trash2 className="mr-2 h-3.5 w-3.5" />
+                              Delete Plan
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="pricing" className="mt-4">
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Pricing</CardTitle>
+                  <CardDescription>One active row per plan/currency.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Plan</TableHead>
+                        {CURRENCIES.map((currency) => (
+                          <TableHead key={currency}>{currency}</TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(plans || []).map((plan) => (
+                        <TableRow key={plan.id}>
+                          <TableCell className="font-medium">{plan.name}</TableCell>
+                          {CURRENCIES.map((currency) => {
+                            const row = activePricingByPlan.get(plan.id)?.get(currency);
+                            return (
+                              <TableCell key={currency}>
+                                {row ? (
+                                  <div className="text-sm">
+                                    <p>
+                                      {getCurrencySymbol(currency)}
+                                      {row.monthly_price.toLocaleString()}/mo
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      annual {getCurrencySymbol(currency)}
+                                      {row.annual_price.toLocaleString()}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+
+              {chainPlan && isSuperAdmin && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Chain Location Tiers</CardTitle>
+                    <CardDescription>
+                      Configure additional-location pricing for Chain across USD, NGN, and GHS.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {chainTierValidation.errors.length > 0 && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                        <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                          {chainTierValidation.errors.slice(0, 8).map((error) => (
+                            <li key={error}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {CURRENCIES.map((currency) => (
+                      <div key={currency} className="rounded-md border p-3">
+                        <div className="mb-3 flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{currency}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Tiers are for additional locations (starting at 2).
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => addChainTierRow(currency)}
+                          >
+                            <Plus className="mr-2 h-3.5 w-3.5" />
+                            Add tier
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2">
+                          {chainTierDrafts[currency].map((row) => (
+                            <div
+                              key={row.localId}
+                              className="grid gap-2 md:grid-cols-[1fr_110px_110px_150px_110px_70px]"
+                            >
+                              <Input
+                                placeholder="2-3"
+                                value={row.tier_label}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    tier_label: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                type="number"
+                                placeholder="2"
+                                value={row.tier_min}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    tier_min: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                type="number"
+                                placeholder="3"
+                                value={row.tier_max}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    tier_max: event.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Price per location"
+                                value={row.price_per_location}
+                                disabled={row.is_custom}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    price_per_location: event.target.value,
+                                  })
+                                }
+                              />
+                              <div className="flex items-center gap-2">
+                                <Switch
+                                  checked={row.is_custom}
+                                  onCheckedChange={(checked) =>
+                                    updateChainTierRow(currency, row.localId, {
+                                      is_custom: checked,
+                                      price_per_location: checked ? "" : row.price_per_location,
+                                    })
+                                  }
+                                />
+                                <Label className="text-xs">Custom</Label>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => removeChainTierRow(currency, row.localId)}
+                                disabled={chainTierDrafts[currency].length <= 1}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div>
+                      <Label>Reason</Label>
+                      <Textarea
+                        value={chainTierReason}
+                        onChange={(event) => {
+                          setChainTierDirty(true);
+                          setChainTierReason(event.target.value);
+                        }}
+                        placeholder="Why are you updating chain location tiers?"
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button onClick={() => saveChainTiersMutation.mutate()} disabled={!canSubmitChainTiers}>
+                        {saveChainTiersMutation.isPending ? "Saving..." : "Save Chain Tiers"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <Dialog open={createPlanOpen} onOpenChange={setCreatePlanOpen}>
+        <DialogContent className="sm:max-w-[980px]">
+          <DialogHeader>
+            <DialogTitle>Add Plans</DialogTitle>
+            <DialogDescription>
+              Create up to {Math.min(MAX_BATCH_ITEMS, remainingPlanSlots)} plans in one submission.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                Batch size: {createPlanDrafts.length}/{Math.min(MAX_BATCH_ITEMS, remainingPlanSlots)}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addCreatePlanDraft}
+                disabled={createPlanDrafts.length >= Math.min(MAX_BATCH_ITEMS, remainingPlanSlots)}
+              >
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Add section
+              </Button>
+            </div>
+
+            {createPlansValidation.errors.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <p className="text-sm font-medium text-destructive">Fix these issues:</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-destructive">
+                  {createPlansValidation.errors.slice(0, 6).map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <Accordion
+              type="multiple"
+              value={createPlanAccordion}
+              onValueChange={setCreatePlanAccordion}
+              className="space-y-3"
+            >
+              {createPlanDrafts.map((draft, index) => {
+                const recommendedLocked = Boolean(recommendedPlanId);
+                const recommendedDraftId =
+                  createPlanDrafts.find((item) => item.is_recommended)?.localId || null;
+                const canToggleRecommended =
+                  !recommendedLocked &&
+                  (!recommendedDraftId ||
+                    recommendedDraftId === draft.localId ||
+                    draft.is_recommended);
+                return (
+                  <AccordionItem key={draft.localId} value={draft.localId} className="rounded-md border px-4">
+                    <AccordionTrigger>
+                      <div className="flex flex-wrap items-center gap-2 text-left">
+                        <span className="font-medium">Plan {index + 1}</span>
+                        <Badge variant={draft.name.trim() ? "default" : "outline"}>
+                          {draft.name.trim() || "Untitled"}
+                        </Badge>
+                        <Badge variant="secondary">{draft.slug.trim() || "no-slug"}</Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4 pb-2">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <Label>Name</Label>
+                            <Input
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(draft.localId, "name", event.target.value)
+                              }
+                              placeholder="Solo"
+                            />
+                          </div>
+                          <div>
+                            <Label>Slug</Label>
+                            <Input
+                              value={draft.slug}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(draft.localId, "slug", event.target.value)
+                              }
+                              placeholder="solo"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label>Description</Label>
+                          <Textarea
+                            value={draft.description}
+                            onChange={(event) =>
+                              updateCreatePlanDraft(draft.localId, "description", event.target.value)
+                            }
+                            placeholder="Short plan description"
+                          />
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <div>
+                            <Label>Display Order</Label>
+                            <Input
+                              type="number"
+                              value={draft.display_order}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(
+                                  draft.localId,
+                                  "display_order",
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label>Trial Days</Label>
+                            <Input
+                              type="number"
+                              value={draft.trial_days}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(
+                                  draft.localId,
+                                  "trial_days",
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                            />
+                          </div>
+                          <div className="flex items-end gap-4 pb-2">
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={draft.is_active}
+                                onCheckedChange={(checked) =>
+                                  updateCreatePlanDraft(draft.localId, "is_active", checked)
+                                }
+                              />
+                              <Label>Active</Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={draft.is_recommended}
+                                onCheckedChange={(checked) =>
+                                  updateCreatePlanDraft(draft.localId, "is_recommended", checked)
+                                }
+                                disabled={!canToggleRecommended}
+                              />
+                              <Label>Recommended</Label>
+                            </div>
+                          </div>
+                        </div>
+
+                        {recommendedPlanId && (
+                          <p className="text-xs text-muted-foreground">
+                            Recommended is locked to {getPlanName(recommendedPlanId)}. Unset it there first.
+                          </p>
+                        )}
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <div>
+                            <Label>Max Locations</Label>
+                            <Input
+                              type="number"
+                              value={draft.max_locations}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(
+                                  draft.localId,
+                                  "max_locations",
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label>Max Staff</Label>
+                            <Input
+                              type="number"
+                              value={draft.max_staff}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(
+                                  draft.localId,
+                                  "max_staff",
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label>Monthly Messages</Label>
+                            <Input
+                              type="number"
+                              value={draft.monthly_messages}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(
+                                  draft.localId,
+                                  "monthly_messages",
+                                  Number(event.target.value || 0),
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label>Max Services (optional)</Label>
+                            <Input
+                              type="number"
+                              value={draft.max_services}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(draft.localId, "max_services", event.target.value)
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label>Max Products (optional)</Label>
+                            <Input
+                              type="number"
+                              value={draft.max_products}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(draft.localId, "max_products", event.target.value)
+                              }
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label>Plan Features</Label>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => addDraftFeature(draft.localId)}
+                            >
+                              <Plus className="mr-2 h-3.5 w-3.5" />
+                              Add feature
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {draft.features.map((feature) => (
+                              <div key={feature.localId} className="grid gap-2 md:grid-cols-[1fr_120px_80px]">
+                                <Input
+                                  value={feature.feature_text}
+                                  onChange={(event) =>
+                                    updateDraftFeature(draft.localId, feature.localId, {
+                                      feature_text: event.target.value,
+                                    })
+                                  }
+                                  placeholder="Feature text"
+                                />
+                                <Input
+                                  type="number"
+                                  value={feature.sort_order}
+                                  onChange={(event) =>
+                                    updateDraftFeature(draft.localId, feature.localId, {
+                                      sort_order: Number(event.target.value || 0),
+                                    })
+                                  }
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => removeDraftFeature(draft.localId, feature.localId)}
+                                  disabled={draft.features.length === 1}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label>Reason</Label>
+                          <Textarea
+                            value={draft.reason}
+                            onChange={(event) =>
+                              updateCreatePlanDraft(draft.localId, "reason", event.target.value)
+                            }
+                            placeholder="Why are you adding this plan?"
+                          />
+                        </div>
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeCreatePlanDraft(draft.localId)}
+                            disabled={createPlanDrafts.length <= 1}
+                          >
+                            Remove section
+                          </Button>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreatePlanOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createPlansMutation.mutate(createPlanDrafts)}
+              disabled={!canSubmitCreatePlans}
+            >
+              {createPlansMutation.isPending ? "Saving..." : "Save Plans"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editPlanOpen} onOpenChange={setEditPlanOpen}>
+        <DialogContent className="sm:max-w-[900px]">
+          <DialogHeader>
+            <DialogTitle>Edit Plan</DialogTitle>
+            <DialogDescription>Update plan fields, limits, and display features.</DialogDescription>
+          </DialogHeader>
+
+          {editPlanDraft && (
+            <div className="space-y-4">
+              {editPlanValidation.errors.length > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                  <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                    {editPlanValidation.errors.slice(0, 6).map((error) => (
+                      <li key={error}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Name</Label>
+                  <Input
+                    value={editPlanDraft.name}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              name: event.target.value,
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Slug</Label>
+                  <Input
+                    value={editPlanDraft.slug}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              slug: sanitizeSlug(event.target.value),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Description</Label>
+                <Textarea
+                  value={editPlanDraft.description}
+                  onChange={(event) =>
+                    setEditPlanDraft((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            description: event.target.value,
+                          }
+                        : prev,
+                    )
+                  }
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label>Display Order</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.display_order}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              display_order: Number(event.target.value || 0),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Trial Days</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.trial_days}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              trial_days: Number(event.target.value || 0),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div className="flex items-end gap-4 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={editPlanDraft.is_active}
+                      onCheckedChange={(checked) =>
+                        setEditPlanDraft((prev) => (prev ? { ...prev, is_active: checked } : prev))
+                      }
+                    />
+                    <Label>Active</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={editPlanDraft.is_recommended}
+                      onCheckedChange={(checked) =>
+                        setEditPlanDraft((prev) =>
+                          prev ? { ...prev, is_recommended: checked } : prev,
+                        )
+                      }
+                      disabled={Boolean(recommendedPlanId && recommendedPlanId !== editPlanId)}
+                    />
+                    <Label>Recommended</Label>
+                  </div>
+                </div>
+              </div>
+
+              {recommendedPlanId && recommendedPlanId !== editPlanId && (
+                <p className="text-xs text-muted-foreground">
+                  Recommended is currently locked to {getPlanName(recommendedPlanId)}.
+                </p>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <Label>Max Locations</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.max_locations}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              max_locations: Number(event.target.value || 0),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Max Staff</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.max_staff}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              max_staff: Number(event.target.value || 0),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Monthly Messages</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.monthly_messages}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              monthly_messages: Number(event.target.value || 0),
+                            }
+                          : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Max Services (optional)</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.max_services}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev ? { ...prev, max_services: event.target.value } : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Max Products (optional)</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.max_products}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev ? { ...prev, max_products: event.target.value } : prev,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Plan Features</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setEditPlanDraft((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              features: [...prev.features, createFeatureDraft(prev.features.length)],
+                            }
+                          : prev,
+                      )
+                    }
+                  >
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Add feature
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {editPlanDraft.features.map((feature) => (
+                    <div key={feature.localId} className="grid gap-2 md:grid-cols-[1fr_120px_80px]">
+                      <Input
+                        value={feature.feature_text}
+                        onChange={(event) =>
+                          setEditPlanDraft((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  features: prev.features.map((item) =>
+                                    item.localId === feature.localId
+                                      ? { ...item, feature_text: event.target.value }
+                                      : item,
+                                  ),
+                                }
+                              : prev,
+                          )
+                        }
+                        placeholder="Feature text"
+                      />
+                      <Input
+                        type="number"
+                        value={feature.sort_order}
+                        onChange={(event) =>
+                          setEditPlanDraft((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  features: prev.features.map((item) =>
+                                    item.localId === feature.localId
+                                      ? { ...item, sort_order: Number(event.target.value || 0) }
+                                      : item,
+                                  ),
+                                }
+                              : prev,
+                          )
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          setEditPlanDraft((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  features: prev.features.filter(
+                                    (item) => item.localId !== feature.localId,
+                                  ),
+                                }
+                              : prev,
+                          )
+                        }
+                        disabled={editPlanDraft.features.length <= 1}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label>Reason</Label>
+                <Textarea
+                  value={editPlanDraft.reason}
+                  onChange={(event) =>
+                    setEditPlanDraft((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            reason: event.target.value,
+                          }
+                        : prev,
+                    )
+                  }
+                  placeholder="Describe why this edit is needed."
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Rollout</Label>
+                  <Select
+                    value={editPlanRolloutMode}
+                    onValueChange={(value) => setEditPlanRolloutMode(value as RolloutMode)}
+                  >
+                    <SelectTrigger className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="now">Roll out now</SelectItem>
+                      <SelectItem value="schedule">Schedule rollout</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {editPlanRolloutMode === "schedule" && (
+                  <div>
+                    <Label>Rollout at</Label>
+                    <Input
+                      className="mt-2"
+                      type="datetime-local"
+                      value={editPlanRolloutAt}
+                      onChange={(event) => setEditPlanRolloutAt(event.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPlanOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (updatePlanMutation.isPending || editPlanSaveRef.current) return;
+                if (!editPlanDraft || !editPlanId) return;
+                updatePlanMutation.mutate({ planId: editPlanId, draft: editPlanDraft });
+              }}
+              disabled={!canSubmitEditPlan}
+            >
+              {updatePlanMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createPricingOpen} onOpenChange={setCreatePricingOpen}>
+        <DialogContent className="sm:max-w-[980px]">
+          <DialogHeader>
+            <DialogTitle>Add Pricing</DialogTitle>
+            <DialogDescription>
+              Configure pricing by plan and currency. Annual value is discount percent.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                Sections: {createPricingSections.length}/{MAX_BATCH_ITEMS}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addPricingSection}
+                disabled={createPricingSections.length >= MAX_BATCH_ITEMS}
+              >
+                <Plus className="mr-2 h-3.5 w-3.5" />
+                Add section
+              </Button>
+            </div>
+
+            {createPricingValidation.errors.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                  {createPricingValidation.errors.slice(0, 6).map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <Accordion
+              type="multiple"
+              value={createPricingAccordion}
+              onValueChange={setCreatePricingAccordion}
+              className="space-y-3"
+            >
+              {createPricingSections.map((section, index) => {
+                const availablePlans = getAvailablePlansForSection(section.localId);
+                const selectedPlanLabel = section.plan_id
+                  ? getPlanName(section.plan_id)
+                  : `Section ${index + 1}`;
+
+                return (
+                  <AccordionItem key={section.localId} value={section.localId} className="rounded-md border px-4">
+                    <AccordionTrigger>
+                      <div className="flex flex-wrap items-center gap-2 text-left">
+                        <span className="font-medium">Pricing {index + 1}</span>
+                        <Badge variant={section.plan_id ? "default" : "outline"}>
+                          {selectedPlanLabel}
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4 pb-2">
+                        <div>
+                          <Label>Plan</Label>
+                          <Select
+                            value={section.plan_id}
+                            onValueChange={(value) =>
+                              updatePricingSection(section.localId, (current) => ({
+                                ...current,
+                                plan_id: value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="mt-2">
+                              <SelectValue placeholder="Select plan" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availablePlans.map((plan) => (
+                                <SelectItem key={plan.id} value={plan.id}>
+                                  {plan.name} {!plan.is_active ? "(Inactive)" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-3">
+                          {CURRENCIES.map((currency) => {
+                            const row = section.currencies[currency];
+                            const monthly = parseNumericInput(row.monthly_price || "0");
+                            const discount = parseNumericInput(row.annual_discount_pct || "0");
+                            const effectiveMonthly =
+                              Number.isFinite(monthly) && Number.isFinite(discount)
+                                ? deriveEffectiveMonthly(monthly, Math.max(0, Math.min(100, discount)))
+                                : 0;
+                            const annualTotal = deriveAnnualTotal(effectiveMonthly);
+                            return (
+                              <div key={currency} className="rounded-md border p-3">
+                                <div className="mb-3 flex items-center justify-between">
+                                  <p className="font-medium">{currency}</p>
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-xs text-muted-foreground">Enable</Label>
+                                    <Switch
+                                      checked={row.enabled}
+                                      onCheckedChange={(checked) =>
+                                        updatePricingSection(section.localId, (current) => ({
+                                          ...current,
+                                          currencies: {
+                                            ...current.currencies,
+                                            [currency]: { ...current.currencies[currency], enabled: checked },
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-4">
+                                  <div>
+                                    <Label>Monthly</Label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={row.monthly_price}
+                                      disabled={!row.enabled}
+                                      onChange={(event) =>
+                                        updatePricingSection(section.localId, (current) => ({
+                                          ...current,
+                                          currencies: {
+                                            ...current.currencies,
+                                            [currency]: {
+                                              ...current.currencies[currency],
+                                              monthly_price: event.target.value,
+                                            },
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Annual discount %</Label>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      step="0.01"
+                                      value={row.annual_discount_pct}
+                                      disabled={!row.enabled}
+                                      onChange={(event) =>
+                                        updatePricingSection(section.localId, (current) => ({
+                                          ...current,
+                                          currencies: {
+                                            ...current.currencies,
+                                            [currency]: {
+                                              ...current.currencies[currency],
+                                              annual_discount_pct: event.target.value,
+                                            },
+                                          },
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Effective monthly</Label>
+                                    <Input
+                                      value={Number.isFinite(effectiveMonthly) ? effectiveMonthly : 0}
+                                      readOnly
+                                      disabled
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Annual total</Label>
+                                    <Input
+                                      value={Number.isFinite(annualTotal) ? annualTotal : 0}
+                                      readOnly
+                                      disabled
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removePricingSection(section.localId)}
+                            disabled={createPricingSections.length <= 1}
+                          >
+                            Remove section
+                          </Button>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+
+            <div>
+              <Label>Reason</Label>
+              <Textarea
+                value={createPricingReason}
+                onChange={(event) => setCreatePricingReason(event.target.value)}
+                placeholder="Why are you creating this pricing batch?"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreatePricingOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                createPricingMutation.mutate({
+                  sections: createPricingSections,
+                  reason: createPricingReason,
+                })
+              }
+              disabled={!canSubmitCreatePricing}
+            >
+              {createPricingMutation.isPending ? "Saving..." : "Save Pricing"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deletePlanOpen} onOpenChange={setDeletePlanOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Delete Plan</DialogTitle>
+            <DialogDescription>
+              Delete is destructive. If the plan is in use, it will be archived instead.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <div className="font-medium text-destructive">Plan: {deletePlanTarget?.name || "-"}</div>
+              <p className="mt-1 text-muted-foreground">
+                Confirm with your 2FA code to continue.
+              </p>
+            </div>
+
+            <div>
+              <Label>Reason</Label>
+              <Textarea
+                value={deletePlanReason}
+                onChange={(event) => setDeletePlanReason(event.target.value)}
+                placeholder="Why are you deleting this plan?"
+              />
+            </div>
+
+            <div>
+              <Label>2FA code</Label>
+              <Input
+                value={deletePlanTotp}
+                onChange={(event) =>
+                  setDeletePlanTotp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                placeholder="6-digit code"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePlanOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                deletePlanMutation.isPending ||
+                !deletePlanTarget ||
+                !deletePlanReason.trim() ||
+                deletePlanTotp.length !== 6
+              }
+              onClick={() => {
+                if (!deletePlanTarget) return;
+                deletePlanMutation.mutate({
+                  planId: deletePlanTarget.id,
+                  reason: deletePlanReason.trim(),
+                  totpCode: deletePlanTotp,
+                });
+              }}
+            >
+              {deletePlanMutation.isPending ? "Deleting..." : "Delete Plan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editPricingOpen} onOpenChange={setEditPricingOpen}>
+        <DialogContent className="sm:max-w-[760px]">
+          <DialogHeader>
+            <DialogTitle>Edit Pricing</DialogTitle>
+            <DialogDescription>
+              Update existing active pricing rows for {editPricingPlanId ? getPlanName(editPricingPlanId) : "plan"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {editPricingValidation.errors.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                  {editPricingValidation.errors.slice(0, 6).map((error) => (
+                    <li key={error}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {editPricingRows.map((row) => {
+              const monthly = parseNumericInput(row.monthly_price || "0");
+              const discount = parseNumericInput(row.annual_discount_pct || "0");
+              const effectiveMonthly =
+                Number.isFinite(monthly) && Number.isFinite(discount)
+                  ? deriveEffectiveMonthly(monthly, Math.max(0, Math.min(100, discount)))
+                  : 0;
+              const annualTotal = deriveAnnualTotal(effectiveMonthly);
+
+              return (
+                <div key={row.id} className="rounded-md border p-3">
+                  <p className="mb-3 text-sm font-medium">{row.currency}</p>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div>
+                      <Label>Monthly</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.monthly_price}
+                        onChange={(event) =>
+                          setEditPricingRows((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id ? { ...item, monthly_price: event.target.value } : item,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>Annual discount %</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={row.annual_discount_pct}
+                        onChange={(event) =>
+                          setEditPricingRows((prev) =>
+                            prev.map((item) =>
+                              item.id === row.id
+                                ? { ...item, annual_discount_pct: event.target.value }
+                                : item,
+                            ),
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>Effective monthly</Label>
+                      <Input value={effectiveMonthly} readOnly disabled />
+                    </div>
+                    <div>
+                      <Label>Annual total</Label>
+                      <Input value={annualTotal} readOnly disabled />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            <div>
+              <Label>Reason</Label>
+              <Textarea
+                value={editPricingReason}
+                onChange={(event) => setEditPricingReason(event.target.value)}
+                placeholder="Why are you changing pricing?"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPricingOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editPricingPlanId) return;
+                updatePricingMutation.mutate({
+                  planId: editPricingPlanId,
+                  rows: editPricingRows,
+                  reason: editPricingReason,
+                });
+              }}
+              disabled={!isSuperAdmin || !editPricingValidation.isValid || updatePricingMutation.isPending}
+            >
+              {updatePricingMutation.isPending ? "Saving..." : "Save Pricing"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </BackofficeLayout>
+  );
 }

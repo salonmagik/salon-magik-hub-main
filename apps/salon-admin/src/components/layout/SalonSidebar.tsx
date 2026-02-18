@@ -37,6 +37,7 @@ import { BannerProvider, GlobalBanner } from "@/components/banners";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/billing/TrialBanner";
+import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
 import {
   Tooltip,
@@ -480,6 +481,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
             {/* Trial Banner */}
             <TrialBanner />
+            <PlanChangeBanner />
 
             {/* Page Content */}
             <div className="flex-1 overflow-auto p-4 lg:p-6">{children}</div>

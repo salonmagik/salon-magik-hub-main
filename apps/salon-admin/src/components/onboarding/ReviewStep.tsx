@@ -14,6 +14,13 @@ interface ReviewStepProps {
   plan: SubscriptionPlan;
   business: BusinessInfo;
   locations: LocationsConfig | null;
+  chainSummary?: {
+    configuredLocations: number;
+    estimatedMonthlyTotal: number;
+    currency: string;
+    expectedBillingDate: string | null;
+    requiresCustom?: boolean;
+  } | null;
 }
 
 const PLAN_NAMES: Record<SubscriptionPlan, string> = {
@@ -46,6 +53,7 @@ export function ReviewStep({
   plan,
   business,
   locations,
+  chainSummary,
 }: ReviewStepProps) {
   const formatDays = (days: string[]) => {
     const dayMap: Record<string, string> = {
@@ -138,6 +146,32 @@ export function ReviewStep({
             <span className="text-muted-foreground"> – 14-day free trial</span>
           </div>
         </div>
+
+        {plan === "chain" && chainSummary && (
+          <div className="border rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="w-4 h-4 text-primary" />
+              Chain Billing Preview
+            </div>
+            <p className="text-sm">
+              Configured stores: <span className="font-medium">{chainSummary.configuredLocations}</span>
+            </p>
+            <p className="text-sm">
+              Estimated monthly charge:{" "}
+              <span className="font-medium">
+                {chainSummary.currency} {chainSummary.estimatedMonthlyTotal.toLocaleString()}
+              </span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Expected billing date: {chainSummary.expectedBillingDate || "Next billing cycle"}
+            </p>
+            {chainSummary.requiresCustom && (
+              <p className="text-xs text-destructive">
+                Current tier is marked custom and cannot be self-served yet.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Business & Location */}
         <div className="border rounded-lg p-4 space-y-3">

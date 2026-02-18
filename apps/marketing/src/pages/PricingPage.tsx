@@ -35,10 +35,25 @@ export default function PricingPage() {
 
   const isLoading = plansLoading || pricingLoading;
 
+  const getEquivalentMonthly = (planId: string) => {
+		const planPricing = pricing?.find((p) => p.plan_id === planId);
+		if (!planPricing) return null;
+
+		if (planPricing.annual_price > 0) {
+			return planPricing.annual_price / 12;
+		}
+
+		return planPricing.effective_monthly;
+	};
+
   const getPlanPrice = (planId: string) => {
     const planPricing = pricing?.find((p) => p.plan_id === planId);
     if (!planPricing) return null;
-    return isAnnual ? planPricing.effective_monthly : planPricing.monthly_price;
+
+    const equivalentMonthly = getEquivalentMonthly(planId);
+		return isAnnual
+			? (equivalentMonthly ?? planPricing.effective_monthly)
+			: planPricing.monthly_price;
   };
 
   const getPlanAnnualTotal = (planId: string) => {
@@ -78,211 +93,265 @@ export default function PricingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/">
-            <SalonMagikLogo size="md" />
-          </Link>
-          <div className="flex items-center gap-4">
-            {!isWaitlistMode && (
-              <>
-                <Link to="/login">
-                  <Button variant="ghost" size="sm">
-                    Log in
-                  </Button>
-                </Link>
-                <Link to="/signup">
-                  <Button size="sm">Get started</Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+		<div className="min-h-screen bg-background">
+			{/* Navigation */}
+			<nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
+				<div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+					<Link to="/">
+						<SalonMagikLogo size="md" />
+					</Link>
+					<div className="flex items-center gap-4">
+						{!isWaitlistMode && (
+							<>
+								<Link to="/login">
+									<Button variant="ghost" size="sm">
+										Log in
+									</Button>
+								</Link>
+								<Link to="/signup">
+									<Button size="sm">Get started</Button>
+								</Link>
+							</>
+						)}
+					</div>
+				</div>
+			</nav>
 
-      {/* Header */}
-      <section className="py-12 px-4">
-        <div className="max-w-6xl mx-auto text-center">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to home
-          </Link>
-          <h1 className="text-4xl font-semibold mb-4">Simple, transparent pricing</h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-            Choose the plan that fits your salon. All plans include a 14-day free trial.
-          </p>
+			{/* Header */}
+			<section className="py-12 px-4">
+				<div className="max-w-6xl mx-auto text-center">
+					<Link
+						to="/"
+						className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
+					>
+						<ArrowLeft className="w-4 h-4" />
+						Back to home
+					</Link>
+					<h1 className="text-4xl font-semibold mb-4">
+						Simple, transparent pricing
+					</h1>
+					<p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+						Choose the plan that fits your salon. All plans include a 14-day
+						free trial.
+					</p>
 
-          {/* Billing Toggle & Currency Selector */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-8">
-            <div className="flex items-center gap-3">
-              <span className={!isAnnual ? "font-medium" : "text-muted-foreground"}>
-                Monthly
-              </span>
-              <Switch checked={isAnnual} onCheckedChange={setIsAnnual} />
-              <span className={isAnnual ? "font-medium" : "text-muted-foreground"}>
-                Annual
-              </span>
-              {isAnnual && (
-                <Badge variant="secondary" className="bg-success/10 text-success">
-                  Save up to 17%
-                </Badge>
-              )}
-            </div>
+					{/* Billing Toggle & Currency Selector */}
+					<div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-8">
+						<div className="flex items-center gap-3">
+							<span
+								className={!isAnnual ? "font-medium" : "text-muted-foreground"}
+							>
+								Monthly
+							</span>
+							<Switch checked={isAnnual} onCheckedChange={setIsAnnual} />
+							<span
+								className={isAnnual ? "font-medium" : "text-muted-foreground"}
+							>
+								Annual
+							</span>
+							{isAnnual && (
+								<Badge
+									variant="secondary"
+									className="bg-success/10 text-success"
+								>
+									Annual discount applied
+								</Badge>
+							)}
+						</div>
 
-            <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPORTED_CURRENCIES.map((c) => (
-                  <SelectItem key={c.code} value={c.code}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
+						<Select value={currency} onValueChange={setCurrency}>
+							<SelectTrigger className="w-32">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{SUPPORTED_CURRENCIES.map((c) => (
+									<SelectItem key={c.code} value={c.code}>
+										{c.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
+			</section>
 
-      {/* Pricing Cards */}
-      <section className="pb-16 px-4">
-        <div className="max-w-6xl mx-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-6">
-              {plans?.map((plan) => {
-                const price = getPlanPrice(plan.id);
-                const annualTotal = getPlanAnnualTotal(plan.id);
-                const planFeatures = getPlanFeatures(plan.id);
-                const planLimit = getPlanLimit(plan.id);
-                const symbol = getCurrencySymbol(currency);
+			{/* Pricing Cards */}
+			<section className="pb-16 px-4">
+				<div className="max-w-6xl mx-auto">
+					{isLoading ? (
+						<div className="flex items-center justify-center py-12">
+							<Loader2 className="w-8 h-8 animate-spin text-primary" />
+						</div>
+					) : (
+						<div className="grid md:grid-cols-3 gap-6">
+							{plans?.map((plan) => {
+								const price = getPlanPrice(plan.id);
+								const annualTotal = getPlanAnnualTotal(plan.id);
+								const equivalentMonthly = getEquivalentMonthly(plan.id);
+								const planFeatures = getPlanFeatures(plan.id);
+								const planLimit = getPlanLimit(plan.id);
+								const symbol = getCurrencySymbol(currency);
 
-                return (
-                  <Card
-                    key={plan.id}
-                    className={`p-6 relative ${
-                      plan.is_recommended ? "border-primary border-2 shadow-lg" : ""
-                    }`}
-                  >
-                    {plan.is_recommended && (
-                      <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        Most Popular
-                      </Badge>
-                    )}
+								return (
+									<Card
+										key={plan.id}
+										className={`p-6 relative ${
+											plan.is_recommended
+												? "border-primary border-2 shadow-lg"
+												: ""
+										}`}
+									>
+										{plan.is_recommended && (
+											<Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+												Most Popular
+											</Badge>
+										)}
 
-                    <div className="mb-6">
-                      <h3 className="text-xl font-semibold mb-1">{plan.name}</h3>
-                      <p className="text-sm text-muted-foreground">{plan.description}</p>
-                    </div>
+										<div className="mb-6">
+											<h3 className="text-xl font-semibold mb-1">
+												{plan.name}
+											</h3>
+											<p className="text-sm text-muted-foreground">
+												{plan.description}
+											</p>
+										</div>
 
-                    <div className="mb-6">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-bold">
-                          {symbol}
-                          {price?.toLocaleString()}
-                        </span>
-                        <span className="text-muted-foreground">/month</span>
-                      </div>
-                      {isAnnual && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {symbol}
-                          {annualTotal?.toLocaleString()} billed annually
-                        </p>
-                      )}
-                    </div>
+										<div className="mb-6">
+											<div className="flex items-baseline gap-1">
+												<span className="text-3xl font-bold">
+													{symbol}
+													{price?.toLocaleString()}
+												</span>
+												<span className="text-muted-foreground">/month</span>
+											</div>
+											{isAnnual && (
+												<div className="text-sm text-muted-foreground mt-1 space-y-0.5">
+													<p>
+														{symbol}
+														{annualTotal?.toLocaleString()} billed annually
+													</p>
+													<p>
+														Equivalent monthly: {symbol}
+														{equivalentMonthly?.toLocaleString()}
+													</p>
+												</div>
+											)}
+										</div>
 
-                    {/* Limits Summary */}
-                    {planLimit && (
-                      <div className="mb-6 p-3 bg-muted/50 rounded-lg text-sm space-y-1">
-                        <p>
-                          <span className="font-medium">{planLimit.max_locations}</span>{" "}
-                          {planLimit.max_locations === 1 ? "location" : "locations"}
-                        </p>
-                        <p>
-                          <span className="font-medium">
-                            {planLimit.max_staff === 1 ? "Owner only" : `Up to ${planLimit.max_staff} staff`}
-                          </span>
-                        </p>
-                        <p>
-                          <span className="font-medium">{planLimit.monthly_messages}</span> messages/month
-                        </p>
-                      </div>
-                    )}
+										{/* Limits Summary */}
+										{planLimit && (
+											<div className="mb-6 p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+												<p>
+													<span className="font-medium">
+														{planLimit.max_locations}
+													</span>{" "}
+													{planLimit.max_locations === 1
+														? "location"
+														: "locations"}
+												</p>
+												<p>
+													<span className="font-medium">
+														{planLimit.max_staff === 1
+															? "Owner only"
+															: `Up to ${planLimit.max_staff} staff`}
+													</span>
+												</p>
+												<p>
+													<span className="font-medium">
+														{planLimit.monthly_messages}
+													</span>{" "}
+													messages/month
+												</p>
+											</div>
+										)}
 
-                    {/* Features */}
-                    <ul className="space-y-3 mb-6">
-                      {planFeatures.map((feature) => (
-                        <li key={feature.id} className="flex items-start gap-2 text-sm">
-                          <Check className="w-4 h-4 text-success mt-0.5 shrink-0" />
-                          <span>{feature.feature_text}</span>
-                        </li>
-                      ))}
-                    </ul>
+										{/* Features */}
+										<ul className="space-y-3 mb-6">
+											{planFeatures.map((feature) => (
+												<li
+													key={feature.id}
+													className="flex items-start gap-2 text-sm"
+												>
+													<Check className="w-4 h-4 text-success mt-0.5 shrink-0" />
+													<span>{feature.feature_text}</span>
+												</li>
+											))}
+										</ul>
 
-                    {isWaitlistMode ? (
-                      <Link to="/#waitlist">
-                        <Button variant={plan.is_recommended ? "default" : "outline"} className="w-full">
-                          <Sparkles className="w-4 h-4 mr-2" />
-                          Join waitlist
-                        </Button>
-                      </Link>
-                    ) : (
-                      <Link to="/signup">
-                        <Button variant={plan.is_recommended ? "default" : "outline"} className="w-full">
-                          Start free trial
-                        </Button>
-                      </Link>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
+										{isWaitlistMode ? (
+											<Link to="/#waitlist">
+												<Button
+													variant={plan.is_recommended ? "default" : "outline"}
+													className="w-full"
+												>
+													<Sparkles className="w-4 h-4 mr-2" />
+													Join waitlist
+												</Button>
+											</Link>
+										) : (
+											<Link to="/signup">
+												<Button
+													variant={plan.is_recommended ? "default" : "outline"}
+													className="w-full"
+												>
+													Start free trial
+												</Button>
+											</Link>
+										)}
+									</Card>
+								);
+							})}
+						</div>
+					)}
+				</div>
+			</section>
 
-      {/* FAQ Section */}
-      <section className="py-16 bg-surface px-4">
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-2xl font-semibold text-center mb-8">Frequently asked questions</h2>
-          <div className="space-y-6">
-            {faqs.map((faq) => (
-              <div key={faq.q}>
-                <h3 className="font-medium mb-2">{faq.q}</h3>
-                <p className="text-muted-foreground">{faq.a}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+			{/* FAQ Section */}
+			<section className="py-16 bg-surface px-4">
+				<div className="max-w-3xl mx-auto">
+					<h2 className="text-2xl font-semibold text-center mb-8">
+						Frequently asked questions
+					</h2>
+					<div className="space-y-6">
+						{faqs.map((faq) => (
+							<div key={faq.q}>
+								<h3 className="font-medium mb-2">{faq.q}</h3>
+								<p className="text-muted-foreground">{faq.a}</p>
+							</div>
+						))}
+					</div>
+				</div>
+			</section>
 
-      {/* Footer */}
-      <footer className="border-t py-8 px-4">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <SalonMagikLogo size="sm" />
-          <div className="flex items-center gap-6 text-sm text-muted-foreground">
-            <Link to="/support" className="hover:text-foreground transition-colors">
-              Support
-            </Link>
-            <Link to="/terms" className="hover:text-foreground transition-colors">
-              Terms
-            </Link>
-            <Link to="/privacy" className="hover:text-foreground transition-colors">
-              Privacy
-            </Link>
-          </div>
-          <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Salon Magik</p>
-        </div>
-      </footer>
-    </div>
-  );
+			{/* Footer */}
+			<footer className="border-t py-8 px-4">
+				<div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+					<SalonMagikLogo size="sm" />
+					<div className="flex items-center gap-6 text-sm text-muted-foreground">
+						<Link
+							to="/support"
+							className="hover:text-foreground transition-colors"
+						>
+							Support
+						</Link>
+						<Link
+							to="/terms"
+							className="hover:text-foreground transition-colors"
+						>
+							Terms
+						</Link>
+						<Link
+							to="/privacy"
+							className="hover:text-foreground transition-colors"
+						>
+							Privacy
+						</Link>
+					</div>
+					<p className="text-sm text-muted-foreground">
+						© {new Date().getFullYear()} Salon Magik
+					</p>
+				</div>
+			</footer>
+		</div>
+	);
 }

@@ -4,15 +4,16 @@ import { useBackofficeAuth } from "@/hooks";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate";
  import {
-   Sidebar,
-   SidebarContent,
-   SidebarHeader,
-   SidebarMenu,
-   SidebarMenuItem,
-   SidebarMenuButton,
-   SidebarProvider,
-   SidebarInset,
-   SidebarFooter,
+		Sidebar,
+		SidebarContent,
+		SidebarHeader,
+		SidebarMenu,
+		SidebarMenuItem,
+		SidebarMenuButton,
+		SidebarProvider,
+		SidebarInset,
+		SidebarFooter,
+		SidebarTrigger,
  } from "@ui/sidebar";
  import { Button } from "@ui/button";
  import { Avatar, AvatarFallback } from "@ui/avatar";
@@ -33,6 +34,7 @@ import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate"
    ChevronDown,
   DollarSign,
   Eye,
+  FileText,
  } from "lucide-react";
 
  interface BackofficeLayoutProps {
@@ -45,6 +47,7 @@ const navItems = [
   { href: "/tenants", label: "Tenants", icon: Building2 },
   { href: "/feature-flags", label: "Feature Flags", icon: Flag },
   { href: "/plans", label: "Plans", icon: DollarSign },
+  { href: "/audit-logs", label: "Audit Logs", icon: FileText },
   { href: "/admins", label: "Admins", icon: Shield },
   { href: "/impersonation", label: "Impersonation", icon: Eye },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -155,6 +158,13 @@ const navItems = [
 						</Sidebar>
 
 						<SidebarInset className="flex-1">
+							<div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
+								<div className="flex items-center gap-2">
+									<Shield className="h-4 w-4 text-red-500" />
+									<span className="text-sm font-medium">BackOffice</span>
+								</div>
+								<SidebarTrigger className="h-9 w-9" />
+							</div>
 							<BackofficeOnboardingGate />
 							<main className="flex-1 overflow-auto">{children}</main>
 						</SidebarInset>
