@@ -13,6 +13,7 @@ import PlansPage from "@/pages/PlansPage";
 import ImpersonationPage from "@/pages/ImpersonationPage";
 import BackofficeSettingsPage from "@/pages/SettingsPage";
 import AdminsPage from "@/pages/AdminsPage";
+import AuditLogsPage from "@/pages/AuditLogsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -142,6 +143,15 @@ function App() {
               {
                 <BackofficeProtectedRoute>
                   <BackofficeSettingsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/audit-logs"
+            element=
+              {
+                <BackofficeProtectedRoute>
+                  <AuditLogsPage />
                 </BackofficeProtectedRoute>
               }
           />

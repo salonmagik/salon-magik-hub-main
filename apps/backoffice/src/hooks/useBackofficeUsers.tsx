@@ -38,18 +38,30 @@ export function useBackofficeUsers() {
 				error: sessionError,
 			} = await supabase.auth.getSession();
 
-			if (sessionError || !session?.access_token) {
+			if (sessionError || !session) {
 				throw new Error(
 					"Your session is invalid or expired. Please sign in again.",
 				);
 			}
 
+			const isSessionExpiringSoon =
+				typeof session.expires_at === "number" &&
+				session.expires_at * 1000 <= Date.now() + 60_000;
+
+			if (isSessionExpiringSoon) {
+				const { data: refreshed, error: refreshError } =
+					await supabase.auth.refreshSession();
+
+				if (refreshError || !refreshed.session) {
+					throw new Error(
+						"Your session expired while creating admin. Please sign in again.",
+					);
+				}
+			}
+
 			const { data, error } = await supabase.functions.invoke(
 				"create-backoffice-admin",
 				{
-					headers: {
-						Authorization: `Bearer ${session.access_token}`,
-					},
 					body: {
 						email,
 						role,

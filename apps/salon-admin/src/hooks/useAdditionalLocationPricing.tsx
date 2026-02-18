@@ -8,94 +8,132 @@ export interface AdditionalLocationTier {
   tier_min: number;
   tier_max: number | null;
   currency: string;
-  price_per_location: number;
+  price_per_location: number | null;
   is_custom: boolean;
 }
 
-export function useAdditionalLocationPricing(planId: string, currency: string = "USD") {
+export interface ChainPriceQuote {
+  total_price: number;
+  breakdown: Array<{
+    tier_label: string;
+    locations: number;
+    price_per_location: number | null;
+    subtotal: number | null;
+    is_custom?: boolean;
+  }>;
+  requires_custom: boolean;
+}
+
+export function useAdditionalLocationPricing(planId: string, currency = "USD") {
   return useQuery({
     queryKey: ["additional-location-pricing", planId, currency],
     queryFn: async (): Promise<AdditionalLocationTier[]> => {
-      try {
-        // Direct query with type casting for new table
-        const { data, error } = await supabase
-          .from("additional_location_pricing" as "tenants")
-          .select("*")
-          .eq("plan_id" as "id", planId)
-          .eq("currency" as "slug", currency)
-          .order("tier_min" as "name");
+      const { data, error } = await (supabase.from as any)("additional_location_pricing")
+        .select("*")
+        .eq("plan_id", planId)
+        .eq("currency", currency)
+        .order("tier_min", { ascending: true });
 
-        if (error) {
-          console.error("Error fetching location pricing:", error);
-          return [];
-        }
-        
-        // Type assertion for new table
-        const tiers = data as unknown as Array<{
-          id: string;
-          plan_id: string;
-          tier_label: string;
-          tier_min: number;
-          tier_max: number | null;
-          currency: string;
-          price_per_location: number;
-          is_custom: boolean;
-        }>;
-
-        return tiers.map((tier) => ({
-          id: tier.id,
-          plan_id: tier.plan_id,
-          tier_label: tier.tier_label,
-          tier_min: tier.tier_min,
-          tier_max: tier.tier_max,
-          currency: tier.currency,
-          price_per_location: Number(tier.price_per_location),
-          is_custom: tier.is_custom,
-        }));
-      } catch (err) {
-        console.error("Failed to fetch location pricing:", err);
-        return [];
-      }
+      if (error) throw error;
+      return ((data || []) as any[]).map((tier) => ({
+        id: tier.id,
+        plan_id: tier.plan_id,
+        tier_label: tier.tier_label,
+        tier_min: Number(tier.tier_min),
+        tier_max: tier.tier_max == null ? null : Number(tier.tier_max),
+        currency: tier.currency,
+        price_per_location:
+          tier.price_per_location == null ? null : Number(tier.price_per_location),
+        is_custom: Boolean(tier.is_custom),
+      }));
     },
-    enabled: !!planId,
+    enabled: Boolean(planId),
     staleTime: 1000 * 60 * 5,
   });
 }
 
-// Calculate total price for Chain plan based on number of locations
+export function useChainPriceQuote(planId: string | null, currency: string, totalLocations: number) {
+  return useQuery({
+    queryKey: ["chain-price-quote", planId, currency, totalLocations],
+    queryFn: async (): Promise<ChainPriceQuote | null> => {
+      if (!planId) return null;
+      const { data, error } = await (supabase.rpc as any)("compute_chain_price", {
+        p_plan_id: planId,
+        p_currency: currency,
+        p_total_locations: totalLocations,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+      return {
+        total_price: Number(row.total_price || 0),
+        breakdown: Array.isArray(row.breakdown) ? row.breakdown : [],
+        requires_custom: Boolean(row.requires_custom),
+      };
+    },
+    enabled: Boolean(planId) && Number.isFinite(totalLocations) && totalLocations >= 1,
+  });
+}
+
 export function calculateChainPrice(
   basePrice: number,
   locationCount: number,
-  tiers: AdditionalLocationTier[]
-): { total: number; breakdown: { tier: string; locations: number; pricePerLocation: number; subtotal: number }[] } {
-  // Base price includes 1 location
+  tiers: AdditionalLocationTier[],
+): {
+  total: number;
+  breakdown: {
+    tier: string;
+    locations: number;
+    pricePerLocation: number | null;
+    subtotal: number | null;
+    isCustom: boolean;
+  }[];
+  requiresCustom: boolean;
+} {
   let total = basePrice;
-  const breakdown: { tier: string; locations: number; pricePerLocation: number; subtotal: number }[] = [
-    { tier: "Base (1 location)", locations: 1, pricePerLocation: basePrice, subtotal: basePrice },
+  let requiresCustom = false;
+  const breakdown: {
+    tier: string;
+    locations: number;
+    pricePerLocation: number | null;
+    subtotal: number | null;
+    isCustom: boolean;
+  }[] = [
+    {
+      tier: "Base (1 location)",
+      locations: 1,
+      pricePerLocation: basePrice,
+      subtotal: basePrice,
+      isCustom: false,
+    },
   ];
 
   if (locationCount <= 1) {
-    return { total, breakdown };
+    return { total, breakdown, requiresCustom };
   }
 
-  // Sort tiers by tier_min
   const sortedTiers = [...tiers].sort((a, b) => a.tier_min - b.tier_min);
-  let remainingLocations = locationCount - 1; // Subtract the base location
+  let ptr = 2;
 
   for (const tier of sortedTiers) {
-    if (remainingLocations <= 0) break;
+    if (ptr > locationCount) break;
+    if (tier.tier_min > ptr) {
+      requiresCustom = true;
+      break;
+    }
 
-    const tierMax = tier.tier_max ?? Infinity;
-    const tierCapacity = tierMax - tier.tier_min + 1;
-    const locationsInTier = Math.min(remainingLocations, tierCapacity);
+    const tierLimit = tier.tier_max ?? locationCount;
+    const locationsInTier = Math.max(0, Math.min(locationCount, tierLimit) - ptr + 1);
+    if (locationsInTier <= 0) continue;
 
-    if (tier.is_custom) {
-      // Custom pricing - show as "Contact us"
+    if (tier.is_custom || tier.price_per_location == null) {
+      requiresCustom = true;
       breakdown.push({
         tier: tier.tier_label,
-        locations: remainingLocations,
-        pricePerLocation: 0,
-        subtotal: 0,
+        locations: locationsInTier,
+        pricePerLocation: null,
+        subtotal: null,
+        isCustom: true,
       });
       break;
     }
@@ -107,10 +145,15 @@ export function calculateChainPrice(
       locations: locationsInTier,
       pricePerLocation: tier.price_per_location,
       subtotal,
+      isCustom: false,
     });
 
-    remainingLocations -= locationsInTier;
+    ptr = tierLimit + 1;
   }
 
-  return { total, breakdown };
+  if (ptr <= locationCount) {
+    requiresCustom = true;
+  }
+
+  return { total, breakdown, requiresCustom };
 }

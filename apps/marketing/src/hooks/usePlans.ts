@@ -1,53 +1,89 @@
-type Plan = {
-  id: string;
-  name: string;
-  summary: string;
-};
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@supabase-client/supabase/client";
 
-type PlanFeature = {
-  plan_id: string;
-  label: string;
-  sort_order: number;
-};
+export interface Plan {
+	id: string;
+	slug: string;
+	name: string;
+	description: string | null;
+	display_order: number;
+	is_active: boolean;
+	is_recommended: boolean;
+	trial_days: number;
+}
 
-type PlanLimit = {
-  plan_id: string;
-  staff?: number | null;
-  locations?: number | null;
-};
+export interface PlanFeature {
+	id: string;
+	plan_id: string;
+	feature_text: string;
+	sort_order: number;
+}
 
-const plans: Plan[] = [
-  { id: "solo", name: "Solo", summary: "For independent operators" },
-  { id: "studio", name: "Studio", summary: "For salons with small teams" },
-  { id: "chain", name: "Chain", summary: "For multi-location salons" },
-];
-
-const planFeatures: PlanFeature[] = [
-  { plan_id: "solo", label: "1 location", sort_order: 1 },
-  { plan_id: "solo", label: "Online booking", sort_order: 2 },
-  { plan_id: "solo", label: "Payments & deposits", sort_order: 3 },
-  { plan_id: "studio", label: "Up to 10 staff", sort_order: 1 },
-  { plan_id: "studio", label: "Packages & vouchers", sort_order: 2 },
-  { plan_id: "studio", label: "Advanced appointment controls", sort_order: 3 },
-  { plan_id: "chain", label: "Multiple locations", sort_order: 1 },
-  { plan_id: "chain", label: "Location-level permissions", sort_order: 2 },
-  { plan_id: "chain", label: "Central oversight", sort_order: 3 },
-];
-
-const planLimits: PlanLimit[] = [
-  { plan_id: "solo", staff: 2, locations: 1 },
-  { plan_id: "studio", staff: 10, locations: 1 },
-  { plan_id: "chain", staff: null, locations: null },
-];
+export interface PlanLimit {
+	id: string;
+	plan_id: string;
+	max_locations: number;
+	max_staff: number;
+	max_services: number | null;
+	max_products: number | null;
+	monthly_messages: number;
+	features_enabled: Record<string, boolean>;
+}
 
 export function usePlans() {
-  return { data: plans, isLoading: false };
+	return useQuery({
+		queryKey: ["plans"],
+		queryFn: async (): Promise<Plan[]> => {
+			const { data, error } = await supabase
+				.from("plans")
+				.select(
+					"id, slug, name, description, display_order, is_active, is_recommended, trial_days",
+				)
+				.eq("is_active", true)
+				.order("display_order", { ascending: true });
+
+			if (error) throw error;
+			return data || [];
+		},
+		staleTime: 1000 * 60 * 5,
+	});
 }
 
 export function usePlanFeatures() {
-  return { data: planFeatures, isLoading: false };
+	return useQuery({
+		queryKey: ["plan-features"],
+		queryFn: async (): Promise<PlanFeature[]> => {
+			const { data, error } = await supabase
+				.from("plan_features")
+				.select("id, plan_id, feature_text, sort_order")
+				.order("sort_order", { ascending: true });
+
+			if (error) throw error;
+			return data || [];
+		},
+		staleTime: 1000 * 60 * 5,
+	});
 }
 
 export function usePlanLimits() {
-  return { data: planLimits, isLoading: false };
+	return useQuery({
+		queryKey: ["plan-limits"],
+		queryFn: async (): Promise<PlanLimit[]> => {
+			const { data, error } = await supabase
+				.from("plan_limits")
+				.select(
+					"id, plan_id, max_locations, max_staff, max_services, max_products, monthly_messages, features_enabled",
+				);
+
+			if (error) throw error;
+			return (data || []).map((row) => ({
+				...row,
+				features_enabled: (row.features_enabled || {}) as Record<
+					string,
+					boolean
+				>,
+			}));
+		},
+		staleTime: 1000 * 60 * 5,
+	});
 }
