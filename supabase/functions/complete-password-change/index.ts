@@ -26,7 +26,7 @@ const handler = async (req: Request): Promise<Response> => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Missing bearer token" }),
         { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -40,7 +40,7 @@ const handler = async (req: Request): Promise<Response> => {
     
     if (userError || !user) {
       return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
+        JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
         { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }

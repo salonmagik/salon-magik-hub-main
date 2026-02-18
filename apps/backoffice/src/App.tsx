@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "@ui/toaster";
+import { Toaster as Sonner } from "@ui/sonner";
 import BackofficeLoginPage from "@/pages/BackofficeLoginPage";
 import BackofficeForgotPasswordPage from "@/pages/BackofficeForgotPasswordPage";
 import BackofficeResetPasswordPage from "@/pages/BackofficeResetPasswordPage";
@@ -19,9 +21,12 @@ import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/Ba
 
 function App() {
   return (
-    <BrowserRouter>
-      <BackofficeAuthProvider>
-        <Routes>
+    <>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <BackofficeAuthProvider>
+          <Routes>
           <Route
             path="/login"
             element=
@@ -157,9 +162,10 @@ function App() {
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BackofficeAuthProvider>
-    </BrowserRouter>
+          </Routes>
+        </BackofficeAuthProvider>
+      </BrowserRouter>
+    </>
   );
 }
 

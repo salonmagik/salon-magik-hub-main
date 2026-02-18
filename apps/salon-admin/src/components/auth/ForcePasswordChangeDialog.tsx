@@ -67,9 +67,13 @@ export function ForcePasswordChangeDialog({
     setIsLoading(true);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      const {
+        data: { session: refreshedSession },
+      } = await supabase.auth.refreshSession();
+      const session = refreshedSession ?? existingSession;
       
-      if (!session) {
+      if (!session?.access_token) {
         toast({
           title: "Session expired",
           description: "Please log in again.",
@@ -80,6 +84,9 @@ export function ForcePasswordChangeDialog({
 
       const { data, error } = await supabase.functions.invoke("complete-password-change", {
         body: { newPassword: password },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
 
       if (error || data?.error) {

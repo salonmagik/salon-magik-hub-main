@@ -84,6 +84,15 @@ export default function OnboardingPage() {
     currency,
     expectedChainLocations,
   );
+  const configuredChainLocations = isChain
+    ? Math.max(1, locationsConfig.locations.length || expectedChainLocations)
+    : 1;
+  const { data: configuredChainQuote } = useChainPriceQuote(
+    isChain ? chainPlan?.id || null : null,
+    currency,
+    configuredChainLocations,
+  );
+  const onboardingTrialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
   const getStepFlow = (): OnboardingStep[] => {
     const flow: OnboardingStep[] = ["role"];
@@ -120,7 +129,9 @@ export default function OnboardingPage() {
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
       case "review":
-        return true;
+        if (!isChain) return true;
+        if (!configuredChainQuote) return false;
+        return configuredChainQuote.requires_custom !== true;
       default:
         return false;
     }
@@ -179,7 +190,7 @@ export default function OnboardingPage() {
         timezone: businessInfo.timezone,
         plan: selectedPlan,
         subscription_status: "trialing",
-        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        trial_ends_at: onboardingTrialEndsAt,
       });
 
       if (tenantError) throw tenantError;
@@ -222,13 +233,14 @@ export default function OnboardingPage() {
         const { error: locationsError } = await supabase.from("locations").insert(locationInserts);
         if (locationsError) throw locationsError;
 
+        const configuredLocations = Math.max(1, locationsConfig.locations.length);
         if (!chainPlan?.id) {
           throw new Error("Chain plan is not configured yet. Contact support.");
         }
         const { error: entitlementError } = await (supabase.rpc as any)("set_tenant_chain_entitlement", {
           p_tenant_id: tenantId,
           p_plan_id: chainPlan.id,
-          p_allowed_locations: Math.max(1, expectedChainLocations),
+          p_allowed_locations: configuredLocations,
           p_source: "onboarding",
           p_reason: "Initial chain location entitlement from onboarding.",
         });
@@ -411,7 +423,7 @@ export default function OnboardingPage() {
                       </p>
                       {chainQuote.requires_custom ? (
                         <p className="mt-2 text-destructive">
-                          11+ locations require custom pricing. Contact support/sales to continue.
+                          This tier is currently marked as custom. Contact support/sales to continue.
                         </p>
                       ) : (
                         <ul className="mt-2 space-y-1 text-muted-foreground">
@@ -451,6 +463,17 @@ export default function OnboardingPage() {
               plan={selectedPlan!}
               business={businessInfo}
               locations={isChain ? locationsConfig : null}
+              chainSummary={
+                isChain && configuredChainQuote
+                  ? {
+                      configuredLocations: configuredChainLocations,
+                      estimatedMonthlyTotal: Number(configuredChainQuote.total_price || 0),
+                      currency,
+                      expectedBillingDate: new Date(onboardingTrialEndsAt).toLocaleDateString(),
+                      requiresCustom: configuredChainQuote.requires_custom,
+                    }
+                  : null
+              }
             />
           )}
 

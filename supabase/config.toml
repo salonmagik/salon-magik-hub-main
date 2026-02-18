@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.backoffice-verify-step-up-totp]
 verify_jwt = false
+
+[functions.complete-password-change]
+verify_jwt = false

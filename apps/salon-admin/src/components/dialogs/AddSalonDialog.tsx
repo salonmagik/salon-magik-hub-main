@@ -40,6 +40,14 @@ interface LocationGate {
   requires_custom: boolean;
 }
 
+interface EntitlementExpansionResult {
+  success: boolean;
+  allowed_locations: number;
+  billing_effective_at?: string;
+  currency?: string;
+  subtotal?: number;
+}
+
 export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
   const { currentTenant } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
@@ -84,21 +92,26 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
   const allowedLocations = locationGate?.allowed ?? fallbackMax;
   const currentLocationCount = locationGate?.used ?? fallbackUsed;
   const canAddLocation = locationGate?.can_add ?? currentLocationCount < allowedLocations;
+  const canAutoExpand =
+    isChainPlan &&
+    !canAddLocation &&
+    locationGate?.requires_custom === false &&
+    Boolean(currentTenant?.id);
 
   const upgradeMessage = useMemo(() => {
     if (isChainPlan) {
-      if (locationGate?.requires_custom || currentLocationCount + 1 > 10) {
-        return "You are entering the 11+ location tier. Contact sales/support to expand this chain plan.";
+      if (locationGate?.requires_custom) {
+        return "The next tier is marked as custom. Contact sales/support to expand this chain plan.";
       }
-      return "Purchase additional location slots to expand your chain.";
+      return "You need more location slots for this chain plan.";
     }
     return "Upgrade to the Chain plan to add more locations and unlock multi-salon management features.";
-  }, [currentLocationCount, isChainPlan, locationGate?.requires_custom]);
+  }, [isChainPlan, locationGate?.requires_custom]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!canAddLocation) {
+    if (!canAddLocation && !canAutoExpand) {
       setShowUpgradePrompt(true);
       return;
     }
@@ -107,6 +120,18 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
     setIsSubmitting(true);
     try {
+      let expansionResult: EntitlementExpansionResult | null = null;
+      if (!canAddLocation && canAutoExpand) {
+        const { data, error } = await (supabase.rpc as any)("expand_chain_entitlement_and_log_billing", {
+          p_tenant_id: currentTenant.id,
+          p_new_allowed_locations: currentLocationCount + 1,
+          p_source: "add_salon",
+          p_reason: "Tenant added a new salon location from Salon overview.",
+        });
+        if (error) throw error;
+        expansionResult = data as EntitlementExpansionResult;
+      }
+
       const { error } = await supabase.from("locations").insert({
         tenant_id: currentTenant.id,
         name: formData.name,
@@ -118,7 +143,14 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
       if (error) throw error;
 
-      toast({ title: "Success", description: "New salon location added" });
+      if (expansionResult?.billing_effective_at) {
+        toast({
+          title: "Salon added",
+          description: `Location added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
+        });
+      } else {
+        toast({ title: "Success", description: "New salon location added" });
+      }
       await refetchLocations();
       onSuccess?.();
       onOpenChange(false);
@@ -138,7 +170,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     toast({
       title: isChainPlan ? "Expansion required" : "Upgrade Required",
       description: isChainPlan
-        ? "Contact support to purchase additional location slots for your chain plan."
+        ? "Contact support to unlock this custom location tier."
         : "Please visit Settings > Subscription to upgrade your plan.",
     });
     onOpenChange(false);
@@ -271,7 +303,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               type="submit"
               disabled={
                 isSubmitting ||
-                !canAddLocation ||
+                (!canAddLocation && !canAutoExpand) ||
                 !formData.name ||
                 !formData.city ||
                 !formData.country
