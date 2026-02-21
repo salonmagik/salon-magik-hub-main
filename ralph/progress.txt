@@ -37,3 +37,24 @@
 - Composite index on (wallet_type, wallet_id, created_at DESC) will optimize queries for transaction history by wallet
 - JSONB metadata field provides flexibility for storing transaction-specific context without schema changes
 - All acceptance criteria met: table structure, foreign key, both required indexes created
+
+---
+## [2026-02-21 23:05:59] - US-003: Create salon_payout_destinations table
+
+### Implemented
+- Created payout_destination_type ENUM with 'bank' and 'mobile_money' values
+- Created salon_payout_destinations table with all required columns: id, tenant_id, destination_type, country, currency, bank_code, bank_name, account_number, account_name, momo_provider, momo_number, paystack_recipient_code, is_default (default false), created_at
+- Added foreign key constraint on tenant_id to tenants table with CASCADE delete
+- Created index idx_salon_payout_destinations_tenant on tenant_id for faster lookups
+
+### Files Changed
+- supabase/migrations/20260221120002_create_salon_payout_destinations.sql
+- ralph/prd.json (marked US-003 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Table supports both bank accounts (for Nigeria NUBAN and Ghana GHIPSS) and mobile money providers (MTN, Vodafone, AirtelTigo)
+- paystack_recipient_code column stores Paystack's recipient code for transfer API calls
+- is_default flag allows tenants to mark a preferred payout destination
+- Multiple destination types (bank vs mobile_money) can be stored per tenant for flexibility
+
