@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import ClientLoginPage from "./ClientLoginPage";
 
 const signInWithOtpMock = vi.fn();
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
@@ -25,7 +26,7 @@ describe("ClientLoginPage", () => {
 
   it("validates identifier before continuing", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <ClientLoginPage />
       </MemoryRouter>
     );
@@ -37,7 +38,7 @@ describe("ClientLoginPage", () => {
   it("advances to OTP step for valid email", async () => {
     signInWithOtpMock.mockResolvedValue({ error: null });
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <ClientLoginPage />
       </MemoryRouter>
     );

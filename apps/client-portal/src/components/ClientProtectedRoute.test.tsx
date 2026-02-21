@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ClientProtectedRoute, ClientPublicOnlyRoute } from "./ClientProtectedRoute";
 
 const useClientAuthMock = vi.fn();
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
 vi.mock("@/hooks", () => ({
   useClientAuth: () => useClientAuthMock(),
@@ -13,7 +14,7 @@ describe("ClientProtectedRoute", () => {
   it("redirects unauthenticated users to login", () => {
     useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: false });
     render(
-      <MemoryRouter initialEntries={["/client"]}>
+      <MemoryRouter initialEntries={["/client"]} future={routerFuture}>
         <Routes>
           <Route
             path="/client"
@@ -34,7 +35,7 @@ describe("ClientProtectedRoute", () => {
   it("redirects authenticated users away from login", () => {
     useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: true });
     render(
-      <MemoryRouter initialEntries={["/login"]}>
+      <MemoryRouter initialEntries={["/login"]} future={routerFuture}>
         <Routes>
           <Route
             path="/login"

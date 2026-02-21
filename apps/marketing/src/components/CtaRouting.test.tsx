@@ -6,6 +6,7 @@ import { LandingHero } from "./LandingHero";
 import { LandingNav } from "./LandingNav";
 
 const usePlansMock = vi.fn();
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
 vi.mock("@/hooks", () => ({
   usePlans: () => usePlansMock(),
@@ -20,7 +21,7 @@ describe("marketing CTA routing", () => {
     vi.stubEnv("VITE_SALON_APP_URL", "https://preview.salonmagik.app");
 
     const { unmount } = render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <LandingNav isLoading={false} isWaitlistMode={false} />
       </MemoryRouter>
     );
@@ -42,7 +43,7 @@ describe("marketing CTA routing", () => {
     vi.stubEnv("VITE_SALON_APP_URL", "https://preview.salonmagik.app");
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <LandingHero isLoading={false} isWaitlistMode={false} />
         <CTASection isWaitlistMode={false} />
       </MemoryRouter>

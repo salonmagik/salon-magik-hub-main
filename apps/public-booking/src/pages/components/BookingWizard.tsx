@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from "@ui/dialog";
 import { Button } from "@ui/button";
@@ -362,6 +363,9 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         style={{ "--brand-color": brandColor } as React.CSSProperties}
       >
         <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
+          <DialogDescription className="sr-only">
+            Complete your booking by reviewing your cart, schedule, and payment details.
+          </DialogDescription>
           <DialogTitle>Complete Checkout</DialogTitle>
         </DialogHeader>
 

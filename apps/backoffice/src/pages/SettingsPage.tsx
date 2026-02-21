@@ -506,13 +506,13 @@ export default function BackofficeSettingsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">2FA Status</Label>
-                    <p className="font-medium">
+                    <div className="font-medium">
                       {backofficeUser?.totp_enabled ? (
                         <Badge variant="default">Enabled</Badge>
                       ) : (
                         <Badge variant="secondary">Disabled</Badge>
                       )}
-                    </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>

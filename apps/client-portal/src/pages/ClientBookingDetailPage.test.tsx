@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import ClientBookingDetailPage from "./ClientBookingDetailPage";
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 
 vi.mock("@/hooks", () => ({
   useClientAuth: () => ({
@@ -23,7 +24,7 @@ vi.mock("@/components/ClientSidebar", () => ({
 describe("ClientBookingDetailPage", () => {
   it("shows booking not found state when no customer context exists", () => {
     render(
-      <MemoryRouter initialEntries={["/client/bookings/booking-1"]}>
+      <MemoryRouter initialEntries={["/client/bookings/booking-1"]} future={routerFuture}>
         <Routes>
           <Route path="/client/bookings/:id" element={<ClientBookingDetailPage />} />
         </Routes>
