@@ -18,3 +18,22 @@
 - Lint command has pre-existing eslint installation issues (eslint not found) - this is unrelated to SQL migration changes
 - SQL migrations do not require TypeScript type checking
 - Story acceptance criteria met: All ENUMs and tables created with proper constraints
+
+---
+## [2026-02-21 22:54:13] - US-002: Create wallet_ledger_entries table
+
+### Implemented
+- Created wallet_ledger_entries table with all required columns: id, tenant_id, wallet_type, wallet_id, entry_type, currency, amount, balance_before, balance_after, reference_type, reference_id, gateway, gateway_reference, idempotency_key, metadata (JSONB default '{}'), created_at
+- Added foreign key constraint on tenant_id to tenants table with CASCADE delete
+- Created unique index wallet_ledger_idempotency_idx on (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL for idempotent transaction processing
+- Created index wallet_ledger_wallet_idx on (wallet_type, wallet_id, created_at DESC) for efficient wallet-based queries
+
+### Files Changed
+- supabase/migrations/20260221120001_create_wallet_ledger_entries.sql
+- ralph/prd.json (updated branchName to feat--salon-customer-purse, marked US-002 as passing)
+
+### Learnings
+- Idempotency is enforced at the database level through unique partial index on (tenant_id, idempotency_key)
+- Composite index on (wallet_type, wallet_id, created_at DESC) will optimize queries for transaction history by wallet
+- JSONB metadata field provides flexibility for storing transaction-specific context without schema changes
+- All acceptance criteria met: table structure, foreign key, both required indexes created

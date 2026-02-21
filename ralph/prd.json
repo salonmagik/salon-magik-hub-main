@@ -1,6 +1,6 @@
 {
   "project": "Purse Implementation with Paystack",
-  "branchName": "ralph/purse-paystack-implementation",
+  "branchName": "feat--salon-customer-purse",
   "description": "Implement a dual-purse system (Customer + Salon) with Paystack integration for customer topups, booking payments, salon receipt of payments, withdrawals to bank/momo, invoice payments, and messaging credit purchases.",
   "userStories": [
     {
@@ -30,8 +30,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created successfully. All acceptance criteria met: table created with all required columns (id, tenant_id, wallet_type, wallet_id, entry_type, currency, amount, balance_before, balance_after, reference_type, reference_id, gateway, gateway_reference, idempotency_key, metadata JSONB default '{}', created_at), foreign key constraint on tenant_id added, unique index wallet_ledger_idempotency_idx created, index wallet_ledger_wallet_idx created. No typecheck command exists in project."
     },
     {
       "id": "US-003",
