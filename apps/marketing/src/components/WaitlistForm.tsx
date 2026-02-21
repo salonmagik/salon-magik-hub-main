@@ -158,9 +158,10 @@ export function WaitlistForm({
 
 			setPosition(result?.position || null);
 			setIsSuccess(true);
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Waitlist submission error:", err);
-			const errorMessage = err.message || "";
+			const message = err instanceof Error ? err.message : "";
+			const errorMessage = message || "";
 
 			if (
 				errorMessage.includes("duplicate") ||
@@ -172,7 +173,7 @@ export function WaitlistForm({
 					"You've already submitted a request before now. We'll notify you when access is ready!",
 				);
 			} else {
-				setError(err.message || "Something went wrong. Please try again.");
+				setError(message || "Something went wrong. Please try again.");
 			}
 		} finally {
 			setIsSubmitting(false);

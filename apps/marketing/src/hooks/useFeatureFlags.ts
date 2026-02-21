@@ -9,7 +9,7 @@ const appEnv = (import.meta.env.MODE === "production" ? "prod" : import.meta.env
   | "prod";
 
 const getFlagEnabled = async (featureKey: string, fallback = false) => {
-  const { data, error } = await (supabase.rpc as any)("evaluate_feature_flag", {
+  const { data, error } = await supabase.rpc("evaluate_feature_flag", {
     p_feature_key: featureKey,
     p_environment: appEnv,
     p_app_name: "marketing",
