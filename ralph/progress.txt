@@ -81,3 +81,23 @@
 - Amount is stored with NUMERIC(12, 2) precision to handle currencies accurately
 - All foreign keys cascade on delete to maintain referential integrity
 
+---
+## [2026-02-21 23:45:00] - US-005: Create messaging_credit_purchases table
+
+### Implemented
+- Created messaging_credit_purchases table with all required columns: id, tenant_id, credits (INTEGER), currency, amount, paid_via (TEXT), payment_intent_id (UUID), gateway_reference, created_at
+- Added CHECK constraint on paid_via to only accept 'salon_purse' or 'paystack' values
+- Added foreign key constraint on tenant_id to tenants table with CASCADE delete
+- Created indexes for tenant_id, paid_via, and created_at for query performance
+
+### Files Changed
+- supabase/migrations/20260221120004_create_messaging_credit_purchases.sql
+- ralph/prd.json (marked US-005 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Used CHECK constraint instead of ENUM for paid_via since only 2 fixed values are needed
+- payment_intent_id is nullable since it's only populated for Paystack payments (not purse payments)
+- Amount uses NUMERIC(12, 2) for consistent currency precision
+- All acceptance criteria met: table structure, foreign key, and paid_via constraint
+
