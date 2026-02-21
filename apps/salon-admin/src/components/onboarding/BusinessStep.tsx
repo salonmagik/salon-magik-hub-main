@@ -25,10 +25,6 @@ interface BusinessStepProps {
 const COUNTRIES = [
   { code: "GH", name: "Ghana", currency: "GHS", timezone: "Africa/Accra" },
   { code: "NG", name: "Nigeria", currency: "NGN", timezone: "Africa/Lagos" },
-  { code: "US", name: "United States", currency: "USD", timezone: "America/New_York" },
-  { code: "GB", name: "United Kingdom", currency: "GBP", timezone: "Europe/London" },
-  { code: "KE", name: "Kenya", currency: "KES", timezone: "Africa/Nairobi" },
-  { code: "ZA", name: "South Africa", currency: "ZAR", timezone: "Africa/Johannesburg" },
 ];
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {

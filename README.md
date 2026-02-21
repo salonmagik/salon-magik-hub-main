@@ -48,6 +48,10 @@ All apps use Vite; default ports are set in their `package.json`.
   - `BASE_URL=https://salonmagik.com`
 - If you need URL values in Vite client code, set `VITE_` prefixed versions too
   (for example `VITE_PUBLIC_BOOKING_BASE_DOMAIN`, `VITE_MANAGE_BOOKINGS_URL`).
+- Marketing CTA routing (`Log in`, `Get started`) uses `VITE_SALON_APP_URL` when set.
+  If it is not set, fallback defaults are:
+  - dev mode: `http://localhost:8080`
+  - prod build: `https://app.salonmagik.com`
 
 ## Supabase
 - Functions live in `supabase/functions`.

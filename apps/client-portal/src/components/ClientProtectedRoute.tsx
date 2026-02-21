@@ -6,6 +6,12 @@ interface ClientProtectedRouteProps {
   children: React.ReactNode;
 }
 
+type RouteState = {
+  from?: {
+    pathname?: string;
+  };
+};
+
 export function ClientProtectedRoute({ children }: ClientProtectedRouteProps) {
   const { isLoading, isAuthenticated } = useClientAuth();
   const location = useLocation();
@@ -45,7 +51,8 @@ export function ClientPublicOnlyRoute({ children }: { children: React.ReactNode 
   }
 
   if (isAuthenticated) {
-    const from = (location.state as any)?.from?.pathname || "/";
+    const routeState = location.state as RouteState | null;
+    const from = routeState?.from?.pathname || "/";
     return <Navigate to={from} replace />;
   }
 

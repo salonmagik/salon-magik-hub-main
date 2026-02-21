@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -35,9 +36,11 @@ import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog"
 import { FlagCustomerDialog } from "@/components/dialogs/FlagCustomerDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
 
@@ -51,6 +54,8 @@ export default function CustomersPage() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [inactiveDialogOpen, setInactiveDialogOpen] = useState(false);
+  const [inactiveDaysThreshold, setInactiveDaysThreshold] = useState(30);
   
   // Action dialogs
   const [flagDialogCustomer, setFlagDialogCustomer] = useState<Customer | null>(null);
@@ -61,6 +66,22 @@ export default function CustomersPage() {
   const { hasPermission } = usePermissions();
 
   const currency = currentTenant?.currency || "USD";
+
+  const { data: inactiveCustomers = [], refetch: refetchInactiveCustomers } = useQuery({
+    queryKey: ["inactive-customers", currentTenant?.id, inactiveDaysThreshold],
+    queryFn: async () => {
+      if (!currentTenant?.id) return [];
+      const { data, error } = await (supabase.rpc as any)("get_inactive_customers", {
+        p_tenant_id: currentTenant.id,
+        p_days_threshold: inactiveDaysThreshold,
+        p_limit: 100,
+        p_offset: 0,
+      });
+      if (error) throw error;
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: Boolean(currentTenant?.id),
+  });
 
   // Permission checks
   const canMakeVIP = hasPermission("customers:vip");
@@ -76,10 +97,10 @@ export default function CustomersPage() {
       const now = new Date();
       return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
     }).length;
-    const inactive = customers.filter((c) => c.status === "inactive").length;
+    const inactive = inactiveCustomers.length;
 
     return { total, vip, thisMonth, inactive };
-  }, [customers]);
+  }, [customers, inactiveCustomers.length]);
 
   const statusCards = [
     { label: "Total Customers", count: stats.total, icon: Users, color: "text-primary", bgColor: "bg-primary/10" },
@@ -188,6 +209,7 @@ export default function CustomersPage() {
               <Card
                 key={card.label}
                 className="cursor-pointer hover:shadow-md transition-shadow border-2 border-transparent hover:border-primary/20"
+                onClick={card.label === "Inactive" ? () => setInactiveDialogOpen(true) : undefined}
               >
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
@@ -454,6 +476,72 @@ export default function CustomersPage() {
         templateFileName="customers"
         onImport={handleImport}
       />
+
+      <Dialog open={inactiveDialogOpen} onOpenChange={setInactiveDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Inactive Customers</DialogTitle>
+            <DialogDescription>
+              Customers with no recorded activity for at least {inactiveDaysThreshold} days.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-3">
+            <Input
+              type="number"
+              min={1}
+              value={inactiveDaysThreshold}
+              onChange={(event) => setInactiveDaysThreshold(Number(event.target.value || 30))}
+              className="w-40"
+            />
+            <Button variant="outline" onClick={() => refetchInactiveCustomers()}>
+              Refresh
+            </Button>
+          </div>
+          <div className="max-h-[420px] space-y-2 overflow-auto pt-2">
+            {inactiveCustomers.length === 0 && (
+              <p className="text-sm text-muted-foreground">No inactive customers found for this threshold.</p>
+            )}
+            {inactiveCustomers.map((row: any) => (
+              <Card key={row.customer_id}>
+                <CardContent className="flex items-center justify-between p-3">
+                  <div>
+                    <p className="font-medium">{row.customer_name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.days_since_last_transaction} days inactive • Last item: {row.last_purchased_item || "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Last transaction: {row.last_transaction_at ? new Date(row.last_transaction_at).toLocaleDateString() : "—"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(row.customer_phone || "");
+                        toast({ title: "Copied", description: "Phone number copied." });
+                      }}
+                      disabled={!row.customer_phone}
+                    >
+                      Copy phone
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const customer = customers.find((item) => item.id === row.customer_id);
+                        if (customer) setDetailCustomer(customer);
+                      }}
+                    >
+                      View details
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </SalonSidebar>
   );
 }

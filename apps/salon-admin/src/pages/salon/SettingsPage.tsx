@@ -478,7 +478,7 @@ export default function SettingsPage() {
     setIsGeneratingSlug(true);
     try {
       // Convert name to URL-friendly slug
-      let baseSlug = currentTenant.name
+      const baseSlug = currentTenant.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")

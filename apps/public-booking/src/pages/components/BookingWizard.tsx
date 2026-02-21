@@ -272,11 +272,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         window.location.href = paymentResponse.data.checkoutUrl;
         return;
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Payment error:", err);
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
       toast({
         title: "Payment failed",
-        description: err.message || "Something went wrong. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -313,11 +314,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setBookingReference(data.reference || "CONFIRMED");
       setStep("confirmation");
       clearCart();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Booking error:", err);
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
       toast({
         title: "Booking failed",
-        description: err.message || "Something went wrong. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {

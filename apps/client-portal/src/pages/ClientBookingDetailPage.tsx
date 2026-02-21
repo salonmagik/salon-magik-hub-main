@@ -41,6 +41,13 @@ const paymentConfig: Record<string, { label: string; className: string }> = {
   refunded_partial: { label: "Partially Refunded", className: "bg-purple-100 text-purple-800" },
 };
 
+type AppointmentProduct = {
+  id: string;
+  product_name: string;
+  quantity: number;
+  total_price: number;
+};
+
 export default function ClientBookingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -143,7 +150,7 @@ export default function ClientBookingDetailPage() {
   const payment = paymentConfig[booking.payment_status] || { label: booking.payment_status, className: "bg-muted" };
 
   const services = booking.services || [];
-  const products = (booking as any).products || [];
+  const products = (booking as { products?: AppointmentProduct[] }).products || [];
   const servicesTotalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
 
   return (
@@ -271,7 +278,7 @@ export default function ClientBookingDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {products.map((product: any) => (
+                {products.map((product) => (
                   <div key={product.id} className="flex justify-between items-start">
                     <div>
                       <p className="font-medium">{product.product_name}</p>

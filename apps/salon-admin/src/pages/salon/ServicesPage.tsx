@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   Gift,
   Plus,
+  Download,
   Search,
   Clock,
   Truck,
@@ -48,6 +49,7 @@ import { BulkActionsBar } from "@/components/catalog/BulkActionsBar";
 import { ReasonConfirmDialog } from "@/components/dialogs/ReasonConfirmDialog";
 import { DeleteConfirmDialog } from "@/components/dialogs/DeleteConfirmDialog";
 import { RequestDeleteDialog } from "@/components/dialogs/RequestDeleteDialog";
+import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDialog";
 import { useServices } from "@/hooks/useServices";
 import { usePackages } from "@/hooks/usePackages";
 import { useProducts } from "@/hooks/useProducts";
@@ -59,10 +61,12 @@ import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
+import * as XLSX from "xlsx";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
 type ProductSubTab = "inventory" | "fulfillment";
 type ItemType = "service" | "product" | "package" | "voucher";
+type CatalogImportType = "services" | "products";
 
 interface CatalogItem {
   id: string;
@@ -83,6 +87,8 @@ export default function ServicesPage() {
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [voucherDialogOpen, setVoucherDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importType, setImportType] = useState<CatalogImportType>("services");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
@@ -97,6 +103,7 @@ export default function ServicesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [requestDeleteDialogOpen, setRequestDeleteDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
@@ -125,14 +132,27 @@ export default function ServicesPage() {
   const canFlag = hasPermission("catalog:flag");
 
   const formatCurrency = (amount: number) => {
-    const symbols: Record<string, string> = {
-      NGN: "₦",
-      GHS: "₵",
-      USD: "$",
-      EUR: "€",
-      GBP: "£",
-    };
-    return `${symbols[currency] || ""}${Number(amount).toLocaleString()}`;
+    return `${currency} ${Number(amount).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const IMPORT_TEMPLATES: Record<CatalogImportType, TemplateColumn[]> = {
+    services: [
+      { header: "name", example: "Silk Press", required: true },
+      { header: "duration_minutes", example: "60", required: false },
+      { header: "price", example: "15000", required: true },
+      { header: "description", example: "Includes wash and finish", required: false },
+      { header: "is_active", example: "true", required: false },
+    ],
+    products: [
+      { header: "name", example: "Shampoo 500ml", required: true },
+      { header: "stock_quantity", example: "24", required: false },
+      { header: "price", example: "8500", required: true },
+      { header: "description", example: "Sulphate free formula", required: false },
+      { header: "is_active", example: "true", required: false },
+    ],
   };
 
   // Build unified items list with status
@@ -495,6 +515,100 @@ export default function ServicesPage() {
     }
   };
 
+  const parseBoolean = (value: unknown): boolean | undefined => {
+    if (value === null || value === undefined || value === "") return undefined;
+    if (typeof value === "boolean") return value;
+    const normalized = String(value).trim().toLowerCase();
+    if (["true", "1", "yes", "active"].includes(normalized)) return true;
+    if (["false", "0", "no", "inactive"].includes(normalized)) return false;
+    return undefined;
+  };
+
+  const parseImportRows = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const firstSheet = workbook.SheetNames[0];
+    if (!firstSheet) return [];
+    const worksheet = workbook.Sheets[firstSheet];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+    return rows.map((row) => ({
+      name: row.name,
+      description: row.description || null,
+      price: row.price,
+      stock_quantity: row.stock_quantity,
+      duration_minutes: row.duration_minutes,
+      is_active: parseBoolean(row.is_active),
+    }));
+  };
+
+  const handleImportCatalog = async (file: File) => {
+    if (!currentTenant?.id) {
+      toast({ title: "No tenant selected", description: "Please select a tenant first.", variant: "destructive" });
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const rows = await parseImportRows(file);
+      if (!rows.length) {
+        toast({ title: "No data found", description: "The uploaded file has no importable rows.", variant: "destructive" });
+        return;
+      }
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        toast({
+          title: "Session expired",
+          description: "Please sign in again before importing.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("bulk-import-catalog", {
+        body: {
+          tenant_id: currentTenant.id,
+          import_type: importType,
+          rows,
+          dry_run: false,
+        },
+      });
+
+      if (error) throw error;
+
+      const summary = data?.summary || {};
+      toast({
+        title: `${importType === "services" ? "Service" : "Product"} import completed`,
+        description: `Imported ${summary.imported_rows ?? 0}/${summary.total_rows ?? rows.length} rows.`,
+      });
+
+      if (importType === "services") {
+        refetchServices();
+      } else {
+        refetchProducts();
+      }
+    } catch (error) {
+      console.error("Catalog import failed:", error);
+      const status = Number((error as any)?.context?.status || 0);
+      toast({
+        title: "Import failed",
+        description:
+          status === 401
+            ? "Your session is not authorized for import. Please sign in again."
+            : status === 403
+              ? "You do not have permission to import catalog records."
+              : "Could not process this file. Check template columns and try again.",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const getAddButtonLabel = () => {
     switch (activeTab) {
       case "services":
@@ -523,21 +637,56 @@ export default function ServicesPage() {
     <SalonSidebar>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold">Services and Products</h1>
             <p className="text-muted-foreground">
               Manage your service catalog, packages, products, and vouchers.
             </p>
           </div>
-          {activeTab === "all" ? (
-            <AddItemPopover onSelect={handleAddFromPopover} />
-          ) : addButtonLabel && (
-            <Button onClick={handleAddClick}>
-              <Plus className="w-4 h-4 mr-2" />
-              {addButtonLabel}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {(activeTab === "all" || activeTab === "services" || activeTab === "products") && (
+              <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                      <Download className="w-4 h-4 mr-2" />
+                      Import
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setImportType("services");
+                        setImportDialogOpen(true);
+                      }}
+                    >
+                      Import Services
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setImportType("products");
+                        setImportDialogOpen(true);
+                      }}
+                    >
+                      Import Products
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+
+            {activeTab === "all" ? (
+              <AddItemPopover onSelect={handleAddFromPopover} />
+            ) : (
+              addButtonLabel && (
+                <Button onClick={handleAddClick}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {addButtonLabel}
+                </Button>
+              )
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -891,6 +1040,17 @@ export default function ServicesPage() {
         open={voucherDialogOpen}
         onOpenChange={setVoucherDialogOpen}
         onSuccess={refetchVouchers}
+      />
+      <ImportDialog
+        open={importDialogOpen}
+        onOpenChange={(open) => {
+          if (!isImporting) setImportDialogOpen(open);
+        }}
+        title={`Import ${importType === "services" ? "Services" : "Products"}`}
+        description={`Upload a CSV or Excel file to bulk import ${importType}.`}
+        templateColumns={IMPORT_TEMPLATES[importType]}
+        templateFileName={importType}
+        onImport={handleImportCatalog}
       />
 
       {/* View/Edit Dialogs */}

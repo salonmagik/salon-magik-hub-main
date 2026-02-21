@@ -127,7 +127,7 @@ export function AddJournalEntryDialog({
   // Simple text parsing logic
   const parseText = (text: string) => {
     const lower = text.toLowerCase();
-    let parsed: ParsedEntry = {
+    const parsed: ParsedEntry = {
       direction: "inflow",
       amount: 0,
       category: "other",
@@ -144,7 +144,7 @@ export function AddJournalEntryDialog({
     }
 
     // Detect amount
-    const amountMatch = text.match(/[\$€£₦]?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+    const amountMatch = text.match(/[$€£₦]?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)/);
     if (amountMatch) {
       parsed.amount = parseFloat(amountMatch[1].replace(/,/g, ""));
       parsed.confidence = "medium";

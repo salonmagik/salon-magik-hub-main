@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,30 +25,59 @@ import {
 } from "@ui/select";
 import { Textarea } from "@ui/textarea";
 import { Loader2, PartyPopper, Sparkles } from "lucide-react";
-import { COUNTRIES } from "@shared/countries";
+import {
+	getCountryByDialCode,
+	parseE164,
+} from "@shared/countries";
+import { validatePhoneByCountry } from "@shared/validation";
 import { PhoneInput } from "@ui/phone-input";
+import { useMarketingMarketCountries } from "@/hooks";
 
-const waitlistSchema = z.object({
-  first_name: z.string().min(2, "First name is required"),
-  last_name: z.string().min(2, "Last name is required"),
-  email: z.string().email("Valid email is required"),
-  phone: z.string().min(8, "Phone number is required"),
-  country: z.string().min(1, "Country is required"),
-  plan_interest: z.string().optional(),
-  team_size: z.string().optional(),
-  notes: z.string().optional(),
-});
+const waitlistSchema = z
+  .object({
+    first_name: z.string().min(2, "First name is required"),
+    last_name: z.string().min(2, "Last name is required"),
+    email: z.string().email("Valid email is required"),
+    phone: z.string().min(8, "Phone number is required"),
+    country: z.string().min(1, "Country is required"),
+    plan_interest: z.string().optional(),
+    team_size: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .superRefine((values, context) => {
+    const parsedPhone = parseE164(values.phone);
+    if (!parsedPhone) {
+      context.addIssue({
+        code: "custom",
+        path: ["phone"],
+        message: "Enter a valid phone number",
+      });
+      return;
+    }
+
+    const countryCode = getCountryByDialCode(parsedPhone.dialCode)?.code ?? "";
+    const phoneValidation = validatePhoneByCountry(countryCode, parsedPhone.nationalNumber);
+    if (!phoneValidation.isValid) {
+      context.addIssue({
+        code: "custom",
+        path: ["phone"],
+        message: phoneValidation.error || "Enter a valid phone number",
+      });
+    }
+  });
 
 type WaitlistFormData = z.infer<typeof waitlistSchema>;
 
 interface WaitlistFormProps {
 	compact?: boolean;
 	mode?: "waitlist" | "interest";
+	source?: "hero_cta" | "footer_cta" | "launch_section";
 }
 
 export function WaitlistForm({
 	compact = false,
 	mode = "waitlist",
+	source = "footer_cta",
 }: WaitlistFormProps) {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isSuccess, setIsSuccess] = useState(false);
@@ -56,6 +86,7 @@ export function WaitlistForm({
 
 	const form = useForm<WaitlistFormData>({
 		resolver: zodResolver(waitlistSchema),
+		mode: "onChange",
 		defaultValues: {
 			first_name: "",
 			last_name: "",
@@ -67,18 +98,40 @@ export function WaitlistForm({
 			notes: "",
 		},
 	});
+	const isInterestMode = mode === "interest";
+	const { data: marketCountries } = useMarketingMarketCountries();
+	const liveCountries = marketCountries?.liveCountries ?? [];
+	const expansionCountries = marketCountries?.expansionCountries ?? [];
+	const selectableCountries = isInterestMode ? expansionCountries : liveCountries;
+
+	const {
+		data: activePlans = [],
+		isLoading: isPlansLoading,
+		isError: hasPlanQueryError,
+	} = useQuery({
+		queryKey: ["marketing-active-plans"],
+		queryFn: async () => {
+			const { data, error } = await supabase
+				.from("plans")
+				.select("id, name, slug, display_order")
+				.eq("is_active", true)
+				.order("display_order", { ascending: true, nullsFirst: false })
+				.order("name", { ascending: true });
+			if (error) throw error;
+			return data ?? [];
+		},
+	});
 
 	const onSubmit = async (data: WaitlistFormData) => {
 		setIsSubmitting(true);
 		setError(null);
 
 		try {
-			const { data: result, error: fnError } = await supabase.functions.invoke(
-				"submit-waitlist",
-				{
-					body: data,
-				},
-			);
+			const functionName = mode === "interest" ? "submit-market-interest" : "submit-waitlist";
+			const payload = mode === "interest" ? { ...data, source } : data;
+			const { data: result, error: fnError } = await supabase.functions.invoke(functionName, {
+				body: payload,
+			});
 
 			if (fnError) {
 				const errorBody = fnError.context?.body;
@@ -105,9 +158,10 @@ export function WaitlistForm({
 
 			setPosition(result?.position || null);
 			setIsSuccess(true);
-		} catch (err: any) {
+		} catch (err: unknown) {
 			console.error("Waitlist submission error:", err);
-			const errorMessage = err.message || "";
+			const message = err instanceof Error ? err.message : "";
+			const errorMessage = message || "";
 
 			if (
 				errorMessage.includes("duplicate") ||
@@ -119,7 +173,7 @@ export function WaitlistForm({
 					"You've already submitted a request before now. We'll notify you when access is ready!",
 				);
 			} else {
-				setError(err.message || "Something went wrong. Please try again.");
+				setError(message || "Something went wrong. Please try again.");
 			}
 		} finally {
 			setIsSubmitting(false);
@@ -155,8 +209,6 @@ export function WaitlistForm({
 			frame();
 		}
 	}, [isSuccess]);
-
-	const isInterestMode = mode === "interest";
 
 	if (isSuccess) {
 		return (
@@ -199,7 +251,7 @@ export function WaitlistForm({
 								</FormItem>
 							)}
 						/>
-						<Button type="submit" disabled={isSubmitting}>
+							<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? (
 								<Loader2 className="w-4 h-4 animate-spin" />
 							) : (
@@ -293,6 +345,12 @@ export function WaitlistForm({
 										value={field.value}
 										onChange={field.onChange}
 										defaultCountry="GH"
+										allowedCountryCodes={
+											isInterestMode ? undefined : liveCountries.map((country) => country.code)
+										}
+										excludeCountryCodes={
+											isInterestMode ? liveCountries.map((country) => country.code) : undefined
+										}
 										placeholder="Phone number"
 										hasError={!!form.formState.errors.phone}
 									/>
@@ -308,14 +366,14 @@ export function WaitlistForm({
 						render={({ field }) => (
 							<FormItem>
 								<FormLabel>Country *</FormLabel>
-								<Select onValueChange={field.onChange} value={field.value}>
+									<Select onValueChange={field.onChange} value={field.value}>
 									<FormControl>
 										<SelectTrigger>
 											<SelectValue placeholder="Select your country" />
 										</SelectTrigger>
 									</FormControl>
 									<SelectContent>
-										{COUNTRIES.map((country) => (
+										{selectableCountries.map((country) => (
 											<SelectItem key={country.code} value={country.code}>
 												{country.name}
 											</SelectItem>
@@ -335,18 +393,23 @@ export function WaitlistForm({
 								<FormLabel>Plan interest (optional)</FormLabel>
 								<Select onValueChange={field.onChange} value={field.value}>
 									<FormControl>
-										<SelectTrigger>
+										<SelectTrigger disabled={isPlansLoading || hasPlanQueryError}>
 											<SelectValue placeholder="Which plan interests you?" />
 										</SelectTrigger>
 									</FormControl>
 									<SelectContent>
-										<SelectItem value="solo">Solo - Just me</SelectItem>
-										<SelectItem value="studio">Studio - Small team</SelectItem>
-										<SelectItem value="chain">
-											Chain - Multiple locations
-										</SelectItem>
+										{activePlans.map((plan) => (
+											<SelectItem key={plan.id} value={plan.slug}>
+												{plan.name}
+											</SelectItem>
+										))}
 									</SelectContent>
 								</Select>
+								{hasPlanQueryError && (
+									<p className="text-xs text-muted-foreground">
+										Plan options are temporarily unavailable.
+									</p>
+								)}
 								<FormMessage />
 							</FormItem>
 						)}
@@ -395,7 +458,11 @@ export function WaitlistForm({
 
 					{error && <p className="text-sm text-destructive">{error}</p>}
 
-					<Button type="submit" className="w-full" disabled={isSubmitting}>
+					<Button
+						type="submit"
+						className="w-full"
+						disabled={isSubmitting || !form.formState.isValid}
+					>
 						{isSubmitting ? (
 							<>
 								<Loader2 className="w-4 h-4 animate-spin mr-2" />

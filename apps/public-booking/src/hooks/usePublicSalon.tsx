@@ -46,9 +46,8 @@ export function usePublicSalon(slug: string | undefined) {
       if (!slug) return null;
 
       // Use the secure view that only exposes safe columns
-      // The view isn't in generated types, so we need to cast
       const { data, error } = await supabase
-        .from("public_booking_tenants" as any)
+        .from("public_booking_tenants")
         .select("*")
         .eq("slug", slug)
         .maybeSingle();

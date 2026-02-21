@@ -12,6 +12,11 @@ import { Loader2, ArrowLeft, Mail, Phone } from "lucide-react";
 import { Button } from "@ui/button";
 
 type LoginStep = "identifier" | "otp" | "password";
+type RouteState = {
+  from?: {
+    pathname?: string;
+  };
+};
 
 // Detect if input is email or phone
 const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -116,7 +121,8 @@ export default function ClientLoginPage() {
       if (data.session) {
         // Check if user has a password set - for now, complete login directly
         // Password prompt will be implemented when the edge function is ready
-        const from = (location.state as any)?.from?.pathname || "/client";
+        const routeState = location.state as RouteState | null;
+        const from = routeState?.from?.pathname || "/client";
         navigate(from, { replace: true });
       }
     } catch (err) {

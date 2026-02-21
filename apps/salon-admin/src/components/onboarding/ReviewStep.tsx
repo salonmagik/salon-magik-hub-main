@@ -21,6 +21,7 @@ interface ReviewStepProps {
     expectedBillingDate: string | null;
     requiresCustom?: boolean;
   } | null;
+  trialDays?: number;
 }
 
 const PLAN_NAMES: Record<SubscriptionPlan, string> = {
@@ -54,6 +55,7 @@ export function ReviewStep({
   business,
   locations,
   chainSummary,
+  trialDays = 14,
 }: ReviewStepProps) {
   const formatDays = (days: string[]) => {
     const dayMap: Record<string, string> = {
@@ -143,7 +145,7 @@ export function ReviewStep({
           </div>
           <div className="text-sm">
             <span className="font-medium">{PLAN_NAMES[plan]}</span>
-            <span className="text-muted-foreground"> – 14-day free trial</span>
+            <span className="text-muted-foreground"> – {trialDays}-day free trial</span>
           </div>
         </div>
 
@@ -166,8 +168,8 @@ export function ReviewStep({
               Expected billing date: {chainSummary.expectedBillingDate || "Next billing cycle"}
             </p>
             {chainSummary.requiresCustom && (
-              <p className="text-xs text-destructive">
-                Current tier is marked custom and cannot be self-served yet.
+              <p className="text-xs text-amber-700">
+                This setup includes custom-tier stores. Onboarding continues, but stores above 10 remain pending approval.
               </p>
             )}
           </div>

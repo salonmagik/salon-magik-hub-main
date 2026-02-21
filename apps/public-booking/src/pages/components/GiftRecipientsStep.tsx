@@ -8,7 +8,9 @@ import { Badge } from "@ui/badge";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { PhoneInput } from "@ui/phone-input";
+import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
 import type { CartItem, GiftRecipient } from "@/hooks/useBookingCart";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 interface GiftRecipientsStepProps {
   giftItems: CartItem[];
@@ -21,6 +23,8 @@ export function GiftRecipientsStep({
   recipients,
   onRecipientsChange,
 }: GiftRecipientsStepProps) {
+  const { data: marketCountries } = useMarketCountries();
+  const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
   const [sameRecipient, setSameRecipient] = useState<boolean | null>(
     giftItems.length > 1 ? null : true
   );
@@ -123,6 +127,7 @@ export function GiftRecipientsStep({
           onChange={(value) => onUpdate("phone", value)}
           placeholder="Phone number"
           defaultCountry="NG"
+          allowedCountryCodes={selectableCountries.map((country) => country.code)}
         />
       </div>
 

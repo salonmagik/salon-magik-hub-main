@@ -2,6 +2,8 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { PhoneInput } from "@ui/phone-input";
+import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 export interface BookerInfo {
   firstName: string;
@@ -17,6 +19,9 @@ interface BookerInfoStepProps {
 }
 
 export function BookerInfoStep({ info, onChange }: BookerInfoStepProps) {
+  const { data: marketCountries } = useMarketCountries();
+  const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
+
   const updateField = (field: keyof BookerInfo, value: string) => {
     onChange({ ...info, [field]: value });
   };
@@ -66,6 +71,7 @@ export function BookerInfoStep({ info, onChange }: BookerInfoStepProps) {
           onChange={(value) => updateField("phone", value)}
           placeholder="Phone number"
           defaultCountry="NG"
+          allowedCountryCodes={selectableCountries.map((country) => country.code)}
         />
       </div>
 

@@ -55,11 +55,20 @@ serve(async (req) => {
 
     const body = await req.json();
     const { first_name, last_name, email, phone, country, plan_interest, team_size, notes } = body;
+    const normalizedCountry = String(country || "").trim().toUpperCase();
+    const liveCountries = new Set(["GH", "NG"]);
 
     // Validate required fields
     if (!first_name || !last_name || !email || !country) {
       return new Response(
         JSON.stringify({ error: "First name, last name, email, and country are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!liveCountries.has(normalizedCountry)) {
+      return new Response(
+        JSON.stringify({ error: "We are currently live only in Ghana and Nigeria." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -102,7 +111,7 @@ serve(async (req) => {
         name: `${first_name.trim()} ${last_name.trim()}`,
         email: email.toLowerCase().trim(),
         phone: phone?.trim() || null,
-        country,
+        country: normalizedCountry,
         plan_interest: plan_interest || null,
         team_size: team_size || null,
         notes: notes?.trim() || null,

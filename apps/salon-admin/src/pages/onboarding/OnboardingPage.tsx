@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +30,19 @@ export default function OnboardingPage() {
   const { toast } = useToast();
   const { user, refreshTenants } = useAuth();
   const { data: plans } = usePlans();
+  const { data: trialSetting } = useQuery({
+    queryKey: ["default-trial-days"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "default_trial_days")
+        .maybeSingle();
+      if (error) throw error;
+      const rawDays = Number((data?.value as any)?.days);
+      return Number.isFinite(rawDays) ? Math.max(0, rawDays) : null;
+    },
+  });
   const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
   const [expectedChainLocations, setExpectedChainLocations] = useState(1);
@@ -92,7 +106,9 @@ export default function OnboardingPage() {
     currency,
     configuredChainLocations,
   );
-  const onboardingTrialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const onboardingTrialDays =
+    trialSetting ?? plans?.find((plan) => plan.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
+  const onboardingTrialEndsAt = new Date(Date.now() + onboardingTrialDays * 24 * 60 * 60 * 1000).toISOString();
 
   const getStepFlow = (): OnboardingStep[] => {
     const flow: OnboardingStep[] = ["role"];
@@ -123,15 +139,13 @@ export default function OnboardingPage() {
         if (!selectedPlan) return false;
         if (selectedPlan !== "chain") return true;
         if (expectedChainLocations < 1) return false;
-        if (!chainQuote) return false;
-        return chainQuote?.requires_custom !== true;
+        return Boolean(chainQuote);
       case "locations":
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
       case "review":
         if (!isChain) return true;
-        if (!configuredChainQuote) return false;
-        return configuredChainQuote.requires_custom !== true;
+        return Boolean(configuredChainQuote);
       default:
         return false;
     }
@@ -217,7 +231,10 @@ export default function OnboardingPage() {
 
       // 4. Create locations
       if (isChain && locationsConfig.locations.length > 0) {
-        const locationInserts = locationsConfig.locations.map((loc) => ({
+        const configuredLocations = Math.max(1, locationsConfig.locations.length);
+        const requiresCustomUnlock = configuredLocations > 10 || configuredChainQuote?.requires_custom === true;
+        const activatedLocations = requiresCustomUnlock ? Math.min(10, configuredLocations) : configuredLocations;
+        const locationInserts = locationsConfig.locations.slice(0, activatedLocations).map((loc) => ({
           tenant_id: tenantId,
           name: loc.name || businessInfo.name,
           city: loc.city,
@@ -233,18 +250,35 @@ export default function OnboardingPage() {
         const { error: locationsError } = await supabase.from("locations").insert(locationInserts);
         if (locationsError) throw locationsError;
 
-        const configuredLocations = Math.max(1, locationsConfig.locations.length);
         if (!chainPlan?.id) {
           throw new Error("Chain plan is not configured yet. Contact support.");
         }
         const { error: entitlementError } = await (supabase.rpc as any)("set_tenant_chain_entitlement", {
           p_tenant_id: tenantId,
           p_plan_id: chainPlan.id,
-          p_allowed_locations: configuredLocations,
-          p_source: "onboarding",
-          p_reason: "Initial chain location entitlement from onboarding.",
+          p_allowed_locations: activatedLocations,
+          p_source: requiresCustomUnlock ? "onboarding_pending_unlock" : "onboarding",
+          p_reason: requiresCustomUnlock
+            ? `Pending custom unlock approval for ${configuredLocations} requested locations.`
+            : "Initial chain location entitlement from onboarding.",
         });
         if (entitlementError) throw entitlementError;
+
+        if (requiresCustomUnlock) {
+          const { error: requestError } = await (supabase.from("tenant_chain_unlock_requests") as any).upsert(
+            {
+              tenant_id: tenantId,
+              plan_id: chainPlan.id,
+              requested_locations: configuredLocations,
+              allowed_locations: activatedLocations,
+              status: "pending",
+              reason: "Requested during onboarding for chain 11+ locations.",
+              requested_by: user.id,
+            },
+            { onConflict: "tenant_id" },
+          );
+          if (requestError) throw requestError;
+        }
       } else {
         // Single location for Solo/Studio
         const { error: locationError } = await supabase.from("locations").insert({
@@ -305,10 +339,18 @@ export default function OnboardingPage() {
 
       setStep("complete");
       
-      toast({
-        title: "Welcome to Salon Magik!",
-        description: "Your salon has been set up successfully.",
-      });
+      if (isChain && configuredChainLocations > 10) {
+        toast({
+          title: "Onboarding complete",
+          description:
+            "Your first 10 locations are active. Additional locations are pending custom pricing approval.",
+        });
+      } else {
+        toast({
+          title: "Welcome to Salon Magik!",
+          description: "Your salon has been set up successfully.",
+        });
+      }
 
       setTimeout(() => {
         navigate("/salon");
@@ -422,8 +464,8 @@ export default function OnboardingPage() {
                         Estimated monthly total: {currency} {chainQuote.total_price.toLocaleString()}
                       </p>
                       {chainQuote.requires_custom ? (
-                        <p className="mt-2 text-destructive">
-                          This tier is currently marked as custom. Contact support/sales to continue.
+                        <p className="mt-2 text-amber-700">
+                          This tier is marked as custom. You can continue onboarding; activation beyond 10 stores will be pending approval.
                         </p>
                       ) : (
                         <ul className="mt-2 space-y-1 text-muted-foreground">
@@ -474,6 +516,7 @@ export default function OnboardingPage() {
                     }
                   : null
               }
+              trialDays={onboardingTrialDays}
             />
           )}
 

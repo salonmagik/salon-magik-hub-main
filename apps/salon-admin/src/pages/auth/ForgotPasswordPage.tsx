@@ -15,14 +15,12 @@ import {
   InputOTPSlot,
 } from "@ui/input-otp";
 import { Lock } from "lucide-react";
-
-import { isValidPassword } from "@shared/form-utils";
-
-// Password strength validation
-const validatePasswordStrength = (password: string): string | null => {
-  const result = isValidPassword(password);
-  return result.valid ? null : result.error || "Invalid password";
-};
+import {
+  validatePasswordStrength,
+  validatePhoneByCountry,
+} from "@shared/validation";
+import { getCountryByDialCode, parseE164 } from "@shared/countries";
+import { ValidationChecklist } from "@ui/validation-checklist";
 
 type PhoneFlowStep = "phone" | "otp" | "newPassword";
 
@@ -48,16 +46,26 @@ export default function ForgotPasswordPage() {
   const [confirmError, setConfirmError] = useState("");
   const [isPhoneSuccess, setIsPhoneSuccess] = useState(false);
 
+  const emailTrimmed = email.trim();
+  const isEmailValid = /\S+@\S+\.\S+/.test(emailTrimmed);
+  const parsedPhone = parseE164(phone);
+  const phoneCountry = parsedPhone ? getCountryByDialCode(parsedPhone.dialCode)?.code ?? "" : "";
+  const phoneValidation = validatePhoneByCountry(phoneCountry, parsedPhone?.nationalNumber ?? "");
+  const passwordValidation = validatePasswordStrength(newPassword);
+  const isConfirmMatch = newPassword.length > 0 && newPassword === confirmPassword;
+  const canSubmitPasswordReset =
+    passwordValidation.isValid && isConfirmMatch && !isLoading;
+
   // Email flow handlers
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email) {
+    if (!emailTrimmed) {
       setEmailError("Email is required");
       return;
     }
     
-    if (!/\S+@\S+\.\S+/.test(email)) {
+    if (!isEmailValid) {
       setEmailError("Please enter a valid email");
       return;
     }
@@ -69,7 +77,7 @@ export default function ForgotPasswordPage() {
       // Call custom edge function instead of Supabase default
       const { data, error } = await supabase.functions.invoke("send-password-reset", {
         body: { 
-          email, 
+          email: emailTrimmed, 
           origin: window.location.origin 
         },
       });
@@ -102,8 +110,8 @@ export default function ForgotPasswordPage() {
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!phone || phone.length < 8) {
-      setPhoneError("Please enter a valid phone number");
+    if (!phoneValidation.isValid) {
+      setPhoneError(phoneValidation.error || "Please enter a valid phone number");
       return;
     }
     
@@ -183,9 +191,8 @@ export default function ForgotPasswordPage() {
       setPasswordError("Password is required");
       hasError = true;
     } else {
-      const strengthError = validatePasswordStrength(newPassword);
-      if (strengthError) {
-        setPasswordError(strengthError);
+      if (!passwordValidation.isValid) {
+        setPasswordError("Password does not meet all requirements");
         hasError = true;
       }
     }
@@ -355,6 +362,7 @@ export default function ForgotPasswordPage() {
               <AuthButton
                 type="submit"
                 isLoading={isLoading}
+                disabled={!isEmailValid || isLoading}
                 icon={<Send size={18} />}
               >
                 Send reset link
@@ -384,6 +392,7 @@ export default function ForgotPasswordPage() {
                 <AuthButton
                   type="submit"
                   isLoading={isLoading}
+                  disabled={!phoneValidation.isValid || isLoading}
                   icon={<Send size={18} />}
                 >
                   Send verification code
@@ -424,7 +433,7 @@ export default function ForgotPasswordPage() {
                   {otpError && <p className="text-sm text-destructive text-center">{otpError}</p>}
                 </div>
 
-                <AuthButton type="submit" isLoading={isLoading}>
+                <AuthButton type="submit" isLoading={isLoading} disabled={otp.length !== 6 || isLoading}>
                   Verify code
                 </AuthButton>
 
@@ -466,8 +475,14 @@ export default function ForgotPasswordPage() {
                   icon={<Lock size={18} />}
                   value={newPassword}
                   onChange={(e) => {
-                    setNewPassword(e.target.value);
+                    const nextPassword = e.target.value;
+                    setNewPassword(nextPassword);
                     setPasswordError("");
+                    if (confirmPassword) {
+                      setConfirmError(
+                        nextPassword === confirmPassword ? "" : "Passwords do not match"
+                      );
+                    }
                   }}
                   error={passwordError}
                   disabled={isLoading}
@@ -480,25 +495,19 @@ export default function ForgotPasswordPage() {
                   icon={<Lock size={18} />}
                   value={confirmPassword}
                   onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    setConfirmError("");
+                    const nextConfirm = e.target.value;
+                    setConfirmPassword(nextConfirm);
+                    setConfirmError(
+                      newPassword && nextConfirm !== newPassword ? "Passwords do not match" : ""
+                    );
                   }}
                   error={confirmError}
                   disabled={isLoading}
                 />
 
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>Password must:</p>
-                  <ul className="list-disc list-inside space-y-0.5 ml-2">
-                    <li>Be at least 8 characters long</li>
-                    <li>Contain at least one lowercase letter</li>
-                    <li>Contain at least one uppercase letter</li>
-                    <li>Contain at least one number</li>
-                    <li>Contain at least one special character (!@#$%^&*...)</li>
-                  </ul>
-                </div>
+                <ValidationChecklist items={passwordValidation.rules} />
 
-                <AuthButton type="submit" isLoading={isLoading}>
+                <AuthButton type="submit" isLoading={isLoading} disabled={!canSubmitPasswordReset}>
                   Reset password
                 </AuthButton>
               </form>

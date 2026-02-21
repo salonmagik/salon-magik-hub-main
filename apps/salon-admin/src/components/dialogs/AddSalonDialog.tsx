@@ -18,7 +18,8 @@ import { useLocations } from "@/hooks/useLocations";
 import { usePlans } from "@/hooks/usePlans";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
-import { COUNTRIES } from "@shared/countries";
+import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 import {
   Select,
   SelectContent,
@@ -48,10 +49,19 @@ interface EntitlementExpansionResult {
   subtotal?: number;
 }
 
+interface ChainUnlockRequest {
+  id: string;
+  requested_locations: number;
+  allowed_locations: number;
+  status: "pending" | "approved" | "rejected";
+}
+
 export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
   const { currentTenant } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
   const { data: plans } = usePlans();
+  const { data: marketCountries } = useMarketCountries();
+  const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -85,28 +95,54 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     staleTime: 1000 * 15,
   });
 
+  const { data: chainUnlockRequest } = useQuery({
+    queryKey: ["tenant-chain-unlock-request", currentTenant?.id],
+    queryFn: async (): Promise<ChainUnlockRequest | null> => {
+      if (!currentTenant?.id) return null;
+      const { data, error } = await (supabase
+        .from("tenant_chain_unlock_requests" as any)
+        .select("id, requested_locations, allowed_locations, status")
+        .eq("tenant_id", currentTenant.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle() as any);
+      if (error) throw error;
+      return data || null;
+    },
+    enabled: Boolean(currentTenant?.id && isChainPlan),
+  });
+
   const currentPlan = plans?.find((p) => p.slug === String(currentTenant?.plan || "").toLowerCase());
   const fallbackMax = currentPlan?.limits?.max_locations || 1;
   const fallbackUsed = locations.length;
 
   const allowedLocations = locationGate?.allowed ?? fallbackMax;
   const currentLocationCount = locationGate?.used ?? fallbackUsed;
-  const canAddLocation = locationGate?.can_add ?? currentLocationCount < allowedLocations;
+  const hasPendingChainUnlock =
+    isChainPlan &&
+    chainUnlockRequest?.status === "pending" &&
+    chainUnlockRequest.requested_locations > chainUnlockRequest.allowed_locations;
+  const canAddLocation =
+    !hasPendingChainUnlock && (locationGate?.can_add ?? currentLocationCount < allowedLocations);
   const canAutoExpand =
     isChainPlan &&
     !canAddLocation &&
+    !hasPendingChainUnlock &&
     locationGate?.requires_custom === false &&
     Boolean(currentTenant?.id);
 
   const upgradeMessage = useMemo(() => {
     if (isChainPlan) {
+      if (hasPendingChainUnlock && chainUnlockRequest) {
+        return `Your request to unlock up to ${chainUnlockRequest.requested_locations} stores is pending approval.`;
+      }
       if (locationGate?.requires_custom) {
         return "The next tier is marked as custom. Contact sales/support to expand this chain plan.";
       }
       return "You need more location slots for this chain plan.";
     }
     return "Upgrade to the Chain plan to add more locations and unlock multi-salon management features.";
-  }, [isChainPlan, locationGate?.requires_custom]);
+  }, [chainUnlockRequest, hasPendingChainUnlock, isChainPlan, locationGate?.requires_custom]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,7 +206,9 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     toast({
       title: isChainPlan ? "Expansion required" : "Upgrade Required",
       description: isChainPlan
-        ? "Contact support to unlock this custom location tier."
+        ? hasPendingChainUnlock
+          ? "Your request is pending approval. We'll notify you once extra stores are activated."
+          : "Contact support to unlock this custom location tier."
         : "Please visit Settings > Subscription to upgrade your plan.",
     });
     onOpenChange(false);
@@ -220,7 +258,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               Cancel
             </Button>
             <Button onClick={handleUpgrade} className="gap-2">
-              {isChainPlan ? "Contact support" : "Upgrade to Chain"}
+              {isChainPlan ? (hasPendingChainUnlock ? "Pending approval" : "Contact support") : "Upgrade to Chain"}
               <ArrowRight className="w-4 h-4" />
             </Button>
           </DialogFooter>
@@ -275,7 +313,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {COUNTRIES.map((c) => (
+                  {selectableCountries.map((c) => (
                     <SelectItem key={c.code} value={c.code}>
                       {c.flag} {c.name}
                     </SelectItem>
