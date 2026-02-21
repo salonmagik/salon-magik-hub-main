@@ -58,3 +58,26 @@
 - is_default flag allows tenants to mark a preferred payout destination
 - Multiple destination types (bank vs mobile_money) can be stored per tenant for flexibility
 
+---
+## [2026-02-21 23:18:00] - US-004: Create salon_withdrawals table
+
+### Implemented
+- Created withdrawal_status ENUM with 'pending', 'processing', 'completed', 'failed' values
+- Created salon_withdrawals table with all required columns: id, tenant_id, salon_wallet_id, payout_destination_id, currency, amount, status (default 'pending'), paystack_transfer_code, paystack_reference, failure_reason, requested_at (default NOW())
+- Added foreign key constraint on tenant_id to tenants table with CASCADE delete
+- Added foreign key constraint on salon_wallet_id to salon_wallets table with CASCADE delete
+- Added foreign key constraint on payout_destination_id to salon_payout_destinations table with CASCADE delete
+- Created indexes for tenant_id, salon_wallet_id, and status for faster lookups
+
+### Files Changed
+- supabase/migrations/20260221120003_create_salon_withdrawals.sql
+- ralph/prd.json (marked US-004 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Table tracks the full lifecycle of a withdrawal request from pending → processing → completed/failed
+- paystack_transfer_code and paystack_reference store Paystack's transfer identifiers
+- failure_reason captures error messages when withdrawals fail
+- Amount is stored with NUMERIC(12, 2) precision to handle currencies accurately
+- All foreign keys cascade on delete to maintain referential integrity
+
