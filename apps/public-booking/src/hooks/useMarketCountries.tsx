@@ -11,7 +11,7 @@ export function useMarketCountries() {
     queryKey: ["public-booking-market-countries"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("market_countries" as any)
+        .from("market_countries")
         .select("country_code")
         .eq("is_selectable", true)
         .in("legal_status", ["active", "legal_approved"]);

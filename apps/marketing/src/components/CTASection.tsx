@@ -14,7 +14,8 @@ export function CTASection({
 }: CTASectionProps) {
   const { data: plans } = usePlans();
   const trialDays = plans?.find((plan) => plan.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
-  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || "https://app.salonmagik.com").replace(/\/$/, "");
+  const defaultSalonAppUrl = import.meta.env.DEV ? "http://localhost:8080" : "https://app.salonmagik.com";
+  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || defaultSalonAppUrl).replace(/\/$/, "");
 
   return (
     <section className="py-16 md:py-24 px-4">

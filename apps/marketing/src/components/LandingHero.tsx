@@ -13,7 +13,8 @@ export function LandingHero({
   isLoading,
   onWaitlistClick,
 }: LandingHeroProps) {
-  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || "https://app.salonmagik.com").replace(/\/$/, "");
+  const defaultSalonAppUrl = import.meta.env.DEV ? "http://localhost:8080" : "https://app.salonmagik.com";
+  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || defaultSalonAppUrl).replace(/\/$/, "");
 
   return (
     <section className="relative overflow-hidden">

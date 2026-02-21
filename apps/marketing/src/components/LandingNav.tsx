@@ -9,7 +9,8 @@ interface LandingNavProps {
 }
 
 export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: LandingNavProps) {
-  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || "https://app.salonmagik.com").replace(/\/$/, "");
+  const defaultSalonAppUrl = import.meta.env.DEV ? "http://localhost:8080" : "https://app.salonmagik.com";
+  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || defaultSalonAppUrl).replace(/\/$/, "");
 
   return (
     <nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
