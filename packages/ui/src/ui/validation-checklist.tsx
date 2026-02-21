@@ -11,7 +11,7 @@ interface ValidationChecklistProps {
   className?: string;
 }
 
-export function ValidationChecklist({ items, className }: ValidationChecklistProps) {
+export function ValidationChecklist({ items, className }: ValidationChecklistProps): JSX.Element {
   return (
     <div className={cn("rounded-lg border bg-muted/30 p-3", className)}>
       <p className="mb-2 text-sm font-medium">Password requirements</p>
