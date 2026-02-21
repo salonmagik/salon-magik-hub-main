@@ -25,5 +25,6 @@ dist-ssr
 
 # Vite/cache
 **/.vite
+**/.turbo
 supabase/.temp
 .env
