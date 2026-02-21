@@ -1,0 +1,20 @@
+---
+## [2026-02-21 12:00:00] - US-001: Create salon_wallets table and enum types
+
+### Implemented
+- Created wallet_type ENUM with 'customer' and 'salon' values
+- Created wallet_entry_type ENUM with all 10 entry types (customer_purse_topup, customer_purse_debit_booking, customer_purse_debit_invoice, customer_purse_reversal, salon_purse_credit_booking, salon_purse_credit_invoice, salon_purse_topup, salon_purse_withdrawal, salon_purse_reversal, salon_purse_debit_credit_purchase)
+- Created salon_wallets table with id, tenant_id (unique), currency (default NGN), balance (default 0), created_at, updated_at
+- Added foreign key constraint on tenant_id to tenants table with CASCADE delete
+- Added index on tenant_id for faster lookups
+- Created trigger to auto-update updated_at timestamp on updates
+
+### Files Changed
+- supabase/migrations/20260221120000_create_purse_enums_and_salon_wallets.sql
+
+### Learnings
+- Project uses timestamp naming convention for migrations: YYYYMMDDHHMMSS_description.sql
+- No typecheck command exists in the project; only lint, test, build, dev commands
+- Lint command has pre-existing eslint installation issues (eslint not found) - this is unrelated to SQL migration changes
+- SQL migrations do not require TypeScript type checking
+- Story acceptance criteria met: All ENUMs and tables created with proper constraints
