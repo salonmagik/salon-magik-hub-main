@@ -27,3 +27,7 @@ dist-ssr
 **/.vite
 supabase/.temp
 .env
+
+AGENTS.md
+daemon
+.turbo

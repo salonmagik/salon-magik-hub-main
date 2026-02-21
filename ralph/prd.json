@@ -1,0 +1,883 @@
+{
+  "project": "Purse Implementation with Paystack",
+  "branchName": "ralph/purse-paystack-implementation",
+  "description": "Implement a dual-purse system (Customer + Salon) with Paystack integration for customer topups, booking payments, salon receipt of payments, withdrawals to bank/momo, invoice payments, and messaging credit purchases.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Create salon_wallets table and enum types",
+      "description": "As a developer, I want to create the salon_wallets table with proper schema so that salons can have wallet balances tracked",
+      "acceptanceCriteria": [
+        "Create wallet_type ENUM with 'customer' and 'salon' values",
+        "Create wallet_entry_type ENUM with all 10 entry types (customer_purse_topup, customer_purse_debit_booking, customer_purse_debit_invoice, customer_purse_reversal, salon_purse_credit_booking, salon_purse_credit_invoice, salon_purse_topup, salon_purse_withdrawal, salon_purse_reversal, salon_purse_debit_credit_purchase)",
+        "Create salon_wallets table with id, tenant_id (unique), currency (default NGN), balance (default 0), created_at, updated_at",
+        "Add foreign key constraint on tenant_id to tenants table with CASCADE delete",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Create wallet_ledger_entries table",
+      "description": "As a developer, I want to create a unified ledger table for both customer and salon wallet transactions so that all wallet activity is auditable",
+      "acceptanceCriteria": [
+        "Create wallet_ledger_entries table with all columns: id, tenant_id, wallet_type, wallet_id, entry_type, currency, amount, balance_before, balance_after, reference_type, reference_id, gateway, gateway_reference, idempotency_key, metadata (JSONB default '{}'), created_at",
+        "Add foreign key constraint on tenant_id",
+        "Create unique index wallet_ledger_idempotency_idx on (tenant_id, idempotency_key) WHERE idempotency_key IS NOT NULL",
+        "Create index wallet_ledger_wallet_idx on (wallet_type, wallet_id, created_at DESC)",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Create salon_payout_destinations table",
+      "description": "As a developer, I want to create a table for storing salon payout destinations (bank accounts and mobile money) so that salons can configure withdrawal destinations",
+      "acceptanceCriteria": [
+        "Create payout_destination_type ENUM with 'bank' and 'mobile_money' values",
+        "Create salon_payout_destinations table with id, tenant_id, destination_type, country, currency, bank_code, bank_name, account_number, account_name, momo_provider, momo_number, paystack_recipient_code, is_default (default false), created_at",
+        "Add foreign key constraint on tenant_id with CASCADE delete",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Create salon_withdrawals table",
+      "description": "As a developer, I want to create a table for tracking withdrawal requests so that salon withdrawal history is maintained",
+      "acceptanceCriteria": [
+        "Create withdrawal_status ENUM with 'pending', 'processing', 'completed', 'failed' values",
+        "Create salon_withdrawals table with id, tenant_id, salon_wallet_id, payout_destination_id, currency, amount, status (default 'pending'), paystack_transfer_code, paystack_reference, failure_reason, requested_at (default now())",
+        "Add foreign key constraints on tenant_id, salon_wallet_id, and payout_destination_id",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create messaging_credit_purchases table",
+      "description": "As a developer, I want to create an audit table for messaging credit purchases so that all credit purchases are tracked",
+      "acceptanceCriteria": [
+        "Create messaging_credit_purchases table with id, tenant_id, credits (INTEGER), currency, amount, paid_via (TEXT), payment_intent_id (UUID), gateway_reference, created_at",
+        "Add foreign key constraint on tenant_id",
+        "paid_via column should accept 'salon_purse' or 'paystack' values",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Extend existing tables with purse-related columns",
+      "description": "As a developer, I want to add intent_type to payment_intents, payment link fields to invoices, and minimum withdrawal amounts to tenants so that purse functionality integrates with existing tables",
+      "acceptanceCriteria": [
+        "Add intent_type TEXT column to payment_intents table (IF NOT EXISTS)",
+        "Add payment_link TEXT and payment_intent_id UUID columns to invoices table (IF NOT EXISTS)",
+        "Add min_withdrawal_ngn NUMERIC(10,2) DEFAULT 1000 to tenants table (IF NOT EXISTS)",
+        "Add min_withdrawal_ghs NUMERIC(10,2) DEFAULT 50 to tenants table (IF NOT EXISTS)",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Create auto-create salon wallet trigger",
+      "description": "As a developer, I want to create a trigger that automatically creates a salon_wallet when a tenant is created so that all tenants have wallets",
+      "acceptanceCriteria": [
+        "Create create_salon_wallet_for_tenant() function that inserts a salon_wallet with tenant_id and currency from new tenant",
+        "Create trigger_create_salon_wallet AFTER INSERT on tenants that calls the function",
+        "Backfill existing tenants: INSERT salon_wallets for all tenants WHERE id NOT IN (SELECT tenant_id FROM salon_wallets)",
+        "Verify function returns NEW",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Create credit_customer_purse RPC function",
+      "description": "As a developer, I want to create an idempotent RPC function for crediting customer purses so that topups are atomic and prevent double-crediting",
+      "acceptanceCriteria": [
+        "Create credit_customer_purse() function accepting p_tenant_id, p_customer_id, p_amount, p_currency, p_idempotency_key, p_gateway_reference",
+        "Function checks idempotency first and returns existing entry ID if already processed",
+        "Function locks customer_purses row with FOR UPDATE",
+        "Function creates purse if not exists with balance 0",
+        "Function updates balance and creates wallet_ledger_entries record with entry_type 'customer_purse_topup'",
+        "Function returns ledger entry ID",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Create debit_customer_purse_for_booking RPC function",
+      "description": "As a developer, I want to create an RPC function for debiting customer purses for bookings so that booking payments from purse are atomic",
+      "acceptanceCriteria": [
+        "Create debit_customer_purse_for_booking() function accepting p_tenant_id, p_customer_id, p_appointment_id, p_amount, p_currency, p_idempotency_key",
+        "Function checks idempotency first",
+        "Function locks customer_purses row and verifies sufficient balance",
+        "Function raises exception 'Insufficient purse balance' if balance < amount",
+        "Function updates balance and creates ledger entry with entry_type 'customer_purse_debit_booking' and negative amount",
+        "Function stores reference_type 'appointment' and reference_id appointment_id",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Create credit_salon_purse RPC function",
+      "description": "As a developer, I want to create an idempotent RPC function for crediting salon purses so that salon can receive payments",
+      "acceptanceCriteria": [
+        "Create credit_salon_purse() function accepting p_tenant_id, p_entry_type, p_reference_type, p_reference_id, p_amount, p_currency, p_idempotency_key, p_gateway_reference (optional)",
+        "Function checks idempotency first",
+        "Function locks salon_wallets row with FOR UPDATE",
+        "Function raises exception if wallet not found",
+        "Function updates balance and creates ledger entry with provided entry_type",
+        "Function returns ledger entry ID",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Create debit_salon_purse_for_withdrawal RPC function",
+      "description": "As a developer, I want to create an RPC function for debiting salon purses for withdrawals so that withdrawals enforce minimum amounts and balance checks",
+      "acceptanceCriteria": [
+        "Create debit_salon_purse_for_withdrawal() function accepting p_tenant_id, p_withdrawal_id, p_amount, p_currency, p_idempotency_key",
+        "Function checks idempotency first",
+        "Function fetches minimum withdrawal amount from tenants table based on currency (NGN: min_withdrawal_ngn, GHS: min_withdrawal_ghs)",
+        "Function raises exception if amount < minimum",
+        "Function locks salon_wallets and verifies sufficient balance",
+        "Function raises exception 'Insufficient wallet balance' if balance < amount",
+        "Function updates balance and creates ledger entry with entry_type 'salon_purse_withdrawal', reference_type 'withdrawal', negative amount",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Create create_wallet_reversal RPC function",
+      "description": "As a developer, I want to create an RPC function for reversing wallet transactions so that failed transfers can be undone",
+      "acceptanceCriteria": [
+        "Create create_wallet_reversal() function accepting p_original_entry_id, p_reason, p_idempotency_key",
+        "Function checks idempotency first",
+        "Function fetches original wallet_ledger_entries record",
+        "Function raises exception if original entry not found",
+        "Function determines reversal type based on wallet_type (customer → customer_purse_reversal, salon → salon_purse_reversal)",
+        "Function locks appropriate wallet (customer_purses or salon_wallets) and calculates new balance by reversing original amount",
+        "Function creates reversal ledger entry with negative of original amount, reference_type 'reversal', metadata containing reason and original_entry_id",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Extend create-payment-session edge function with intent_type",
+      "description": "As a developer, I want to extend the create-payment-session edge function to accept and store intent_type so that different payment types can be handled appropriately",
+      "acceptanceCriteria": [
+        "Add intentType, customerId, invoiceId, credits to request interface (optional fields)",
+        "intentType should accept: 'appointment_payment', 'customer_purse_topup', 'salon_purse_topup', 'invoice_payment', 'messaging_credit_purchase'",
+        "Store intent_type in payment_intents insert (default to 'appointment_payment')",
+        "Include intent_type, customer_id, invoice_id, credits in Paystack metadata",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Extend payment-webhook to handle appointment_payment and credit salon purse",
+      "description": "As a developer, I want to extend the payment webhook to credit salon purse on appointment payments so that salons receive payment credits",
+      "acceptanceCriteria": [
+        "Add switch statement on payment_intents.intent_type || 'appointment_payment'",
+        "For 'appointment_payment' case: after existing appointment payment logic, call supabase.rpc('credit_salon_purse') with p_entry_type='salon_purse_credit_booking', p_reference_type='appointment', p_reference_id=appointment_id, p_idempotency_key=booking_${paystackReference}",
+        "Amount converted from kobo/pesewas (divide by 100)",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add customer_purse_topup handler to payment-webhook",
+      "description": "As a developer, I want to add customer_purse_topup handling to the payment webhook so that customer topups credit their purse",
+      "acceptanceCriteria": [
+        "Add 'customer_purse_topup' case to intent_type switch",
+        "Call supabase.rpc('credit_customer_purse') with p_customer_id from metadata, amount/100, p_idempotency_key=topup_${paystackReference}",
+        "Handle errors appropriately",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Add salon_purse_topup handler to payment-webhook",
+      "description": "As a developer, I want to add salon_purse_topup handling to the payment webhook so that salons can directly topup their purse",
+      "acceptanceCriteria": [
+        "Add 'salon_purse_topup' case to intent_type switch",
+        "Call supabase.rpc('credit_salon_purse') with p_entry_type='salon_purse_topup', p_reference_type='topup', p_reference_id=paymentIntent.id, amount/100, p_idempotency_key=salon_topup_${paystackReference}",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Add invoice_payment handler to payment-webhook",
+      "description": "As a developer, I want to add invoice_payment handling to the payment webhook so that invoice payments mark invoice as paid and credit salon purse",
+      "acceptanceCriteria": [
+        "Add 'invoice_payment' case to intent_type switch",
+        "Update invoices table: set status='paid', paid_at=current timestamp WHERE id=metadata.invoice_id",
+        "Call supabase.rpc('credit_salon_purse') with p_entry_type='salon_purse_credit_invoice', p_reference_type='invoice', p_reference_id=metadata.invoice_id, amount/100, p_idempotency_key=invoice_${paystackReference}",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Add messaging_credit_purchase handler to payment-webhook",
+      "description": "As a developer, I want to add messaging credit purchase handling to the payment webhook so that credit purchases via Paystack add credits and create audit records",
+      "acceptanceCriteria": [
+        "Add 'messaging_credit_purchase' case to intent_type switch",
+        "Upsert communication_credits table to add metadata.credits to balance (use supabase.sql for increment)",
+        "Insert messaging_credit_purchases record with tenant_id, credits, currency, amount/100, paid_via='paystack', payment_intent_id, gateway_reference",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Create create-invoice-payment-session edge function",
+      "description": "As a developer, I want to create an edge function for generating invoice payment links so that customers can pay invoices via Paystack",
+      "acceptanceCriteria": [
+        "Create supabase/functions/create-invoice-payment-session/index.ts",
+        "Function accepts invoiceId in request body",
+        "Function fetches invoice with tenant data",
+        "Function returns 404 if invoice not found, 400 if already paid",
+        "Function creates payment_intent with intent_type='invoice_payment'",
+        "Function calls Paystack /transaction/initialize with invoice amount in kobo, customer email, metadata with tenant_id, invoice_id, payment_intent_id, intent_type",
+        "Function updates invoice with payment_link and payment_intent_id",
+        "Function updates payment_intent with paystack_reference and paystack_access_code",
+        "Function returns paymentUrl and reference",
+        "Include proper CORS headers",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Create get-banks-and-momo-providers edge function",
+      "description": "As a developer, I want to create an edge function for fetching banks and mobile money providers from Paystack so that payout destination forms can display available options",
+      "acceptanceCriteria": [
+        "Create supabase/functions/get-banks-and-momo-providers/index.ts",
+        "Function accepts country (NG or GH) and optional type (mobile_money) query params",
+        "Function calls Paystack GET /bank with country and type params",
+        "For Ghana without type, set pay_with_bank_transfer=true",
+        "Function returns array of banks with id, name, slug, code, type, currency fields",
+        "Function returns 500 if PAYSTACK_SECRET_KEY not configured",
+        "Include proper CORS headers",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Create verify-bank-account edge function",
+      "description": "As a developer, I want to create an edge function for verifying bank account numbers via Paystack so that users can confirm account details before saving",
+      "acceptanceCriteria": [
+        "Create supabase/functions/verify-bank-account/index.ts",
+        "Function accepts accountNumber and bankCode in request body",
+        "Function returns 400 if parameters missing",
+        "Function calls Paystack GET /bank/resolve with account_number and bank_code query params",
+        "Function returns verified:true with accountName, accountNumber, bankId on success",
+        "Function returns verified:false with error message on failure",
+        "Include proper CORS headers",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Create create-payout-destination edge function",
+      "description": "As a developer, I want to create an edge function for creating payout destinations via Paystack so that salons can configure withdrawal destinations",
+      "acceptanceCriteria": [
+        "Create supabase/functions/create-payout-destination/index.ts",
+        "Function requires authentication and verifies user",
+        "Function accepts tenantId, destinationType, country, currency, bankCode, bankName, accountNumber, accountName, momoProvider, momoNumber, isDefault",
+        "For bank type: create Paystack recipient with type='nuban' (NG) or 'ghipss' (GH)",
+        "For mobile_money type: create Paystack recipient with type='mobile_money', bank_code=momoProvider.toUpperCase()",
+        "If isDefault=true, unset is_default on all other destinations for tenant first",
+        "Function inserts salon_payout_destinations with paystack_recipient_code from Paystack response",
+        "Function returns destination object or error",
+        "Include proper CORS headers",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Create process-salon-withdrawal edge function",
+      "description": "As a developer, I want to create an edge function for processing salon withdrawals via Paystack transfers so that salons can withdraw funds",
+      "acceptanceCriteria": [
+        "Create supabase/functions/process-salon-withdrawal/index.ts",
+        "Function requires authentication",
+        "Function accepts tenantId, payoutDestinationId, amount",
+        "Function fetches salon_wallets and salon_payout_destinations",
+        "Function creates salon_withdrawals record with status='pending'",
+        "Function calls debit_salon_purse_for_withdrawal RPC",
+        "If debit fails, delete withdrawal record and throw error",
+        "Function updates withdrawal status to 'processing'",
+        "Function calls Paystack POST /transfer with amount in kobo, recipient code, reference=withdrawal.id",
+        "If transfer fails: create wallet reversal, update withdrawal status='failed' with failure_reason, return error",
+        "If transfer succeeds: update withdrawal with paystack_transfer_code and paystack_reference",
+        "Function returns withdrawal and transfer data",
+        "Include proper CORS headers",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Create paystack-transfer-webhook edge function",
+      "description": "As a developer, I want to create an edge function for handling Paystack transfer webhooks so that withdrawal status is updated and failed transfers are reversed",
+      "acceptanceCriteria": [
+        "Create supabase/functions/paystack-transfer-webhook/index.ts",
+        "Function verifies Paystack signature using HMAC SHA-512",
+        "Function returns 401 if signature invalid",
+        "For event='transfer.success': update salon_withdrawals status='completed' WHERE id=data.reference",
+        "For event='transfer.failed' or 'transfer.reversed': fetch ledger entry for withdrawal, call create_wallet_reversal RPC with reason from event, update salon_withdrawals status='failed' with failure_reason",
+        "Function returns {received: true}",
+        "Include proper CORS headers with x-paystack-signature",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Create purchase-credits-from-purse edge function",
+      "description": "As a developer, I want to create an edge function for purchasing messaging credits from salon purse so that salons can buy credits without Paystack",
+      "acceptanceCriteria": [
+        "Create supabase/functions/purchase-credits-from-purse/index.ts",
+        "Function requires authentication",
+        "Function accepts tenantId, packageId",
+        "Define CREDIT_PACKAGES: pack_50 (50 credits, 3500 NGN, 60 GHS), pack_100 (100, 6500, 108), pack_250 (250, 15000, 240), pack_500 (500, 27000, 420)",
+        "Function validates packageId and fetches wallet",
+        "Function returns 400 if insufficient balance",
+        "Function creates messaging_credit_purchases record with paid_via='salon_purse'",
+        "Function calls debit_salon_purse_for_withdrawal RPC with purchase.id as reference",
+        "If debit fails: delete purchase record and throw error",
+        "Function increments communication_credits balance (or creates if not exists)",
+        "Function returns success with credits and newBalance",
+        "Include proper CORS headers",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Create useSalonWallet hook",
+      "description": "As a developer, I want to create a React hook for fetching salon wallet data so that components can display wallet balance",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/hooks/useSalonWallet.tsx",
+        "Hook accepts tenantId parameter",
+        "Hook fetches salon_wallets row for tenant",
+        "Hook returns wallet, isLoading, error, refetch",
+        "Hook uses useCallback for fetch function",
+        "Hook uses useEffect to fetch on mount and when tenantId changes",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Create useWalletLedger hook",
+      "description": "As a developer, I want to create a React hook for fetching wallet ledger entries so that transaction history can be displayed",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/hooks/useWalletLedger.tsx",
+        "Hook accepts walletType ('customer' | 'salon'), walletId, limit (optional) parameters",
+        "Hook fetches wallet_ledger_entries filtered by wallet_type and wallet_id, ordered by created_at DESC",
+        "Hook returns entries, isLoading, error, refetch",
+        "Hook uses useCallback and useEffect patterns",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Create usePayoutDestinations hook",
+      "description": "As a developer, I want to create a React hook for managing payout destinations so that salon can CRUD their payout destinations",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/hooks/usePayoutDestinations.tsx",
+        "Hook accepts tenantId parameter",
+        "Hook fetches salon_payout_destinations for tenant",
+        "Hook provides createDestination function that calls create-payout-destination edge function",
+        "Hook provides deleteDestination function",
+        "Hook returns destinations, isLoading, error, createDestination, deleteDestination, refetch",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Create useWithdrawals hook",
+      "description": "As a developer, I want to create a React hook for managing salon withdrawals so that withdrawal history and creation is accessible",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/hooks/useWithdrawals.tsx",
+        "Hook accepts tenantId parameter",
+        "Hook fetches salon_withdrawals for tenant ordered by requested_at DESC",
+        "Hook provides createWithdrawal function that calls process-salon-withdrawal edge function",
+        "Hook returns withdrawals, isLoading, error, createWithdrawal, refetch",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-030",
+      "title": "Create useBankList hook",
+      "description": "As a developer, I want to create a React hook for fetching bank/momo provider lists so that payout destination forms can populate dropdowns",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/hooks/useBankList.tsx",
+        "Hook accepts country ('NG' | 'GH') and optional type ('mobile_money') parameters",
+        "Hook calls get-banks-and-momo-providers edge function with query params",
+        "Hook returns banks array (id, name, code, type), isLoading, error, refetch",
+        "Hook uses useCallback and useEffect patterns",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-031",
+      "title": "Create useAccountVerification hook",
+      "description": "As a developer, I want to create a React hook for verifying bank accounts so that payout destination forms can validate account details",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/hooks/useAccountVerification.tsx",
+        "Hook provides verify function accepting accountNumber and bankCode",
+        "verify function calls verify-bank-account edge function",
+        "Hook provides reset function to clear verification result",
+        "Hook returns verify, reset, isVerifying, result (verified, accountName, error)",
+        "Hook uses useCallback for verify and reset",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-032",
+      "title": "Create SalonWalletCard component",
+      "description": "As a salon owner, I want to see my wallet balance in a card component so that I can view my current funds at a glance",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/components/billing/SalonWalletCard.tsx",
+        "Component uses useSalonWallet hook to fetch wallet data",
+        "Component displays currency and balance formatted appropriately",
+        "Component shows loading state while fetching",
+        "Component includes 'Top Up' and 'Withdraw' buttons (actions can be placeholder for now)",
+        "Component uses shadcn Card component",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-033",
+      "title": "Create PayoutDestinationsManager component",
+      "description": "As a salon owner, I want to manage my payout destinations (bank/momo accounts) with account verification so that I can configure where to receive withdrawals",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/components/billing/PayoutDestinationsManager.tsx",
+        "Component uses usePayoutDestinations, useBankList, useAccountVerification hooks",
+        "Component displays list of existing destinations with delete action",
+        "Component includes 'Add Destination' form with country selector (NG/GH)",
+        "Component includes destination type selector (bank/mobile_money)",
+        "Component dynamically loads banks/providers based on country and type using useBankList",
+        "Component includes bank/provider dropdown and account number input",
+        "Component includes 'Verify Account' button that calls useAccountVerification.verify",
+        "Component shows verified account name in read-only field after successful verification",
+        "Component shows error message if verification fails",
+        "Component 'Save' button disabled until verification succeeds",
+        "Component includes 'Set as default' checkbox",
+        "Nigeria accounts validated as 10 digits",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-034",
+      "title": "Create WithdrawalDialog component",
+      "description": "As a salon owner, I want to initiate withdrawals via a dialog so that I can transfer funds to my bank/momo account",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/components/billing/WithdrawalDialog.tsx",
+        "Component uses useSalonWallet, usePayoutDestinations, useWithdrawals hooks",
+        "Dialog displays current wallet balance",
+        "Dialog includes payout destination dropdown (only showing saved destinations)",
+        "Dialog includes amount input with validation (minimum amounts: NGN 1000, GHS 50)",
+        "Dialog shows error if amount exceeds wallet balance",
+        "Dialog shows error if amount below minimum",
+        "Dialog 'Withdraw' button calls createWithdrawal from useWithdrawals hook",
+        "Dialog shows success message and closes on successful withdrawal",
+        "Dialog uses shadcn Dialog component",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-035",
+      "title": "Create WithdrawalHistory component",
+      "description": "As a salon owner, I want to view my withdrawal history with status so that I can track my fund transfers",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/components/billing/WithdrawalHistory.tsx",
+        "Component uses useWithdrawals hook",
+        "Component displays withdrawals in a table/list with columns: date, amount, destination, status, reference",
+        "Component shows status badges with colors: pending (yellow), processing (blue), completed (green), failed (red)",
+        "Component shows failure_reason for failed withdrawals",
+        "Component shows loading state while fetching",
+        "Component uses shadcn Table component",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-036",
+      "title": "Create WalletLedger component",
+      "description": "As a salon owner, I want to view my wallet transaction history so that I can see all credits and debits to my wallet",
+      "acceptanceCriteria": [
+        "Create apps/salon-admin/src/components/billing/WalletLedger.tsx",
+        "Component accepts walletType ('customer' | 'salon') and walletId props",
+        "Component uses useWalletLedger hook",
+        "Component displays ledger entries in a table with columns: date, type, amount, balance_after, reference",
+        "Component formats entry_type as human-readable labels",
+        "Component shows credit amounts in green, debit amounts in red",
+        "Component includes pagination (limit 50 per page)",
+        "Component uses shadcn Table component",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-037",
+      "title": "Add wallet section to Settings page in salon-admin",
+      "description": "As a salon owner, I want to access wallet and payout features from my Settings page so that I can manage my finances",
+      "acceptanceCriteria": [
+        "Update apps/salon-admin/src/pages/salon/SettingsPage.tsx",
+        "Add 'Wallet' tab to settings navigation",
+        "Wallet tab displays SalonWalletCard component",
+        "Wallet tab displays WalletLedger component below the card",
+        "Add 'Payout Destinations' tab to settings navigation",
+        "Payout Destinations tab displays PayoutDestinationsManager component",
+        "Add 'Withdrawals' tab to settings navigation",
+        "Withdrawals tab displays WithdrawalHistory component",
+        "Tab navigation uses existing settings page pattern",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-038",
+      "title": "Connect WithdrawalDialog to SalonWalletCard",
+      "description": "As a salon owner, I want to click the Withdraw button on the wallet card to open the withdrawal dialog so that I can initiate withdrawals",
+      "acceptanceCriteria": [
+        "Update SalonWalletCard component to include WithdrawalDialog",
+        "Withdraw button opens WithdrawalDialog",
+        "Dialog receives wallet data as props",
+        "After successful withdrawal, refetch wallet balance and close dialog",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-039",
+      "title": "Create PurseTopupDialog component for client portal",
+      "description": "As a customer, I want to top up my purse via a dialog so that I can add funds to pay for bookings",
+      "acceptanceCriteria": [
+        "Create apps/client-portal/src/components/PurseTopupDialog.tsx",
+        "Component accepts customerId and tenantId props",
+        "Dialog includes amount input with predefined amounts (100, 500, 1000, custom)",
+        "Dialog includes currency selection based on tenant currency",
+        "Dialog 'Top Up' button calls create-payment-session edge function with intentType='customer_purse_topup', customerId",
+        "Dialog redirects to Paystack payment URL on success",
+        "Dialog uses shadcn Dialog component",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-040",
+      "title": "Create PurseTransactionHistory component for client portal",
+      "description": "As a customer, I want to view my purse transaction history so that I can see my topups and payments",
+      "acceptanceCriteria": [
+        "Create apps/client-portal/src/components/PurseTransactionHistory.tsx",
+        "Component accepts customerId and tenantId props",
+        "Component fetches customer_purses to get wallet_id",
+        "Component uses wallet_ledger_entries filtered by wallet_type='customer' and wallet_id",
+        "Component displays transactions in a table with date, type, amount, balance columns",
+        "Component shows human-readable labels for entry types",
+        "Component uses shadcn Table component",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-041",
+      "title": "Update CustomerPurseToggle to use real purse balance",
+      "description": "As a customer, I want to see my actual purse balance in the booking flow so that I can use my real funds",
+      "acceptanceCriteria": [
+        "Update apps/public-booking/src/components/CustomerPurseToggle.tsx",
+        "Remove demo mode logic",
+        "Component fetches customer_purses balance for current customer",
+        "Component displays actual balance",
+        "Component disables toggle if balance is zero or insufficient for booking amount",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-042",
+      "title": "Add split payment UI to PaymentStep in public-booking",
+      "description": "As a customer, I want to use a combination of purse balance and Paystack to pay for bookings so that I can split payment between sources",
+      "acceptanceCriteria": [
+        "Update apps/public-booking/src/pages/components/PaymentStep.tsx (or equivalent payment component)",
+        "Add three payment options: 'Pay with Purse', 'Pay with Card', 'Split Payment'",
+        "For 'Pay with Purse': call debit_customer_purse_for_booking RPC directly, mark appointment as paid",
+        "For 'Pay with Card': existing Paystack flow (appointment_payment intent_type)",
+        "For 'Split Payment': show slider to select purse amount vs card amount, create payment intent for card portion only, debit purse for purse portion",
+        "Validate sufficient purse balance before allowing purse/split payment",
+        "Show clear breakdown of purse vs card amounts",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-043",
+      "title": "Add generatePaymentLink to invoices in salon-admin",
+      "description": "As a salon owner, I want to generate payment links for invoices so that customers can pay online",
+      "acceptanceCriteria": [
+        "Update apps/salon-admin/src/hooks/useInvoices.tsx to add generatePaymentLink function",
+        "Function calls create-invoice-payment-session edge function with invoiceId",
+        "Function returns payment link or error",
+        "Add 'Generate Payment Link' button to invoice detail view/list",
+        "Button calls generatePaymentLink and displays link (copyable, shareable)",
+        "Button disabled if invoice already paid or has payment_link",
+        "Show existing payment_link if present",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-044",
+      "title": "Add dual payment option to CreditPurchaseDialog",
+      "description": "As a salon owner, I want to purchase messaging credits using either my salon purse or Paystack so that I have payment flexibility",
+      "acceptanceCriteria": [
+        "Update apps/salon-admin/src/components/billing/CreditPurchaseDialog.tsx",
+        "Add payment method selector: 'Pay from Wallet' or 'Pay with Paystack'",
+        "Show current wallet balance when 'Pay from Wallet' selected",
+        "Disable 'Pay from Wallet' if wallet balance insufficient for selected package",
+        "For 'Pay from Wallet': call purchase-credits-from-purse edge function",
+        "For 'Pay with Paystack': call create-payment-session with intentType='messaging_credit_purchase', credits, and redirect to Paystack",
+        "Show success message after purchase",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-045",
+      "title": "End-to-end testing of customer purse topup flow",
+      "description": "As a QA tester, I want to verify customer purse topup works end-to-end so that customers can successfully add funds",
+      "acceptanceCriteria": [
+        "Test: Customer can open topup dialog and enter amount",
+        "Test: Paystack payment session is created with intent_type='customer_purse_topup'",
+        "Test: Redirect to Paystack works",
+        "Test: Webhook credits customer purse after successful payment",
+        "Test: Ledger entry created with correct amount and idempotency",
+        "Test: Duplicate webhook calls do not double-credit (idempotency)",
+        "Test: Customer sees updated balance after topup",
+        "All tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-046",
+      "title": "End-to-end testing of booking payment flows",
+      "description": "As a QA tester, I want to verify all booking payment methods work correctly so that customers can book with purse, card, or split payment",
+      "acceptanceCriteria": [
+        "Test: Customer with sufficient purse balance can pay booking from purse only",
+        "Test: Purse balance debited correctly and ledger entry created",
+        "Test: Customer can pay booking with Paystack only",
+        "Test: Salon purse credited after Paystack booking payment",
+        "Test: Customer can split payment between purse and Paystack",
+        "Test: Split payment debits purse for purse portion and creates payment intent for card portion",
+        "Test: Both customer purse debit and salon purse credit occur correctly",
+        "All tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-047",
+      "title": "End-to-end testing of salon withdrawal flow",
+      "description": "As a QA tester, I want to verify salon withdrawals work correctly so that salons can successfully withdraw funds",
+      "acceptanceCriteria": [
+        "Test: Salon can add and verify bank account (Nigeria NUBAN)",
+        "Test: Salon can add and verify mobile money account (Ghana)",
+        "Test: Account verification returns correct account name",
+        "Test: Salon can initiate withdrawal to saved destination",
+        "Test: Withdrawal below minimum amount is rejected",
+        "Test: Withdrawal exceeding balance is rejected",
+        "Test: Successful withdrawal debits salon purse and creates ledger entry",
+        "Test: Paystack transfer initiated correctly",
+        "Test: transfer.success webhook updates withdrawal to completed",
+        "Test: transfer.failed webhook reverses purse debit and marks withdrawal as failed",
+        "All tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-048",
+      "title": "End-to-end testing of invoice payment flow",
+      "description": "As a QA tester, I want to verify invoice payment via generated links works correctly so that customers can pay invoices online",
+      "acceptanceCriteria": [
+        "Test: Salon owner can generate payment link for unpaid invoice",
+        "Test: Payment link redirects to Paystack with correct amount",
+        "Test: Successful payment updates invoice status to 'paid'",
+        "Test: Successful payment credits salon purse",
+        "Test: Ledger entry created with reference to invoice",
+        "Test: Payment link cannot be generated for already-paid invoice",
+        "All tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-049",
+      "title": "End-to-end testing of messaging credit purchase flow",
+      "description": "As a QA tester, I want to verify messaging credit purchases work via both salon purse and Paystack so that salons can buy credits",
+      "acceptanceCriteria": [
+        "Test: Salon can purchase credits from purse if balance sufficient",
+        "Test: Purse debited correctly and credits added to communication_credits",
+        "Test: Purchase audit record created in messaging_credit_purchases",
+        "Test: Salon can purchase credits via Paystack",
+        "Test: Paystack payment webhook adds credits and creates audit record",
+        "Test: Purchase from purse fails gracefully if balance insufficient",
+        "All tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-050",
+      "title": "Error handling and edge case testing",
+      "description": "As a QA tester, I want to verify error handling works correctly for all edge cases so that the system is robust",
+      "acceptanceCriteria": [
+        "Test: Invalid bank code in account verification returns appropriate error",
+        "Test: Network failures in Paystack API calls handled gracefully",
+        "Test: Concurrent withdrawal attempts on same wallet handled correctly (locking)",
+        "Test: Missing PAYSTACK_SECRET_KEY returns 500 error",
+        "Test: Unauthorized requests to edge functions return 401",
+        "Test: Invalid package ID in credit purchase returns 400",
+        "Test: Webhook signature validation rejects tampered payloads",
+        "All tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
