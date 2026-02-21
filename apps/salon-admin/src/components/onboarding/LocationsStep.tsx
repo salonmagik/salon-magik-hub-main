@@ -6,6 +6,7 @@ import { Switch } from "@ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { MapPin, Plus, Trash2, Star } from "lucide-react";
 import { cn } from "@shared/utils";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 export interface LocationInfo {
   id: string;
@@ -35,13 +36,14 @@ interface LocationsStepProps {
   defaultOpeningTime: string;
   defaultClosingTime: string;
   defaultOpeningDays: string[];
+  maxLocations?: number;
   onChange: (config: LocationsConfig) => void;
 }
 
-const COUNTRIES = [
-  { code: "NG", name: "Nigeria", timezone: "Africa/Lagos" },
-  { code: "GH", name: "Ghana", timezone: "Africa/Accra" },
-];
+const MARKET_TIMEZONES: Record<string, string> = {
+  GH: "Africa/Accra",
+  NG: "Africa/Lagos",
+};
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const hour = i.toString().padStart(2, "0");
@@ -66,9 +68,15 @@ export function LocationsStep({
   defaultOpeningTime,
   defaultClosingTime,
   defaultOpeningDays,
+  maxLocations,
   onChange,
 }: LocationsStepProps) {
+  const { data: marketCountries = [] } = useMarketCountries();
+  const resolvedMaxLocations = Math.max(1, maxLocations ?? Number.MAX_SAFE_INTEGER);
+  const canAddMoreLocations = config.locations.length < resolvedMaxLocations;
+
   const addLocation = () => {
+    if (!canAddMoreLocations) return;
     const newLocation: LocationInfo = {
       id: crypto.randomUUID(),
       name: config.sameName ? businessName : "",
@@ -259,10 +267,10 @@ export function LocationsStep({
                   <Select
                     value={location.country}
                     onValueChange={(v) => {
-                      const country = COUNTRIES.find((c) => c.code === v);
+                      const timezone = MARKET_TIMEZONES[v] ?? location.timezone;
                       updateLocation(location.id, {
                         country: v,
-                        timezone: country?.timezone || "",
+                        timezone,
                       });
                     }}
                   >
@@ -270,7 +278,7 @@ export function LocationsStep({
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
-                      {COUNTRIES.map((c) => (
+                      {marketCountries.map((c) => (
                         <SelectItem key={c.code} value={c.code}>
                           {c.name}
                         </SelectItem>
@@ -361,10 +369,14 @@ export function LocationsStep({
           variant="outline"
           className="w-full"
           onClick={addLocation}
+          disabled={!canAddMoreLocations}
         >
           <Plus className="w-4 h-4 mr-2" />
-          Add location
+          {canAddMoreLocations ? "Add location" : "Location limit reached"}
         </Button>
+        <p className="text-xs text-muted-foreground text-center">
+          Configured {config.locations.length} of {resolvedMaxLocations} locations.
+        </p>
       </CardContent>
     </>
   );

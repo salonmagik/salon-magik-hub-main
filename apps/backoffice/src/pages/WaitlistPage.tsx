@@ -1,4 +1,5 @@
- import { useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import {
   useMarketInterest,
@@ -20,7 +21,7 @@ import {
    TableHead,
    TableHeader,
    TableRow,
- } from "@ui/table";
+} from "@ui/table";
  import {
    DropdownMenu,
    DropdownMenuContent,
@@ -37,10 +38,13 @@ import {
    AlertDialogHeader,
    AlertDialogTitle,
  } from "@ui/alert-dialog";
- import { Textarea } from "@ui/textarea";
- import { Label } from "@ui/label";
+import { Textarea } from "@ui/textarea";
+import { Label } from "@ui/label";
+import { supabase } from "@/lib/supabase";
  import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, RefreshCw, Globe } from "lucide-react";
  import { format } from "date-fns";
+
+type OpsView = "imports" | "assistance" | "reactivation";
  
  export default function WaitlistPage() {
    const [activeTab, setActiveTab] = useState<WaitlistStatus | "all">("pending");
@@ -55,8 +59,48 @@ import {
    const [selectedLead, setSelectedLead] = useState<WaitlistLead | null>(null);
    const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [showResendDialog, setShowResendDialog] = useState(false);
+   const [showResendDialog, setShowResendDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [opsView, setOpsView] = useState<OpsView>("imports");
+
+  const { data: importJobs = [], isLoading: isImportJobsLoading } = useQuery({
+    queryKey: ["ops-catalog-import-jobs"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("catalog_import_jobs" as any)
+        .select("id, tenant_id, import_type, status, created_at, finished_at, summary_json")
+        .order("created_at", { ascending: false })
+        .limit(50) as any);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: assistanceRequests = [], isLoading: isAssistanceLoading } = useQuery({
+    queryKey: ["ops-setup-assistance-requests"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("setup_assistance_requests" as any)
+        .select("id, tenant_id, request_type, status, notes, created_at")
+        .order("created_at", { ascending: false })
+        .limit(50) as any);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: reactivationCampaigns = [], isLoading: isReactivationLoading } = useQuery({
+    queryKey: ["ops-reactivation-campaigns"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("customer_reactivation_campaigns" as any)
+        .select("id, tenant_id, channel, status, name, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .limit(50) as any);
+      if (error) throw error;
+      return data || [];
+    },
+  });
  
    const handleApprove = () => {
      if (!selectedLead) return;
@@ -370,6 +414,123 @@ import {
                  </Table>
                </div>
              )}
+           </CardContent>
+         </Card>
+
+         <Card>
+           <CardHeader>
+             <CardTitle>Operations Monitoring</CardTitle>
+             <CardDescription>
+               Track import jobs, setup assistance requests, and reactivation campaign execution.
+             </CardDescription>
+           </CardHeader>
+           <CardContent>
+             <Tabs value={opsView} onValueChange={(value) => setOpsView(value as OpsView)}>
+               <TabsList>
+                 <TabsTrigger value="imports">Imports</TabsTrigger>
+                 <TabsTrigger value="assistance">Assistance</TabsTrigger>
+                 <TabsTrigger value="reactivation">Reactivation</TabsTrigger>
+               </TabsList>
+               <TabsContent value="imports" className="mt-4">
+                 {isImportJobsLoading ? (
+                   <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                 ) : (
+                   <div className="rounded-md border">
+                     <Table>
+                       <TableHeader>
+                         <TableRow>
+                           <TableHead>Tenant</TableHead>
+                           <TableHead>Type</TableHead>
+                           <TableHead>Status</TableHead>
+                           <TableHead>Created</TableHead>
+                           <TableHead>Finished</TableHead>
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                         {importJobs.map((job: any) => (
+                           <TableRow key={job.id}>
+                             <TableCell>{job.tenant_id}</TableCell>
+                             <TableCell className="capitalize">{job.import_type}</TableCell>
+                             <TableCell><Badge variant="outline">{job.status}</Badge></TableCell>
+                             <TableCell>{format(new Date(job.created_at), "MMM d, yyyy HH:mm")}</TableCell>
+                             <TableCell>{job.finished_at ? format(new Date(job.finished_at), "MMM d, yyyy HH:mm") : "—"}</TableCell>
+                           </TableRow>
+                         ))}
+                         {importJobs.length === 0 && (
+                           <TableRow><TableCell colSpan={5} className="py-6 text-center text-muted-foreground">No import jobs yet.</TableCell></TableRow>
+                         )}
+                       </TableBody>
+                     </Table>
+                   </div>
+                 )}
+               </TabsContent>
+               <TabsContent value="assistance" className="mt-4">
+                 {isAssistanceLoading ? (
+                   <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                 ) : (
+                   <div className="rounded-md border">
+                     <Table>
+                       <TableHeader>
+                         <TableRow>
+                           <TableHead>Tenant</TableHead>
+                           <TableHead>Type</TableHead>
+                           <TableHead>Status</TableHead>
+                           <TableHead>Notes</TableHead>
+                           <TableHead>Created</TableHead>
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                         {assistanceRequests.map((request: any) => (
+                           <TableRow key={request.id}>
+                             <TableCell>{request.tenant_id}</TableCell>
+                             <TableCell>{request.request_type}</TableCell>
+                             <TableCell><Badge variant="outline">{request.status}</Badge></TableCell>
+                             <TableCell className="max-w-[300px] truncate">{request.notes || "—"}</TableCell>
+                             <TableCell>{format(new Date(request.created_at), "MMM d, yyyy HH:mm")}</TableCell>
+                           </TableRow>
+                         ))}
+                         {assistanceRequests.length === 0 && (
+                           <TableRow><TableCell colSpan={5} className="py-6 text-center text-muted-foreground">No assistance requests yet.</TableCell></TableRow>
+                         )}
+                       </TableBody>
+                     </Table>
+                   </div>
+                 )}
+               </TabsContent>
+               <TabsContent value="reactivation" className="mt-4">
+                 {isReactivationLoading ? (
+                   <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+                 ) : (
+                   <div className="rounded-md border">
+                     <Table>
+                       <TableHeader>
+                         <TableRow>
+                           <TableHead>Name</TableHead>
+                           <TableHead>Tenant</TableHead>
+                           <TableHead>Channel</TableHead>
+                           <TableHead>Status</TableHead>
+                           <TableHead>Created</TableHead>
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                         {reactivationCampaigns.map((campaign: any) => (
+                           <TableRow key={campaign.id}>
+                             <TableCell className="font-medium">{campaign.name}</TableCell>
+                             <TableCell>{campaign.tenant_id}</TableCell>
+                             <TableCell className="capitalize">{campaign.channel}</TableCell>
+                             <TableCell><Badge variant="outline">{campaign.status}</Badge></TableCell>
+                             <TableCell>{format(new Date(campaign.created_at), "MMM d, yyyy HH:mm")}</TableCell>
+                           </TableRow>
+                         ))}
+                         {reactivationCampaigns.length === 0 && (
+                           <TableRow><TableCell colSpan={5} className="py-6 text-center text-muted-foreground">No campaigns yet.</TableCell></TableRow>
+                         )}
+                       </TableBody>
+                     </Table>
+                   </div>
+                 )}
+               </TabsContent>
+             </Tabs>
            </CardContent>
          </Card>
        </div>

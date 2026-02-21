@@ -6,7 +6,7 @@ import {
   paragraph,
   createButton,
   smallText,
-  getSenderName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
  
  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -123,9 +123,9 @@ function buildInvitationEmail(name: string, invitationLink: string): string {
        headers: {
          "Content-Type": "application/json",
          Authorization: `Bearer ${RESEND_API_KEY}`,
-       },
-       body: JSON.stringify({
-         from: `${getSenderName({ mode: "product" })} <${fromEmail}>`,
+      },
+      body: JSON.stringify({
+         from: buildFromAddress({ mode: "product", fromEmail }),
          to: [lead.email],
          subject: "🎉 You're invited to Salon Magik!",
          html: buildInvitationEmail(firstName, invitationLink),

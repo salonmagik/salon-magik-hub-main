@@ -27,6 +27,8 @@ interface BackofficeAuthState {
 	isTotpVerified: boolean;
 	requiresTotpSetup: boolean;
 	requiresPasswordChange: boolean;
+	effectivePermissions: string[];
+	effectivePages: string[];
 }
 
 interface BackofficeAuthContextType extends BackofficeAuthState {
@@ -35,6 +37,8 @@ interface BackofficeAuthContextType extends BackofficeAuthState {
 	setupTotp: (secret: string) => Promise<boolean>;
 	refreshBackofficeUser: () => Promise<void>;
 	markPasswordChanged: () => void;
+	hasBackofficePermission: (permissionKey: string) => boolean;
+	hasBackofficePageAccess: (pageKey: string) => boolean;
 }
 
 const BackofficeAuthContext = createContext<
@@ -52,6 +56,8 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 		isTotpVerified: false,
 		requiresTotpSetup: false,
 		requiresPasswordChange: false,
+		effectivePermissions: [],
+		effectivePages: [],
 	});
 
 	const clearBackofficeSessionArtifacts = () => {
@@ -71,6 +77,8 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 			isTotpVerified: false,
 			requiresTotpSetup: false,
 			requiresPasswordChange: false,
+			effectivePermissions: [],
+			effectivePages: [],
 		});
 		clearBackofficeSessionArtifacts();
 	}, []);
@@ -144,6 +152,78 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 		return data;
 	};
 
+	const fetchEffectivePermissions = async (
+		backofficeUserId: string,
+		role?: string,
+	): Promise<string[]> => {
+		if (role === "super_admin") {
+			return ["*"];
+		}
+
+		const { data: assignment, error: assignmentError } = await (supabase
+			.from("backoffice_user_role_assignments" as any)
+			.select("role_template_id")
+			.eq("backoffice_user_id", backofficeUserId)
+			.maybeSingle() as any);
+
+		if (assignmentError) {
+			console.error("Error fetching role assignment:", assignmentError);
+			return [];
+		}
+
+		if (!assignment?.role_template_id) return [];
+
+		const { data: permissionRows, error: permissionError } = await (supabase
+			.from("backoffice_role_template_permissions" as any)
+			.select("permission_key")
+			.eq("template_id", assignment.role_template_id) as any);
+
+		if (permissionError) {
+			console.error("Error fetching role template permissions:", permissionError);
+			return [];
+		}
+
+		if (!permissionRows?.length) return [];
+		return Array.from(
+			new Set(permissionRows.map((row) => row.permission_key).filter(Boolean) as string[]),
+		);
+	};
+
+	const fetchEffectivePages = async (
+		backofficeUserId: string,
+		role?: string,
+	): Promise<string[]> => {
+		if (role === "super_admin") {
+			return ["*"];
+		}
+
+		const { data: assignment, error: assignmentError } = await (supabase
+			.from("backoffice_user_role_assignments" as any)
+			.select("role_template_id")
+			.eq("backoffice_user_id", backofficeUserId)
+			.maybeSingle() as any);
+
+		if (assignmentError) {
+			console.error("Error fetching role assignment pages:", assignmentError);
+			return [];
+		}
+
+		if (!assignment?.role_template_id) return [];
+
+		const { data: pageRows, error: pageError } = await (supabase
+			.from("backoffice_role_template_pages" as any)
+			.select("page_key")
+			.eq("template_id", assignment.role_template_id) as any);
+
+		if (pageError) {
+			console.error("Error fetching role template pages:", pageError);
+			return [];
+		}
+
+		if (!pageRows?.length) return [];
+		return Array.from(new Set(pageRows.map((row) => row.page_key).filter(Boolean) as string[]));
+	};
+
 	const hydrateFromSession = useCallback(
 		async (session: Session | null) => {
 			if (!session?.user) {
@@ -156,6 +236,12 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 				session.user.id,
 				session.user.email || "",
 			);
+			const effectivePermissions = backofficeUser
+				? await fetchEffectivePermissions(backofficeUser.id, backofficeUser.role)
+				: [];
+			const effectivePages = backofficeUser
+				? await fetchEffectivePages(backofficeUser.id, backofficeUser.role)
+				: [];
 			const totpVerifiedInSession =
 				sessionStorage.getItem("backoffice_totp_verified") === "true";
 
@@ -171,6 +257,8 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 					: true,
 				requiresTotpSetup: !!backofficeUser && !!backofficeUser.totp_required,
 				requiresPasswordChange: !!backofficeUser?.temp_password_required,
+				effectivePermissions,
+				effectivePages,
 			});
 		},
 		[clearAuthState],
@@ -337,12 +425,20 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 			state.user.id,
 			state.user.email || "",
 		);
+		const effectivePermissions = backofficeUser
+			? await fetchEffectivePermissions(backofficeUser.id, backofficeUser.role)
+			: [];
+		const effectivePages = backofficeUser
+			? await fetchEffectivePages(backofficeUser.id, backofficeUser.role)
+			: [];
 		setState((prev) => ({
 			...prev,
 			backofficeUser,
 			isAuthenticated: !!backofficeUser,
 			requiresTotpSetup: !!backofficeUser && !!backofficeUser.totp_required,
 			requiresPasswordChange: !!backofficeUser?.temp_password_required,
+			effectivePermissions,
+			effectivePages,
 		}));
 	};
 
@@ -369,6 +465,14 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 				setupTotp,
 				refreshBackofficeUser,
 				markPasswordChanged,
+				hasBackofficePermission: (permissionKey: string) => {
+					if (state.backofficeUser?.role === "super_admin") return true;
+					return state.effectivePermissions.includes(permissionKey);
+				},
+				hasBackofficePageAccess: (pageKey: string) => {
+					if (state.backofficeUser?.role === "super_admin") return true;
+					return state.effectivePages.includes(pageKey);
+				},
 			}}
 		>
 			{children}

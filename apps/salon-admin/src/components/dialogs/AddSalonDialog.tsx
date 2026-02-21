@@ -56,6 +56,8 @@ interface ChainUnlockRequest {
   status: "pending" | "approved" | "rejected";
 }
 
+const SELF_SERVE_CHAIN_LOCATION_LIMIT = 10;
+
 export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
   const { currentTenant } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
@@ -71,6 +73,8 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [showUnlockRequestPrompt, setShowUnlockRequestPrompt] = useState(false);
+  const [isSubmittingUnlockRequest, setIsSubmittingUnlockRequest] = useState(false);
 
   const isChainPlan = String(currentTenant?.plan || "").toLowerCase() === "chain";
 
@@ -95,7 +99,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     staleTime: 1000 * 15,
   });
 
-  const { data: chainUnlockRequest } = useQuery({
+  const { data: chainUnlockRequest, refetch: refetchChainUnlockRequest } = useQuery({
     queryKey: ["tenant-chain-unlock-request", currentTenant?.id],
     queryFn: async (): Promise<ChainUnlockRequest | null> => {
       if (!currentTenant?.id) return null;
@@ -122,30 +126,62 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     isChainPlan &&
     chainUnlockRequest?.status === "pending" &&
     chainUnlockRequest.requested_locations > chainUnlockRequest.allowed_locations;
+  const isOverEntitlement = currentLocationCount > allowedLocations;
+  const nextRequestedLocationCount = currentLocationCount + 1;
   const canAddLocation =
     !hasPendingChainUnlock && (locationGate?.can_add ?? currentLocationCount < allowedLocations);
+  const crossesSelfServeLimit = isChainPlan && nextRequestedLocationCount > SELF_SERVE_CHAIN_LOCATION_LIMIT;
   const canAutoExpand =
     isChainPlan &&
     !canAddLocation &&
     !hasPendingChainUnlock &&
+    !crossesSelfServeLimit &&
     locationGate?.requires_custom === false &&
     Boolean(currentTenant?.id);
+  const canSubmitUnlockRequest =
+    isChainPlan &&
+    !hasPendingChainUnlock &&
+    !canAddLocation &&
+    Boolean(locationGate?.requires_custom || crossesSelfServeLimit) &&
+    Boolean(currentTenant?.id && currentPlan?.id);
 
   const upgradeMessage = useMemo(() => {
     if (isChainPlan) {
+      if (isOverEntitlement) {
+        return `Your account currently has ${currentLocationCount} configured locations, which is above your active entitlement of ${allowedLocations}. New locations are blocked until entitlement is updated.`;
+      }
       if (hasPendingChainUnlock && chainUnlockRequest) {
         return `Your request to unlock up to ${chainUnlockRequest.requested_locations} stores is pending approval.`;
       }
-      if (locationGate?.requires_custom) {
+      if (locationGate?.requires_custom || crossesSelfServeLimit) {
         return "The next tier is marked as custom. Contact sales/support to expand this chain plan.";
       }
       return "You need more location slots for this chain plan.";
     }
     return "Upgrade to the Chain plan to add more locations and unlock multi-salon management features.";
-  }, [chainUnlockRequest, hasPendingChainUnlock, isChainPlan, locationGate?.requires_custom]);
+  }, [
+    allowedLocations,
+    chainUnlockRequest,
+    currentLocationCount,
+    hasPendingChainUnlock,
+    isChainPlan,
+    crossesSelfServeLimit,
+    isOverEntitlement,
+    locationGate?.requires_custom,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (
+      isChainPlan &&
+      !hasPendingChainUnlock &&
+      !canAddLocation &&
+      (locationGate?.requires_custom || crossesSelfServeLimit)
+    ) {
+      setShowUnlockRequestPrompt(true);
+      return;
+    }
 
     if (!canAddLocation && !canAutoExpand) {
       setShowUpgradePrompt(true);
@@ -214,6 +250,38 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     onOpenChange(false);
   };
 
+  const handleSubmitUnlockRequest = async () => {
+    if (!currentTenant?.id || !isChainPlan || !currentPlan?.id) return;
+
+    setIsSubmittingUnlockRequest(true);
+    try {
+      const requestedLocations = Math.max(11, nextRequestedLocationCount);
+      const { error } = await (supabase.rpc as any)("submit_chain_unlock_request", {
+        p_tenant_id: currentTenant.id,
+        p_plan_id: currentPlan.id,
+        p_requested_locations: requestedLocations,
+        p_reason: `Requested from Add Salon dialog for ${requestedLocations} locations.`,
+      });
+      if (error) throw error;
+
+      await refetchChainUnlockRequest();
+      setShowUnlockRequestPrompt(false);
+      onOpenChange(false);
+      toast({
+        title: "Request submitted",
+        description: `Your request for ${requestedLocations} stores has been submitted. Support will contact you for activation.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Request failed",
+        description: error.message || "Unable to submit unlock request right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingUnlockRequest(false);
+    }
+  };
+
   if (showUpgradePrompt) {
     return (
       <Dialog
@@ -260,6 +328,61 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
             <Button onClick={handleUpgrade} className="gap-2">
               {isChainPlan ? (hasPendingChainUnlock ? "Pending approval" : "Contact support") : "Upgrade to Chain"}
               <ArrowRight className="w-4 h-4" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (showUnlockRequestPrompt) {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setShowUnlockRequestPrompt(false);
+          onOpenChange(isOpen);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-warning-foreground" />
+              Request chain unlock
+            </DialogTitle>
+            <DialogDescription>
+              This location would push your chain into the custom 11+ tier.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Alert>
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p className="font-medium">
+                    Current: {currentLocationCount} / {allowedLocations} locations
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Submit a request to activate up to {Math.max(11, nextRequestedLocationCount)} stores.
+                    Support will contact you with custom pricing and approval details.
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUnlockRequestPrompt(false);
+                onOpenChange(false);
+              }}
+              disabled={isSubmittingUnlockRequest}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitUnlockRequest} disabled={isSubmittingUnlockRequest}>
+              {isSubmittingUnlockRequest && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Submit request
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -341,7 +464,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               type="submit"
               disabled={
                 isSubmitting ||
-                (!canAddLocation && !canAutoExpand) ||
+                (!canAddLocation && !canAutoExpand && !canSubmitUnlockRequest) ||
                 !formData.name ||
                 !formData.city ||
                 !formData.country

@@ -231,7 +231,11 @@ export default function OnboardingPage() {
 
       // 4. Create locations
       if (isChain && locationsConfig.locations.length > 0) {
-        const configuredLocations = Math.max(1, locationsConfig.locations.length);
+        const expectedLocations = Math.max(1, expectedChainLocations);
+        const configuredLocations = Math.max(
+          1,
+          Math.min(locationsConfig.locations.length, expectedLocations),
+        );
         const requiresCustomUnlock = configuredLocations > 10 || configuredChainQuote?.requires_custom === true;
         const activatedLocations = requiresCustomUnlock ? Math.min(10, configuredLocations) : configuredLocations;
         const locationInserts = locationsConfig.locations.slice(0, activatedLocations).map((loc) => ({
@@ -493,6 +497,7 @@ export default function OnboardingPage() {
               defaultOpeningTime={businessInfo.openingTime}
               defaultClosingTime={businessInfo.closingTime}
               defaultOpeningDays={businessInfo.openingDays}
+              maxLocations={Math.max(1, expectedChainLocations)}
               onChange={setLocationsConfig}
             />
           )}

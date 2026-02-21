@@ -3,6 +3,7 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Building2 } from "lucide-react";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 export interface BusinessInfo {
   name: string;
@@ -21,11 +22,10 @@ interface BusinessStepProps {
   onChange: (info: BusinessInfo) => void;
 }
 
-// Ghana first as primary launch market
-const COUNTRIES = [
-  { code: "GH", name: "Ghana", currency: "GHS", timezone: "Africa/Accra" },
-  { code: "NG", name: "Nigeria", currency: "NGN", timezone: "Africa/Lagos" },
-];
+const MARKET_DEFAULTS: Record<string, { currency: string; timezone: string }> = {
+  GH: { currency: "GHS", timezone: "Africa/Accra" },
+  NG: { currency: "NGN", timezone: "Africa/Lagos" },
+};
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const hour = i.toString().padStart(2, "0");
@@ -43,20 +43,20 @@ const DAYS_OF_WEEK = [
 ];
 
 export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
+  const { data: marketCountries = [] } = useMarketCountries();
+
   const handleChange = (field: keyof BusinessInfo, value: string | string[]) => {
     onChange({ ...businessInfo, [field]: value });
   };
 
   const handleCountryChange = (countryCode: string) => {
-    const country = COUNTRIES.find((c) => c.code === countryCode);
-    if (country) {
-      onChange({
-        ...businessInfo,
-        country: countryCode,
-        currency: country.currency,
-        timezone: country.timezone,
-      });
-    }
+    const defaults = MARKET_DEFAULTS[countryCode] ?? { currency: "USD", timezone: "UTC" };
+    onChange({
+      ...businessInfo,
+      country: countryCode,
+      currency: defaults.currency,
+      timezone: defaults.timezone,
+    });
   };
 
   const toggleDay = (day: string) => {
@@ -96,7 +96,7 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
                 <SelectValue placeholder="Select country" />
               </SelectTrigger>
               <SelectContent>
-                {COUNTRIES.map((country) => (
+                {marketCountries.map((country) => (
                   <SelectItem key={country.code} value={country.code}>
                     {country.name}
                   </SelectItem>
