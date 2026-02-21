@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from "@ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
@@ -210,6 +211,9 @@ export function CustomerDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
+          <DialogDescription className="sr-only">
+            Customer profile, engagement summary, appointments, notes, and transaction history.
+          </DialogDescription>
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
               {getInitials(customer.full_name)}
