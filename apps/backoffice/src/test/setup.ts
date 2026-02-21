@@ -1,4 +1,9 @@
 import "@testing-library/jest-dom";
+import { vi } from "vitest";
+
+// Prevent Supabase client construction failures in tests that import app modules directly.
+vi.stubEnv("VITE_SUPABASE_URL", "https://example.supabase.co");
+vi.stubEnv("VITE_SUPABASE_PUBLISHABLE_KEY", "test-anon-key");
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,
