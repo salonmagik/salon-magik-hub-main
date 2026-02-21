@@ -8,9 +8,27 @@ importers:
 
   .:
     devDependencies:
+      '@eslint/js':
+        specifier: ^9.32.0
+        version: 9.39.2
+      eslint:
+        specifier: ^9.32.0
+        version: 9.39.2(jiti@1.21.7)
+      eslint-plugin-react-hooks:
+        specifier: ^5.2.0
+        version: 5.2.0(eslint@9.39.2(jiti@1.21.7))
+      eslint-plugin-react-refresh:
+        specifier: ^0.4.20
+        version: 0.4.26(eslint@9.39.2(jiti@1.21.7))
+      globals:
+        specifier: ^15.15.0
+        version: 15.15.0
       turbo:
         specifier: ^2.8.3
         version: 2.8.3
+      typescript-eslint:
+        specifier: ^8.38.0
+        version: 8.54.0(eslint@9.39.2(jiti@1.21.7))(typescript@5.9.3)
 
   apps/backoffice:
     dependencies:
@@ -1050,6 +1068,9 @@ importers:
       '@types/node':
         specifier: ^20.17.6
         version: 20.19.32
+      eslint:
+        specifier: ^9.32.0
+        version: 9.39.2(jiti@1.21.7)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
