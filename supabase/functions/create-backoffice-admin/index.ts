@@ -5,7 +5,7 @@ import {
   paragraph,
   smallText,
   createButton,
-  getSenderName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
 
 const corsHeaders = {
@@ -220,6 +220,15 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to upsert backoffice user: ${backofficeUpsertError.message}`);
     }
 
+    const { data: backofficeRecord, error: backofficeRecordError } = await adminClient
+      .from("backoffice_users")
+      .select("id")
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+    if (backofficeRecordError) {
+      throw new Error(`Failed to load backoffice user record: ${backofficeRecordError.message}`);
+    }
+
     // Best effort for newer flag columns (safe on older schemas).
     await adminClient
       .from("backoffice_users")
@@ -263,7 +272,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: `${getSenderName({ mode: "product" })} <${fromEmail}>`,
+          from: buildFromAddress({ mode: "product", fromEmail }),
           to: [email],
           subject: "Your Salon Magik BackOffice access",
           html: emailHtml,
@@ -289,6 +298,7 @@ Deno.serve(async (req) => {
         success: true,
         email,
         role,
+        backofficeUserId: backofficeRecord?.id ?? null,
         emailSent,
         tempPassword: emailSent ? null : tempPassword,
       }),

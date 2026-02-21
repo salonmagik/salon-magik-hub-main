@@ -4,7 +4,7 @@ import {
   heading,
   paragraph,
   smallText,
-  getSenderName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
 
 const corsHeaders = {
@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: `${getSenderName({ mode: "product" })} <${fromEmail}>`,
+          from: buildFromAddress({ mode: "product", fromEmail: fromEmail || "noreply@salonmagik.com" }),
           to: superAdminEmail,
           subject: "🔐 Salon Magik BackOffice - Super Admin Credentials",
           html: wrapEmailTemplate(

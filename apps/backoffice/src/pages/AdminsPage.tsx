@@ -1,6 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
-import { useBackofficeAuth, useBackofficeUsers } from "@/hooks";
+import {
+  useBackofficeAuth,
+  useBackofficeUsers,
+  type BackofficeUserWithTemplate,
+  useBackofficeRoleTemplates,
+} from "@/hooks";
 import {
   Card,
   CardContent,
@@ -12,6 +17,7 @@ import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Badge } from "@ui/badge";
+import { Checkbox } from "@ui/checkbox";
 import {
   Table,
   TableBody,
@@ -49,24 +55,79 @@ import { format } from "date-fns";
 export default function AdminsPage() {
   const { backofficeUser } = useBackofficeAuth();
   const { users, isLoading, createUser, deleteUser } = useBackofficeUsers();
+  const { templates, permissionKeys, pageKeys, assignTemplate, upsertTemplate, toggleTemplateActive } = useBackofficeRoleTemplates();
   const isSuperAdmin = backofficeUser?.role === "super_admin";
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "support_agent">("support_agent");
+  const [newTemplateId, setNewTemplateId] = useState<string>("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [selectedPermissionKeys, setSelectedPermissionKeys] = useState<string[]>([]);
+  const [selectedPageKeys, setSelectedPageKeys] = useState<string[]>([]);
+
+  const editableTemplates = useMemo(
+    () => templates.filter((template) => !template.is_system),
+    [templates],
+  );
 
   const handleAddUser = async () => {
     if (!newEmail.trim()) return;
-    await createUser.mutateAsync({ email: newEmail, role: newRole });
+    const created = await createUser.mutateAsync({ email: newEmail, role: newRole });
+    if (newRole !== "super_admin" && newTemplateId && created.backofficeUserId) {
+      await assignTemplate.mutateAsync({
+        backofficeUserId: created.backofficeUserId,
+        roleTemplateId: newTemplateId,
+      });
+    }
     setAddDialogOpen(false);
     setNewEmail("");
     setNewRole("support_agent");
+    setNewTemplateId("");
   };
 
   const handleDeleteUser = async (userId: string) => {
     await deleteUser.mutateAsync(userId);
     setDeleteConfirmId(null);
+  };
+
+  const openCreateTemplate = () => {
+    setEditingTemplateId(null);
+    setTemplateName("");
+    setTemplateDescription("");
+    setSelectedPermissionKeys([]);
+    setSelectedPageKeys([]);
+    setTemplateDialogOpen(true);
+  };
+
+  const openEditTemplate = (templateId: string) => {
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) return;
+    setEditingTemplateId(template.id);
+    setTemplateName(template.name);
+    setTemplateDescription(template.description || "");
+    setSelectedPermissionKeys(template.permissions);
+    setSelectedPageKeys(template.pages);
+    setTemplateDialogOpen(true);
+  };
+
+  const toggleSelection = (current: string[], key: string) =>
+    current.includes(key) ? current.filter((item) => item !== key) : [...current, key];
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) return;
+    await upsertTemplate.mutateAsync({
+      id: editingTemplateId ?? undefined,
+      name: templateName,
+      description: templateDescription,
+      permissionKeys: selectedPermissionKeys,
+      pageKeys: selectedPageKeys,
+    });
+    setTemplateDialogOpen(false);
   };
 
   const getRoleBadge = (role: string) => {
@@ -107,13 +168,17 @@ export default function AdminsPage() {
               Manage administrators who have access to the BackOffice
             </p>
           </div>
-          <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Admin
-              </Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={openCreateTemplate}>
+              Manage Templates
+            </Button>
+            <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Admin
+                </Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add BackOffice Admin</DialogTitle>
@@ -144,18 +209,37 @@ export default function AdminsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="template">Role template</Label>
+                  <Select value={newTemplateId} onValueChange={setNewTemplateId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleAddUser} disabled={createUser.isPending}>
+                <Button
+                  onClick={handleAddUser}
+                  disabled={createUser.isPending || !newEmail.trim() || !newTemplateId}
+                >
                   {createUser.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Add Admin
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         </div>
 
         <Card>
@@ -179,6 +263,7 @@ export default function AdminsPage() {
                   <TableRow>
                     <TableHead>Domain</TableHead>
                     <TableHead>Role</TableHead>
+                    <TableHead>Template</TableHead>
                     <TableHead>2FA</TableHead>
                     <TableHead>Last Login</TableHead>
                     <TableHead>Added</TableHead>
@@ -190,6 +275,55 @@ export default function AdminsPage() {
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">{user.email_domain}</TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
+                      <TableCell>
+                        {(() => {
+                          const assignment = (user as BackofficeUserWithTemplate)
+                            .backoffice_user_role_assignments as
+                            | {
+                                role_template_id?: string;
+                                backoffice_role_templates?: { name?: string } | null;
+                              }
+                            | {
+                                role_template_id?: string;
+                                backoffice_role_templates?: { name?: string } | null;
+                              }[]
+                            | null
+                            | undefined;
+                          const selectedTemplateId = Array.isArray(assignment)
+                            ? assignment[0]?.role_template_id
+                            : assignment?.role_template_id;
+                          const selectedTemplateName = Array.isArray(assignment)
+                            ? assignment[0]?.backoffice_role_templates?.name
+                            : assignment?.backoffice_role_templates?.name;
+
+                          if (user.role === "super_admin") return "System role";
+
+                          return (
+                            <Select
+                              value={selectedTemplateId || ""}
+                              onValueChange={(templateId) =>
+                                assignTemplate.mutate({
+                                  backofficeUserId: user.id,
+                                  roleTemplateId: templateId,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder={selectedTemplateName || "Unassigned"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {editableTemplates
+                                  .filter((template) => template.is_active)
+                                  .map((template) => (
+                                    <SelectItem key={template.id} value={template.id}>
+                                      {template.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          );
+                        })()}
+                      </TableCell>
                       <TableCell>
                         {user.totp_enabled ? (
                           <Badge variant="default">
@@ -232,7 +366,7 @@ export default function AdminsPage() {
                   ))}
                   {(!users || users.length === 0) && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                         No BackOffice users found
                       </TableCell>
                     </TableRow>
@@ -242,6 +376,139 @@ export default function AdminsPage() {
             )}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Role Templates</CardTitle>
+            <CardDescription>
+              Configure page and action permissions for non-super-admin users.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {editableTemplates.map((template) => (
+              <div key={template.id} className="rounded-md border p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{template.name}</p>
+                    <p className="text-sm text-muted-foreground">{template.description || "No description"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {template.pages.length} page scopes · {template.permissions.length} action permissions
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={template.is_active ? "default" : "secondary"}>
+                      {template.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <Button size="sm" variant="outline" onClick={() => openEditTemplate(template.id)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={template.is_active ? "secondary" : "default"}
+                      onClick={() =>
+                        toggleTemplateActive.mutate({
+                          id: template.id,
+                          isActive: !template.is_active,
+                        })
+                      }
+                    >
+                      {template.is_active ? "Deactivate" : "Activate"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {!editableTemplates.length && (
+              <p className="text-sm text-muted-foreground">No custom templates created yet.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{editingTemplateId ? "Edit role template" : "Create role template"}</DialogTitle>
+              <DialogDescription>
+                Select the pages and actions this template is allowed to access.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="template-name">Template name</Label>
+                <Input
+                  id="template-name"
+                  value={templateName}
+                  onChange={(event) => setTemplateName(event.target.value)}
+                  placeholder="e.g. Sales Agent"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="template-description">Description</Label>
+                <Input
+                  id="template-description"
+                  value={templateDescription}
+                  onChange={(event) => setTemplateDescription(event.target.value)}
+                  placeholder="Optional description"
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Page access</Label>
+                  <div className="max-h-56 overflow-y-auto rounded-md border p-3 space-y-3">
+                    {pageKeys.map((page) => (
+                      <label key={page.key} className="flex items-start gap-3 text-sm">
+                        <Checkbox
+                          checked={selectedPageKeys.includes(page.key)}
+                          onCheckedChange={() =>
+                            setSelectedPageKeys((current) => toggleSelection(current, page.key))
+                          }
+                        />
+                        <span>
+                          <span className="font-medium">{page.label}</span>
+                          <span className="block text-muted-foreground">{page.route_path}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Action permissions</Label>
+                  <div className="max-h-56 overflow-y-auto rounded-md border p-3 space-y-3">
+                    {permissionKeys.map((permission) => (
+                      <label key={permission.key} className="flex items-start gap-3 text-sm">
+                        <Checkbox
+                          checked={selectedPermissionKeys.includes(permission.key)}
+                          onCheckedChange={() =>
+                            setSelectedPermissionKeys((current) => toggleSelection(current, permission.key))
+                          }
+                        />
+                        <span>
+                          <span className="font-medium">{permission.label}</span>
+                          <span className="block text-muted-foreground">{permission.key}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTemplateDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveTemplate}
+                disabled={!templateName.trim() || upsertTemplate.isPending}
+              >
+                {upsertTemplate.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Save template
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>

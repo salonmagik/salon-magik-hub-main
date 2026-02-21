@@ -35,20 +35,30 @@ import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate"
   DollarSign,
   Eye,
   FileText,
+  type LucideIcon,
  } from "lucide-react";
 
  interface BackofficeLayoutProps {
    children: ReactNode;
  }
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  pageKey?: string;
+  permissionKey?: string;
+}
+
+const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/waitlist", label: "Waitlist", icon: Users },
-  { href: "/tenants", label: "Tenants", icon: Building2 },
-  { href: "/feature-flags", label: "Feature Flags", icon: Flag },
+  { href: "/tenants", label: "Tenants", icon: Building2, pageKey: "tenants" },
+  { href: "/feature-flags", label: "Feature Flags", icon: Flag, pageKey: "feature_flags" },
   { href: "/plans", label: "Plans", icon: DollarSign },
+  { href: "/sales", label: "Sales Ops", icon: DollarSign, pageKey: "sales_ops" },
   { href: "/audit-logs", label: "Audit Logs", icon: FileText },
-  { href: "/admins", label: "Admins", icon: Shield },
+  { href: "/admins", label: "Admins", icon: Shield, pageKey: "admins", permissionKey: "admins.manage_templates" },
   { href: "/impersonation", label: "Impersonation", icon: Eye },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -56,7 +66,13 @@ const navItems = [
  export function BackofficeLayout({ children }: BackofficeLayoutProps) {
    const location = useLocation();
    const navigate = useNavigate();
-   const { profile, backofficeUser, signOut } = useBackofficeAuth();
+   const { profile, backofficeUser, signOut, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
+   const visibleNavItems = navItems.filter((item) => {
+    if (backofficeUser?.role === "super_admin") return true;
+    if (item.pageKey && !hasBackofficePageAccess(item.pageKey)) return false;
+    if (item.permissionKey && !hasBackofficePermission(item.permissionKey)) return false;
+    return true;
+   });
 
    const handleSignOut = async () => {
      await signOut();
@@ -95,7 +111,7 @@ const navItems = [
 
 							<SidebarContent className="px-2 py-4">
 								<SidebarMenu>
-									{navItems.map((item) => {
+									{visibleNavItems.map((item) => {
 										const isActive =
 											location.pathname === item.href ||
 											(item.href !== "/" &&

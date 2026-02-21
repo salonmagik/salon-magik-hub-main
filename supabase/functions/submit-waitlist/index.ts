@@ -6,7 +6,9 @@ import {
   heading, 
   paragraph, 
   createInfoBox,
-  EMAIL_STYLES 
+  EMAIL_STYLES,
+  sanitizeEmailDisplayName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
 
 const corsHeaders = {
@@ -15,7 +17,7 @@ const corsHeaders = {
 };
 
 function sanitizeName(name: string): string {
-  return name.replace(/[<>"'\n\r]/g, "").trim();
+  return sanitizeEmailDisplayName(name);
 }
 
 function buildWaitlistConfirmationEmail(firstName: string): string {
@@ -146,7 +148,7 @@ serve(async (req) => {
         const emailHtml = buildWaitlistConfirmationEmail(first_name.trim());
         
         await resend.emails.send({
-          from: `Salon Magik <${fromEmail}>`,
+          from: buildFromAddress({ mode: "product", fromEmail }),
           to: [email.toLowerCase().trim()],
           subject: "You're in! Welcome to Salon Magik early access",
           html: emailHtml,

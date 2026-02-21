@@ -58,6 +58,16 @@ interface KillSwitchValue {
   enabled_by: string | null;
 }
 
+interface TenantTrialOverride {
+  id: string;
+  tenant_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+  status: string;
+  created_at: string;
+}
+
 const LEGAL_STATUS_OPTIONS: { value: LegalStatus; label: string }[] = [
   { value: "planned", label: "Planned" },
   { value: "legal_approved", label: "Legal Approved" },
@@ -105,6 +115,10 @@ export default function BackofficeSettingsPage() {
   const [newCurrencyCode, setNewCurrencyCode] = useState("USD");
   const [notesDraft, setNotesDraft] = useState("");
   const [trialDaysDraft, setTrialDaysDraft] = useState(14);
+  const [overrideTenantId, setOverrideTenantId] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideStartsAt, setOverrideStartsAt] = useState("");
+  const [overrideEndsAt, setOverrideEndsAt] = useState("");
 
   const { data: killSwitch, isLoading: killSwitchLoading } = useQuery({
     queryKey: ["platform-settings", "kill_switch"],
@@ -163,6 +177,19 @@ export default function BackofficeSettingsPage() {
 
       if (error) throw error;
       return (data ?? []) as MarketCountryCurrency[];
+    },
+  });
+
+  const { data: trialOverrides = [] } = useQuery({
+    queryKey: ["tenant-trial-overrides"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("tenant_trial_overrides" as any)
+        .select("id, tenant_id, starts_at, ends_at, reason, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20) as any);
+      if (error) throw error;
+      return (data ?? []) as TenantTrialOverride[];
     },
   });
 
@@ -244,6 +271,56 @@ export default function BackofficeSettingsPage() {
       toast.success("Default trial period updated.");
     },
     onError: (error: Error) => toast.error(error.message || "Failed to update default trial period"),
+  });
+
+  const createTrialOverrideMutation = useMutation({
+    mutationFn: async () => {
+      if (!overrideTenantId || !overrideStartsAt || !overrideEndsAt) {
+        throw new Error("Tenant ID, start, and end dates are required.");
+      }
+
+      const { error } = await (supabase
+        .from("tenant_trial_overrides" as any)
+        .insert({
+          tenant_id: overrideTenantId.trim(),
+          starts_at: new Date(overrideStartsAt).toISOString(),
+          ends_at: new Date(overrideEndsAt).toISOString(),
+          reason: overrideReason.trim() || null,
+          status: "active",
+          granted_by: backofficeUser?.user_id ?? null,
+        } as any) as any);
+
+      if (error) throw error;
+      await writeAuditLog("tenant_trial_override_created", backofficeUser?.user_id, {
+        tenant_id: overrideTenantId.trim(),
+        starts_at: overrideStartsAt,
+        ends_at: overrideEndsAt,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-trial-overrides"] });
+      toast.success("Tenant trial override created");
+      setOverrideTenantId("");
+      setOverrideReason("");
+      setOverrideStartsAt("");
+      setOverrideEndsAt("");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to create trial override"),
+  });
+
+  const revokeTrialOverrideMutation = useMutation({
+    mutationFn: async (overrideId: string) => {
+      const { error } = await (supabase
+        .from("tenant_trial_overrides" as any)
+        .update({ status: "revoked" } as any)
+        .eq("id", overrideId) as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-trial-overrides"] });
+      toast.success("Trial override revoked");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to revoke override"),
   });
 
   const updateCountryMutation = useMutation({
@@ -546,6 +623,97 @@ export default function BackofficeSettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   Current: {defaultTrialDays ?? 14} day(s)
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Tenant Gifted Trials</CardTitle>
+                <CardDescription>
+                  Create temporary trial overrides for specific tenants independent of the global trial window.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Tenant ID</Label>
+                    <Input
+                      value={overrideTenantId}
+                      onChange={(event) => setOverrideTenantId(event.target.value)}
+                      placeholder="Tenant UUID"
+                      disabled={!isSuperAdmin}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Starts</Label>
+                    <Input
+                      type="datetime-local"
+                      value={overrideStartsAt}
+                      onChange={(event) => setOverrideStartsAt(event.target.value)}
+                      disabled={!isSuperAdmin}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ends</Label>
+                    <Input
+                      type="datetime-local"
+                      value={overrideEndsAt}
+                      onChange={(event) => setOverrideEndsAt(event.target.value)}
+                      disabled={!isSuperAdmin}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Reason</Label>
+                  <Textarea
+                    value={overrideReason}
+                    onChange={(event) => setOverrideReason(event.target.value)}
+                    placeholder="Why this tenant is receiving a gifted trial"
+                    disabled={!isSuperAdmin}
+                  />
+                </div>
+
+                <Button
+                  onClick={() => createTrialOverrideMutation.mutate()}
+                  disabled={!isSuperAdmin || createTrialOverrideMutation.isPending}
+                >
+                  Create Trial Override
+                </Button>
+
+                <div className="space-y-2">
+                  {(trialOverrides ?? []).map((override) => (
+                    <div key={override.id} className="flex items-center justify-between rounded-md border p-3">
+                      <div>
+                        <p className="font-medium">{override.tenant_id}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(override.starts_at).toLocaleString()} - {new Date(override.ends_at).toLocaleString()}
+                        </p>
+                        {override.reason && (
+                          <p className="text-xs text-muted-foreground">{override.reason}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={override.status === "active" ? "default" : "secondary"}>
+                          {override.status}
+                        </Badge>
+                        {override.status === "active" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => revokeTrialOverrideMutation.mutate(override.id)}
+                            disabled={!isSuperAdmin || revokeTrialOverrideMutation.isPending}
+                          >
+                            Revoke
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {!(trialOverrides ?? []).length && (
+                    <p className="text-sm text-muted-foreground">No tenant overrides created yet.</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

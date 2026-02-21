@@ -4,10 +4,23 @@ import { useBackofficeAuth } from "@/hooks";
 
  interface BackofficeProtectedRouteProps {
    children: React.ReactNode;
+   requiredPermissionKey?: string;
+   requiredPageKey?: string;
  }
 
-export function BackofficeProtectedRoute({ children }: BackofficeProtectedRouteProps) {
-  const { isLoading, isTotpVerified, requiresTotpSetup, user } =
+export function BackofficeProtectedRoute({
+  children,
+  requiredPermissionKey,
+  requiredPageKey,
+}: BackofficeProtectedRouteProps) {
+  const {
+    isLoading,
+    isTotpVerified,
+    requiresTotpSetup,
+    user,
+    hasBackofficePermission,
+    hasBackofficePageAccess,
+  } =
 		useBackofficeAuth();
   const location = useLocation();
   const path = location.pathname;
@@ -35,6 +48,14 @@ export function BackofficeProtectedRoute({ children }: BackofficeProtectedRouteP
 
   if (isTotpVerified === false && path !== "/verify-2fa") {
     return <Navigate to="/verify-2fa" replace />;
+  }
+
+  if (requiredPageKey && !hasBackofficePageAccess(requiredPageKey)) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (requiredPermissionKey && !hasBackofficePermission(requiredPermissionKey)) {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;

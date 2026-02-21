@@ -16,6 +16,7 @@ import ImpersonationPage from "@/pages/ImpersonationPage";
 import BackofficeSettingsPage from "@/pages/SettingsPage";
 import AdminsPage from "@/pages/AdminsPage";
 import AuditLogsPage from "@/pages/AuditLogsPage";
+import SalesOpsPage from "@/pages/SalesOpsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -101,7 +102,7 @@ function App() {
             path="/tenants"
             element=
               {
-                <BackofficeProtectedRoute>
+                <BackofficeProtectedRoute requiredPageKey="tenants">
                   <TenantsPage />
                 </BackofficeProtectedRoute>
               }
@@ -110,7 +111,7 @@ function App() {
             path="/feature-flags"
             element=
               {
-                <BackofficeProtectedRoute>
+                <BackofficeProtectedRoute requiredPageKey="feature_flags">
                   <FeatureFlagsPage />
                 </BackofficeProtectedRoute>
               }
@@ -137,8 +138,17 @@ function App() {
             path="/admins"
             element=
               {
-                <BackofficeProtectedRoute>
+                <BackofficeProtectedRoute requiredPageKey="admins" requiredPermissionKey="admins.manage_templates">
                   <AdminsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/sales"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="sales_ops">
+                  <SalesOpsPage />
                 </BackofficeProtectedRoute>
               }
           />

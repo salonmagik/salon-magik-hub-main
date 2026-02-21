@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { buildFromAddress } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -202,7 +203,13 @@ serve(async (req) => {
         if (channel === "email") {
           if (!customer.email) throw new Error("Customer has no email");
           if (!resendApiKey) throw new Error("RESEND_API_KEY not configured");
-          await sendEmail(resendApiKey, resendFromEmail, customer.email, subject, `<p>${message}</p>`);
+          await sendEmail(
+            resendApiKey,
+            buildFromAddress({ mode: "product", fromEmail: resendFromEmail }),
+            customer.email,
+            subject,
+            `<p>${message}</p>`,
+          );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
           if (!termiiApiKey) throw new Error("TERMII_API_KEY not configured");

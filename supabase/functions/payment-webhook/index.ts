@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildFromAddress } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -376,7 +377,7 @@ Deno.serve(async (req) => {
                         "Content-Type": "application/json",
                       },
                       body: JSON.stringify({
-                        from: resendFromEmail,
+                        from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail }),
                         to: profile.email,
                         subject: `New Paid Booking at ${tenant.name}`,
                         html: `
@@ -455,6 +456,17 @@ Deno.serve(async (req) => {
             .eq("id", event.data.paymentIntentId);
         }
       }
+
+      if (tenantId && reference) {
+        await supabase.rpc("finalize_sales_conversion_from_webhook", {
+          p_payment_ref: reference,
+          p_tenant_id: tenantId,
+          p_status: "paid",
+          p_amount: amount ?? null,
+          p_currency: "USD",
+          p_paid_at: new Date().toISOString(),
+        });
+      }
     }
 
     // Handle payment failure
@@ -462,7 +474,7 @@ Deno.serve(async (req) => {
       event.type === "payment_intent.payment_failed" ||
       event.type === "charge.failed"
     ) {
-      const { paymentIntentId } = event.data;
+      const { paymentIntentId, tenantId, reference, amount } = event.data;
 
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
         await supabase
@@ -472,6 +484,17 @@ Deno.serve(async (req) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", paymentIntentId);
+      }
+
+      if (tenantId) {
+        await supabase.rpc("finalize_sales_conversion_from_webhook", {
+          p_payment_ref: reference ?? null,
+          p_tenant_id: tenantId,
+          p_status: "failed",
+          p_amount: amount ?? null,
+          p_currency: "USD",
+          p_paid_at: new Date().toISOString(),
+        });
       }
     }
 

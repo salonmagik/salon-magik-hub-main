@@ -4,6 +4,12 @@ import { toast } from "sonner";
 import type { Tables } from "@/lib/supabase";
 
 type BackofficeUser = Tables<"backoffice_users">;
+export type BackofficeUserWithTemplate = BackofficeUser & {
+  backoffice_user_role_assignments?: {
+    role_template_id: string;
+    backoffice_role_templates?: { name: string } | null;
+  } | null;
+};
 
 export function useBackofficeUsers() {
   const queryClient = useQueryClient();
@@ -13,11 +19,13 @@ export function useBackofficeUsers() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("backoffice_users")
-        .select("*")
+        .select(
+          "*, backoffice_user_role_assignments(role_template_id, backoffice_role_templates(name))",
+        )
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as BackofficeUser[];
+      return (data || []) as BackofficeUserWithTemplate[];
     },
   });
 
@@ -80,6 +88,7 @@ export function useBackofficeUsers() {
 				success: boolean;
 				email: string;
 				role: string;
+				backofficeUserId: string | null;
 				emailSent: boolean;
 				tempPassword: string | null;
 			};

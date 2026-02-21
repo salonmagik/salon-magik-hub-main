@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -37,6 +37,8 @@ import { FlagCustomerDialog } from "@/components/dialogs/FlagCustomerDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
+import { Textarea } from "@ui/textarea";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -45,6 +47,17 @@ import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
 
 type Customer = Tables<"customers">;
+type ReactivationChannel = "email" | "sms" | "whatsapp";
+
+interface InactiveCustomerRow {
+  customer_id: string;
+  customer_name: string;
+  customer_email: string | null;
+  customer_phone: string | null;
+  days_since_last_transaction: number;
+  last_purchased_item: string | null;
+  last_transaction_at: string | null;
+}
 
 const statusFilters = ["All", "Active", "VIP", "Inactive", "Blocked"];
 
@@ -56,12 +69,20 @@ export default function CustomersPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [inactiveDialogOpen, setInactiveDialogOpen] = useState(false);
   const [inactiveDaysThreshold, setInactiveDaysThreshold] = useState(30);
+  const [reactivationDialogOpen, setReactivationDialogOpen] = useState(false);
+  const [reactivationChannel, setReactivationChannel] = useState<ReactivationChannel>("email");
+  const [reactivationMessage, setReactivationMessage] = useState(
+    "Hi {{customer_name}}, we miss you at {{salon_name}}. Your favorite service is available this week. Reply to book and enjoy a warm welcome back.",
+  );
+  const [reactivationSubject, setReactivationSubject] = useState("We miss you at {{salon_name}}");
+  const [selectedInactiveCustomerIds, setSelectedInactiveCustomerIds] = useState<string[]>([]);
   
   // Action dialogs
   const [flagDialogCustomer, setFlagDialogCustomer] = useState<Customer | null>(null);
   const [deleteDialogCustomer, setDeleteDialogCustomer] = useState<Customer | null>(null);
 
   const { currentTenant } = useAuth();
+  const queryClient = useQueryClient();
   const { customers, isLoading, refetch, updateCustomerStatus, flagCustomer, deleteCustomer } = useCustomers();
   const { hasPermission } = usePermissions();
 
@@ -69,7 +90,7 @@ export default function CustomersPage() {
 
   const { data: inactiveCustomers = [], refetch: refetchInactiveCustomers } = useQuery({
     queryKey: ["inactive-customers", currentTenant?.id, inactiveDaysThreshold],
-    queryFn: async () => {
+    queryFn: async (): Promise<InactiveCustomerRow[]> => {
       if (!currentTenant?.id) return [];
       const { data, error } = await (supabase.rpc as any)("get_inactive_customers", {
         p_tenant_id: currentTenant.id,
@@ -78,9 +99,73 @@ export default function CustomersPage() {
         p_offset: 0,
       });
       if (error) throw error;
-      return Array.isArray(data) ? data : [];
+      return Array.isArray(data) ? (data as InactiveCustomerRow[]) : [];
     },
     enabled: Boolean(currentTenant?.id),
+  });
+
+  const sendReactivationMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentTenant?.id) throw new Error("Tenant missing");
+      if (!selectedInactiveCustomerIds.length) throw new Error("Select at least one recipient");
+
+      const selectedRows = inactiveCustomers.filter((row) =>
+        selectedInactiveCustomerIds.includes(row.customer_id),
+      );
+
+      const { data: campaign, error: campaignError } = await (supabase
+        .from("customer_reactivation_campaigns" as any)
+        .insert({
+          tenant_id: currentTenant.id,
+          name: `Reactivation ${new Date().toLocaleDateString()}`,
+          channel: reactivationChannel,
+          status: "previewed",
+          template_json: {
+            subject: reactivationSubject,
+            message: reactivationMessage,
+          },
+          filters_json: {
+            days_threshold: inactiveDaysThreshold,
+          },
+        })
+        .select("id")
+        .single() as any);
+
+      if (campaignError) throw campaignError;
+
+      const recipientsPayload = selectedRows.map((row) => ({
+        campaign_id: campaign.id,
+        customer_id: row.customer_id,
+        preview_payload_json: {
+          subject: reactivationSubject
+            .replaceAll("{{customer_name}}", row.customer_name)
+            .replaceAll("{{salon_name}}", currentTenant.name || "Salon Magik"),
+          message: reactivationMessage
+            .replaceAll("{{customer_name}}", row.customer_name)
+            .replaceAll("{{salon_name}}", currentTenant.name || "Salon Magik")
+            .replaceAll("{{most_purchased_item}}", row.last_purchased_item || "our top services"),
+        },
+      }));
+
+      const { error: recipientsError } = await (supabase
+        .from("customer_reactivation_recipients" as any)
+        .insert(recipientsPayload as any) as any);
+      if (recipientsError) throw recipientsError;
+
+      const { error: invokeError } = await supabase.functions.invoke("send-reactivation-campaign", {
+        body: { campaign_id: campaign.id },
+      });
+      if (invokeError) throw invokeError;
+    },
+    onSuccess: () => {
+      toast({ title: "Reactivation sent", description: "Campaign queued and sent to selected customers." });
+      setReactivationDialogOpen(false);
+      setSelectedInactiveCustomerIds([]);
+      queryClient.invalidateQueries({ queryKey: ["inactive-customers"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Send failed", description: error.message, variant: "destructive" });
+    },
   });
 
   // Permission checks
@@ -496,12 +581,18 @@ export default function CustomersPage() {
             <Button variant="outline" onClick={() => refetchInactiveCustomers()}>
               Refresh
             </Button>
+            <Button
+              onClick={() => setReactivationDialogOpen(true)}
+              disabled={inactiveCustomers.length === 0}
+            >
+              Trigger reactivation
+            </Button>
           </div>
           <div className="max-h-[420px] space-y-2 overflow-auto pt-2">
             {inactiveCustomers.length === 0 && (
               <p className="text-sm text-muted-foreground">No inactive customers found for this threshold.</p>
             )}
-            {inactiveCustomers.map((row: any) => (
+            {inactiveCustomers.map((row) => (
               <Card key={row.customer_id}>
                 <CardContent className="flex items-center justify-between p-3">
                   <div>
@@ -539,6 +630,110 @@ export default function CustomersPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reactivationDialogOpen} onOpenChange={setReactivationDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Reactivation Campaign Composer</DialogTitle>
+            <DialogDescription>
+              Select customers, preview the message, and send through your preferred channel.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Channel</p>
+                <Select
+                  value={reactivationChannel}
+                  onValueChange={(value) => setReactivationChannel(value as ReactivationChannel)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">Email (1 credit)</SelectItem>
+                    <SelectItem value="sms">SMS (2 credits)</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp (2 credits)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {reactivationChannel === "email" && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Subject</p>
+                  <Input
+                    value={reactivationSubject}
+                    onChange={(event) => setReactivationSubject(event.target.value)}
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Message template</p>
+                <Textarea
+                  rows={5}
+                  value={reactivationMessage}
+                  onChange={(event) => setReactivationMessage(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supported variables: {"{{customer_name}}"}, {"{{salon_name}}"}, {"{{most_purchased_item}}"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Recipients</p>
+              <div className="max-h-60 space-y-2 overflow-auto rounded-md border p-3">
+                {inactiveCustomers.map((row) => {
+                  const checked = selectedInactiveCustomerIds.includes(row.customer_id);
+                  return (
+                    <label key={row.customer_id} className="flex items-start gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(event) => {
+                          setSelectedInactiveCustomerIds((current) => {
+                            if (event.target.checked) return [...current, row.customer_id];
+                            return current.filter((id) => id !== row.customer_id);
+                          });
+                        }}
+                      />
+                      <span>
+                        <span className="font-medium">{row.customer_name}</span>
+                        <span className="block text-muted-foreground">
+                          {row.days_since_last_transaction} days inactive
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div className="rounded-md border p-3">
+                <p className="text-sm font-medium mb-1">Preview</p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  {(reactivationChannel === "email" ? reactivationSubject : "Reactivation message")
+                    .replaceAll("{{customer_name}}", "Jane Doe")
+                    .replaceAll("{{salon_name}}", currentTenant?.name || "Salon Magik")}
+                </p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {reactivationMessage
+                    .replaceAll("{{customer_name}}", "Jane Doe")
+                    .replaceAll("{{salon_name}}", currentTenant?.name || "Salon Magik")
+                    .replaceAll("{{most_purchased_item}}", "Hair Coloring")}
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => sendReactivationMutation.mutate()}
+                  disabled={sendReactivationMutation.isPending || selectedInactiveCustomerIds.length === 0}
+                >
+                  Send Campaign
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

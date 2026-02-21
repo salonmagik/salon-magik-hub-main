@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getSenderName } from "../_shared/email-template.ts";
+import { buildFromAddress } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -320,7 +320,11 @@ const handler = async (req: Request): Promise<Response> => {
       tenant?.logo_url || undefined
     );
 
-    const fromAddress = `${getSenderName({ mode: "salon", salonName: tenant?.name || "Salon Magik" }).replace(/[<>"\n\r]/g, "").trim()} <${fromEmail}>`;
+    const fromAddress = buildFromAddress({
+      mode: "salon",
+      salonName: tenant?.name || "Salon Magik",
+      fromEmail,
+    });
     
     console.log("Sending email with from address:", fromAddress);
     
