@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,8 +25,9 @@ import {
 } from "@ui/select";
 import { Textarea } from "@ui/textarea";
 import { Loader2, PartyPopper, Sparkles } from "lucide-react";
-import { COUNTRIES } from "@shared/countries";
+import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
 import { PhoneInput } from "@ui/phone-input";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 const waitlistSchema = z.object({
   first_name: z.string().min(2, "First name is required"),
@@ -45,6 +47,8 @@ interface WaitlistFormProps {
 }
 
 export function WaitlistForm({ compact = false }: WaitlistFormProps) {
+  const { data: marketCountries } = useMarketCountries();
+  const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [position, setPosition] = useState<number | null>(null);
@@ -61,6 +65,24 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
       plan_interest: "",
       team_size: "",
       notes: "",
+    },
+  });
+
+  const {
+    data: activePlans = [],
+    isLoading: isPlansLoading,
+    isError: hasPlanQueryError,
+  } = useQuery({
+    queryKey: ["salon-admin-active-plans"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("plans")
+        .select("id, name, slug, display_order")
+        .eq("is_active", true)
+        .order("display_order", { ascending: true, nullsFirst: false })
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -267,6 +289,7 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
                     value={field.value}
                     onChange={field.onChange}
                     defaultCountry="GH"
+                    allowedCountryCodes={selectableCountries.map((country) => country.code)}
                     placeholder="Phone number"
                     hasError={!!form.formState.errors.phone}
                   />
@@ -289,7 +312,7 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {COUNTRIES.map((country) => (
+                    {selectableCountries.map((country) => (
                       <SelectItem key={country.code} value={country.code}>
                         {country.name}
                       </SelectItem>
@@ -309,16 +332,23 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
                 <FormLabel>Plan interest (optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger disabled={isPlansLoading || hasPlanQueryError}>
                       <SelectValue placeholder="Which plan interests you?" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="solo">Solo - Just me</SelectItem>
-                    <SelectItem value="studio">Studio - Small team</SelectItem>
-                    <SelectItem value="chain">Chain - Multiple locations</SelectItem>
+                    {activePlans.map((plan) => (
+                      <SelectItem key={plan.id} value={plan.slug}>
+                        {plan.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {hasPlanQueryError && (
+                  <p className="text-xs text-muted-foreground">
+                    Plan options are temporarily unavailable.
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )}

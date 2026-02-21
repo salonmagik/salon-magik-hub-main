@@ -232,7 +232,7 @@ export default function SignupPage() {
       subtitle={
         waitlistLead
           ? "Complete your registration to get started."
-          : "Start your 14-day free trial. No credit card required."
+          : "Start your free trial. No credit card required."
       }
     >
       {/* Invitation Badge */}

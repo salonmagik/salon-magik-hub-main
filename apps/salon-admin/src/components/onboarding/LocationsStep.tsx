@@ -41,10 +41,6 @@ interface LocationsStepProps {
 const COUNTRIES = [
   { code: "NG", name: "Nigeria", timezone: "Africa/Lagos" },
   { code: "GH", name: "Ghana", timezone: "Africa/Accra" },
-  { code: "US", name: "United States", timezone: "America/New_York" },
-  { code: "GB", name: "United Kingdom", timezone: "Europe/London" },
-  { code: "KE", name: "Kenya", timezone: "Africa/Nairobi" },
-  { code: "ZA", name: "South Africa", timezone: "Africa/Johannesburg" },
 ];
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {

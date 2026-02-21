@@ -1,6 +1,14 @@
  import { useState } from "react";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
-import { useWaitlist, useWaitlistActions, WaitlistLead, WaitlistStatus } from "@/hooks";
+import {
+  useMarketInterest,
+  useMarketInterestActions,
+  useWaitlist,
+  useWaitlistActions,
+  WaitlistLead,
+  WaitlistStatus,
+  type MarketInterestStatus,
+} from "@/hooks";
  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
  import { Button } from "@ui/button";
  import { Badge } from "@ui/badge";
@@ -31,13 +39,18 @@ import { useWaitlist, useWaitlistActions, WaitlistLead, WaitlistStatus } from "@
  } from "@ui/alert-dialog";
  import { Textarea } from "@ui/textarea";
  import { Label } from "@ui/label";
- import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, RefreshCw } from "lucide-react";
+ import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, RefreshCw, Globe } from "lucide-react";
  import { format } from "date-fns";
  
  export default function WaitlistPage() {
    const [activeTab, setActiveTab] = useState<WaitlistStatus | "all">("pending");
+   const [interestStatusFilter, setInterestStatusFilter] = useState<MarketInterestStatus | "all">("all");
    const { data: leads, isLoading } = useWaitlist(activeTab === "all" ? undefined : activeTab);
+   const { data: marketInterestLeads, isLoading: isMarketInterestLoading } = useMarketInterest({
+     status: interestStatusFilter,
+   });
    const { approveLead, rejectLead, resendInvite } = useWaitlistActions();
+   const { updateStatus: updateMarketInterestStatus } = useMarketInterestActions();
  
    const [selectedLead, setSelectedLead] = useState<WaitlistLead | null>(null);
    const [showApproveDialog, setShowApproveDialog] = useState(false);
@@ -92,6 +105,22 @@ import { useWaitlist, useWaitlistActions, WaitlistLead, WaitlistStatus } from "@
      return (
        <Badge variant="secondary" className={colors[plan] || ""}>
          {plan.charAt(0).toUpperCase() + plan.slice(1)}
+       </Badge>
+     );
+   };
+
+   const getMarketInterestStatusBadge = (status: MarketInterestStatus) => {
+     const styles: Record<MarketInterestStatus, string> = {
+       new: "bg-blue-50 text-blue-700 border-blue-200",
+       reviewing: "bg-amber-50 text-amber-700 border-amber-200",
+       contacted: "bg-violet-50 text-violet-700 border-violet-200",
+       qualified: "bg-emerald-50 text-emerald-700 border-emerald-200",
+       closed: "bg-slate-100 text-slate-700 border-slate-200",
+     };
+
+     return (
+       <Badge variant="outline" className={styles[status]}>
+         {status.charAt(0).toUpperCase() + status.slice(1)}
        </Badge>
      );
    };
@@ -243,6 +272,104 @@ import { useWaitlist, useWaitlistActions, WaitlistLead, WaitlistStatus } from "@
                  )}
                </TabsContent>
              </Tabs>
+           </CardContent>
+         </Card>
+
+         <Card>
+           <CardHeader>
+             <div className="flex items-center justify-between">
+               <div>
+                 <CardTitle className="flex items-center gap-2">
+                   <Globe className="h-4 w-4" />
+                   Other Countries Interest
+                 </CardTitle>
+                 <CardDescription>
+                   {marketInterestLeads?.length || 0} interest leads
+                 </CardDescription>
+               </div>
+               <Tabs value={interestStatusFilter} onValueChange={(value) => setInterestStatusFilter(value as MarketInterestStatus | "all")}>
+                 <TabsList>
+                   <TabsTrigger value="all">All</TabsTrigger>
+                   <TabsTrigger value="new">New</TabsTrigger>
+                   <TabsTrigger value="reviewing">Reviewing</TabsTrigger>
+                   <TabsTrigger value="contacted">Contacted</TabsTrigger>
+                   <TabsTrigger value="qualified">Qualified</TabsTrigger>
+                   <TabsTrigger value="closed">Closed</TabsTrigger>
+                 </TabsList>
+               </Tabs>
+             </div>
+           </CardHeader>
+           <CardContent>
+             {isMarketInterestLoading ? (
+               <div className="flex justify-center py-10">
+                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+               </div>
+             ) : !marketInterestLeads?.length ? (
+               <p className="py-10 text-center text-muted-foreground">
+                 No interest leads found for this filter.
+               </p>
+             ) : (
+               <div className="rounded-md border">
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Name</TableHead>
+                       <TableHead>Email</TableHead>
+                       <TableHead>Phone</TableHead>
+                       <TableHead>Country</TableHead>
+                       <TableHead>Salon</TableHead>
+                       <TableHead>Status</TableHead>
+                       <TableHead>Source</TableHead>
+                       <TableHead>Submitted</TableHead>
+                       <TableHead className="w-[50px]"></TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {marketInterestLeads.map((lead) => (
+                       <TableRow key={lead.id}>
+                         <TableCell className="font-medium">
+                           {lead.first_name} {lead.last_name}
+                         </TableCell>
+                         <TableCell>{lead.email}</TableCell>
+                         <TableCell>{lead.phone_e164}</TableCell>
+                         <TableCell>{lead.country}</TableCell>
+                         <TableCell>{lead.salon_name}</TableCell>
+                         <TableCell>{getMarketInterestStatusBadge(lead.status)}</TableCell>
+                         <TableCell>{lead.source}</TableCell>
+                         <TableCell className="text-muted-foreground text-sm">
+                           {format(new Date(lead.created_at), "MMM d, yyyy")}
+                         </TableCell>
+                         <TableCell>
+                           <DropdownMenu>
+                             <DropdownMenuTrigger asChild>
+                               <Button variant="ghost" size="icon" className="h-8 w-8">
+                                 <MoreHorizontal className="h-4 w-4" />
+                               </Button>
+                             </DropdownMenuTrigger>
+                             <DropdownMenuContent align="end">
+                               {(["new", "reviewing", "contacted", "qualified", "closed"] as MarketInterestStatus[]).map((status) => (
+                                 <DropdownMenuItem
+                                   key={status}
+                                   disabled={lead.status === status || updateMarketInterestStatus.isPending}
+                                   onClick={() =>
+                                     updateMarketInterestStatus.mutate({
+                                       leadId: lead.id,
+                                       status,
+                                     })
+                                   }
+                                 >
+                                   Mark as {status}
+                                 </DropdownMenuItem>
+                               ))}
+                             </DropdownMenuContent>
+                           </DropdownMenu>
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+               </div>
+             )}
            </CardContent>
          </Card>
        </div>

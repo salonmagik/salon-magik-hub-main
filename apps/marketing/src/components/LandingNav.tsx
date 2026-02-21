@@ -9,6 +9,8 @@ interface LandingNavProps {
 }
 
 export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: LandingNavProps) {
+  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || "https://app.salonmagik.com").replace(/\/$/, "");
+
   return (
     <nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
@@ -28,16 +30,16 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
           </Link>
           {!isLoading && !isWaitlistMode && (
             <>
-              <Link to="/login" className="hidden sm:block">
+              <a href={`${salonAppUrl}/login`} className="hidden sm:block">
                 <Button variant="ghost" size="sm" className="text-sm">
                   Log in
                 </Button>
-              </Link>
-              <Link to="/signup">
+              </a>
+              <a href={`${salonAppUrl}/signup`}>
                 <Button size="sm" className="text-xs sm:text-sm px-3 sm:px-4">
                   Get started
                 </Button>
-              </Link>
+              </a>
             </>
           )}
           {!isLoading && isWaitlistMode && (

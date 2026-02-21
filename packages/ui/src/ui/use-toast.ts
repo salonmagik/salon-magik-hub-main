@@ -2,7 +2,8 @@ import * as React from "react";
 import type { ToastActionElement, ToastProps } from "./toast";
 
 const TOAST_LIMIT = 1;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_REMOVE_DELAY = 300;
+const TOAST_AUTO_DISMISS_DELAY = 5000;
 
 type ToasterToast = ToastProps & {
   id: string;
@@ -38,6 +39,7 @@ interface State {
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+const autoDismissTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 const addToRemoveQueue = (toastId: string) => {
   if (toastTimeouts.has(toastId)) {
@@ -50,6 +52,17 @@ const addToRemoveQueue = (toastId: string) => {
   toastTimeouts.set(toastId, timeout);
 };
 
+const addToAutoDismissQueue = (toastId: string) => {
+  if (autoDismissTimeouts.has(toastId)) {
+    return;
+  }
+  const timeout = setTimeout(() => {
+    autoDismissTimeouts.delete(toastId);
+    dispatch({ type: "DISMISS_TOAST", toastId });
+  }, TOAST_AUTO_DISMISS_DELAY);
+  autoDismissTimeouts.set(toastId, timeout);
+};
+
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case "ADD_TOAST":
@@ -58,8 +71,23 @@ export const reducer = (state: State, action: Action): State => {
       return { ...state, toasts: state.toasts.map((t) => (t.id === action.toast.id ? { ...t, ...action.toast } : t)) };
     case "DISMISS_TOAST": {
       const { toastId } = action;
-      if (toastId) addToRemoveQueue(toastId);
-      else state.toasts.forEach((toast) => addToRemoveQueue(toast.id));
+      if (toastId) {
+        addToRemoveQueue(toastId);
+        const autoTimeout = autoDismissTimeouts.get(toastId);
+        if (autoTimeout) {
+          clearTimeout(autoTimeout);
+          autoDismissTimeouts.delete(toastId);
+        }
+      } else {
+        state.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id);
+          const autoTimeout = autoDismissTimeouts.get(toast.id);
+          if (autoTimeout) {
+            clearTimeout(autoTimeout);
+            autoDismissTimeouts.delete(toast.id);
+          }
+        });
+      }
       return {
         ...state,
         toasts: state.toasts.map((t) =>
@@ -70,7 +98,16 @@ export const reducer = (state: State, action: Action): State => {
       };
     }
     case "REMOVE_TOAST":
-      if (action.toastId === undefined) return { ...state, toasts: [] };
+      if (action.toastId === undefined) {
+        autoDismissTimeouts.forEach((timeout) => clearTimeout(timeout));
+        autoDismissTimeouts.clear();
+        return { ...state, toasts: [] };
+      }
+      const autoTimeout = autoDismissTimeouts.get(action.toastId);
+      if (autoTimeout) {
+        clearTimeout(autoTimeout);
+        autoDismissTimeouts.delete(action.toastId);
+      }
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.toastId) };
   }
 };
@@ -88,6 +125,7 @@ export function toast({ ...props }: ToastProps) {
   const update = (props: ToasterToast) => dispatch({ type: "UPDATE_TOAST", toast: { ...props, id } });
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
   dispatch({ type: "ADD_TOAST", toast: { ...props, id, open: true } });
+  addToAutoDismissQueue(id);
   return { id, dismiss, update };
 }
 

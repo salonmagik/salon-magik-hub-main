@@ -1,10 +1,21 @@
  import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
-import { useTenants, TenantWithStats } from "@/hooks";
+import { useBackofficeAuth, useTenants, TenantWithStats } from "@/hooks";
+import { supabase } from "@/lib/supabase";
  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
  import { Button } from "@ui/button";
  import { Badge } from "@ui/badge";
  import { Input } from "@ui/input";
+import { Label } from "@ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
  import {
    Table,
    TableBody,
@@ -21,10 +32,64 @@ import { useTenants, TenantWithStats } from "@/hooks";
  } from "@ui/dropdown-menu";
  import { Loader2, MoreHorizontal, Search, Eye, Building2, Users } from "lucide-react";
  import { format } from "date-fns";
+import { toast } from "sonner";
+
+interface ChainUnlockRequestRow {
+  id: string;
+  tenant_id: string;
+  requested_locations: number;
+  allowed_locations: number;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  tenant?: { id: string; name: string; plan: string | null } | null;
+}
  
  export default function TenantsPage() {
+   const queryClient = useQueryClient();
+   const { backofficeUser } = useBackofficeAuth();
    const { data: tenants, isLoading } = useTenants();
    const [searchQuery, setSearchQuery] = useState("");
+   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+   const [selectedRequest, setSelectedRequest] = useState<ChainUnlockRequestRow | null>(null);
+   const [allowedLocations, setAllowedLocations] = useState(11);
+   const [amount, setAmount] = useState("0");
+   const [currency, setCurrency] = useState("USD");
+   const [reason, setReason] = useState("");
+
+   const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
+     queryKey: ["chain-unlock-requests"],
+     queryFn: async () => {
+       const { data, error } = await (supabase
+         .from("tenant_chain_unlock_requests" as any)
+         .select("id, tenant_id, requested_locations, allowed_locations, status, created_at, tenant:tenants(id,name,plan)")
+         .eq("status", "pending")
+         .order("created_at", { ascending: false }) as any);
+       if (error) throw error;
+       return (data || []) as ChainUnlockRequestRow[];
+     },
+   });
+
+   const approveUnlockMutation = useMutation({
+     mutationFn: async () => {
+       if (!selectedRequest) return;
+       const { error } = await (supabase.rpc as any)("approve_chain_custom_unlock", {
+         p_tenant_id: selectedRequest.tenant_id,
+         p_allowed_locations: Math.max(11, Number(allowedLocations || 11)),
+         p_amount: Number(amount || 0),
+         p_currency: currency,
+         p_reason: reason || "Custom unlock approved in backoffice.",
+       });
+       if (error) throw error;
+     },
+     onSuccess: () => {
+       toast.success("Chain unlock approved");
+       queryClient.invalidateQueries({ queryKey: ["chain-unlock-requests"] });
+       queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] });
+       setApproveDialogOpen(false);
+       setSelectedRequest(null);
+     },
+     onError: (error: any) => toast.error(error.message || "Failed to approve unlock"),
+   });
  
    const filteredTenants = tenants?.filter((t) =>
      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -60,6 +125,62 @@ import { useTenants, TenantWithStats } from "@/hooks";
            </p>
          </div>
  
+         <Card>
+           <CardHeader>
+             <CardTitle>Pending Chain Unlock Requests</CardTitle>
+             <CardDescription>Approve custom unlock for tenants requesting more than 10 stores.</CardDescription>
+           </CardHeader>
+           <CardContent>
+             {loadingUnlockRequests ? (
+               <div className="flex justify-center py-8">
+                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+               </div>
+             ) : chainUnlockRequests.length === 0 ? (
+               <p className="text-sm text-muted-foreground">No pending requests.</p>
+             ) : (
+               <div className="rounded-md border">
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Tenant</TableHead>
+                       <TableHead>Requested</TableHead>
+                       <TableHead>Active</TableHead>
+                       <TableHead>Requested At</TableHead>
+                       <TableHead className="w-[120px]">Action</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {chainUnlockRequests.map((request) => (
+                       <TableRow key={request.id}>
+                         <TableCell>{request.tenant?.name || request.tenant_id}</TableCell>
+                         <TableCell>{request.requested_locations}</TableCell>
+                         <TableCell>{request.allowed_locations}</TableCell>
+                         <TableCell>{format(new Date(request.created_at), "MMM d, yyyy HH:mm")}</TableCell>
+                         <TableCell>
+                           <Button
+                             size="sm"
+                             disabled={backofficeUser?.role !== "super_admin"}
+                             onClick={() => {
+                               setSelectedRequest(request);
+                               setAllowedLocations(Math.max(request.requested_locations, 11));
+                               setAmount("0");
+                               setCurrency("USD");
+                               setReason("Approving chain unlock request from Backoffice.");
+                               setApproveDialogOpen(true);
+                             }}
+                           >
+                             Approve
+                           </Button>
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+               </div>
+             )}
+           </CardContent>
+         </Card>
+
          <Card>
            <CardHeader>
              <div className="flex items-center justify-between">
@@ -174,6 +295,53 @@ import { useTenants, TenantWithStats } from "@/hooks";
            </CardContent>
          </Card>
        </div>
+
+       <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+         <DialogContent>
+           <DialogHeader>
+             <DialogTitle>Approve Chain Unlock</DialogTitle>
+             <DialogDescription>
+               Set allowed locations and custom amount for {selectedRequest?.tenant?.name || "tenant"}.
+             </DialogDescription>
+           </DialogHeader>
+           <div className="space-y-3">
+             <div className="space-y-2">
+               <Label>Allowed locations</Label>
+               <Input
+                 type="number"
+                 min={11}
+                 value={allowedLocations}
+                 onChange={(event) => setAllowedLocations(Number(event.target.value || 11))}
+               />
+             </div>
+             <div className="grid grid-cols-2 gap-3">
+               <div className="space-y-2">
+                 <Label>Currency</Label>
+                 <Input value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
+               </div>
+               <div className="space-y-2">
+                 <Label>Custom amount</Label>
+                 <Input value={amount} onChange={(event) => setAmount(event.target.value)} />
+               </div>
+             </div>
+             <div className="space-y-2">
+               <Label>Reason</Label>
+               <Input value={reason} onChange={(event) => setReason(event.target.value)} />
+             </div>
+           </div>
+           <DialogFooter>
+             <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
+               Cancel
+             </Button>
+             <Button
+               onClick={() => approveUnlockMutation.mutate()}
+               disabled={approveUnlockMutation.isPending || !selectedRequest}
+             >
+               {approveUnlockMutation.isPending ? "Approving..." : "Approve unlock"}
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
      </BackofficeLayout>
    );
  }

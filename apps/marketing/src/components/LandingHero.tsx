@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { Button } from "@ui/button";
 import { ArrowRight, Play } from "lucide-react";
 const heroImage = "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1600&q=80";
@@ -9,7 +8,13 @@ interface LandingHeroProps {
   onWaitlistClick?: () => void;
 }
 
-export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: LandingHeroProps) {
+export function LandingHero({
+  isWaitlistMode,
+  isLoading,
+  onWaitlistClick,
+}: LandingHeroProps) {
+  const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || "https://app.salonmagik.com").replace(/\/$/, "");
+
   return (
     <section className="relative overflow-hidden">
       {/* Background Image with Overlay */}
@@ -39,12 +44,12 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
 
           {!isLoading && !isWaitlistMode && (
             <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <Link to="/signup">
+              <a href={`${salonAppUrl}/signup`}>
                 <Button size="lg" className="w-full sm:w-auto text-base">
                   Get started free
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
-              </Link>
+              </a>
               <Button variant="outline" size="lg" className="w-full sm:w-auto text-base bg-card/80 backdrop-blur-sm">
                 <Play className="mr-2 w-4 h-4" />
                 Watch demo

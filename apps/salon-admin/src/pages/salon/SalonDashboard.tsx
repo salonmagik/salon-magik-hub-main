@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
@@ -26,6 +27,7 @@ import { Skeleton } from "@ui/skeleton";
 import { Badge } from "@ui/badge";
 import { Progress } from "@ui/progress";
 import { formatDistanceToNow } from "date-fns";
+import { supabase } from "@/lib/supabase";
 
 const statusStyles: Record<string, { bg: string; text: string }> = {
   scheduled: { bg: "bg-muted", text: "text-muted-foreground" },
@@ -55,6 +57,23 @@ export default function SalonDashboard() {
     recentActivity,
     isLoading,
   } = useDashboardStats();
+  const { data: chainUnlockRequest } = useQuery({
+    queryKey: ["dashboard-chain-unlock-request", currentTenant?.id],
+    queryFn: async () => {
+      if (!currentTenant?.id || String(currentTenant.plan || "").toLowerCase() !== "chain") return null;
+      const { data, error } = await (supabase
+        .from("tenant_chain_unlock_requests" as any)
+        .select("requested_locations, allowed_locations, status")
+        .eq("tenant_id", currentTenant.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle() as any);
+      if (error) throw error;
+      return data || null;
+    },
+    enabled: Boolean(currentTenant?.id),
+  });
 
   const statCards = [
     {
@@ -131,6 +150,24 @@ export default function SalonDashboard() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {chainUnlockRequest && (
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-medium text-amber-900">Chain expansion pending approval</h3>
+                  <p className="text-sm text-amber-800">
+                    You requested {chainUnlockRequest.requested_locations} stores. {chainUnlockRequest.allowed_locations} are currently active.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => navigate("/salon/overview")}>
+                  View salons
+                </Button>
               </div>
             </CardContent>
           </Card>

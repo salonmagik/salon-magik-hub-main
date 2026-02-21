@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,8 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { useToast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { validatePasswordStrength } from "@shared/validation";
+import { ValidationChecklist } from "@ui/validation-checklist";
 
 interface ForcePasswordChangeDialogProps {
   open: boolean;
@@ -30,16 +32,8 @@ export function ForcePasswordChangeDialog({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string }>({});
 
-  // Password requirements
-  const requirements = [
-    { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-    { label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-    { label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
-    { label: "One number", test: (p: string) => /\d/.test(p) },
-    { label: "One special character", test: (p: string) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(p) },
-  ];
-
-  const allRequirementsMet = requirements.every((req) => req.test(password));
+  const passwordValidation = validatePasswordStrength(password);
+  const allRequirementsMet = passwordValidation.isValid;
 
   const validate = () => {
     const newErrors: { password?: string; confirmPassword?: string } = {};
@@ -184,28 +178,7 @@ export function ForcePasswordChangeDialog({
             )}
           </div>
 
-          {/* Password requirements checklist */}
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-sm font-medium mb-2">Password requirements:</p>
-            <ul className="space-y-1">
-              {requirements.map((req, index) => {
-                const met = req.test(password);
-                return (
-                  <li
-                    key={index}
-                    className={`flex items-center gap-2 text-sm ${
-                      met ? "text-green-600" : "text-muted-foreground"
-                    }`}
-                  >
-                    <CheckCircle2 
-                      className={`h-4 w-4 ${met ? "text-green-600" : "text-muted-foreground/50"}`} 
-                    />
-                    {req.label}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+          <ValidationChecklist items={passwordValidation.rules} />
 
           <Button 
             type="submit" 
