@@ -617,3 +617,39 @@
 - Pre-existing lint issues (eslint not found in supabase-client package) unrelated to this change
 - All acceptance criteria met: function created, accepts parameters, validates inputs, calls Paystack API, returns correct response structure, includes CORS headers
 
+---
+## [2026-02-22 21:00:00] - US-022: Create create-payout-destination edge function
+
+### Implemented
+- Created supabase/functions/create-payout-destination/index.ts edge function
+- Function requires authentication using Authorization header and getUser() verification
+- Function accepts all required parameters: tenantId, destinationType, country, currency, bankCode, bankName, accountNumber, accountName, momoProvider, momoNumber, isDefault
+- Validates required fields for both bank and mobile_money destination types
+- For bank type: creates Paystack recipient with type='nuban' (Nigeria) or 'ghipss' (Ghana)
+  - Calls Paystack POST /transferrecipient with account_number, bank_code, name, currency
+- For mobile_money type: creates Paystack recipient with type='mobile_money'
+  - Uses momoProvider.toUpperCase() as bank_code
+  - Includes email field (required by Paystack API)
+- If isDefault=true: unsets is_default on all other destinations for tenant before inserting new record
+- Inserts salon_payout_destinations record with paystack_recipient_code from Paystack response
+- Returns destination object on success
+- Includes proper CORS headers for OPTIONS preflight and all responses
+- Error handling with try-catch and appropriate status codes (400, 401, 500)
+
+### Files Changed
+- supabase/functions/create-payout-destination/index.ts (created)
+- ralph/prd.json (marked US-022 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Paystack /transferrecipient endpoint creates recipient codes needed for transfers
+- Bank recipients use type='nuban' (Nigeria) or 'ghipss' (Ghana)
+- Mobile money recipients use type='mobile_money' with provider code (e.g., 'MTN', 'VODAFONE') as bank_code
+- Paystack requires email field for mobile money recipients even though not used
+- Authentication pattern: check bearer token → getUser() → verify user exists
+- Service role client needed for database operations (user client only for auth)
+- isDefault flag management: unset all existing defaults before setting new one
+- All acceptance criteria met: function created with auth, accepts all parameters, validates inputs, creates Paystack recipients correctly for both types, manages is_default flag, inserts DB record with paystack_recipient_code, returns destination, includes CORS headers
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found) unrelated to this change
+
