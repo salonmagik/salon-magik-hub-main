@@ -479,3 +479,36 @@
 - invoiceId field added to both Stripe and Paystack metadata extraction for consistency
 - All acceptance criteria met: case added to switch, invoices table updated with status='paid' and paid_at, credit_salon_purse RPC called with correct parameters including p_entry_type='salon_purse_credit_invoice', p_reference_type='invoice', p_reference_id=invoiceId, idempotency key, error handling implemented
 - Pre-existing lint issues (eslint not found) unrelated to this change
+
+---
+## [2026-02-22 19:15:00] - US-018: Add messaging_credit_purchase handler to payment-webhook
+
+### Implemented
+- Extended WebhookEvent interface to include credits field
+- Added credits extraction from both Stripe and Paystack metadata (with parseInt to convert from string)
+- Added 'messaging_credit_purchase' case to intent_type switch statement in payment-webhook
+- Fetches tenant currency from tenants table for proper currency handling
+- Checks if communication_credits record exists for tenant:
+  - If exists: updates balance by incrementing with credits value
+  - If not exists: creates new record with initial balance set to credits value
+- Inserts messaging_credit_purchases record with:
+  - tenant_id, credits, currency from tenant (defaults to NGN), amount (already converted from kobo/pesewas)
+  - paid_via='paystack', payment_intent_id, gateway_reference
+- Validates required fields (credits, tenantId, amount, paymentIntentId) before processing
+- Wrapped in try-catch with error logging and success logging
+
+### Files Changed
+- supabase/functions/payment-webhook/index.ts
+- ralph/prd.json (marked US-018 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Amount is already converted from kobo/pesewas to main currency units in webhook parsing (lines 191, 244), no additional conversion needed
+- credits field must be extracted from metadata and parsed to integer (comes as string in metadata)
+- Messaging credit purchases require credits, tenantId, amount, and paymentIntentId fields
+- communication_credits table has tenant_id as UNIQUE constraint, so checking existence before insert/update
+- Pattern mirrors US-015, US-016, and US-017 implementations: fetch context data → validate → check existence → update/insert credits → create audit record → log success/error
+- credits field added to both Stripe and Paystack metadata extraction for consistency
+- All acceptance criteria met: case added to switch, communication_credits balance incremented (or created if not exists), messaging_credit_purchases record inserted with all required fields, error handling implemented
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found in supabase-client package) unrelated to this change

@@ -14,6 +14,7 @@ interface WebhookEvent {
     tenantId?: string;
     customerId?: string;
     invoiceId?: string;
+    credits?: number;
     amount?: number;
     status?: string;
     reference?: string;
@@ -187,6 +188,7 @@ Deno.serve(async (req) => {
           tenantId: metadata?.tenant_id,
           customerId: metadata?.customer_id,
           invoiceId: metadata?.invoice_id,
+          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
           amount: object.amount_received ? object.amount_received / 100 : undefined,
           status: object.status,
           reference: object.id,
@@ -223,6 +225,7 @@ Deno.serve(async (req) => {
             tenant_id?: string;
             customer_id?: string;
             invoice_id?: string;
+            credits?: string;
           };
         };
       };
@@ -239,6 +242,7 @@ Deno.serve(async (req) => {
           tenantId: metadata?.tenant_id,
           customerId: metadata?.customer_id,
           invoiceId: metadata?.invoice_id,
+          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
           amount: data.amount ? data.amount / 100 : undefined,
           status: data.status,
           reference: data.reference,
@@ -619,6 +623,88 @@ Deno.serve(async (req) => {
             }
           } else {
             console.error("Missing required fields for invoice_payment:", { invoiceId, amount, tenantId });
+          }
+          break;
+
+        case "messaging_credit_purchase":
+          // Handle messaging credit purchase
+          const { credits } = event.data;
+          const messagingTenantId = event.data.tenantId;
+          const messagingAmount = amount;
+          const messagingPaymentIntentId = paymentIntentId;
+          
+          if (credits && messagingTenantId && messagingAmount && messagingPaymentIntentId && isValidUUID(messagingPaymentIntentId)) {
+            // Get tenant details for currency
+            const { data: messagingTenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", messagingTenantId)
+              .single();
+
+            try {
+              // First, check if communication_credits record exists
+              const { data: existingCredits } = await supabase
+                .from("communication_credits")
+                .select("id, balance")
+                .eq("tenant_id", messagingTenantId)
+                .single();
+
+              if (existingCredits) {
+                // Update existing record by incrementing balance
+                const { error: updateError } = await supabase
+                  .from("communication_credits")
+                  .update({
+                    balance: existingCredits.balance + credits,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("tenant_id", messagingTenantId);
+
+                if (updateError) {
+                  console.error("Error updating communication_credits balance:", updateError);
+                }
+              } else {
+                // Create new record with initial balance
+                const { error: insertError } = await supabase
+                  .from("communication_credits")
+                  .insert({
+                    tenant_id: messagingTenantId,
+                    balance: credits,
+                    updated_at: new Date().toISOString(),
+                  });
+
+                if (insertError) {
+                  console.error("Error inserting communication_credits:", insertError);
+                }
+              }
+
+              // Insert messaging_credit_purchases record for audit trail
+              const { error: purchaseInsertError } = await supabase
+                .from("messaging_credit_purchases")
+                .insert({
+                  tenant_id: messagingTenantId,
+                  credits: credits,
+                  currency: messagingTenant?.currency || "NGN",
+                  amount: messagingAmount,
+                  paid_via: "paystack",
+                  payment_intent_id: messagingPaymentIntentId,
+                  gateway_reference: reference,
+                });
+
+              if (purchaseInsertError) {
+                console.error("Error inserting messaging_credit_purchases:", purchaseInsertError);
+              } else {
+                console.log(`Messaging credits added: ${credits} credits for tenant ${messagingTenantId}`);
+              }
+            } catch (creditPurchaseError) {
+              console.error("Exception processing messaging credit purchase:", creditPurchaseError);
+            }
+          } else {
+            console.error("Missing required fields for messaging_credit_purchase:", { 
+              credits, 
+              messagingTenantId, 
+              messagingAmount, 
+              messagingPaymentIntentId 
+            });
           }
           break;
 
