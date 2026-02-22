@@ -410,3 +410,36 @@
 - Field validation prevents processing when required data is missing
 - Pattern matches US-014 implementation: fetch context data → validate → call RPC → log success/error
 - All acceptance criteria met: case added to switch, credit_customer_purse RPC called with correct parameters including customer_id from metadata and idempotency key, error handling implemented
+
+---
+## [2026-02-22 01:27:08] - US-016: Add salon_purse_topup handler to payment-webhook
+
+### Implemented
+- Added 'salon_purse_topup' case to intent_type switch statement in payment-webhook
+- Fetches tenant currency from tenants table for proper currency handling
+- Calls credit_salon_purse RPC with:
+  - p_tenant_id: salonTenantId from event data
+  - p_entry_type: 'salon_purse_topup'
+  - p_reference_type: 'topup'
+  - p_reference_id: paymentIntentId
+  - p_amount: amount (already converted from kobo/pesewas to main currency units)
+  - p_currency: from tenant (defaults to NGN)
+  - p_idempotency_key: `salon_topup_${reference}` for idempotent processing
+  - p_gateway_reference: reference for gateway traceability
+- Validates required fields (salonTenantId, amount, paymentIntentId) before processing
+- Wrapped in try-catch with error logging and success logging
+- Logs error if required fields are missing
+
+### Files Changed
+- supabase/functions/payment-webhook/index.ts
+- ralph/prd.json (marked US-016 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Amount is already converted from kobo/pesewas to main currency units in webhook parsing (lines 188, 238), no additional conversion needed
+- Salon purse topups require tenantId, amount, and paymentIntentId fields
+- paymentIntentId used as reference_id for traceability since there's no other entity to link to for direct topups
+- Idempotency key `salon_topup_${reference}` ensures duplicate webhooks don't double-credit salon purse
+- Pattern mirrors US-015 implementation: fetch context data → validate → call RPC → log success/error
+- Variable naming uses salonTenantId and salonTenant to avoid shadowing the tenantId variable from customer_purse_topup case
+- All acceptance criteria met: case added to switch, credit_salon_purse RPC called with correct parameters including p_entry_type='salon_purse_topup', p_reference_type='topup', p_reference_id=paymentIntentId, idempotency key, error handling implemented

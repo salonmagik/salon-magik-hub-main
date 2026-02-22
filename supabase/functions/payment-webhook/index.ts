@@ -527,6 +527,43 @@ Deno.serve(async (req) => {
           }
           break;
 
+        case "salon_purse_topup":
+          // Handle salon purse topup
+          const { tenantId: salonTenantId } = event.data;
+          
+          if (salonTenantId && amount && paymentIntentId) {
+            // Get tenant details for currency
+            const { data: salonTenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", salonTenantId)
+              .single();
+
+            try {
+              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                p_tenant_id: salonTenantId,
+                p_entry_type: "salon_purse_topup",
+                p_reference_type: "topup",
+                p_reference_id: paymentIntentId,
+                p_amount: amount,
+                p_currency: salonTenant?.currency || "NGN",
+                p_idempotency_key: `salon_topup_${reference}`,
+                p_gateway_reference: reference,
+              });
+
+              if (creditError) {
+                console.error("Error crediting salon purse:", creditError);
+              } else {
+                console.log(`Salon purse credited: ${amount} ${salonTenant?.currency || "NGN"} for tenant ${salonTenantId}`);
+              }
+            } catch (purseError) {
+              console.error("Exception crediting salon purse:", purseError);
+            }
+          } else {
+            console.error("Missing required fields for salon_purse_topup:", { salonTenantId, amount, paymentIntentId });
+          }
+          break;
+
         default:
           console.log(`Unhandled intent_type: ${intentType}`);
           break;
