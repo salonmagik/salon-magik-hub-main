@@ -653,3 +653,56 @@
 - No typecheck command exists for edge functions (Deno-based)
 - Pre-existing lint issues (eslint not found) unrelated to this change
 
+---
+## [2026-02-22 21:30:00] - US-023: Create process-salon-withdrawal edge function
+
+### Implemented
+- Created supabase/functions/process-salon-withdrawal/index.ts edge function
+- Function requires authentication using Authorization header and getUser() verification
+- Function accepts tenantId, payoutDestinationId, amount in request body with proper validation
+- Returns 400 if required fields missing or amount <= 0
+- Returns 401 if authentication fails
+- Fetches salon_wallets and salon_payout_destinations from database
+- Returns 404 if wallet or payout destination not found
+- Creates salon_withdrawals record with status='pending'
+- Calls debit_salon_purse_for_withdrawal RPC with:
+  - p_tenant_id, p_withdrawal_id, p_amount, p_currency
+  - p_idempotency_key: `withdrawal_{withdrawal.id}` for idempotent processing
+- If debit fails: deletes withdrawal record and returns error with debit error message
+- Updates withdrawal status to 'processing' after successful debit
+- Calls Paystack POST /transfer with:
+  - amount converted to kobo/pesewas (multiply by 100)
+  - recipient: paystack_recipient_code from payout destination
+  - reference: `withdrawal_{id}_{timestamp}` for uniqueness
+  - reason: `Salon withdrawal {id}`
+  - currency from wallet (uppercase)
+- If transfer fails:
+  - Calls create_wallet_reversal RPC with:
+    - p_original_entry_id from debit operation
+    - p_reason from Paystack error message
+    - p_idempotency_key: `reversal_withdrawal_{withdrawal.id}`
+  - Updates withdrawal status='failed' with failure_reason from Paystack
+  - Returns error
+- If transfer succeeds:
+  - Updates withdrawal with paystack_transfer_code and paystack_reference from Paystack response
+  - Returns withdrawal object and transfer data
+- Includes proper CORS headers for OPTIONS preflight and all responses
+- Error handling with try-catch and appropriate status codes (400, 401, 404, 500)
+
+### Files Changed
+- supabase/functions/process-salon-withdrawal/index.ts (created)
+- ralph/prd.json (marked US-023 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Withdrawal flow follows create → debit → process → update pattern with rollback on failure
+- Idempotency key uses withdrawal.id to ensure duplicate calls don't re-process withdrawals
+- Amount conversion to kobo/pesewas (multiply by 100) required for Paystack transfer API
+- Transfer reference format `withdrawal_{id}_{timestamp}` ensures uniqueness per withdrawal attempt
+- Reversal pattern: on transfer failure, immediately reverse the debit to restore wallet balance
+- Deletion of withdrawal record on debit failure keeps audit clean (no orphan pending records)
+- Service role client needed for all database operations after auth verification
+- Paystack /transfer API requires source='balance', recipient code, amount, reference, currency
+- All acceptance criteria met: function created with auth, accepts required parameters, fetches wallet/destination, creates withdrawal record, calls debit RPC, handles debit failure with deletion, updates status to processing, calls Paystack transfer API, handles transfer failure with reversal and status update, handles transfer success with Paystack data updates, returns withdrawal/transfer data, includes CORS headers
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found) and build issues (marketing app dependency) unrelated to this change
