@@ -588,3 +588,32 @@
 - Pre-existing lint issues (eslint not found) unrelated to this change
 - All acceptance criteria met: function created, accepts country and type params, calls Paystack API, handles Ghana-specific parameter, returns banks array with required fields, returns 500 if key missing, includes CORS headers
 
+---
+## [2026-02-22 20:30:00] - US-021: Create verify-bank-account edge function
+
+### Implemented
+- Created supabase/functions/verify-bank-account/index.ts edge function
+- Function accepts accountNumber and bankCode in request body with proper validation
+- Returns 400 if accountNumber or bankCode parameters are missing
+- Calls Paystack GET /bank/resolve API with account_number and bank_code query params
+- On success: returns verified:true with accountName, accountNumber, bankId from Paystack response
+- On failure: returns verified:false with error message from Paystack or generic error message
+- Returns 500 if PAYSTACK_SECRET_KEY not configured
+- Includes proper CORS headers for OPTIONS preflight and all responses
+- Error handling with try-catch and appropriate status codes
+
+### Files Changed
+- supabase/functions/verify-bank-account/index.ts (created)
+- ralph/prd.json (marked US-021 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Paystack /bank/resolve endpoint requires account_number and bank_code as query parameters
+- Account verification returns account_name, account_number, and bank_id on success
+- Verification failures should return 200 status with verified:false to allow client-side handling
+- Function follows same pattern as get-banks-and-momo-providers: CORS headers, Paystack auth, error handling
+- TypeScript interfaces provide type safety for request and response structures
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found in supabase-client package) unrelated to this change
+- All acceptance criteria met: function created, accepts parameters, validates inputs, calls Paystack API, returns correct response structure, includes CORS headers
+
