@@ -157,3 +157,31 @@
 - Backfill pattern: INSERT INTO target SELECT FROM source WHERE source.id NOT IN (SELECT key FROM target)
 - All acceptance criteria met: function creation, trigger creation, backfill, returns NEW
 
+---
+## [2026-02-22 02:30:00] - US-008: Create credit_customer_purse RPC function
+
+### Implemented
+- Created credit_customer_purse() function accepting p_tenant_id, p_customer_id, p_amount, p_currency, p_idempotency_key, p_gateway_reference (optional)
+- Function checks idempotency first by querying wallet_ledger_entries with idempotency_key
+- Returns existing entry ID if transaction already processed (prevents double-crediting)
+- Locks customer_purses row with FOR UPDATE to ensure atomic balance updates
+- Creates customer purse if not exists with balance 0 and returns new purse ID
+- Calculates new balance by adding p_amount to current balance
+- Updates customer_purses balance and updated_at timestamp
+- Creates wallet_ledger_entries record with entry_type 'customer_purse_topup', storing balance_before, balance_after, and idempotency_key
+- Returns ledger entry ID on success
+- Marked as SECURITY DEFINER for proper permissions
+
+### Files Changed
+- supabase/migrations/20260222120007_create_credit_customer_purse_rpc.sql
+- ralph/prd.json (marked US-008 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Idempotency check must happen before any row locking to avoid deadlocks in concurrent scenarios
+- FOR UPDATE lock on customer_purses prevents race conditions when multiple topups occur simultaneously
+- INSERT...RETURNING allows creating purse and capturing id/balance in single query
+- SECURITY DEFINER ensures function runs with privileges of function owner, allowing service role to execute wallet operations
+- Gateway reference stored conditionally (only for Paystack payments, NULL for direct purse operations)
+- Function pattern: check idempotency → lock → create if needed → update balance → create ledger entry → return ID
+
