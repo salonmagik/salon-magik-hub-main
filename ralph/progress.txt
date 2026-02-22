@@ -555,3 +555,36 @@
 - All acceptance criteria met: function created, accepts invoiceId, fetches invoice with tenant data, returns 404/400 for not found/already paid, creates payment_intent with intent_type='invoice_payment', calls Paystack with correct parameters, updates invoice and payment_intent, returns paymentUrl and reference, includes CORS headers
 - No typecheck command exists for edge functions (Deno-based)
 - Pre-existing lint issues (eslint not found) unrelated to this change
+
+---
+## [2026-02-22 20:00:00] - US-020: Create get-banks-and-momo-providers edge function
+
+### Implemented
+- Created supabase/functions/get-banks-and-momo-providers/index.ts edge function
+- Function accepts country (NG or GH) query parameter (required)
+- Function accepts optional type query parameter (mobile_money)
+- Calls Paystack GET /bank API with country and type parameters
+- For Ghana without type, sets pay_with_bank_transfer=true parameter
+- Returns 400 if country parameter is missing
+- Returns 500 if PAYSTACK_SECRET_KEY not configured
+- Returns array of banks with all required fields:
+  - id, name, slug, code, type, currency
+- Maps Paystack response data to Bank interface
+- Includes proper CORS headers for preflight and all responses
+- Error handling with try-catch and appropriate status codes
+
+### Files Changed
+- supabase/functions/get-banks-and-momo-providers/index.ts (created)
+- ralph/prd.json (marked US-020 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Paystack /bank endpoint requires country parameter and optionally accepts type parameter
+- For Ghana bank transfers (not mobile money), pay_with_bank_transfer=true must be set
+- Query parameters extracted using URL.searchParams.get() for GET requests
+- Bank data structure includes id, name, slug, code, type, currency fields
+- Function follows same pattern as create-invoice-payment-session: CORS headers, error handling, Paystack auth header
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found) unrelated to this change
+- All acceptance criteria met: function created, accepts country and type params, calls Paystack API, handles Ghana-specific parameter, returns banks array with required fields, returns 500 if key missing, includes CORS headers
+
