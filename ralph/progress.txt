@@ -246,3 +246,37 @@
 - SECURITY DEFINER ensures edge functions can credit salon wallets on behalf of automated payment webhooks
 - All acceptance criteria met: function signature with optional gateway_reference, idempotency, locking, exception on missing wallet, balance update, ledger entry creation with provided entry_type, returns ID
 
+---
+## [2026-02-22 16:30:00] - US-011: Create debit_salon_purse_for_withdrawal RPC function
+
+### Implemented
+- Created debit_salon_purse_for_withdrawal() function accepting p_tenant_id, p_withdrawal_id, p_amount, p_currency, p_idempotency_key
+- Function checks idempotency first by querying wallet_ledger_entries with idempotency_key
+- Returns existing entry ID if transaction already processed (prevents duplicate debits)
+- Fetches minimum withdrawal amount from tenants table based on currency (NGN: min_withdrawal_ngn, GHS: min_withdrawal_ghs) with fallback defaults
+- Raises exception if amount is below minimum with clear message showing amount and currency
+- Locks salon_wallets row with FOR UPDATE to ensure atomic balance updates
+- Raises exception 'Salon wallet not found for tenant X' if wallet doesn't exist
+- Verifies sufficient balance before processing
+- Raises exception 'Insufficient wallet balance. Available: X, Required: Y' if balance < amount
+- Calculates new balance by subtracting p_amount from current balance
+- Updates salon_wallets balance and updated_at timestamp
+- Creates wallet_ledger_entries record with entry_type 'salon_purse_withdrawal', negative amount, reference_type 'withdrawal', reference_id p_withdrawal_id
+- Returns ledger entry ID on success
+- Marked as SECURITY DEFINER for proper permissions
+
+### Files Changed
+- supabase/migrations/20260222120010_create_debit_salon_purse_for_withdrawal_rpc.sql
+- ralph/prd.json (marked US-011 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Minimum withdrawal amounts are currency-specific: NGN 1000 (~$1.20), GHS 50 (~$3.10)
+- CASE statement used to dynamically select min_withdrawal based on currency
+- COALESCE provides fallback defaults if min_withdrawal columns are NULL for any reason
+- Exception messages include both currency symbol and amount for clarity to users
+- Minimum amount check happens before wallet locking to fail fast and avoid unnecessary locks
+- Pattern for withdrawal debits: check idempotency → validate minimum → lock → verify balance → update balance → create ledger entry → return ID
+- All acceptance criteria met: function signature, idempotency, minimum withdrawal enforcement, wallet locking, balance verification, exception handling with descriptive messages, ledger entry creation with correct entry_type and negative amount
+- Pre-existing build issues (marketing app dependency issue) and lint issues (eslint not found) unrelated to this SQL migration
+

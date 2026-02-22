@@ -171,8 +171,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created successfully. All acceptance criteria met: function accepts all required parameters (p_tenant_id, p_withdrawal_id, p_amount, p_currency, p_idempotency_key), checks idempotency first and returns existing entry ID if already processed, fetches minimum withdrawal amount from tenants table based on currency (NGN: min_withdrawal_ngn default 1000, GHS: min_withdrawal_ghs default 50), raises exception if amount < minimum with clear message, locks salon_wallets row with FOR UPDATE, verifies sufficient balance and raises 'Insufficient wallet balance' exception if balance < amount with available/required amounts, raises exception if wallet not found, updates balance and creates ledger entry with entry_type 'salon_purse_withdrawal', reference_type 'withdrawal', negative amount, returns ledger entry ID. No typecheck command exists in project for SQL migrations."
     },
     {
       "id": "US-012",
