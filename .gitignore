@@ -33,3 +33,6 @@ daemon
 .turbo
 
 ralph.sh
+
+# supabase
+.branches
