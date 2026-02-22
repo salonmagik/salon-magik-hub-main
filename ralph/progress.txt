@@ -346,3 +346,34 @@
 - intentType defaults to 'appointment_payment' for backward compatibility with existing clients
 - No Deno installation available for typecheck, but TypeScript syntax verified manually
 - All acceptance criteria met: optional fields added to interface, intentType with 5 values, default to 'appointment_payment', stored in DB, included in payment gateway metadata
+
+---
+## [2026-02-22 17:30:00] - US-014: Extend payment-webhook to handle appointment_payment and credit salon purse
+
+### Implemented
+- Fetched intent_type from payment_intents table for each successful payment webhook
+- Added switch statement on intentType with default value 'appointment_payment' for backward compatibility
+- Wrapped existing appointment payment logic inside 'appointment_payment' case
+- Added credit_salon_purse RPC call after invoice generation in appointment_payment handler:
+  - p_entry_type: 'salon_purse_credit_booking'
+  - p_reference_type: 'appointment'
+  - p_reference_id: appointmentId
+  - p_amount: amount (already converted from kobo/pesewas in webhook parsing)
+  - p_currency: tenant currency (defaults to NGN)
+  - p_idempotency_key: `booking_${reference}` for idempotent processing
+  - p_gateway_reference: reference for gateway traceability
+- Added error handling and logging for salon purse credit operations
+- Added default case in switch to log unhandled intent types
+
+### Files Changed
+- supabase/functions/payment-webhook/index.ts
+- ralph/prd.json (marked US-014 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Amount is already converted from kobo/pesewas to main currency units in webhook parsing (lines 186, 234) so no additional conversion needed
+- intent_type defaults to 'appointment_payment' to maintain backward compatibility with existing payment flows
+- RPC call wrapped in try-catch to ensure appointment payment succeeds even if purse crediting fails (logging error but not failing entire webhook)
+- Idempotency key `booking_${reference}` ensures duplicate webhooks don't double-credit salon purse
+- Switch statement structure allows easy addition of other intent types (US-015 through US-018)
+- All acceptance criteria met: switch statement added, intent_type fetched with default, credit_salon_purse called with correct parameters, amount already converted

@@ -252,9 +252,28 @@ Deno.serve(async (req) => {
       event.type === "payment_intent.succeeded" ||
       event.type === "charge.success"
     ) {
-      const { appointmentId, amount, reference, tenantId } = event.data;
+      const { appointmentId, paymentIntentId, amount, reference, tenantId } = event.data;
 
-      // Validate appointment ID
+      // Fetch payment intent to get intent_type
+      let intentType = "appointment_payment"; // Default for backward compatibility
+      let paymentIntent = null;
+      
+      if (paymentIntentId && isValidUUID(paymentIntentId)) {
+        const { data } = await supabase
+          .from("payment_intents")
+          .select("intent_type")
+          .eq("id", paymentIntentId)
+          .single();
+        
+        if (data?.intent_type) {
+          intentType = data.intent_type;
+          paymentIntent = data;
+        }
+      }
+
+      console.log("Processing payment with intent_type:", intentType);
+
+      // Validate appointment ID if present
       if (appointmentId && !isValidUUID(appointmentId)) {
         console.error("Invalid appointment_id format:", appointmentId);
         return new Response(
@@ -263,7 +282,10 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (appointmentId && amount) {
+      // Handle different payment intent types
+      switch (intentType) {
+        case "appointment_payment":
+          if (appointmentId && amount) {
         // Update appointment payment status
         const { error: appointmentError } = await supabase
           .from("appointments")
@@ -441,19 +463,46 @@ Deno.serve(async (req) => {
           } catch (invoiceError) {
             console.error("Error generating invoice:", invoiceError);
           }
-        }
 
-        // Update payment intent status
-        if (event.data.paymentIntentId && isValidUUID(event.data.paymentIntentId)) {
-          await supabase
-            .from("payment_intents")
-            .update({
-              status: "completed",
-              gateway_reference: reference,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", event.data.paymentIntentId);
+          // Credit salon purse for the appointment payment
+          try {
+            const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+              p_tenant_id: appointment.tenant_id,
+              p_entry_type: "salon_purse_credit_booking",
+              p_reference_type: "appointment",
+              p_reference_id: appointmentId,
+              p_amount: amount,
+              p_currency: tenant?.currency || "NGN",
+              p_idempotency_key: `booking_${reference}`,
+              p_gateway_reference: reference,
+            });
+
+            if (creditError) {
+              console.error("Error crediting salon purse:", creditError);
+            } else {
+              console.log(`Salon purse credited: ${amount} ${tenant?.currency || "NGN"} for appointment ${appointmentId}`);
+            }
+          } catch (purseError) {
+            console.error("Exception crediting salon purse:", purseError);
+          }
         }
+          break;
+
+        default:
+          console.log(`Unhandled intent_type: ${intentType}`);
+          break;
+      }
+
+      // Update payment intent status
+      if (event.data.paymentIntentId && isValidUUID(event.data.paymentIntentId)) {
+        await supabase
+          .from("payment_intents")
+          .update({
+            status: "completed",
+            gateway_reference: reference,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", event.data.paymentIntentId);
       }
     }
 
