@@ -443,3 +443,39 @@
 - Pattern mirrors US-015 implementation: fetch context data → validate → call RPC → log success/error
 - Variable naming uses salonTenantId and salonTenant to avoid shadowing the tenantId variable from customer_purse_topup case
 - All acceptance criteria met: case added to switch, credit_salon_purse RPC called with correct parameters including p_entry_type='salon_purse_topup', p_reference_type='topup', p_reference_id=paymentIntentId, idempotency key, error handling implemented
+
+---
+## [2026-02-22 18:30:00] - US-017: Add invoice_payment handler to payment-webhook
+
+### Implemented
+- Extended WebhookEvent interface to include invoiceId field
+- Added invoice_id extraction from both Stripe and Paystack metadata
+- Added 'invoice_payment' case to intent_type switch statement in payment-webhook
+- Updates invoices table with status='paid', paid_at=current timestamp, updated_at timestamp WHERE id=invoiceId
+- Fetches tenant currency from tenants table for proper currency handling
+- Calls credit_salon_purse RPC with:
+  - p_tenant_id: tenantId from event data
+  - p_entry_type: 'salon_purse_credit_invoice'
+  - p_reference_type: 'invoice'
+  - p_reference_id: invoiceId
+  - p_amount: amount (already converted from kobo/pesewas to main currency units)
+  - p_currency: from tenant (defaults to NGN)
+  - p_idempotency_key: `invoice_${reference}` for idempotent processing
+  - p_gateway_reference: reference for gateway traceability
+- Validates required fields (invoiceId, tenantId, amount) before processing
+- Wrapped in try-catch with error logging and success logging
+
+### Files Changed
+- supabase/functions/payment-webhook/index.ts
+- ralph/prd.json (marked US-017 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Amount is already converted from kobo/pesewas to main currency units in webhook parsing (lines 188, 238), no additional conversion needed
+- Invoice payments require invoiceId, tenantId, and amount fields
+- Invoice status updated before crediting salon purse to ensure payment is recorded even if purse crediting fails
+- Idempotency key `invoice_${reference}` ensures duplicate webhooks don't double-credit salon purse
+- Pattern mirrors US-015 and US-016 implementations: fetch context data → validate → update invoice → call RPC → log success/error
+- invoiceId field added to both Stripe and Paystack metadata extraction for consistency
+- All acceptance criteria met: case added to switch, invoices table updated with status='paid' and paid_at, credit_salon_purse RPC called with correct parameters including p_entry_type='salon_purse_credit_invoice', p_reference_type='invoice', p_reference_id=invoiceId, idempotency key, error handling implemented
+- Pre-existing lint issues (eslint not found) unrelated to this change

@@ -13,6 +13,7 @@ interface WebhookEvent {
     appointmentId?: string;
     tenantId?: string;
     customerId?: string;
+    invoiceId?: string;
     amount?: number;
     status?: string;
     reference?: string;
@@ -185,6 +186,7 @@ Deno.serve(async (req) => {
           appointmentId: metadata?.appointment_id,
           tenantId: metadata?.tenant_id,
           customerId: metadata?.customer_id,
+          invoiceId: metadata?.invoice_id,
           amount: object.amount_received ? object.amount_received / 100 : undefined,
           status: object.status,
           reference: object.id,
@@ -220,6 +222,7 @@ Deno.serve(async (req) => {
             payment_intent_id?: string;
             tenant_id?: string;
             customer_id?: string;
+            invoice_id?: string;
           };
         };
       };
@@ -235,6 +238,7 @@ Deno.serve(async (req) => {
           appointmentId: metadata?.appointment_id,
           tenantId: metadata?.tenant_id,
           customerId: metadata?.customer_id,
+          invoiceId: metadata?.invoice_id,
           amount: data.amount ? data.amount / 100 : undefined,
           status: data.status,
           reference: data.reference,
@@ -561,6 +565,60 @@ Deno.serve(async (req) => {
             }
           } else {
             console.error("Missing required fields for salon_purse_topup:", { salonTenantId, amount, paymentIntentId });
+          }
+          break;
+
+        case "invoice_payment":
+          // Handle invoice payment
+          const { invoiceId } = event.data;
+          
+          if (invoiceId && isValidUUID(invoiceId) && amount && tenantId) {
+            // Get tenant details for currency
+            const { data: invoiceTenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", tenantId)
+              .single();
+
+            try {
+              // Update invoice status to 'paid' and set paid_at timestamp
+              const { error: invoiceUpdateError } = await supabase
+                .from("invoices")
+                .update({
+                  status: "paid",
+                  paid_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", invoiceId);
+
+              if (invoiceUpdateError) {
+                console.error("Error updating invoice:", invoiceUpdateError);
+              } else {
+                console.log(`Invoice ${invoiceId} marked as paid`);
+              }
+
+              // Credit salon purse for the invoice payment
+              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                p_tenant_id: tenantId,
+                p_entry_type: "salon_purse_credit_invoice",
+                p_reference_type: "invoice",
+                p_reference_id: invoiceId,
+                p_amount: amount,
+                p_currency: invoiceTenant?.currency || "NGN",
+                p_idempotency_key: `invoice_${reference}`,
+                p_gateway_reference: reference,
+              });
+
+              if (creditError) {
+                console.error("Error crediting salon purse for invoice:", creditError);
+              } else {
+                console.log(`Salon purse credited: ${amount} ${invoiceTenant?.currency || "NGN"} for invoice ${invoiceId}`);
+              }
+            } catch (invoiceError) {
+              console.error("Exception processing invoice payment:", invoiceError);
+            }
+          } else {
+            console.error("Missing required fields for invoice_payment:", { invoiceId, amount, tenantId });
           }
           break;
 
