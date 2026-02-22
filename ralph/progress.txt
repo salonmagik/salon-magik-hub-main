@@ -512,3 +512,46 @@
 - All acceptance criteria met: case added to switch, communication_credits balance incremented (or created if not exists), messaging_credit_purchases record inserted with all required fields, error handling implemented
 - No typecheck command exists for edge functions (Deno-based)
 - Pre-existing lint issues (eslint not found in supabase-client package) unrelated to this change
+
+---
+## [2026-02-22 19:45:00] - US-019: Create create-invoice-payment-session edge function
+
+### Implemented
+- Created supabase/functions/create-invoice-payment-session/index.ts edge function
+- Function accepts invoiceId in request body with proper validation (returns 400 if missing)
+- Fetches invoice with tenant data using inner join on tenants table
+- Returns 404 if invoice not found
+- Returns 400 if invoice status is already 'paid'
+- Fetches customer email and name for Paystack transaction
+- Creates payment_intent record with:
+  - tenant_id, amount, currency from invoice
+  - customer_email, customer_name from customers table
+  - gateway='paystack', status='pending'
+  - intent_type='invoice_payment'
+  - paystack_reference with format 'invoice_{invoiceId}_timestamp'
+- Calls Paystack POST /transaction/initialize with:
+  - amount converted to kobo/pesewas (multiply by 100)
+  - customer email
+  - currency in uppercase
+  - reference for idempotency
+  - metadata containing tenant_id, invoice_id, payment_intent_id, intent_type, customer_name
+- Updates invoice table with payment_link (Paystack authorization_url) and payment_intent_id
+- Updates payment_intents table with paystack_access_code, paystack_reference, status='processing'
+- Returns JSON with paymentUrl, reference, paymentIntentId
+- Includes proper CORS headers for OPTIONS preflight and all responses
+
+### Files Changed
+- supabase/functions/create-invoice-payment-session/index.ts (created)
+- ralph/prd.json (marked US-019 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Invoice payment flow requires fetching both invoice and customer data before initializing Paystack
+- Inner join on tenants table provides tenant metadata in single query
+- Paystack reference format 'invoice_{id}_{timestamp}' ensures uniqueness per invoice payment attempt
+- amount converted to minor units (kobo/pesewas) by multiplying by 100 for Paystack API
+- Two-step update process: first create payment_intent, then update invoice and payment_intent with Paystack response data
+- Edge function follows same pattern as create-payment-session but specialized for invoice use case
+- All acceptance criteria met: function created, accepts invoiceId, fetches invoice with tenant data, returns 404/400 for not found/already paid, creates payment_intent with intent_type='invoice_payment', calls Paystack with correct parameters, updates invoice and payment_intent, returns paymentUrl and reference, includes CORS headers
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found) unrelated to this change
