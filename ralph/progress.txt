@@ -280,3 +280,40 @@
 - All acceptance criteria met: function signature, idempotency, minimum withdrawal enforcement, wallet locking, balance verification, exception handling with descriptive messages, ledger entry creation with correct entry_type and negative amount
 - Pre-existing build issues (marketing app dependency issue) and lint issues (eslint not found) unrelated to this SQL migration
 
+---
+## [2026-02-22 01:01:06] - US-012: Create create_wallet_reversal RPC function
+
+### Implemented
+- Created create_wallet_reversal() function accepting p_original_entry_id, p_reason, p_idempotency_key
+- Function checks idempotency first by querying wallet_ledger_entries with idempotency_key
+- Returns existing entry ID if reversal already processed (prevents duplicate reversals)
+- Fetches original wallet_ledger_entries record to determine wallet type and retrieve transaction details
+- Raises exception 'Original ledger entry not found with ID X' if original entry doesn't exist
+- Determines reversal entry type based on wallet_type: customer → 'customer_purse_reversal', salon → 'salon_purse_reversal'
+- Calculates reversal amount as negative of original amount (-1 * original.amount)
+- For customer wallets: locks customer_purses row with FOR UPDATE, verifies purse exists, calculates new balance, updates balance
+- For salon wallets: locks salon_wallets row with FOR UPDATE, verifies wallet exists, calculates new balance, updates balance
+- Creates wallet_ledger_entries record with:
+  - entry_type: customer_purse_reversal or salon_purse_reversal
+  - amount: negative of original amount (reverses the transaction)
+  - reference_type: 'reversal'
+  - reference_id: original entry ID
+  - metadata JSONB: contains reason, original_entry_id, original_amount, original_entry_type
+- Returns ledger entry ID on success
+- Marked as SECURITY DEFINER for proper permissions
+
+### Files Changed
+- supabase/migrations/20260222120011_create_wallet_reversal_rpc.sql
+- ralph/prd.json (marked US-012 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Reversal functions must handle both customer and salon wallet types with conditional logic
+- Reversal amount is calculated as -1 * original amount to undo the original transaction
+- Metadata JSONB provides audit trail storing reason, original entry details for compliance and debugging
+- FOR UPDATE locks prevent race conditions when multiple reversals might be attempted
+- Function uses SELECT * INTO RECORD to fetch all columns from original entry efficiently
+- Pattern for reversals: check idempotency → fetch original entry → validate existence → determine reversal type → lock wallet → calculate new balance → update balance → create reversal ledger entry → return ID
+- All acceptance criteria met: function signature, idempotency, original entry fetch, exception handling, wallet type determination, wallet locking, reversal amount calculation, ledger entry creation with metadata
+- Pre-existing lint issues (eslint not found) unrelated to this SQL migration
+
