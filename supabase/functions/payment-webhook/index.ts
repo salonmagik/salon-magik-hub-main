@@ -12,6 +12,7 @@ interface WebhookEvent {
     paymentIntentId?: string;
     appointmentId?: string;
     tenantId?: string;
+    customerId?: string;
     amount?: number;
     status?: string;
     reference?: string;
@@ -183,6 +184,7 @@ Deno.serve(async (req) => {
           paymentIntentId: metadata?.payment_intent_id,
           appointmentId: metadata?.appointment_id,
           tenantId: metadata?.tenant_id,
+          customerId: metadata?.customer_id,
           amount: object.amount_received ? object.amount_received / 100 : undefined,
           status: object.status,
           reference: object.id,
@@ -217,6 +219,7 @@ Deno.serve(async (req) => {
             appointment_id?: string;
             payment_intent_id?: string;
             tenant_id?: string;
+            customer_id?: string;
           };
         };
       };
@@ -231,6 +234,7 @@ Deno.serve(async (req) => {
           paymentIntentId: metadata?.payment_intent_id,
           appointmentId: metadata?.appointment_id,
           tenantId: metadata?.tenant_id,
+          customerId: metadata?.customer_id,
           amount: data.amount ? data.amount / 100 : undefined,
           status: data.status,
           reference: data.reference,
@@ -486,6 +490,41 @@ Deno.serve(async (req) => {
             console.error("Exception crediting salon purse:", purseError);
           }
         }
+          break;
+
+        case "customer_purse_topup":
+          // Handle customer purse topup
+          const { customerId, tenantId } = event.data;
+          
+          if (customerId && tenantId && amount) {
+            // Get tenant details for currency
+            const { data: tenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", tenantId)
+              .single();
+
+            try {
+              const { error: creditError } = await supabase.rpc("credit_customer_purse", {
+                p_tenant_id: tenantId,
+                p_customer_id: customerId,
+                p_amount: amount,
+                p_currency: tenant?.currency || "NGN",
+                p_idempotency_key: `topup_${reference}`,
+                p_gateway_reference: reference,
+              });
+
+              if (creditError) {
+                console.error("Error crediting customer purse:", creditError);
+              } else {
+                console.log(`Customer purse credited: ${amount} ${tenant?.currency || "NGN"} for customer ${customerId}`);
+              }
+            } catch (purseError) {
+              console.error("Exception crediting customer purse:", purseError);
+            }
+          } else {
+            console.error("Missing required fields for customer_purse_topup:", { customerId, tenantId, amount });
+          }
           break;
 
         default:

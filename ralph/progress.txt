@@ -377,3 +377,36 @@
 - Idempotency key `booking_${reference}` ensures duplicate webhooks don't double-credit salon purse
 - Switch statement structure allows easy addition of other intent types (US-015 through US-018)
 - All acceptance criteria met: switch statement added, intent_type fetched with default, credit_salon_purse called with correct parameters, amount already converted
+
+---
+## [2026-02-22 01:25:25] - US-015: Add customer_purse_topup handler to payment-webhook
+
+### Implemented
+- Extended WebhookEvent interface to include customerId field
+- Added customerId extraction from both Stripe and Paystack metadata
+- Added 'customer_purse_topup' case to intent_type switch statement in payment-webhook
+- Fetches tenant currency from tenants table for proper currency handling
+- Calls credit_customer_purse RPC with:
+  - p_tenant_id from event data
+  - p_customer_id from event data (extracted from metadata)
+  - p_amount: already converted from kobo/pesewas to main currency units
+  - p_currency from tenant (defaults to NGN)
+  - p_idempotency_key: `topup_${reference}` for idempotent processing
+  - p_gateway_reference: reference for gateway traceability
+- Validates required fields (customerId, tenantId, amount) before processing
+- Wrapped in try-catch with error logging and console logging on success
+- Logs error if required fields are missing
+
+### Files Changed
+- supabase/functions/payment-webhook/index.ts
+- ralph/prd.json (marked US-015 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Amount is already converted from kobo/pesewas to main currency units in webhook parsing (lines 186, 235), no additional conversion needed
+- customerId must be extracted from metadata for both Stripe and Paystack webhooks
+- Tenant currency fetched to ensure purse operations use correct currency
+- Idempotency key `topup_${reference}` ensures duplicate webhooks don't double-credit customer purse
+- Field validation prevents processing when required data is missing
+- Pattern matches US-014 implementation: fetch context data → validate → call RPC → log success/error
+- All acceptance criteria met: case added to switch, credit_customer_purse RPC called with correct parameters including customer_id from metadata and idempotency key, error handling implemented
