@@ -101,3 +101,31 @@
 - Amount uses NUMERIC(12, 2) for consistent currency precision
 - All acceptance criteria met: table structure, foreign key, and paid_via constraint
 
+---
+## [2026-02-22 00:30:00] - US-006: Extend existing tables with purse-related columns
+
+### Implemented
+- Added intent_type TEXT column to payment_intents table (IF NOT EXISTS)
+- Created index idx_payment_intents_intent_type for filtering by intent_type
+- Added payment_link TEXT column to invoices table (IF NOT EXISTS)
+- Added payment_intent_id UUID column to invoices table (IF NOT EXISTS)
+- Added foreign key constraint from invoices.payment_intent_id to payment_intents.id (with ON DELETE SET NULL)
+- Created index idx_invoices_payment_intent_id for payment_intent_id lookups
+- Added min_withdrawal_ngn NUMERIC(10,2) DEFAULT 1000 to tenants table (IF NOT EXISTS)
+- Added min_withdrawal_ghs NUMERIC(10,2) DEFAULT 50 to tenants table (IF NOT EXISTS)
+- Added documentation comments for all new columns
+
+### Files Changed
+- supabase/migrations/20260221120005_extend_tables_for_purse.sql
+- ralph/prd.json (marked US-006 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- All ALTER TABLE statements use IF NOT EXISTS for idempotent schema updates
+- Foreign key constraint creation wrapped in DO block to check if constraint already exists
+- intent_type column supports 5 payment types: appointment_payment, customer_purse_topup, salon_purse_topup, invoice_payment, messaging_credit_purchase
+- payment_intent_id on invoices enables tracking online invoice payments via Paystack
+- Minimum withdrawal amounts vary by currency: NGN 1000 (~$1.20), GHS 50 (~$3.10)
+- Indexes created with WHERE clauses for partial indexes on non-null values to save space
+- Comments added for schema documentation and developer clarity
+
