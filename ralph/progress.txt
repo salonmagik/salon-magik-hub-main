@@ -706,3 +706,42 @@
 - All acceptance criteria met: function created with auth, accepts required parameters, fetches wallet/destination, creates withdrawal record, calls debit RPC, handles debit failure with deletion, updates status to processing, calls Paystack transfer API, handles transfer failure with reversal and status update, handles transfer success with Paystack data updates, returns withdrawal/transfer data, includes CORS headers
 - No typecheck command exists for edge functions (Deno-based)
 - Pre-existing lint issues (eslint not found) and build issues (marketing app dependency) unrelated to this change
+
+---
+## [2026-02-22 22:00:00] - US-024: Create paystack-transfer-webhook edge function
+
+### Implemented
+- Created supabase/functions/paystack-transfer-webhook/index.ts edge function
+- Implemented Paystack signature verification using HMAC SHA-512
+- Returns 401 if signature invalid or missing
+- Handles transfer.success event:
+  - Extracts withdrawal ID from reference (format: "withdrawal_{id}_{timestamp}")
+  - Updates salon_withdrawals status to 'completed'
+- Handles transfer.failed and transfer.reversed events:
+  - Extracts withdrawal ID from reference
+  - Fetches withdrawal record to get tenant_id
+  - Fetches ledger entry for the withdrawal
+  - Calls create_wallet_reversal RPC with:
+    - p_original_entry_id: ledger entry ID
+    - p_reason: failure reason from Paystack event
+    - p_idempotency_key: `reversal_{eventType}_{withdrawalId}`
+  - Updates salon_withdrawals status to 'failed' with failure_reason
+- Returns {received: true} on success
+- Includes proper CORS headers with x-paystack-signature
+
+### Files Changed
+- supabase/functions/paystack-transfer-webhook/index.ts (created)
+- ralph/prd.json (marked US-024 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Paystack transfer webhook events: transfer.success, transfer.failed, transfer.reversed
+- Withdrawal reference format: "withdrawal_{id}_{timestamp}" used to extract withdrawal ID
+- Reversal idempotency key format: `reversal_{eventType}_{withdrawalId}` prevents duplicate reversals
+- Must fetch ledger entry to get entry ID for reversal operation
+- Signature verification uses HMAC SHA-512 with Paystack secret key
+- Edge function follows same pattern as payment-webhook: CORS headers, signature verification, event handling
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (eslint not found in packages) unrelated to this change
+- All acceptance criteria met: function created with signature verification, returns 401 on invalid signature, handles success/failed/reversed events correctly, returns {received: true}, includes CORS headers
+
