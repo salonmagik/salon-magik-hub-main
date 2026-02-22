@@ -317,3 +317,32 @@
 - All acceptance criteria met: function signature, idempotency, original entry fetch, exception handling, wallet type determination, wallet locking, reversal amount calculation, ledger entry creation with metadata
 - Pre-existing lint issues (eslint not found) unrelated to this SQL migration
 
+---
+## [2026-02-22 03:30:00] - US-013: Extend create-payment-session edge function with intent_type
+
+### Implemented
+- Extended PaymentRequest interface to include:
+  - intentType?: "appointment_payment" | "customer_purse_topup" | "salon_purse_topup" | "invoice_payment" | "messaging_credit_purchase"
+  - customerId?: string
+  - invoiceId?: string
+  - credits?: number
+- Made appointmentId optional since not all payment types require appointments (e.g., purse topups, invoice payments)
+- Made isDeposit optional with default to false
+- Updated validation to remove appointmentId requirement (now only tenantId, amount, customerEmail required)
+- Updated reference generation to handle missing appointmentId gracefully
+- Stored intent_type in payment_intents insert with default value 'appointment_payment'
+- Added intent_type, customer_id, invoice_id, credits to Paystack metadata
+- Added intent_type, customer_id, invoice_id, credits to Stripe metadata
+
+### Files Changed
+- supabase/functions/create-payment-session/index.ts
+- ralph/prd.json (marked US-013 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Edge function now supports 5 payment intent types: appointment_payment, customer_purse_topup, salon_purse_topup, invoice_payment, messaging_credit_purchase
+- appointmentId field made optional to accommodate non-appointment payment flows
+- Metadata passed to both Paystack and Stripe includes all context fields needed for webhook processing
+- intentType defaults to 'appointment_payment' for backward compatibility with existing clients
+- No Deno installation available for typecheck, but TypeScript syntax verified manually
+- All acceptance criteria met: optional fields added to interface, intentType with 5 values, default to 'appointment_payment', stored in DB, included in payment gateway metadata

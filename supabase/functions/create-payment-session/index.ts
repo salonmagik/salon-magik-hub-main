@@ -7,16 +7,20 @@ const corsHeaders = {
 
 interface PaymentRequest {
   tenantId: string;
-  appointmentId: string;
+  appointmentId?: string;
   amount: number;
   currency: string;
   customerEmail: string;
   customerName: string;
   description: string;
-  isDeposit: boolean;
+  isDeposit?: boolean;
   successUrl: string;
   cancelUrl: string;
   preferredGateway?: "stripe" | "paystack"; // Allow user to select gateway
+  intentType?: "appointment_payment" | "customer_purse_topup" | "salon_purse_topup" | "invoice_payment" | "messaging_credit_purchase";
+  customerId?: string;
+  invoiceId?: string;
+  credits?: number;
 }
 
 Deno.serve(async (req) => {
@@ -44,10 +48,14 @@ Deno.serve(async (req) => {
       successUrl,
       cancelUrl,
       preferredGateway,
+      intentType = "appointment_payment",
+      customerId,
+      invoiceId,
+      credits,
     } = body;
 
     // Validate required fields
-    if (!tenantId || !appointmentId || !amount || !customerEmail) {
+    if (!tenantId || !amount || !customerEmail) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -77,22 +85,23 @@ Deno.serve(async (req) => {
       : isPaystackRegion;
 
     // Generate unique reference
-    const reference = `sm_${appointmentId.substring(0, 8)}_${Date.now()}`;
+    const reference = `sm_${appointmentId?.substring(0, 8) || Date.now().toString().substring(0, 8)}_${Date.now()}`;
 
     // Store payment intent in database
     const { data: paymentIntent, error: intentError } = await supabase
       .from("payment_intents")
       .insert({
         tenant_id: tenantId,
-        appointment_id: appointmentId,
+        appointment_id: appointmentId || null,
         amount: amount,
         currency: currency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
         gateway: usePaystack ? "paystack" : "stripe",
-        is_deposit: isDeposit,
+        is_deposit: isDeposit || false,
         status: "pending",
         paystack_reference: usePaystack ? reference : null,
+        intent_type: intentType,
       })
       .select("id")
       .single();
@@ -128,11 +137,15 @@ Deno.serve(async (req) => {
           reference: reference,
           callback_url: successUrl,
           metadata: {
-            appointment_id: appointmentId,
+            appointment_id: appointmentId || null,
             payment_intent_id: paymentIntent?.id,
             tenant_id: tenantId,
-            is_deposit: isDeposit,
+            is_deposit: isDeposit || false,
             customer_name: customerName,
+            intent_type: intentType,
+            customer_id: customerId || null,
+            invoice_id: invoiceId || null,
+            credits: credits || null,
           },
         }),
       });
@@ -188,9 +201,13 @@ Deno.serve(async (req) => {
           "customer_email": customerEmail,
           "success_url": `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
           "cancel_url": cancelUrl,
-          "metadata[appointment_id]": appointmentId,
+          "metadata[appointment_id]": appointmentId || "",
           "metadata[payment_intent_id]": paymentIntent?.id || "",
           "metadata[tenant_id]": tenantId,
+          "metadata[intent_type]": intentType,
+          "metadata[customer_id]": customerId || "",
+          "metadata[invoice_id]": invoiceId || "",
+          "metadata[credits]": credits?.toString() || "",
         }),
       });
 
