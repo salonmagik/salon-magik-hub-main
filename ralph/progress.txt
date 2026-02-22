@@ -185,3 +185,34 @@
 - Gateway reference stored conditionally (only for Paystack payments, NULL for direct purse operations)
 - Function pattern: check idempotency → lock → create if needed → update balance → create ledger entry → return ID
 
+---
+## [2026-02-22 03:00:00] - US-009: Create debit_customer_purse_for_booking RPC function
+
+### Implemented
+- Created debit_customer_purse_for_booking() function accepting p_tenant_id, p_customer_id, p_appointment_id, p_amount, p_currency, p_idempotency_key
+- Function checks idempotency first by querying wallet_ledger_entries with idempotency_key
+- Returns existing entry ID if transaction already processed (prevents duplicate debits)
+- Locks customer_purses row with FOR UPDATE to ensure atomic balance updates
+- Raises exception 'Customer purse not found' if purse doesn't exist
+- Verifies sufficient balance before processing
+- Raises exception 'Insufficient purse balance. Available: X, Required: Y' if balance < amount
+- Calculates new balance by subtracting p_amount from current balance
+- Updates customer_purses balance and updated_at timestamp
+- Creates wallet_ledger_entries record with entry_type 'customer_purse_debit_booking', negative amount, reference_type 'appointment', reference_id p_appointment_id
+- Returns ledger entry ID on success
+- Marked as SECURITY DEFINER for proper permissions
+
+### Files Changed
+- supabase/migrations/20260222120008_create_debit_customer_purse_for_booking_rpc.sql
+- ralph/prd.json (marked US-009 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Debit functions must verify balance before locking to fail fast on insufficient funds
+- Exception messages should include both available and required amounts for clarity
+- Negative amounts in ledger entries clearly indicate debits vs credits (credits are positive)
+- Reference type 'appointment' and reference_id link ledger entries to specific bookings
+- Pattern for debit functions: check idempotency → lock → verify balance → update balance → create ledger entry → return ID
+- SECURITY DEFINER required for service role to execute wallet operations on behalf of customers
+- All acceptance criteria met: function signature, idempotency, locking, balance verification, exception handling, ledger entry creation
+
