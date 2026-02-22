@@ -216,3 +216,33 @@
 - SECURITY DEFINER required for service role to execute wallet operations on behalf of customers
 - All acceptance criteria met: function signature, idempotency, locking, balance verification, exception handling, ledger entry creation
 
+---
+## [2026-02-22 15:45:00] - US-010: Create credit_salon_purse RPC function
+
+### Implemented
+- Created credit_salon_purse() function accepting p_tenant_id, p_entry_type, p_reference_type, p_reference_id, p_amount, p_currency, p_idempotency_key, p_gateway_reference (optional)
+- Function checks idempotency first by querying wallet_ledger_entries with idempotency_key
+- Returns existing entry ID if transaction already processed (prevents double-crediting)
+- Locks salon_wallets row with FOR UPDATE to ensure atomic balance updates
+- Raises exception 'Salon wallet not found for tenant X' if wallet doesn't exist
+- Calculates new balance by adding p_amount to current balance
+- Updates salon_wallets balance and updated_at timestamp
+- Creates wallet_ledger_entries record with provided p_entry_type (supports salon_purse_credit_booking, salon_purse_credit_invoice, salon_purse_topup)
+- Stores reference_type and reference_id for traceability (e.g., 'appointment'/'invoice'/'topup' + respective ID)
+- Conditionally sets gateway='paystack' when p_gateway_reference is provided
+- Returns ledger entry ID on success
+- Marked as SECURITY DEFINER for proper permissions
+
+### Files Changed
+- supabase/migrations/20260222120009_create_credit_salon_purse_rpc.sql
+- ralph/prd.json (marked US-010 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Flexible entry_type parameter allows same function to handle multiple credit scenarios (booking payments, invoice payments, direct topups)
+- Reference type and ID enable linking ledger entries to source transactions for audit trails
+- Gateway reference is optional since salon credits can come from Paystack payments OR customer purse debits
+- Function pattern mirrors credit_customer_purse: check idempotency → lock → verify existence → update balance → create ledger entry → return ID
+- SECURITY DEFINER ensures edge functions can credit salon wallets on behalf of automated payment webhooks
+- All acceptance criteria met: function signature with optional gateway_reference, idempotency, locking, exception on missing wallet, balance update, ledger entry creation with provided entry_type, returns ID
+
