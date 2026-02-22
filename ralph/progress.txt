@@ -129,3 +129,31 @@
 - Indexes created with WHERE clauses for partial indexes on non-null values to save space
 - Comments added for schema documentation and developer clarity
 
+---
+## [2026-02-22 01:15:00] - US-007: Create auto-create salon wallet trigger
+
+### Implemented
+- Created create_salon_wallet_for_tenant() function that:
+  - Inserts salon_wallet with tenant_id and currency from NEW tenant record
+  - Uses ON CONFLICT (tenant_id) DO NOTHING for idempotency
+  - Returns NEW as required for trigger functions
+  - Marked as SECURITY DEFINER for proper permissions
+- Created trigger_create_salon_wallet as AFTER INSERT on tenants table
+- Added DROP TRIGGER IF EXISTS for idempotent migration
+- Backfilled existing tenants with INSERT...SELECT query filtering WHERE id NOT IN (SELECT tenant_id FROM salon_wallets)
+- Used ON CONFLICT DO NOTHING on backfill for idempotency
+- Added documentation comments for function and trigger
+
+### Files Changed
+- supabase/migrations/20260221120006_create_salon_wallet_trigger.sql
+- ralph/prd.json (marked US-007 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Trigger functions must return NEW for AFTER INSERT triggers to maintain proper flow
+- SECURITY DEFINER needed on trigger function to ensure it has proper privileges to insert into salon_wallets
+- ON CONFLICT (tenant_id) DO NOTHING provides idempotency for both trigger and backfill operations
+- DROP TRIGGER IF EXISTS ensures migration can be re-run safely
+- Backfill pattern: INSERT INTO target SELECT FROM source WHERE source.id NOT IN (SELECT key FROM target)
+- All acceptance criteria met: function creation, trigger creation, backfill, returns NEW
+

@@ -102,8 +102,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Migration created successfully. All acceptance criteria met: create_salon_wallet_for_tenant() function created with proper RETURN NEW statement, trigger_create_salon_wallet created as AFTER INSERT on tenants, backfill query added with idempotent ON CONFLICT handling. Function uses ON CONFLICT DO NOTHING for idempotency. No typecheck command exists in project for SQL migrations. Pre-existing eslint installation issues unrelated to this change."
     },
     {
       "id": "US-008",
