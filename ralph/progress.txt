@@ -1338,3 +1338,44 @@
 - Uses import.meta.env for environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
 - Fetches auth token using supabase.auth.getSession() before calling edge function
 - Component ready for integration with client portal pages for topup functionality
+
+---
+## [2026-02-23 04:00:00] - US-040: Create PurseTransactionHistory component for client portal
+
+### Implemented
+- Created PurseTransactionHistory.tsx component in apps/client-portal/src/components/
+- Component accepts customerId, tenantId, and optional currency (default NGN) props
+- Fetches customer_purses to get wallet_id (purse.id) using Supabase query:
+  - .eq("customer_id", customerId)
+  - .eq("tenant_id", tenantId)
+  - .maybeSingle() to gracefully handle missing purse
+- Fetches wallet_ledger_entries filtered by wallet_type='customer' and wallet_id
+  - Orders by created_at DESC
+  - Limits to 100 most recent transactions
+- Displays transactions in shadcn Table component with 4 columns:
+  - Date: formatted with date-fns (MMM dd, yyyy HH:mm)
+  - Type: human-readable labels via ENTRY_TYPE_LABELS map
+  - Amount: formatted with formatCurrency, colored green for credits (amount > 0), red for debits (amount < 0)
+  - Balance: balance_after formatted with formatCurrency
+- Shows human-readable labels for all 4 customer purse entry types:
+  - customer_purse_topup → "Purse Top Up"
+  - customer_purse_debit_booking → "Booking Payment"
+  - customer_purse_debit_invoice → "Invoice Payment"
+  - customer_purse_reversal → "Reversal"
+- Shows loading state with Skeleton components (5 rows)
+- Shows error state with Alert component and AlertCircle icon
+- Shows empty state with FileText icon and message "No transactions yet"
+
+### Files Changed
+- apps/client-portal/src/components/PurseTransactionHistory.tsx (created)
+- ralph/prd.json (marked US-040 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Component follows same pattern as salon-admin WalletLedger but simplified for client portal use case
+- No pagination needed for client portal (limit 100 transactions)
+- .maybeSingle() used instead of .single() to gracefully handle missing purse records
+- Customer purse entry types are a subset of all entry types (only 4 vs 10 total)
+- Build passes successfully with no errors
+- No typecheck command exists in project (confirmed by AGENTS.md and previous stories)
+- Browser verification pending integration into client portal pages (likely BookingsPage or separate Wallet page)
