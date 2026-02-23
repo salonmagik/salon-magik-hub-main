@@ -497,8 +497,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Hook created successfully. All acceptance criteria met: created useBankList.tsx in apps/salon-admin/src/hooks/, accepts country ('NG' | 'GH') and optional type ('mobile_money') parameters, calls get-banks-and-momo-providers edge function with query params using fetch with Authorization header, returns banks array with all required fields (id, name, code, type, slug, currency), isLoading, error, refetch, uses useCallback for fetchBanks function with country/type dependencies, uses useEffect to fetch on mount and when country/type changes. Build passes successfully. No typecheck command exists in project (confirmed by AGENTS.md)."
     },
     {
       "id": "US-031",

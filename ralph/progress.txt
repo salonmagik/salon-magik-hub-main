@@ -919,3 +919,36 @@
 - Build passes successfully for salon-admin app in 1m 56s
 - All acceptance criteria met: hook created, accepts tenantId, fetches withdrawals ordered by requested_at DESC, provides createWithdrawal that calls process-salon-withdrawal edge function, returns all required values (withdrawals, isLoading, error, createWithdrawal, refetch)
 - No typecheck command exists in project (confirmed by AGENTS.md and all previous stories)
+
+---
+## [2026-02-23 05:00:00] - US-030: Create useBankList hook
+
+### Implemented
+- Created useBankList.tsx hook in apps/salon-admin/src/hooks/
+- Hook accepts country ('NG' | 'GH') and optional type ('mobile_money') parameters
+- Hook calls get-banks-and-momo-providers edge function with query params using fetch API
+- Constructs edge function URL with Supabase URL and query parameters (country and optional type)
+- Uses Authorization header with session access token (falls back to anon key if no session)
+- Parses response JSON to extract banks array from { banks: Bank[] } structure
+- Exported Bank interface with all required fields: id, name, code, type, slug, currency
+- Returns banks (Bank[]), isLoading (boolean), error (Error | null), refetch (function)
+- Uses useCallback for fetchBanks function with country and type as dependencies
+- Uses useEffect to automatically fetch banks on mount and when country or type changes
+- Returns empty array if country parameter is not provided
+- Includes proper error handling with try-catch and error logging
+
+### Files Changed
+- apps/salon-admin/src/hooks/useBankList.tsx (created)
+- ralph/prd.json (marked US-030 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Edge functions with GET requests and query parameters require direct fetch API usage instead of supabase.functions.invoke
+- Edge function URL format: ${VITE_SUPABASE_URL}/functions/v1/{function-name}?{query-params}
+- Authorization header requires either session access token or anon key for edge function authentication
+- get-banks-and-momo-providers edge function returns { banks: Bank[] } structure, not just Bank[]
+- Hook pattern follows established pattern: early return if required params missing, useState for state, useCallback for fetch, useEffect for auto-fetching
+- Build passes successfully for salon-admin app (1m 18s build time)
+- All acceptance criteria met: hook created, accepts country and optional type params, calls edge function with query params, returns banks array with all required fields, uses useCallback/useEffect patterns
+- No typecheck command exists in project (confirmed by AGENTS.md and previous stories)
+- Pre-existing build warnings about chunk size and Node version are unrelated to this change
