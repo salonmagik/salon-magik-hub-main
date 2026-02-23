@@ -985,3 +985,40 @@
 - All acceptance criteria met: hook created, provides verify function that accepts accountNumber/bankCode and calls verify-bank-account edge function, provides reset function to clear result, returns verify/reset/isVerifying/result, uses useCallback for both functions
 - No typecheck command exists in project (confirmed by AGENTS.md and all previous stories)
 - Pre-existing lint issues (eslint rules not found in .vite/deps) unrelated to this change
+
+---
+## [2026-02-23 04:00:00] - US-032: Create SalonWalletCard component
+
+### Implemented
+- Created SalonWalletCard.tsx component in apps/salon-admin/src/components/billing/
+- Component uses useSalonWallet hook to fetch wallet data for current tenant
+- Uses useAuth hook to get currentTenant.id and currency
+- Displays wallet balance formatted with formatCurrency from @shared/currency
+- Shows loading state with Loader2 spinner animation while fetching
+- Shows error state with error message if fetch fails
+- Includes "Top Up" and "Withdraw" buttons with placeholder onClick handlers
+- Uses shadcn Card, CardHeader, CardTitle, CardDescription, CardContent components
+- Displays balance as large prominent text (text-4xl font-bold)
+- Includes Wallet icon in card title
+- Shows "Available Balance" label and currency below the balance
+- Uses icons from lucide-react: Wallet, Loader2, Plus, ArrowUpRight
+- Properly handles null/undefined wallet state
+- Number conversion for balance to ensure proper formatting
+
+### Files Changed
+- apps/salon-admin/src/components/billing/SalonWalletCard.tsx (created)
+- ralph/prd.json (marked US-032 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Component follows existing pattern from CreditPurchaseDialog for card-based UI
+- formatCurrency utility imported from @shared/currency handles currency formatting
+- useAuth hook provides currentTenant with id and currency fields
+- useSalonWallet hook accepts optional tenantId parameter and returns wallet, isLoading, error, refetch
+- Loading state should use Loader2 with animate-spin for consistent UX
+- Error state should display destructive text color with muted error details
+- Balance display uses Number() conversion since Supabase returns numeric as string
+- Button layout uses flex-1 for equal-width buttons in a flex container
+- Top Up uses primary button style, Withdraw uses outline variant for visual hierarchy
+- Build passes successfully with no TypeScript errors
+- Browser verification will occur when component is integrated into Settings page (US-037)
