@@ -28,8 +28,11 @@ dist-ssr
 supabase/.temp
 .env
 
+# Agents
 AGENTS.md
 daemon
+ralph
+
 .turbo
 
 ralph.sh
