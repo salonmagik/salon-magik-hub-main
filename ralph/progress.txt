@@ -1022,3 +1022,51 @@
 - Top Up uses primary button style, Withdraw uses outline variant for visual hierarchy
 - Build passes successfully with no TypeScript errors
 - Browser verification will occur when component is integrated into Settings page (US-037)
+
+---
+## [2026-02-23 08:00:00] - US-033: Create PayoutDestinationsManager component
+
+### Implemented
+- Created PayoutDestinationsManager.tsx component in apps/salon-admin/src/components/billing/
+- Component uses usePayoutDestinations, useBankList, and useAccountVerification hooks
+- Component displays list of existing payout destinations using DestinationCard sub-component
+- Each destination card shows icon (Building for bank, Smartphone for mobile money), destination name, account holder name, account/mobile number, country/currency, and delete button
+- Default destinations show "Default" badge
+- Component includes collapsible 'Add Destination' form with:
+  - Country selector (NG/GH) - defaults to tenant currency
+  - Destination type selector (bank/mobile_money)
+  - Bank/provider dropdown - dynamically loads from useBankList based on country and type
+  - Account/mobile number input field
+  - 'Verify Account' button (for bank accounts only) - calls useAccountVerification.verify
+  - Verification result display with CheckCircle2 (green) for success or XCircle (red) for failure
+  - Verified account name shown in read-only input field after successful verification
+  - Manual account name input for mobile money accounts
+  - 'Set as default' checkbox
+  - Cancel and Save buttons
+- Nigeria bank accounts validated as 10 digits using regex /^\d{10}$/
+- Error message displayed for invalid Nigeria account numbers
+- Save button disabled until verification succeeds (for bank accounts) or all fields filled (for mobile money)
+- Form resets when country or destination type changes
+- Toast notifications for success/error states (via usePayoutDestinations hook)
+- Delete confirmation prompt before deleting destinations
+
+### Files Changed
+- apps/salon-admin/src/components/billing/PayoutDestinationsManager.tsx (created)
+- ralph/prd.json (marked US-033 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Component follows established patterns from CreditPurchaseDialog and SalonWalletCard components
+- Uses shadcn UI components: Card, Select, Input, Label, Button, Badge
+- Bank verification only applicable to bank accounts, not mobile money (Paystack limitation)
+- Account number validation differs by country: Nigeria requires exactly 10 digits for bank accounts
+- Mobile money providers loaded via same useBankList hook with type="mobile_money" parameter
+- Form state management: separate useState for each field plus form visibility toggle
+- Verification state managed by useAccountVerification hook (isVerifying, result)
+- Currency defaults to tenant currency but can be overridden via country selector
+- Build passes successfully for salon-admin app (51.26s)
+- All acceptance criteria met: component created, uses all required hooks, displays destinations list with delete, includes full form with all required fields, account verification for banks, error handling, validation, default checkbox
+- No typecheck command exists in project (confirmed by AGENTS.md)
+- Pre-existing TypeScript errors for salon_payout_destinations table (types not regenerated after migrations) - this is expected and documented in previous stories
+- Browser verification pending integration with Settings page (US-037)
+
