@@ -35,6 +35,40 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download staging promotion manifest
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: deploy-staging.yml
+          commit: ${{ inputs.commit_sha }}
+          name: promotion-manifest-staging
+          path: artifacts
+
+      - name: Validate staging promotion manifest
+        run: |
+          test -f artifacts/promotion-manifest-staging.json
+          MANIFEST_SHA=$(jq -r '.commit_sha' artifacts/promotion-manifest-staging.json)
+          MANIFEST_SOURCE=$(jq -r '.source' artifacts/promotion-manifest-staging.json)
+          MANIFEST_READY_FOR=$(jq -r '.ready_for' artifacts/promotion-manifest-staging.json)
+          test "$MANIFEST_SHA" = "${{ inputs.commit_sha }}"
+          test "$MANIFEST_SOURCE" = "staging"
+          test "$MANIFEST_READY_FOR" = "prod"
+
+      - name: Download immutable build artifact from CI
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ci.yml
+          commit: ${{ inputs.commit_sha }}
+          name: web-builds-${{ inputs.commit_sha }}
+          path: artifacts
+
+      - name: Verify immutable build artifact
+        run: |
+          test -f artifacts/web-builds-${{ inputs.commit_sha }}.tar.gz
+          mkdir -p promoted-build
+          tar -xzf artifacts/web-builds-${{ inputs.commit_sha }}.tar.gz -C promoted-build
+
       - name: Apply DB migrations (prod)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -47,9 +81,6 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_PROD }} --workdir supabase
-
-      - name: Build apps (same commit)
-        run: pnpm build
 
       - name: Post-deploy smoke checks
         run: pnpm test

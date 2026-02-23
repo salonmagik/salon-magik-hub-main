@@ -36,6 +36,36 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download CI release manifest
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ci.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: release-manifest
+          path: artifacts
+
+      - name: Validate CI release manifest
+        run: |
+          test -f artifacts/release-manifest.json
+          MANIFEST_SHA=$(jq -r '.commit_sha' artifacts/release-manifest.json)
+          test "$MANIFEST_SHA" = "${{ github.event.workflow_run.head_sha }}"
+
+      - name: Download immutable build artifact from CI
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ci.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: web-builds-${{ github.event.workflow_run.head_sha }}
+          path: artifacts
+
+      - name: Verify immutable build artifact
+        run: |
+          test -f artifacts/web-builds-${{ github.event.workflow_run.head_sha }}.tar.gz
+          mkdir -p promoted-build
+          tar -xzf artifacts/web-builds-${{ github.event.workflow_run.head_sha }}.tar.gz -C promoted-build
+
       - name: Apply DB migrations (dev)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -49,15 +79,13 @@ jobs:
         run: |
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }} --workdir supabase
 
-      - name: Build apps
-        run: pnpm build
-
       - name: Write promotion manifest
         run: |
           mkdir -p artifacts
           cat > artifacts/promotion-manifest.json <<JSON
           {
             "commit_sha": "${{ github.event.workflow_run.head_sha }}",
+            "artifact_name": "web-builds-${{ github.event.workflow_run.head_sha }}",
             "source": "dev",
             "ready_for": "staging",
             "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
