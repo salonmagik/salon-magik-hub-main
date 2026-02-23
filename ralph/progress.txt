@@ -1112,3 +1112,45 @@
 - Build passes successfully - no typecheck command exists in project (per AGENTS.md)
 - Browser verification will happen in US-038 when dialog is connected to SalonWalletCard
 - Pre-existing LSP errors related to Supabase type generation (salon_wallets, salon_withdrawals, salon_payout_destinations tables not in generated types yet)
+
+---
+## [2026-02-23 04:00:00] - US-035: Create WithdrawalHistory component
+
+### Implemented
+- Created WithdrawalHistory.tsx component in apps/salon-admin/src/components/billing/
+- Component uses useWithdrawals hook to fetch withdrawals for tenant
+- Component uses usePayoutDestinations hook to display destination details (bank name + account or momo provider + number)
+- Displays withdrawals in shadcn Table component with columns:
+  - Date: formatted with date-fns (MMM dd, yyyy HH:mm)
+  - Amount: formatted with formatCurrency
+  - Destination: shows bank/momo details from getDestinationDisplay helper
+  - Status: colored badges with getStatusBadge helper
+  - Reference: shows paystack_reference or truncated withdrawal ID
+- Status badges implemented with correct colors:
+  - pending: yellow background (bg-yellow-500/20 text-yellow-700)
+  - processing: blue background (bg-blue-500/20 text-blue-700)
+  - completed: green background (bg-green-500/20 text-green-700)
+  - failed: destructive variant (red)
+- Shows failure_reason below status badge for failed withdrawals (small red text)
+- Shows loading state with 5 Skeleton rows
+- Shows error state with Alert component (destructive variant)
+- Shows empty state with History icon and descriptive message
+- Uses responsive Tailwind classes (hidden md:table-cell, hidden lg:table-cell) for destination and reference columns
+
+### Files Changed
+- apps/salon-admin/src/components/billing/WithdrawalHistory.tsx (created)
+- ralph/prd.json (marked US-035 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Table component pattern from AuditLogPage: use shadcn Table with TableHeader/TableBody/TableRow/TableCell
+- Badge variant customization using className for custom colors (bg-{color}-500/20 pattern)
+- Loading state shows skeleton rows for better UX than spinner
+- Empty state with icon and message provides clear user feedback
+- Helper functions (getDestinationDisplay, getStatusBadge) keep component code clean and readable
+- Responsive table: hide less important columns on smaller screens using Tailwind responsive classes
+- date-fns format() used for consistent date formatting across app
+- formatCurrency utility from @shared/currency ensures proper currency display
+- Pre-existing LSP errors in useWithdrawals and usePayoutDestinations hooks are due to outdated Supabase type generation (salon_withdrawals and salon_payout_destinations tables not yet in generated types)
+- Build passes successfully despite LSP errors (types are correct at runtime)
+- Browser verification pending integration with Settings page (US-037)
