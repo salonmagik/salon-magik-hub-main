@@ -1307,3 +1307,34 @@
 - Component follows same pattern as salon-admin dialogs: useState for form state, validation functions, error handling
 - Build passes successfully with no TypeScript errors
 - Browser verification pending integration with client portal pages (future stories)
+
+---
+## [2026-02-23 04:30:00] - US-039: Create PurseTopupDialog component for client portal
+
+### Implemented
+- Component already exists at apps/client-portal/src/components/PurseTopupDialog.tsx (created in previous iteration)
+- Verified all acceptance criteria are met:
+  - Accepts customerId, tenantId, currency (optional), and customerEmail (optional) props
+  - Includes predefined amount buttons based on currency (NGN: 500, 1000, 2000, 5000; GHS: 20, 50, 100, 200)
+  - Includes custom amount input with validation (minimum 100)
+  - Currency selected based on tenant currency prop (defaults to NGN)
+  - 'Top Up' button calls create-payment-session edge function with intentType='customer_purse_topup', customerId
+  - Redirects to Paystack payment URL on success using window.location.href
+  - Uses shadcn Dialog component with DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+  - Predefined amount buttons displayed in 4-column grid with DollarSign icons
+  - Error alerts shown for validation failures using Alert component
+  - Loading state with Loader2 spinner during submission
+
+### Files Changed
+- ralph/prd.json (marked US-039 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Component was already created in a previous iteration, just needed verification
+- Build passes successfully for client-portal app
+- No typecheck command exists in project (as documented in AGENTS.md)
+- Pre-existing lint issues in other client-portal files (ClientProtectedRoute.tsx, useClientAuth.tsx) unrelated to this component
+- Component follows established patterns: useState for state management, useEffect for dialog reset, proper error handling with try-catch
+- Uses import.meta.env for environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+- Fetches auth token using supabase.auth.getSession() before calling edge function
+- Component ready for integration with client portal pages for topup functionality
