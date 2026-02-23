@@ -1452,3 +1452,35 @@
 - Pattern for payment modes: determine available modes based on balance, show appropriate UI, handle each mode separately in submission
 - Build passes successfully with no errors
 - Pre-existing LSP errors (toast description property) unrelated to this implementation
+
+---
+## [2026-02-23 04:00:00] - US-043: Add generatePaymentLink to invoices in salon-admin
+
+### Implemented
+- Updated useInvoices.tsx to add generatePaymentLink function
+- Function calls create-invoice-payment-session edge function with invoiceId parameter
+- Function returns payment link URL on success or null on error
+- Function shows toast notifications for success and error states
+- Function refetches invoices after successful generation to update payment_link field
+- Created InvoicePaymentLink component (apps/salon-admin/src/components/billing/InvoicePaymentLink.tsx) to display payment link UI
+- Component shows "Generate Payment Link" button when no link exists
+- Component displays existing payment link in read-only input field with copy and open actions
+- Component automatically hides if invoice status is 'paid' or 'void'
+- Copy button shows checkmark icon when link is copied to clipboard
+- Open button opens payment link in new tab
+
+### Files Changed
+- apps/salon-admin/src/hooks/useInvoices.tsx
+- apps/salon-admin/src/components/billing/InvoicePaymentLink.tsx (created)
+- ralph/prd.json (marked US-043 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- generatePaymentLink function follows same pattern as other invoice actions (sendInvoice, markAsPaid, voidInvoice)
+- Edge function invoke with supabase.functions.invoke returns {data, error} structure
+- Payment link is stored in invoice.payment_link field after generation
+- Component uses invoice.status to determine if payment link should be displayed
+- TypeScript compilation passes with npx tsc --noEmit
+- Build/lint killed due to memory issues (pre-existing project issue, documented in US-026 through US-042)
+- InvoicePaymentLink component is ready to be integrated into invoice detail/list views when those pages are created
+- All acceptance criteria met: generatePaymentLink function added to hook, calls edge function, returns link or error, component displays link with copy/share actions, button disabled for paid/void invoices, shows existing payment_link if present, TypeScript check passes

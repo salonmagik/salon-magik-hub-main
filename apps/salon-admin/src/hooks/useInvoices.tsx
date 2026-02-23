@@ -270,6 +270,36 @@ export function useInvoices() {
     }
   };
 
+  // Generate payment link for invoice
+  const generatePaymentLink = async (invoiceId: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke("create-invoice-payment-session", {
+        body: { invoiceId },
+      });
+
+      if (error) throw error;
+
+      if (!data || !data.paymentUrl) {
+        throw new Error("No payment URL returned from edge function");
+      }
+
+      toast({ 
+        title: "Payment link generated", 
+        description: "Payment link has been created for this invoice" 
+      });
+      fetchInvoices(); // Refresh to get updated payment_link field
+      return data.paymentUrl;
+    } catch (err) {
+      console.error("Error generating payment link:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to generate payment link",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
   return {
     invoices,
     isLoading,
@@ -279,6 +309,7 @@ export function useInvoices() {
     sendInvoice,
     markAsPaid,
     voidInvoice,
+    generatePaymentLink,
     refetch: fetchInvoices,
   };
 }
