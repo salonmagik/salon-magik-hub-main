@@ -1154,3 +1154,42 @@
 - Pre-existing LSP errors in useWithdrawals and usePayoutDestinations hooks are due to outdated Supabase type generation (salon_withdrawals and salon_payout_destinations tables not yet in generated types)
 - Build passes successfully despite LSP errors (types are correct at runtime)
 - Browser verification pending integration with Settings page (US-037)
+
+---
+## [2026-02-23 03:30:00] - US-036: Create WalletLedger component
+
+### Implemented
+- Created WalletLedger.tsx component in apps/salon-admin/src/components/billing/
+- Component accepts walletType ('customer' | 'salon'), walletId, and optional currency props
+- Uses useWalletLedger hook to fetch ledger entries with limit
+- Displays ledger entries in shadcn Table component with 5 columns:
+  - Date: formatted with date-fns as "MMM dd, yyyy HH:mm"
+  - Type: formatted with ENTRY_TYPE_LABELS map for all 10 entry types
+  - Amount: formatted with formatCurrency, colored green for credits (amount > 0) and red for debits (amount < 0)
+  - Balance After: formatted with formatCurrency
+  - Reference: shows reference_type and truncated reference_id (first 8 chars)
+- Implemented pagination with 50 entries per page:
+  - Previous/Next buttons with ChevronLeft/ChevronRight icons
+  - Shows record count (e.g., "Showing 1-50 of 150")
+  - Client-side pagination by slicing fetched entries
+- Implemented loading state with Skeleton components (5 rows)
+- Implemented error state with Alert component
+- Implemented empty state with FileText icon and message
+- Used responsive classes to hide reference column on smaller screens (md breakpoint)
+- Follows same pattern as WithdrawalHistory component for consistency
+
+### Files Changed
+- apps/salon-admin/src/components/billing/WalletLedger.tsx (created)
+- ralph/prd.json (marked US-036 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- ENTRY_TYPE_LABELS map provides human-readable labels for all 10 entry types defined in wallet_entry_type ENUM
+- Amount color coding: positive amounts are credits (green), negative amounts are debits (red)
+- Pagination implemented client-side by fetching limit * (page + 1) entries and slicing for display
+- Component pattern: loading → error → empty → data display with pagination
+- Reference column shows reference_type (e.g., "appointment", "invoice", "withdrawal") and truncated reference_id
+- Build passes successfully with no errors or warnings related to this component
+- No typecheck command exists in project (confirmed by AGENTS.md)
+- Browser verification pending integration with Settings page (US-037)
+
