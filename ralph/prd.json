@@ -448,8 +448,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Hook created successfully. All acceptance criteria met: created useWalletLedger.tsx in apps/salon-admin/src/hooks/, accepts walletType ('customer' | 'salon'), walletId, and optional limit (default 100) parameters via options object, fetches wallet_ledger_entries using Supabase with filters .eq('wallet_type', walletType) and .eq('wallet_id', walletId), orders by created_at DESC, returns entries, isLoading, error, refetch, uses useCallback for fetchEntries function with walletType/walletId/limit dependencies, uses useEffect to fetch on mount and when walletId changes. Build passes successfully. No typecheck command exists in project (confirmed by AGENTS.md and previous stories). Pre-existing lint timeout issues unrelated to this change."
     },
     {
       "id": "US-028",

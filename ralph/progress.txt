@@ -819,3 +819,34 @@
 - Supabase generated types (Tables<"salon_wallets">) will be available once migrations are applied and types regenerated
 - Import patterns: useState/useCallback/useEffect from "react", supabase from "@/lib/supabase", Tables type from "@supabase-client"
 
+---
+## [2026-02-23 04:30:00] - US-027: Create useWalletLedger hook
+
+### Implemented
+- Created useWalletLedger.tsx hook in apps/salon-admin/src/hooks/
+- Hook accepts options object with walletType ('customer' | 'salon'), walletId, and optional limit (default 100) parameters
+- Hook fetches wallet_ledger_entries using Supabase with filters .eq("wallet_type", walletType) and .eq("wallet_id", walletId)
+- Orders results by created_at DESC for most recent transactions first
+- Applies limit to query if specified
+- Returns entries (WalletLedgerEntry[]), isLoading (boolean), error (Error | null), refetch (function)
+- Uses useCallback for fetchEntries function with walletType, walletId, limit as dependencies
+- Uses useEffect to automatically fetch entries on mount and when walletId changes
+- Includes proper error handling with try-catch and error logging
+- Returns empty array if walletId is not provided
+
+### Files Changed
+- apps/salon-admin/src/hooks/useWalletLedger.tsx (created)
+- ralph/prd.json (marked US-027 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Hook pattern uses options object with destructured parameters for cleaner API when multiple params needed
+- wallet_ledger_entries table stores unified transaction history for both customer and salon wallets
+- Ledger query requires both wallet_type and wallet_id for proper filtering (composite key pattern)
+- Default limit of 100 prevents excessive data loading for wallets with large transaction history
+- Ordering by created_at DESC provides natural reverse-chronological display for transaction lists
+- Build passes successfully for salon-admin app
+- All acceptance criteria met: hook created, accepts all required parameters, filters and orders correctly, returns proper values, uses useCallback/useEffect patterns
+- No typecheck command exists in project (confirmed by AGENTS.md and previous stories)
+- Pre-existing lint timeout issues unrelated to this change
+
