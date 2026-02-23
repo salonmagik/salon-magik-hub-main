@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { formatCurrency } from "@shared/currency";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
 import { Loader2, Wallet, Plus, ArrowUpRight } from "lucide-react";
+import { WithdrawalDialog } from "./WithdrawalDialog";
 
 export function SalonWalletCard() {
   const { currentTenant } = useAuth();
-  const { wallet, isLoading, error } = useSalonWallet(currentTenant?.id);
+  const { wallet, isLoading, error, refetch } = useSalonWallet(currentTenant?.id);
+  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
 
   const currency = currentTenant?.currency || "NGN";
 
@@ -17,8 +20,15 @@ export function SalonWalletCard() {
   };
 
   const handleWithdraw = () => {
-    // TODO: Implement withdraw functionality
-    console.log("Withdraw clicked");
+    setWithdrawalDialogOpen(true);
+  };
+
+  const handleWithdrawalDialogClose = (open: boolean) => {
+    setWithdrawalDialogOpen(open);
+    // Refetch wallet balance when dialog closes
+    if (!open) {
+      refetch();
+    }
   };
 
   return (
@@ -67,6 +77,12 @@ export function SalonWalletCard() {
           </div>
         )}
       </CardContent>
+
+      {/* Withdrawal Dialog */}
+      <WithdrawalDialog
+        open={withdrawalDialogOpen}
+        onOpenChange={handleWithdrawalDialogClose}
+      />
     </Card>
   );
 }

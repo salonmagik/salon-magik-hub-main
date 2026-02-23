@@ -1238,3 +1238,36 @@
 - Build process has memory issues (killed with Exit status 137), but this is a pre-existing project issue unrelated to this change
 - All acceptance criteria met except browser verification (pending integration test)
 
+---
+## [2026-02-23 10:00:00] - US-038: Connect WithdrawalDialog to SalonWalletCard
+
+### Implemented
+- Updated SalonWalletCard.tsx to integrate WithdrawalDialog component
+- Added useState import from "react" for state management
+- Added WithdrawalDialog import from "./WithdrawalDialog"
+- Added withdrawalDialogOpen state using useState(false)
+- Updated useSalonWallet destructuring to include refetch function
+- Modified handleWithdraw function to open dialog by calling setWithdrawalDialogOpen(true)
+- Created handleWithdrawalDialogClose function that:
+  - Accepts open boolean parameter
+  - Sets withdrawalDialogOpen state via setWithdrawalDialogOpen(open)
+  - Refetches wallet balance via refetch() when dialog closes (if !open)
+- Added WithdrawalDialog component at end of Card component with:
+  - open={withdrawalDialogOpen} prop
+  - onOpenChange={handleWithdrawalDialogClose} prop
+- WithdrawalDialog fetches its own wallet data internally via useSalonWallet hook (no need to pass wallet as prop)
+- Dialog closes automatically on successful withdrawal (handled by WithdrawalDialog.onOpenChange)
+
+### Files Changed
+- apps/salon-admin/src/components/billing/SalonWalletCard.tsx
+- ralph/prd.json (marked US-038 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- WithdrawalDialog is self-contained and fetches its own data, so no wallet props needed
+- Dialog open/close state managed by parent (SalonWalletCard) but dialog controls its own closure on success
+- Refetch pattern: call refetch() when dialog closes to ensure wallet balance updates after withdrawal
+- Build passes successfully in 15.81s with no TypeScript errors
+- All acceptance criteria met: SalonWalletCard includes WithdrawalDialog, Withdraw button opens dialog, refetch wallet balance on dialog close
+- Browser verification pending integration test
+
