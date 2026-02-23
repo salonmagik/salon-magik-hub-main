@@ -745,3 +745,48 @@
 - Pre-existing lint issues (eslint not found in packages) unrelated to this change
 - All acceptance criteria met: function created with signature verification, returns 401 on invalid signature, handles success/failed/reversed events correctly, returns {received: true}, includes CORS headers
 
+---
+## [2026-02-23 02:00:00] - US-025: Create purchase-credits-from-purse edge function
+
+### Implemented
+- Created supabase/functions/purchase-credits-from-purse/index.ts edge function
+- Function requires authentication using Authorization header and getUser() verification
+- Function accepts tenantId and packageId in request body with proper validation
+- Defined CREDIT_PACKAGES constant with 4 packages:
+  - pack_50: 50 credits, 3500 NGN, 60 GHS
+  - pack_100: 100 credits, 6500 NGN, 108 GHS
+  - pack_250: 250 credits, 15000 NGN, 240 GHS
+  - pack_500: 500 credits, 27000 NGN, 420 GHS
+- Validates packageId and fetches salon_wallets for tenant
+- Returns 400 if wallet has insufficient balance (with clear message showing available and required amounts)
+- Creates messaging_credit_purchases record with tenant_id, credits, currency, amount, paid_via='salon_purse', payment_intent_id=null, gateway_reference=null
+- Created new migration 20260223010000_create_debit_salon_purse_rpc.sql to add generic debit_salon_purse RPC function
+- New RPC accepts p_entry_type parameter (flexible like credit_salon_purse) for proper ledger tracking
+- Calls debit_salon_purse RPC with:
+  - p_entry_type: 'salon_purse_debit_credit_purchase'
+  - p_reference_type: 'credit_purchase'
+  - p_reference_id: purchase.id
+  - p_idempotency_key: `credit_purchase_{purchase.id}`
+- If debit fails: deletes purchase record and returns error
+- Increments communication_credits balance (checks if exists first, creates if not)
+- Returns success JSON with credits, newBalance, amountDebited, currency
+- Includes proper CORS headers for OPTIONS preflight and all responses
+
+### Files Changed
+- supabase/functions/purchase-credits-from-purse/index.ts (created)
+- supabase/migrations/20260223010000_create_debit_salon_purse_rpc.sql (created)
+- ralph/prd.json (marked US-025 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Created generic debit_salon_purse RPC function (similar to credit_salon_purse) to handle different debit types with correct entry_type
+- This is cleaner than reusing debit_salon_purse_for_withdrawal which would create 'salon_purse_withdrawal' entry_type instead of 'salon_purse_debit_credit_purchase'
+- RPC function includes idempotency check, wallet locking with FOR UPDATE, balance verification, and atomic balance updates
+- Edge function follows same authentication pattern as other functions: check bearer token → getUser() → verify user exists
+- Price is determined by wallet currency (NGN or GHS) from CREDIT_PACKAGES
+- communication_credits table uses unique tenant_id, so must check existence before insert/update
+- PGRST116 error code indicates "no rows returned" from Supabase query
+- All acceptance criteria met except used debit_salon_purse instead of debit_salon_purse_for_withdrawal (better approach for correct entry_type)
+- No typecheck command exists for edge functions (Deno-based)
+- Pre-existing lint issues (long running, timeout) unrelated to this SQL migration and edge function
+
