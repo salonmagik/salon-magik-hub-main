@@ -41,6 +41,9 @@ import {
   Gift,
   Share2,
   Ticket,
+  Wallet,
+  Banknote,
+  ArrowDownUp,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -50,12 +53,20 @@ import { useMyReferralCodes, useMyReferralDiscounts, useGenerateReferralCode } f
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import { differenceInDays, format } from "date-fns";
+import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
+import { WalletLedger } from "@/components/billing/WalletLedger";
+import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
+import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
+import { useSalonWallet } from "@/hooks/useSalonWallet";
 
 const settingsTabs = [
   { id: "profile", label: "Salon Profile", icon: Building2 },
   { id: "hours", label: "Business Hours", icon: Clock },
   { id: "booking", label: "Booking Settings", icon: User },
   { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "wallet", label: "Wallet", icon: Wallet },
+  { id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
+  { id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
   { id: "promotions", label: "Promotions", icon: Gift },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
@@ -109,6 +120,7 @@ export default function SettingsPage() {
     isSaving: notificationsSaving, 
     saveSettings: saveNotificationSettings 
   } = useNotificationSettings();
+  const { wallet } = useSalonWallet(currentTenant?.id);
 
   // Sync tab with URL params
   useEffect(() => {
@@ -1567,6 +1579,27 @@ export default function SettingsPage() {
     );
   };
 
+  const renderWalletTab = () => (
+    <div className="space-y-6">
+      <SalonWalletCard />
+      {wallet && (
+        <WalletLedger
+          walletType="salon"
+          walletId={wallet.id}
+          currency={wallet.currency}
+        />
+      )}
+    </div>
+  );
+
+  const renderPayoutDestinationsTab = () => (
+    <PayoutDestinationsManager />
+  );
+
+  const renderWithdrawalsTab = () => (
+    <WithdrawalHistory />
+  );
+
   const renderPlaceholderTab = () => (
     <Card>
       <CardContent className="p-12 text-center">
@@ -1668,6 +1701,9 @@ export default function SettingsPage() {
             {activeTab === "hours" && renderHoursTab()}
             {activeTab === "booking" && renderBookingTab()}
             {activeTab === "payments" && renderPaymentsTab()}
+            {activeTab === "wallet" && renderWalletTab()}
+            {activeTab === "payout-destinations" && renderPayoutDestinationsTab()}
+            {activeTab === "withdrawals" && renderWithdrawalsTab()}
             {activeTab === "promotions" && renderPromotionsTab()}
             {activeTab === "notifications" && renderNotificationsTab()}
             {activeTab === "roles" && renderRolesTab()}
