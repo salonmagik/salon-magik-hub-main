@@ -1271,3 +1271,39 @@
 - All acceptance criteria met: SalonWalletCard includes WithdrawalDialog, Withdraw button opens dialog, refetch wallet balance on dialog close
 - Browser verification pending integration test
 
+
+---
+## [2026-02-23 04:30:00] - US-039: Create PurseTopupDialog component for client portal
+
+### Implemented
+- Created PurseTopupDialog.tsx component in apps/client-portal/src/components/
+- Component accepts customerId, tenantId, currency (optional, defaults to NGN), and customerEmail (optional) props
+- Included predefined amount buttons based on currency:
+  - NGN: 500, 1000, 2000, 5000
+  - GHS: 20, 50, 100, 200
+- Included custom amount input field with validation (minimum 100)
+- Implemented 'Top Up' button that calls create-payment-session edge function with:
+  - intentType: 'customer_purse_topup'
+  - customerId, tenantId, amount, customerEmail
+- Redirects to Paystack payment URL on success using window.location.href
+- Uses shadcn Dialog component with DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+- Shows predefined amount buttons in 4-column grid layout with DollarSign icons
+- Shows error alerts for validation failures using Alert component with destructive variant
+- Created vite-env.d.ts file for proper TypeScript support of import.meta.env
+- Includes loading state with Loader2 spinner during payment session creation
+- Shows selected amount in button label dynamically
+
+### Files Changed
+- apps/client-portal/src/components/PurseTopupDialog.tsx (created)
+- apps/client-portal/src/vite-env.d.ts (created)
+- ralph/prd.json (marked US-039 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Client portal uses createSupabaseClient from @supabase-client/supabase/client with unique storage key "sb-salonmagik-client"
+- Edge functions called via fetch with Authorization header using access_token from session
+- import.meta.env requires vite-env.d.ts with /// <reference types="vite/client" /> for TypeScript support
+- Predefined amounts should be currency-specific for better UX
+- Component follows same pattern as salon-admin dialogs: useState for form state, validation functions, error handling
+- Build passes successfully with no TypeScript errors
+- Browser verification pending integration with client portal pages (future stories)
