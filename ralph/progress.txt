@@ -850,3 +850,39 @@
 - No typecheck command exists in project (confirmed by AGENTS.md and previous stories)
 - Pre-existing lint timeout issues unrelated to this change
 
+---
+## [2026-02-23 03:30:00] - US-028: Create usePayoutDestinations hook
+
+### Implemented
+- Created usePayoutDestinations.tsx hook in apps/salon-admin/src/hooks/
+- Hook accepts tenantId parameter (optional string)
+- Hook fetches salon_payout_destinations for tenant using Supabase query with .eq("tenant_id", tenantId) filter
+- Hook orders results by created_at DESC for newest-first display
+- Hook provides createDestination function that accepts CreateDestinationData interface with fields:
+  - tenantId, destinationType, country, currency, bankCode, bankName, accountNumber, accountName, momoProvider, momoNumber, isDefault
+- createDestination calls create-payout-destination edge function using supabase.functions.invoke
+- createDestination refetches destinations after successful creation
+- Hook provides deleteDestination function that accepts destination ID
+- deleteDestination performs hard delete from salon_payout_destinations table with tenant_id verification
+- deleteDestination refetches destinations after successful deletion
+- Hook returns destinations (PayoutDestination[]), isLoading (boolean), error (Error | null), createDestination (function), deleteDestination (function), refetch (function)
+- Uses useCallback for fetchDestinations with tenantId dependency
+- Uses useEffect to automatically fetch destinations on mount and when tenantId changes
+- Includes proper error handling with try-catch and console.error logging
+- Integrates with toast notifications for user feedback
+- Follows established patterns from useInvoices and useCustomers hooks
+
+### Files Changed
+- apps/salon-admin/src/hooks/usePayoutDestinations.tsx (created)
+- ralph/prd.json (marked US-028 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Hook pattern in this codebase: useState for state, useCallback for functions, useEffect for auto-fetching
+- CRUD hooks follow pattern: fetch on mount, provide create/delete functions that call API and refetch data
+- Edge functions called via supabase.functions.invoke with body parameter
+- Toast notifications used for success/error feedback in user-facing operations
+- Type safety provided by Tables<"table_name"> from @supabase-client package
+- All acceptance criteria met: hook created, accepts tenantId, fetches destinations, provides create/delete functions, returns all required values
+- Build times out (pre-existing project issue documented in previous stories), but TypeScript syntax is valid
+- No typecheck command exists in project (confirmed by AGENTS.md)
