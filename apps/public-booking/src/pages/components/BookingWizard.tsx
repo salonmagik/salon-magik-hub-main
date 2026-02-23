@@ -15,7 +15,7 @@ import { SchedulingStep } from "./SchedulingStep";
 import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
 import { GiftRecipientsStep } from "./GiftRecipientsStep";
 import { ReviewStep, type PaymentOption } from "./ReviewStep";
-import { PaymentStep, type PaymentGateway } from "./PaymentStep";
+import { PaymentStep, type PaymentGateway, type PaymentMode } from "./PaymentStep";
 import { type AppliedVoucher } from "@/components/VoucherInput";
 import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
@@ -59,6 +59,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("stripe");
   const [purseAmount, setPurseAmount] = useState(0);
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("card");
+  const [purseBalance, setPurseBalance] = useState(0);
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [splitPurseAmount, setSplitPurseAmount] = useState(0);
+  const [splitCardAmount, setSplitCardAmount] = useState(0);
 
   // Sync location when locations load
   useEffect(() => {
@@ -66,6 +71,47 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setSelectedLocation(locations[0]);
     }
   }, [locations, selectedLocation]);
+
+  // Fetch customer purse balance when email is available
+  useEffect(() => {
+    const fetchPurseBalance = async () => {
+      if (!bookerInfo.email || !salon.id) return;
+
+      try {
+        // Look up customer by email and tenant
+        const { data: customer, error: customerError } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("tenant_id", salon.id)
+          .eq("email", bookerInfo.email)
+          .maybeSingle();
+
+        if (customerError || !customer) {
+          setPurseBalance(0);
+          setCustomerId(null);
+          return;
+        }
+
+        setCustomerId(customer.id);
+
+        // Get purse balance
+        const { data: purse } = await supabase
+          .from("customer_purses")
+          .select("balance")
+          .eq("tenant_id", salon.id)
+          .eq("customer_id", customer.id)
+          .maybeSingle();
+
+        setPurseBalance(purse?.balance || 0);
+      } catch (err) {
+        console.error("Error fetching purse balance:", err);
+        setPurseBalance(0);
+        setCustomerId(null);
+      }
+    };
+
+    fetchPurseBalance();
+  }, [bookerInfo.email, salon.id]);
 
   const totalDuration = getTotalDuration();
   const giftItems = getGiftItems();
@@ -224,53 +270,194 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     }
   };
 
+  // Handler for payment mode changes from PaymentStep
+  const handlePaymentModeChange = (mode: PaymentMode, purseAmt: number, cardAmt: number) => {
+    setPaymentMode(mode);
+    setSplitPurseAmount(purseAmt);
+    setSplitCardAmount(cardAmt);
+  };
+
   // Called from payment step to submit with payment
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Call edge function to create booking
-      const { data, error } = await supabase.functions.invoke("create-public-booking", {
-        body: {
-          tenantId: salon.id,
-          locationId: selectedLocation?.id,
-          scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
-          scheduledTime: leaveUnscheduled ? null : selectedTime,
-          customer: bookerInfo,
-          isUnscheduled: leaveUnscheduled,
-          items: items.map((item) => ({
-            ...item,
-            giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
-          })),
-          payAtSalon: false,
-          voucherCode: appliedVoucher?.code || null,
-          voucherDiscount: voucherDiscount,
-          purseAmount: purseAmount,
-          depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
-        },
-      });
+      // Handle pay with purse only
+      if (paymentMode === "purse") {
+        if (!customerId) {
+          throw new Error("Customer not found");
+        }
 
-      if (error) throw error;
+        // Call edge function to create booking
+        const { data, error } = await supabase.functions.invoke("create-public-booking", {
+          body: {
+            tenantId: salon.id,
+            locationId: selectedLocation?.id,
+            scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
+            scheduledTime: leaveUnscheduled ? null : selectedTime,
+            customer: bookerInfo,
+            isUnscheduled: leaveUnscheduled,
+            items: items.map((item) => ({
+              ...item,
+              giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
+            })),
+            payAtSalon: false,
+            voucherCode: appliedVoucher?.code || null,
+            voucherDiscount: voucherDiscount,
+            purseAmount: 0, // Don't apply purse through booking, we'll debit directly
+            depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+          },
+        });
 
-      // Redirect to selected payment gateway
-      const paymentResponse = await supabase.functions.invoke("create-payment-session", {
-        body: {
-          tenantId: salon.id,
-          appointmentId: data.appointmentId,
-          amount: amountDueNow,
-          currency: salon.currency,
-          customerEmail: bookerInfo.email,
-          customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
-          description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
-          isDeposit: paymentOption === "pay_deposit",
-          successUrl: window.location.href,
-          cancelUrl: window.location.href,
-          preferredGateway: selectedGateway,
-        },
-      });
+        if (error) throw error;
 
-      if (paymentResponse.data?.checkoutUrl) {
-        window.location.href = paymentResponse.data.checkoutUrl;
+        const appointmentId = data.appointmentId;
+        const amountToDebit = amountDueNow;
+
+        // Debit customer purse directly via RPC
+        const { data: ledgerData, error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
+          p_tenant_id: salon.id,
+          p_customer_id: customerId,
+          p_appointment_id: appointmentId,
+          p_amount: amountToDebit,
+          p_currency: salon.currency,
+          p_idempotency_key: `booking_purse_${appointmentId}_${Date.now()}`,
+        });
+
+        if (debitError) {
+          console.error("Purse debit failed:", debitError);
+          throw new Error("Failed to debit purse balance: " + debitError.message);
+        }
+
+        // Update appointment to mark as paid
+        await supabase
+          .from("appointments")
+          .update({
+            payment_status: "fully_paid",
+            amount_paid: amountToDebit,
+          })
+          .eq("id", appointmentId);
+
+        setBookingReference(data.reference || "CONFIRMED");
+        setStep("confirmation");
+        clearCart();
         return;
+      }
+
+      // Handle split payment
+      if (paymentMode === "split") {
+        if (!customerId) {
+          throw new Error("Customer not found");
+        }
+
+        // Call edge function to create booking
+        const { data, error } = await supabase.functions.invoke("create-public-booking", {
+          body: {
+            tenantId: salon.id,
+            locationId: selectedLocation?.id,
+            scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
+            scheduledTime: leaveUnscheduled ? null : selectedTime,
+            customer: bookerInfo,
+            isUnscheduled: leaveUnscheduled,
+            items: items.map((item) => ({
+              ...item,
+              giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
+            })),
+            payAtSalon: false,
+            voucherCode: appliedVoucher?.code || null,
+            voucherDiscount: voucherDiscount,
+            purseAmount: 0, // Don't apply purse through booking, we'll debit directly
+            depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+          },
+        });
+
+        if (error) throw error;
+
+        const appointmentId = data.appointmentId;
+
+        // Debit customer purse for the purse portion
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
+          p_tenant_id: salon.id,
+          p_customer_id: customerId,
+          p_appointment_id: appointmentId,
+          p_amount: splitPurseAmount,
+          p_currency: salon.currency,
+          p_idempotency_key: `booking_split_purse_${appointmentId}_${Date.now()}`,
+        });
+
+        if (debitError) {
+          console.error("Purse debit failed:", debitError);
+          throw new Error("Failed to debit purse balance: " + debitError.message);
+        }
+
+        // Create payment session for card portion
+        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
+          body: {
+            tenantId: salon.id,
+            appointmentId: appointmentId,
+            amount: splitCardAmount,
+            currency: salon.currency,
+            customerEmail: bookerInfo.email,
+            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
+            description: `Booking Payment (${formatCurrency(splitPurseAmount, salon.currency)} from purse)`,
+            isDeposit: false,
+            successUrl: window.location.href,
+            cancelUrl: window.location.href,
+            preferredGateway: selectedGateway,
+          },
+        });
+
+        if (paymentResponse.data?.checkoutUrl) {
+          window.location.href = paymentResponse.data.checkoutUrl;
+          return;
+        }
+      }
+
+      // Handle card payment only (original flow)
+      if (paymentMode === "card") {
+        // Call edge function to create booking
+        const { data, error } = await supabase.functions.invoke("create-public-booking", {
+          body: {
+            tenantId: salon.id,
+            locationId: selectedLocation?.id,
+            scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
+            scheduledTime: leaveUnscheduled ? null : selectedTime,
+            customer: bookerInfo,
+            isUnscheduled: leaveUnscheduled,
+            items: items.map((item) => ({
+              ...item,
+              giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
+            })),
+            payAtSalon: false,
+            voucherCode: appliedVoucher?.code || null,
+            voucherDiscount: voucherDiscount,
+            purseAmount: purseAmount,
+            depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+          },
+        });
+
+        if (error) throw error;
+
+        // Redirect to selected payment gateway
+        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
+          body: {
+            tenantId: salon.id,
+            appointmentId: data.appointmentId,
+            amount: amountDueNow,
+            currency: salon.currency,
+            customerEmail: bookerInfo.email,
+            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
+            description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
+            isDeposit: paymentOption === "pay_deposit",
+            successUrl: window.location.href,
+            cancelUrl: window.location.href,
+            preferredGateway: selectedGateway,
+          },
+        });
+
+        if (paymentResponse.data?.checkoutUrl) {
+          window.location.href = paymentResponse.data.checkoutUrl;
+          return;
+        }
       }
     } catch (err: any) {
       console.error("Payment error:", err);
@@ -478,6 +665,11 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 onSubmit={handlePaymentSubmit}
                 isSubmitting={isSubmitting}
                 brandColor={brandColor}
+                purseBalance={purseBalance}
+                customerId={customerId || undefined}
+                customerEmail={bookerInfo.email}
+                tenantId={salon.id}
+                onPaymentModeChange={handlePaymentModeChange}
               />
             )}
 

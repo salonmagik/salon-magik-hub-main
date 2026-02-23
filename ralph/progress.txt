@@ -1414,3 +1414,41 @@
 - All acceptance criteria met: demo mode logic removed, real purse balance fetched and displayed, toggle disabled for zero balance
 - Component now follows simpler UX pattern: customer selects to use purse, balance immediately applied to booking
 
+
+---
+## [2026-02-23 15:00:00] - US-042: Add split payment UI to PaymentStep in public-booking
+
+### Implemented
+- Extended PaymentStep component to support three payment modes: 'purse', 'card', 'split'
+- Added PaymentMode type and updated PaymentStepProps interface to accept purseBalance, customerId, customerEmail, tenantId, and onPaymentModeChange callback
+- Implemented three payment option buttons:
+  - "Pay with Store Credit": shows when purse balance covers full amount, displays available balance
+  - "Pay with Card": standard card payment via Stripe/Paystack
+  - "Split Payment": shows when purse balance exists but doesn't cover full amount, allows combination payment
+- Added Slider component for split payment adjustment with real-time breakdown showing purse vs card amounts
+- Updated BookingWizard to fetch customer purse balance via useEffect when bookerInfo.email changes
+- Added state variables: paymentMode, purseBalance, customerId, splitPurseAmount, splitCardAmount
+- Implemented handlePaymentModeChange handler to track payment mode and amounts
+- Updated handlePaymentSubmit to handle three payment flows:
+  - Purse only: calls debit_customer_purse_for_booking RPC, marks appointment as fully_paid
+  - Split: debits purse for purse portion, creates payment session for card portion
+  - Card only: existing Paystack/Stripe flow
+- Updated PaymentStep rendering to pass all new props
+- Payment validation: purse option disabled if balance insufficient, clear error messaging
+
+### Files Changed
+- apps/public-booking/src/pages/components/PaymentStep.tsx
+- apps/public-booking/src/pages/components/BookingWizard.tsx
+- ralph/prd.json (marked US-042 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- PaymentStep now provides flexible payment options based on customer's purse balance
+- Slider component provides intuitive UI for adjusting split payment amounts
+- debit_customer_purse_for_booking RPC requires type assertion (as any) due to TypeScript generated types not including custom RPC functions
+- Split payment flow: debit purse first, then redirect to payment gateway for card portion
+- Purse-only payment flow: debit purse, update appointment status, show confirmation (no gateway redirect)
+- Customer purse balance fetched dynamically when email entered in booking flow
+- Pattern for payment modes: determine available modes based on balance, show appropriate UI, handle each mode separately in submission
+- Build passes successfully with no errors
+- Pre-existing LSP errors (toast description property) unrelated to this implementation
