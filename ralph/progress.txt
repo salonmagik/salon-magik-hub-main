@@ -952,3 +952,36 @@
 - All acceptance criteria met: hook created, accepts country and optional type params, calls edge function with query params, returns banks array with all required fields, uses useCallback/useEffect patterns
 - No typecheck command exists in project (confirmed by AGENTS.md and previous stories)
 - Pre-existing build warnings about chunk size and Node version are unrelated to this change
+
+---
+## [2026-02-23 06:00:00] - US-031: Create useAccountVerification hook
+
+### Implemented
+- Created useAccountVerification.tsx hook in apps/salon-admin/src/hooks/
+- Hook provides verify function accepting accountNumber and bankCode parameters
+- verify function calls verify-bank-account edge function using supabase.functions.invoke with body containing accountNumber and bankCode
+- verify function returns VerificationResult with fields: verified (boolean), accountName (optional), accountNumber (optional), bankId (optional), error (optional)
+- Hook provides reset function to clear verification result (sets result to null)
+- Hook returns verify, reset, isVerifying (boolean), result (VerificationResult | null)
+- Uses useCallback for verify function (no dependencies needed as it accepts runtime parameters)
+- Uses useCallback for reset function (no dependencies)
+- Uses useState for isVerifying and result state management
+- Includes proper error handling with try-catch, error logging, and graceful error result return
+- Exported VerificationResult interface for type safety
+- Hook follows established pattern from usePayoutDestinations and useCreditPurchase hooks
+
+### Files Changed
+- apps/salon-admin/src/hooks/useAccountVerification.tsx (created)
+- ralph/prd.json (marked US-031 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Account verification hook pattern: simple imperative functions (verify, reset) rather than auto-fetching on mount
+- verify function returns Promise<VerificationResult> allowing callers to handle result directly (not just via state)
+- Result state provides UI-friendly access to verification status for displaying in forms
+- Edge function returns both success (verified: true, accountName, accountNumber, bankId) and failure (verified: false, error) in same response structure
+- reset function allows clearing verification when user changes account number or bank code fields
+- Build passes successfully for salon-admin app in 1m 47s
+- All acceptance criteria met: hook created, provides verify function that accepts accountNumber/bankCode and calls verify-bank-account edge function, provides reset function to clear result, returns verify/reset/isVerifying/result, uses useCallback for both functions
+- No typecheck command exists in project (confirmed by AGENTS.md and all previous stories)
+- Pre-existing lint issues (eslint rules not found in .vite/deps) unrelated to this change

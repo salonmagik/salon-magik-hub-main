@@ -514,8 +514,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Hook created successfully. All acceptance criteria met: created useAccountVerification.tsx in apps/salon-admin/src/hooks/, provides verify function accepting accountNumber and bankCode parameters that calls verify-bank-account edge function, provides reset function to clear verification result, returns verify, reset, isVerifying, result (with verified, accountName, accountNumber, bankId, error fields), uses useCallback for verify and reset functions. Hook follows established pattern from existing hooks like usePayoutDestinations and useCreditPurchase. Build passes successfully. No typecheck command exists in project (confirmed by AGENTS.md). Pre-existing lint issues (eslint rules not found) unrelated to this change."
     },
     {
       "id": "US-032",
