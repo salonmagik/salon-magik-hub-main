@@ -886,3 +886,36 @@
 - All acceptance criteria met: hook created, accepts tenantId, fetches destinations, provides create/delete functions, returns all required values
 - Build times out (pre-existing project issue documented in previous stories), but TypeScript syntax is valid
 - No typecheck command exists in project (confirmed by AGENTS.md)
+
+---
+## [2026-02-23 05:00:00] - US-029: Create useWithdrawals hook
+
+### Implemented
+- Created useWithdrawals.tsx hook in apps/salon-admin/src/hooks/
+- Hook accepts tenantId parameter (optional string)
+- Hook fetches salon_withdrawals for tenant using Supabase query with .eq("tenant_id", tenantId) filter
+- Hook orders results by requested_at DESC for newest-first display
+- Hook returns withdrawals (SalonWithdrawal[]), isLoading (boolean), error (Error | null), createWithdrawal (function), refetch (function)
+- Hook provides createWithdrawal function that accepts CreateWithdrawalData interface with fields:
+  - tenantId, payoutDestinationId, amount
+- createWithdrawal calls process-salon-withdrawal edge function using supabase.functions.invoke
+- createWithdrawal refetches withdrawals after successful creation to update the list
+- Uses useCallback for fetchWithdrawals function with tenantId as dependency
+- Uses useEffect to automatically fetch withdrawals on mount and when tenantId changes
+- Includes proper error handling with try-catch, error logging, and toast notifications
+- Uses type-safe SalonWithdrawal type from Supabase generated types: `type SalonWithdrawal = Tables<"salon_withdrawals">`
+
+### Files Changed
+- apps/salon-admin/src/hooks/useWithdrawals.tsx (created)
+- ralph/prd.json (marked US-029 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Hook pattern mirrors usePayoutDestinations: useState for state, useCallback for fetch, useEffect for auto-fetch
+- salon_withdrawals table tracks full withdrawal history ordered by requested_at timestamp
+- createWithdrawal calls edge function which handles full withdrawal lifecycle: create record → debit wallet → call Paystack → update status
+- Toast notifications provide user feedback for success/error scenarios
+- Edge function returns withdrawal object which can be used for immediate UI updates
+- Build passes successfully for salon-admin app in 1m 56s
+- All acceptance criteria met: hook created, accepts tenantId, fetches withdrawals ordered by requested_at DESC, provides createWithdrawal that calls process-salon-withdrawal edge function, returns all required values (withdrawals, isLoading, error, createWithdrawal, refetch)
+- No typecheck command exists in project (confirmed by AGENTS.md and all previous stories)
