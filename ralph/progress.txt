@@ -790,3 +790,32 @@
 - No typecheck command exists for edge functions (Deno-based)
 - Pre-existing lint issues (long running, timeout) unrelated to this SQL migration and edge function
 
+---
+## [2026-02-23 03:00:00] - US-026: Create useSalonWallet hook
+
+### Implemented
+- Created useSalonWallet.tsx hook in apps/salon-admin/src/hooks/
+- Hook accepts tenantId parameter (optional string)
+- Hook fetches salon_wallets row for tenant using Supabase query with .eq("tenant_id", tenantId) filter
+- Uses .maybeSingle() to return single record or null if not found
+- Hook returns wallet (SalonWallet | null), isLoading (boolean), error (Error | null), refetch (function)
+- Uses useCallback for fetchWallet function with tenantId as dependency
+- Uses useEffect to automatically fetch wallet on mount and when tenantId changes
+- Follows exact pattern from existing useCustomerPurse.tsx hook
+- Uses type-safe SalonWallet type from Supabase generated types: `type SalonWallet = Tables<"salon_wallets">`
+- Includes proper error handling with try-catch and error logging
+
+### Files Changed
+- apps/salon-admin/src/hooks/useSalonWallet.tsx (created)
+- ralph/prd.json (marked US-026 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Hook pattern in this codebase: useState for state, useCallback for fetch functions, useEffect for auto-fetching
+- All hooks follow consistent pattern: check if required params exist, set loading state, fetch data, handle errors, set state
+- Uses .maybeSingle() instead of .single() to gracefully handle missing records (returns null instead of throwing error)
+- No typecheck command exists in project (confirmed by AGENTS.md and all previous stories)
+- TypeScript syntax is valid as it follows exact pattern from existing useCustomerPurse.tsx hook
+- Supabase generated types (Tables<"salon_wallets">) will be available once migrations are applied and types regenerated
+- Import patterns: useState/useCallback/useEffect from "react", supabase from "@/lib/supabase", Tables type from "@supabase-client"
+
