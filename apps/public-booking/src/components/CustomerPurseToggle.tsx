@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { Wallet, Lock, AlertCircle } from "lucide-react";
+import { Wallet, AlertCircle } from "lucide-react";
 import { Switch } from "@ui/switch";
 import { Label } from "@ui/label";
-import { Button } from "@ui/button";
-import { Input } from "@ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@ui/dialog";
 import { formatCurrency } from "@shared/currency";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
@@ -34,10 +24,6 @@ export function CustomerPurseToggle({
   const [isEnabled, setIsEnabled] = useState(false);
   const [purseBalance, setPurseBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showAuthDialog, setShowAuthDialog] = useState(false);
-  const [authCode, setAuthCode] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [isVerified, setIsVerified] = useState(false);
 
   const checkPurseBalance = useCallback(async () => {
     setIsLoading(true);
@@ -82,52 +68,18 @@ export function CustomerPurseToggle({
   const handleToggle = async (enabled: boolean) => {
     if (enabled) {
       if (purseBalance && purseBalance > 0) {
-        // Show auth dialog for verification
-        setShowAuthDialog(true);
-      }
-    } else {
-      setIsEnabled(false);
-      setIsVerified(false);
-      onPurseApplied(0);
-    }
-  };
-
-  const handleVerifyCode = async () => {
-    setIsVerifying(true);
-    try {
-      // For demo purposes, accept any 6-digit code
-      // In production, this would call verify-purse-access edge function
-      if (authCode.length === 6) {
-        setIsVerified(true);
         setIsEnabled(true);
-        setShowAuthDialog(false);
-
         const amountToApply = Math.min(purseBalance || 0, maxAmount);
         onPurseApplied(amountToApply);
 
         toast({
           title: "Store credit applied",
-          description: `${formatCurrency(amountToApply, currency)} will be deducted from your balance.`,
-        });
-      } else {
-        toast({
-          title: "Invalid code",
-          description: "Please enter a valid 6-digit code.",
-          variant: "destructive",
         });
       }
-    } finally {
-      setIsVerifying(false);
-      setAuthCode("");
+    } else {
+      setIsEnabled(false);
+      onPurseApplied(0);
     }
-  };
-
-  const handleSendCode = async () => {
-    // In production, this would send OTP via edge function
-    toast({
-      title: "Code sent",
-      description: `A verification code has been sent to ${customerEmail}`,
-    });
   };
 
   // Still loading
@@ -183,7 +135,7 @@ export function CustomerPurseToggle({
             <p className="text-xs text-muted-foreground">
               Balance: {formatCurrency(purseBalance || 0, currency)}
             </p>
-            {isEnabled && isVerified && (
+            {isEnabled && (
               <div className="text-xs space-y-0.5">
                 <p className="text-primary font-medium">
                   {formatCurrency(amountToApply, currency)} will be applied
@@ -200,9 +152,6 @@ export function CustomerPurseToggle({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isVerified && (
-            <span className="text-xs text-primary font-medium">✓ Verified</span>
-          )}
           <Switch
             checked={isEnabled}
             onCheckedChange={handleToggle}
@@ -210,51 +159,6 @@ export function CustomerPurseToggle({
           />
         </div>
       </div>
-
-      <Dialog open={showAuthDialog} onOpenChange={setShowAuthDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5" />
-              Verify Your Identity
-            </DialogTitle>
-            <DialogDescription>
-              To use your store credit, please verify your identity. We'll send a code to{" "}
-              {customerEmail}.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Verification Code</Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="Enter 6-digit code"
-                value={authCode}
-                onChange={(e) => setAuthCode(e.target.value.replace(/\D/g, ""))}
-              />
-            </div>
-
-            <Button variant="link" className="px-0 text-sm" onClick={handleSendCode}>
-              Send verification code
-            </Button>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAuthDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleVerifyCode}
-              disabled={authCode.length !== 6 || isVerifying}
-            >
-              {isVerifying ? "Verifying..." : "Verify & Apply"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

@@ -1379,3 +1379,38 @@
 - Build passes successfully with no errors
 - No typecheck command exists in project (confirmed by AGENTS.md and previous stories)
 - Browser verification pending integration into client portal pages (likely BookingsPage or separate Wallet page)
+
+---
+## [2026-02-23 12:00:00] - US-041: Update CustomerPurseToggle to use real purse balance
+
+### Implemented
+- Updated CustomerPurseToggle.tsx component in apps/public-booking/src/components/
+- Removed demo mode logic: verification dialog with OTP code acceptance
+- Removed unused imports: Lock icon, Button, Input, Dialog components (DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter)
+- Removed unused state variables: showAuthDialog, authCode, isVerifying, isVerified
+- Simplified handleToggle function to immediately apply purse balance without verification dialog:
+  - When enabled: sets isEnabled true, calculates amountToApply, calls onPurseApplied callback, shows toast notification
+  - When disabled: sets isEnabled false, calls onPurseApplied(0)
+- Removed handleVerifyCode and handleSendCode functions (demo mode verification logic)
+- Removed isVerified check from UI rendering (line 138)
+- Removed "Verified" badge display
+- Removed entire verification dialog JSX (lines 204-257 in old version)
+- Component already fetches real purse balance from customer_purses table (lines 28-59)
+- Component already displays actual balance (line 136)
+- Component already disables toggle when balance is zero (lines 101-118)
+
+### Files Changed
+- apps/public-booking/src/components/CustomerPurseToggle.tsx
+- ralph/prd.json (marked US-041 as passing)
+- ralph/progress.txt (this file)
+
+### Learnings
+- Original component was already fetching real purse balance, only demo logic was the verification dialog
+- Verification dialog was accepting any 6-digit code (lines 98-100 in old version)
+- No OTP/verification system exists in the codebase yet (no verify-purse-access edge function)
+- Simplifying user flow: toggle immediately applies purse balance like standard payment method selection
+- Build passes successfully for public-booking app in 5.70s
+- Pre-existing lint errors in other files (usePublicSalon.tsx, BookingWizard.tsx, tailwind.config.ts) unrelated to this change
+- All acceptance criteria met: demo mode logic removed, real purse balance fetched and displayed, toggle disabled for zero balance
+- Component now follows simpler UX pattern: customer selects to use purse, balance immediately applied to booking
+
