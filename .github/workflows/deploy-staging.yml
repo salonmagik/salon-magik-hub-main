@@ -34,6 +34,40 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download promotion manifest from dev deploy
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: deploy-dev.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: promotion-manifest
+          path: artifacts
+
+      - name: Validate promotion manifest from dev
+        run: |
+          test -f artifacts/promotion-manifest.json
+          MANIFEST_SHA=$(jq -r '.commit_sha' artifacts/promotion-manifest.json)
+          MANIFEST_SOURCE=$(jq -r '.source' artifacts/promotion-manifest.json)
+          MANIFEST_READY_FOR=$(jq -r '.ready_for' artifacts/promotion-manifest.json)
+          test "$MANIFEST_SHA" = "${{ github.event.workflow_run.head_sha }}"
+          test "$MANIFEST_SOURCE" = "dev"
+          test "$MANIFEST_READY_FOR" = "staging"
+
+      - name: Download immutable build artifact from CI
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ci.yml
+          commit: ${{ github.event.workflow_run.head_sha }}
+          name: web-builds-${{ github.event.workflow_run.head_sha }}
+          path: artifacts
+
+      - name: Verify immutable build artifact
+        run: |
+          test -f artifacts/web-builds-${{ github.event.workflow_run.head_sha }}.tar.gz
+          mkdir -p promoted-build
+          tar -xzf artifacts/web-builds-${{ github.event.workflow_run.head_sha }}.tar.gz -C promoted-build
+
       - name: Apply DB migrations (staging)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -47,8 +81,24 @@ jobs:
         run: |
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_STAGING }} --workdir supabase
 
-      - name: Build apps
-        run: pnpm build
-
       - name: Integration smoke checks
         run: pnpm test
+
+      - name: Write staging promotion manifest
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/promotion-manifest-staging.json <<JSON
+          {
+            "commit_sha": "${{ github.event.workflow_run.head_sha }}",
+            "artifact_name": "web-builds-${{ github.event.workflow_run.head_sha }}",
+            "source": "staging",
+            "ready_for": "prod",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+
+      - name: Upload staging promotion manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-manifest-staging
+          path: artifacts/promotion-manifest-staging.json
