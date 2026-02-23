@@ -731,6 +731,44 @@
       "priority": 6,
       "passes": true,
       "notes": "Split payment UI successfully implemented. All acceptance criteria met: updated PaymentStep.tsx with three payment options ('Pay with Store Credit', 'Pay with Card', 'Split Payment'), implemented purse-only payment by calling debit_customer_purse_for_booking RPC directly and marking appointment as fully_paid, card-only payment uses existing Paystack flow (appointment_payment intent_type), split payment shows slider to adjust purse vs card amounts with real-time breakdown display, validates sufficient purse balance (disables purse option if balance is insufficient), shows clear breakdown of purse vs card amounts in both slider section and amount summary, BookingWizard fetches customer purse balance when email is entered, passes purseBalance, customerId, customerEmail, tenantId to PaymentStep, handlePaymentSubmit updated to handle all three payment modes, split payment debits purse for purse portion and creates payment intent for card portion only. Build passes successfully. Browser verification pending."
+    },
+    {
+      "id": "US-043",
+      "title": "Add generatePaymentLink to invoices in salon-admin",
+      "description": "As a salon owner, I want to generate payment links for invoices so that customers can pay online",
+      "acceptanceCriteria": [
+        "Update apps/salon-admin/src/hooks/useInvoices.tsx to add generatePaymentLink function",
+        "Function calls create-invoice-payment-session edge function with invoiceId",
+        "Function returns payment link or error",
+        "Add 'Generate Payment Link' button to invoice detail view/list",
+        "Button calls generatePaymentLink and displays link (copyable, shareable)",
+        "Button disabled if invoice already paid or has payment_link",
+        "Show existing payment_link if present",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-044",
+      "title": "Add dual payment option to CreditPurchaseDialog",
+      "description": "As a salon owner, I want to purchase messaging credits using either my salon purse or Paystack so that I have payment flexibility",
+      "acceptanceCriteria": [
+        "Update apps/salon-admin/src/components/billing/CreditPurchaseDialog.tsx",
+        "Add payment method selector: 'Pay from Wallet' or 'Pay with Paystack'",
+        "Show current wallet balance when 'Pay from Wallet' selected",
+        "Disable 'Pay from Wallet' if wallet balance insufficient for selected package",
+        "For 'Pay from Wallet': call purchase-credits-from-purse edge function",
+        "For 'Pay with Paystack': call create-payment-session with intentType='messaging_credit_purchase', credits, and redirect to Paystack",
+        "Show success message after purchase",
+        "Typecheck passes",
+        "Verify changes work in browser"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
     }
   ]
 }
