@@ -12,7 +12,7 @@ type AppStorageKey =
   | "sb-salonmagik-backoffice";
 
 type SupabaseClientMap = Partial<
-  Record<AppStorageKey, ReturnType<typeof createClient<Database>>>
+  Record<string, ReturnType<typeof createClient<Database>>>
 >;
 
 const CLIENT_CACHE_KEY = "__salonmagik_supabase_clients__";
@@ -28,21 +28,31 @@ function getClientCache(): SupabaseClientMap {
 }
 
 export function createSupabaseClient(storageKey: AppStorageKey) {
+  const projectRefFromUrl = (() => {
+    try {
+      return new URL(SUPABASE_URL).hostname.split(".")[0];
+    } catch {
+      return "";
+    }
+  })();
+  const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID || projectRefFromUrl;
+  const scopedStorageKey = projectRef ? `${storageKey}-${projectRef}` : storageKey;
+
   const cache = getClientCache();
-  if (cache[storageKey]) {
-    return cache[storageKey]!;
+  if (cache[scopedStorageKey]) {
+    return cache[scopedStorageKey]!;
   }
 
   const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       storage: localStorage,
-      storageKey,
+      storageKey: scopedStorageKey,
       persistSession: true,
       autoRefreshToken: true,
     },
   });
 
-  cache[storageKey] = client;
+  cache[scopedStorageKey] = client;
   return client;
 }
 

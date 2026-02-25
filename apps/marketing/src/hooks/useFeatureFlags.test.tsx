@@ -3,11 +3,36 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFeatureFlags, useGeoInterestMode, useWaitlistMode } from "./useFeatureFlags";
 
-const rpcMock = vi.fn();
+const platformFeatureMock = vi.fn();
+const featureFlagMock = vi.fn();
 
 vi.mock("@supabase-client/supabase/client", () => ({
   supabase: {
-    rpc: (...args: unknown[]) => rpcMock(...args),
+    from: (table: string) => {
+      if (table === "platform_features") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => platformFeatureMock(),
+            }),
+          }),
+        };
+      }
+
+      if (table === "feature_flags") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: () => featureFlagMock(),
+              }),
+            }),
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected table mock: ${table}`);
+    },
   },
 }));
 
@@ -22,27 +47,33 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 describe("useFeatureFlags", () => {
   beforeEach(() => {
-    rpcMock.mockReset();
+    platformFeatureMock.mockReset();
+    featureFlagMock.mockReset();
   });
 
   it("resolves waitlist mode from feature evaluation", async () => {
-    rpcMock.mockResolvedValueOnce({ data: [{ enabled: true }], error: null });
+    platformFeatureMock.mockResolvedValueOnce({ data: { id: "feature-1" }, error: null });
+    featureFlagMock.mockResolvedValueOnce({ data: { is_enabled: true }, error: null });
     const { result } = renderHook(() => useWaitlistMode(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isWaitlistMode).toBe(true);
   });
 
   it("resolves geo interest mode from feature evaluation", async () => {
-    rpcMock.mockResolvedValueOnce({ data: [{ enabled: false }], error: null });
+    platformFeatureMock.mockResolvedValueOnce({ data: { id: "feature-2" }, error: null });
+    featureFlagMock.mockResolvedValueOnce({ data: { is_enabled: false }, error: null });
     const { result } = renderHook(() => useGeoInterestMode(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isEnabled).toBe(false);
   });
 
   it("combines both flags", async () => {
-    rpcMock
-      .mockResolvedValueOnce({ data: [{ enabled: true }], error: null })
-      .mockResolvedValueOnce({ data: [{ enabled: true }], error: null });
+    platformFeatureMock
+      .mockResolvedValueOnce({ data: { id: "feature-1" }, error: null })
+      .mockResolvedValueOnce({ data: { id: "feature-2" }, error: null });
+    featureFlagMock
+      .mockResolvedValueOnce({ data: { is_enabled: true }, error: null })
+      .mockResolvedValueOnce({ data: { is_enabled: true }, error: null });
 
     const { result } = renderHook(() => useFeatureFlags(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
