@@ -28,4 +28,5 @@ dist-ssr
 **/.turbo
 supabase/.temp
 supabase/supabase/.temp
+supabase/**/.temp
 .env

@@ -11,3 +11,4 @@ export {
   type MarketInterestLead,
   type MarketInterestStatus,
 } from "./useMarketInterest";
+export { useSalesOps } from "./useSalesOps";

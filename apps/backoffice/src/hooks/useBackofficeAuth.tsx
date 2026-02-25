@@ -14,6 +14,7 @@ type BackofficeUser = Tables<"backoffice_users"> & {
 	totp_required?: boolean | null;
 	temp_password_required?: boolean | null;
 	password_changed_at?: string | null;
+  is_sales_agent?: boolean | null;
 };
 type Profile = Tables<"profiles">;
 
@@ -64,6 +65,13 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 		sessionStorage.removeItem("backoffice_totp_verified");
 		localStorage.removeItem("sb-salonmagik-backoffice");
 		localStorage.removeItem("sb-salonmagik-backoffice-auth-token");
+		for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+			const key = localStorage.key(i);
+			if (!key) continue;
+			if (key.startsWith("sb-salonmagik-backoffice-")) {
+				localStorage.removeItem(key);
+			}
+		}
 	};
 
 	const clearAuthState = useCallback(() => {
@@ -152,76 +160,70 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 		return data;
 	};
 
+	const touchBackofficeSession = useCallback(
+		async (session: Session, userId: string) => {
+			const nowIso = new Date().toISOString();
+			const sessionToken = session.access_token;
+			if (!sessionToken) return;
+
+			await supabase.from("backoffice_sessions").upsert(
+				{
+					user_id: userId,
+					session_token: sessionToken,
+					last_activity_at: nowIso,
+					ended_at: null,
+					end_reason: null,
+				},
+				{ onConflict: "session_token" },
+			);
+
+			await supabase
+				.from("backoffice_sessions")
+				.update({
+					ended_at: nowIso,
+					end_reason: "replaced",
+				})
+				.eq("user_id", userId)
+				.neq("session_token", sessionToken)
+				.is("ended_at", null);
+		},
+		[],
+	);
+
 	const fetchEffectivePermissions = async (
 		backofficeUserId: string,
 		role?: string,
 	): Promise<string[]> => {
+		void backofficeUserId;
 		if (role === "super_admin") {
 			return ["*"];
 		}
-
-		const { data: assignment, error: assignmentError } = await (supabase
-			.from("backoffice_user_role_assignments" as any)
-			.select("role_template_id")
-			.eq("backoffice_user_id", backofficeUserId)
-			.maybeSingle() as any);
-
-		if (assignmentError) {
-			console.error("Error fetching role assignment:", assignmentError);
-			return [];
-		}
-
-		if (!assignment?.role_template_id) return [];
-
-		const { data: permissionRows, error: permissionError } = await (supabase
-			.from("backoffice_role_template_permissions" as any)
-			.select("permission_key")
-			.eq("template_id", assignment.role_template_id) as any);
-
-		if (permissionError) {
-			console.error("Error fetching role template permissions:", permissionError);
-			return [];
-		}
-
-		if (!permissionRows?.length) return [];
-		return Array.from(
-			new Set(permissionRows.map((row) => row.permission_key).filter(Boolean) as string[]),
+		const { data, error } = await (supabase.rpc as any)(
+			"backoffice_get_effective_permissions",
 		);
+		if (error) {
+			console.error("Error fetching role template permissions:", error);
+			return [];
+		}
+		return Array.from(new Set(((data as string[] | null) ?? []).filter(Boolean)));
 	};
 
 	const fetchEffectivePages = async (
 		backofficeUserId: string,
 		role?: string,
 	): Promise<string[]> => {
+		void backofficeUserId;
 		if (role === "super_admin") {
 			return ["*"];
 		}
-
-		const { data: assignment, error: assignmentError } = await (supabase
-			.from("backoffice_user_role_assignments" as any)
-			.select("role_template_id")
-			.eq("backoffice_user_id", backofficeUserId)
-			.maybeSingle() as any);
-
-		if (assignmentError) {
-			console.error("Error fetching role assignment pages:", assignmentError);
+		const { data, error } = await (supabase.rpc as any)(
+			"backoffice_get_effective_pages",
+		);
+		if (error) {
+			console.error("Error fetching role assignment pages:", error);
 			return [];
 		}
-
-		if (!assignment?.role_template_id) return [];
-
-		const { data: pageRows, error: pageError } = await (supabase
-			.from("backoffice_role_template_pages" as any)
-			.select("page_key")
-			.eq("template_id", assignment.role_template_id) as any);
-
-		if (pageError) {
-			console.error("Error fetching role template pages:", pageError);
-			return [];
-		}
-
-		if (!pageRows?.length) return [];
-		return Array.from(new Set(pageRows.map((row) => row.page_key).filter(Boolean) as string[]));
+		return Array.from(new Set(((data as string[] | null) ?? []).filter(Boolean)));
 	};
 
 	const hydrateFromSession = useCallback(
@@ -260,8 +262,12 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 				effectivePermissions,
 				effectivePages,
 			});
+
+			if (backofficeUser) {
+				void touchBackofficeSession(session, session.user.id);
+			}
 		},
-		[clearAuthState],
+		[clearAuthState, touchBackofficeSession],
 	);
 
 	const initializeAuth = useCallback(async () => {
@@ -329,8 +335,26 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 	const signOut = async () => {
 		setState((prev) => ({ ...prev, isLoading: true }));
 		sessionStorage.removeItem("backoffice_totp_verified");
+		if (state.user && state.session?.access_token) {
+			await supabase
+				.from("backoffice_sessions")
+				.update({ ended_at: new Date().toISOString(), end_reason: "logout" })
+				.eq("user_id", state.user.id)
+				.eq("session_token", state.session.access_token)
+				.is("ended_at", null);
+		}
 		await supabase.auth.signOut();
 	};
+
+	useEffect(() => {
+		if (!state.session || !state.user || !state.backofficeUser) return;
+
+		const interval = window.setInterval(() => {
+			void touchBackofficeSession(state.session as Session, state.user!.id);
+		}, 60_000);
+
+		return () => window.clearInterval(interval);
+	}, [state.session, state.user, state.backofficeUser, touchBackofficeSession]);
 
 	const verifyTotp = async (token: string): Promise<boolean> => {
 		if (!state.backofficeUser?.totp_secret) return false;

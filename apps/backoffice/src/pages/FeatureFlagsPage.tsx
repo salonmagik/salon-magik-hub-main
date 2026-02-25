@@ -407,6 +407,7 @@ export default function FeatureFlagsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Feature Flags</h1>
           <p className="text-muted-foreground">Master toggles control global ON/OFF. Rules handle targeted rollout.</p>
+          <p className="text-xs text-muted-foreground mt-1">MVP note: marketing currently reads master toggles directly for `waitlist_enabled` and `other_countries_interest_enabled`.</p>
         </div>
 
         <Card>
