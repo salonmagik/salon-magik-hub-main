@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 import type { Tables } from "@supabase-client";
 
 type Appointment = Tables<"appointments">;
@@ -51,6 +52,7 @@ interface RecentActivity {
 
 export function useDashboardStats() {
   const { currentTenant } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [stats, setStats] = useState<DashboardStats>({
     todayAppointments: 0,
     confirmedCount: 0,
@@ -82,6 +84,32 @@ export function useDashboardStats() {
     const endOfDay = `${today}T23:59:59`;
 
     try {
+      let todayAppointmentsQuery = supabase
+        .from("appointments")
+        .select(`
+            *,
+            customer:customers(full_name),
+            services:appointment_services(service_name)
+          `)
+        .eq("tenant_id", currentTenant.id)
+        .gte("scheduled_start", startOfDay)
+        .lte("scheduled_start", endOfDay)
+        .order("scheduled_start", { ascending: true });
+
+      let completedAppointmentsQuery = supabase
+        .from("appointments")
+        .select(`
+            scheduled_start,
+            services:appointment_services(service_name)
+          `)
+        .eq("tenant_id", currentTenant.id)
+        .eq("status", "completed");
+
+      if (hasScope) {
+        todayAppointmentsQuery = todayAppointmentsQuery.in("location_id", scopedLocationIds);
+        completedAppointmentsQuery = completedAppointmentsQuery.in("location_id", scopedLocationIds);
+      }
+
       // Parallel fetch all data
       const [
         todayAptsResult,
@@ -97,17 +125,7 @@ export function useDashboardStats() {
         completedAptsResult,
       ] = await Promise.all([
         // Today's appointments with customer info
-        supabase
-          .from("appointments")
-          .select(`
-            *,
-            customer:customers(full_name),
-            services:appointment_services(service_name)
-          `)
-          .eq("tenant_id", currentTenant.id)
-          .gte("scheduled_start", startOfDay)
-          .lte("scheduled_start", endOfDay)
-          .order("scheduled_start", { ascending: true }),
+        todayAppointmentsQuery,
 
         // Total customers
         supabase
@@ -171,14 +189,7 @@ export function useDashboardStats() {
           .limit(5),
 
         // All completed appointments for insights
-        supabase
-          .from("appointments")
-          .select(`
-            scheduled_start,
-            services:appointment_services(service_name)
-          `)
-          .eq("tenant_id", currentTenant.id)
-          .eq("status", "completed"),
+        completedAppointmentsQuery,
       ]);
 
       // Process today's appointments
@@ -369,7 +380,7 @@ export function useDashboardStats() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, currentTenant?.online_booking_enabled]);
+  }, [currentTenant?.id, currentTenant?.online_booking_enabled, hasScope, scopedLocationIds]);
 
   useEffect(() => {
     fetchStats();

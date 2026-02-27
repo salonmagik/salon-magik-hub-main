@@ -1,7 +1,10 @@
-import { ReactNode } from "react";
-import { Navigate } from "react-router-dom";
+import { ReactNode, useEffect } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { isModuleAllowedInContext } from "@/lib/contextAccess";
+import { supabase } from "@/lib/supabase";
 
 interface ModuleProtectedRouteProps {
   children: ReactNode;
@@ -20,9 +23,50 @@ export function ModuleProtectedRoute({
   fallback,
   redirectTo = "/salon",
 }: ModuleProtectedRouteProps) {
-  const { hasPermission, isLoading } = usePermissions();
+  const { hasPermission, isLoading, currentRole } = usePermissions();
+  const location = useLocation();
+  const {
+    user,
+    currentTenant,
+    activeContextType,
+    isLoading: authLoading,
+    hasCompletedOnboarding,
+    isAssignmentPending,
+  } = useAuth();
+  const isGuardBootstrapping =
+    authLoading || (hasCompletedOnboarding && (!currentTenant?.id || !currentRole));
+  const hasModuleAccess = hasPermission(module);
+  const isContextAllowed = isModuleAllowedInContext(module, activeContextType, location.pathname);
+  const requiresStrictContext = location.pathname === "/salon/overview/staff";
+  const isAllowed = hasModuleAccess && (!requiresStrictContext || isContextAllowed);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (
+      isLoading ||
+      isGuardBootstrapping ||
+      isAssignmentPending ||
+      isAllowed ||
+      hasModuleAccess ||
+      !currentTenant?.id ||
+      !user?.id
+    )
+      return;
+    (async () => {
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "access.denied",
+        _entity_type: "module",
+        _entity_id: user.id,
+        _metadata: {
+          module,
+          context_type: activeContextType,
+          reason: "permission_denied",
+        },
+      });
+    })();
+  }, [activeContextType, currentTenant?.id, hasModuleAccess, isAllowed, isAssignmentPending, isGuardBootstrapping, isLoading, module, user?.id]);
+
+  if (isLoading || isGuardBootstrapping) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -30,7 +74,15 @@ export function ModuleProtectedRoute({
     );
   }
 
-  if (!hasPermission(module)) {
+  if (isAssignmentPending) {
+    return <Navigate to="/salon/assignment-pending" replace />;
+  }
+
+  if (!isContextAllowed && requiresStrictContext) {
+    return <Navigate to="/salon/staff" replace />;
+  }
+
+  if (!isAllowed) {
     if (fallback) {
       return <>{fallback}</>;
     }
@@ -51,12 +103,13 @@ interface PermissionGateProps {
 
 export function PermissionGate({ children, module, fallback = null }: PermissionGateProps) {
   const { hasPermission, isLoading } = usePermissions();
+  const { activeContextType } = useAuth();
 
   if (isLoading) {
     return null;
   }
 
-  if (!hasPermission(module)) {
+  if (!hasPermission(module) || !isModuleAllowedInContext(module, activeContextType)) {
     return <>{fallback}</>;
   }
 

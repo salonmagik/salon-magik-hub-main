@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@ui/sonner";
 import { TooltipProvider } from "@ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
@@ -33,6 +34,7 @@ import StaffPage from "./pages/salon/StaffPage";
 import CalendarPage from "./pages/salon/CalendarPage";
 import EmailTemplatesPage from "./pages/salon/EmailTemplatesPage";
 import AccessDeniedPage from "./pages/salon/AccessDeniedPage";
+import AssignmentPendingPage from "./pages/salon/AssignmentPendingPage";
 import AuditLogPage from "./pages/salon/AuditLogPage";
 import SalonsOverviewPage from "./pages/salon/SalonsOverviewPage";
 
@@ -45,12 +47,43 @@ const queryClient = new QueryClient();
 
 // Smart root route component - redirects based on auth state
 function RootRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
-  
+  const { isAuthenticated, isLoading, hasCompletedOnboarding, isAssignmentPending, getFirstAllowedRoute } = useAuth();
+  const [targetRoute, setTargetRoute] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !hasCompletedOnboarding) {
+      setTargetRoute(null);
+      return;
+    }
+    if (isAssignmentPending) {
+      setTargetRoute("/salon/assignment-pending");
+      return;
+    }
+    let mounted = true;
+    (async () => {
+      const route = await getFirstAllowedRoute();
+      if (mounted) {
+        setTargetRoute(route);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [getFirstAllowedRoute, hasCompletedOnboarding, isAssignmentPending, isAuthenticated, isLoading]);
+
   if (isLoading) return null;
   
-  // Authenticated users go to salon, unauthenticated go to login
-  return isAuthenticated ? <Navigate to="/salon" replace /> : <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!hasCompletedOnboarding) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  if (!targetRoute) return null;
+
+  return <Navigate to={targetRoute} replace />;
 }
 
 const App = () => (
@@ -101,7 +134,9 @@ const App = () => (
               path="/salon"
               element={
                 <ProtectedRoute>
-                  <SalonDashboard />
+                  <ModuleProtectedRoute module="dashboard">
+                    <SalonDashboard />
+                  </ModuleProtectedRoute>
                 </ProtectedRoute>
               }
             />
@@ -214,6 +249,14 @@ const App = () => (
               }
             />
             <Route
+              path="/salon/assignment-pending"
+              element={
+                <ProtectedRoute>
+                  <AssignmentPendingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/salon/email-templates"
               element={
                 <ProtectedRoute>
@@ -245,6 +288,16 @@ const App = () => (
                 <ProtectedRoute>
                   <ModuleProtectedRoute module="salons_overview">
                     <SalonsOverviewPage />
+                  </ModuleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/overview/staff"
+              element={
+                <ProtectedRoute>
+                  <ModuleProtectedRoute module="staff">
+                    <StaffPage />
                   </ModuleProtectedRoute>
                 </ProtectedRoute>
               }

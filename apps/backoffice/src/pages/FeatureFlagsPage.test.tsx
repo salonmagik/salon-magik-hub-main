@@ -23,7 +23,17 @@ describe("FeatureFlagsPage", () => {
   it("renders feature flag management sections", () => {
     render(<FeatureFlagsPage />);
     expect(screen.getByRole("heading", { name: /feature flags/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /master toggles/i })).toBeInTheDocument();
-    expect(screen.getByText(/rollout rules \(overrides\)/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /marketing master toggles/i })).toBeInTheDocument();
+    expect(screen.getByText(/deterministic master toggles only/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /rollout rules \(overrides\)/i })).not.toBeInTheDocument();
+  });
+
+  it("renders the master toggle table and security notice", () => {
+    render(<FeatureFlagsPage />);
+    expect(screen.getByText(/2fa required for writes/i)).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /feature/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /key/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /status/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /last updated/i })).toBeInTheDocument();
   });
 });
