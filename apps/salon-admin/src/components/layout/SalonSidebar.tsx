@@ -40,6 +40,7 @@ import { TrialBanner } from "@/components/billing/TrialBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
+import { isModuleAllowedInContext } from "@/lib/contextAccess";
 import {
   Tooltip,
   TooltipContent,
@@ -95,6 +96,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
   { label: "Salons Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
+  { label: "Staff", icon: UserCog, path: "/salon/overview/staff", module: "staff" },
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
@@ -144,7 +146,15 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const { toast } = useToast();
   const { unreadCount } = useNotifications();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
-  const { currentTenant } = useAuth();
+  const {
+    currentTenant,
+    activeContextType,
+    activeLocationId,
+    availableContexts,
+    isAssignmentPending,
+    setActiveContext,
+    getFirstAllowedRoute,
+  } = useAuth();
   
   // Start staff session on mount
   const { startSession } = useStaffSessions();
@@ -154,12 +164,23 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
-    if (permissionsLoading) return []; // Return EMPTY to prevent flash
+    if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
     return mainNavItems.filter((item) => {
+      if (item.path === "/salon/overview/staff") {
+        return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
+      }
+      if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
+        return false;
+      }
       if (!item.module) return true; // No module = always visible
-      return hasPermission(item.module);
+      return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
     });
-  }, [hasPermission, permissionsLoading]);
+  }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
+
+  const contextValue = useMemo(() => {
+    if (activeContextType === "owner_hub") return "owner_hub";
+    return activeLocationId || "";
+  }, [activeContextType, activeLocationId]);
 
   // Get plan display info
   const getPlanDisplay = () => {
@@ -228,6 +249,19 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     } else {
       navigate("/login");
     }
+  };
+
+  const handleContextChange = async (nextValue: string) => {
+    if (!nextValue) return;
+    if (nextValue === "owner_hub") {
+      await setActiveContext("owner_hub", null);
+      const route = await getFirstAllowedRoute("owner_hub", null);
+      navigate(route, { replace: true });
+      return;
+    }
+    await setActiveContext("location", nextValue);
+    const route = await getFirstAllowedRoute("location", nextValue);
+    navigate(route, { replace: true });
   };
 
   const isActive = (path: string) => {
@@ -327,6 +361,33 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {(isExpanded || isMobileOpen) && <span>{planDisplay.label}</span>}
         </div>
       </div>
+
+      {/* Context Switcher */}
+      {(isExpanded || isMobileOpen) && !isAssignmentPending && availableContexts.length > 1 && (
+        <div className="px-4 mb-2">
+          <label htmlFor="context-switcher" className="mb-1 block text-[11px] font-medium text-white/70">
+            Interface
+          </label>
+          <select
+            id="context-switcher"
+            value={contextValue}
+            onChange={(event) => {
+              void handleContextChange(event.target.value);
+            }}
+            className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+          >
+            {availableContexts.map((context) => (
+              <option
+                key={`${context.type}-${context.locationId || "owner_hub"}`}
+                value={context.type === "owner_hub" ? "owner_hub" : context.locationId || ""}
+                className="text-ink"
+              >
+                {context.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Global Banner (only when expanded) */}
       {(isExpanded || isMobileOpen) && <GlobalBanner />}

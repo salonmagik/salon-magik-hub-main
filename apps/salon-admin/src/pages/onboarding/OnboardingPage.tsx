@@ -194,6 +194,7 @@ export default function OnboardingPage() {
 
     try {
       const tenantId = crypto.randomUUID();
+      let creatorDefaultLocationId: string | null = null;
 
       // 1. Create the tenant
       const { error: tenantError } = await supabase.from("tenants").insert({
@@ -251,8 +252,21 @@ export default function OnboardingPage() {
           is_default: loc.isDefault,
         }));
 
-        const { error: locationsError } = await supabase.from("locations").insert(locationInserts);
+        const { error: locationsError } = await supabase
+          .from("locations")
+          .insert(locationInserts)
+          .select("id");
         if (locationsError) throw locationsError;
+        const { data: defaultLocationRow, error: defaultLocationError } = await supabase
+          .from("locations")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (defaultLocationError) throw defaultLocationError;
+        creatorDefaultLocationId = defaultLocationRow?.id || null;
 
         if (!chainPlan?.id) {
           throw new Error("Chain plan is not configured yet. Contact support.");
@@ -285,20 +299,34 @@ export default function OnboardingPage() {
         }
       } else {
         // Single location for Solo/Studio
-        const { error: locationError } = await supabase.from("locations").insert({
-          tenant_id: tenantId,
-          name: "Main Location",
-          city: businessInfo.city,
-          address: businessInfo.address || null,
-          country: businessInfo.country,
-          timezone: businessInfo.timezone,
-          opening_time: businessInfo.openingTime,
-          closing_time: businessInfo.closingTime,
-          opening_days: businessInfo.openingDays,
-          is_default: true,
-        });
+        const { data: insertedLocation, error: locationError } = await supabase
+          .from("locations")
+          .insert({
+            tenant_id: tenantId,
+            name: "Main Location",
+            city: businessInfo.city,
+            address: businessInfo.address || null,
+            country: businessInfo.country,
+            timezone: businessInfo.timezone,
+            opening_time: businessInfo.openingTime,
+            closing_time: businessInfo.closingTime,
+            opening_days: businessInfo.openingDays,
+            is_default: true,
+          })
+          .select("id")
+          .single();
 
         if (locationError) throw locationError;
+        creatorDefaultLocationId = insertedLocation?.id || null;
+      }
+
+      if (selectedRole !== "owner" && creatorDefaultLocationId) {
+        const { error: assignmentError } = await supabase.from("staff_locations").insert({
+          user_id: user.id,
+          tenant_id: tenantId,
+          location_id: creatorDefaultLocationId,
+        });
+        if (assignmentError) throw assignmentError;
       }
 
       // 5. Create communication credits

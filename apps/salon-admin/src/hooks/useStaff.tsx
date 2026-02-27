@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 import type { Tables } from "@supabase-client";
 
 type UserRole = Tables<"user_roles">;
@@ -9,11 +10,17 @@ type Profile = Tables<"profiles">;
 export interface StaffMember {
   userId: string;
   role: UserRole["role"];
+  isActive: boolean;
   profile: Profile | null;
+  assignedLocationIds: string[];
+  assignedLocationNames: string[];
+  assignedLocationCount: number;
+  isUnassigned: boolean;
 }
 
 export function useStaff() {
-  const { currentTenant } = useAuth();
+  const { currentTenant, currentRole } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -37,9 +44,43 @@ export function useStaff() {
 
       if (rolesError) throw rolesError;
 
-      const userIds = [...new Set((rolesData || []).map((r) => r.user_id))];
+      const { data: staffLocationRows, error: staffLocationError } = await supabase
+        .from("staff_locations")
+        .select("user_id, location_id")
+        .eq("tenant_id", currentTenant.id);
 
-      if (userIds.length === 0) {
+      if (staffLocationError) throw staffLocationError;
+
+      const { data: locationsData, error: locationsError } = await supabase
+        .from("locations")
+        .select("id, name")
+        .eq("tenant_id", currentTenant.id);
+
+      if (locationsError) throw locationsError;
+
+      const locationNameById = new Map((locationsData || []).map((location) => [location.id, location.name]));
+      const allLocationIds = (locationsData || []).map((location) => location.id);
+      const allLocationNames = (locationsData || []).map((location) => location.name);
+
+      const assignmentMap = new Map<string, string[]>();
+      (staffLocationRows || []).forEach((row) => {
+        const current = assignmentMap.get(row.user_id) || [];
+        current.push(row.location_id);
+        assignmentMap.set(row.user_id, current);
+      });
+
+      const userIds = [...new Set((rolesData || []).map((r) => r.user_id))];
+      let scopedUserIds = userIds;
+
+      const isOwnerView = currentRole === "owner";
+      if (!isOwnerView && hasScope) {
+        scopedUserIds = userIds.filter((userId) => {
+          const assigned = assignmentMap.get(userId) || [];
+          return assigned.some((locationId) => scopedLocationIds.includes(locationId));
+        });
+      }
+
+      if (scopedUserIds.length === 0) {
         setStaff([]);
         setIsLoading(false);
         return;
@@ -49,17 +90,36 @@ export function useStaff() {
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
-        .in("user_id", userIds);
+        .in("user_id", scopedUserIds);
 
       if (profilesError) throw profilesError;
 
       const profilesMap = new Map((profilesData || []).map((p) => [p.user_id, p]));
 
-      const staffList: StaffMember[] = (rolesData || []).map((role) => ({
-        userId: role.user_id,
-        role: role.role,
-        profile: profilesMap.get(role.user_id) || null,
-      }));
+      const scopedSet = new Set(scopedUserIds);
+      const staffList: StaffMember[] = (rolesData || [])
+        .filter((role) => scopedSet.has(role.user_id))
+        .map((role) => {
+          const rawAssignedIds = assignmentMap.get(role.user_id) || [];
+          const assignedLocationIds = role.role === "owner" ? allLocationIds : rawAssignedIds;
+          const assignedLocationNames =
+            role.role === "owner"
+              ? allLocationNames
+              : assignedLocationIds
+                  .map((locationId) => locationNameById.get(locationId))
+                  .filter(Boolean) as string[];
+
+          return {
+            userId: role.user_id,
+            role: role.role,
+            isActive: role.is_active !== false,
+            profile: profilesMap.get(role.user_id) || null,
+            assignedLocationIds,
+            assignedLocationNames,
+            assignedLocationCount: assignedLocationIds.length,
+            isUnassigned: role.role === "owner" ? false : assignedLocationIds.length === 0,
+          };
+        });
 
       setStaff(staffList);
     } catch (err) {
@@ -68,7 +128,7 @@ export function useStaff() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [currentRole, currentTenant?.id, hasScope, scopedLocationIds]);
 
   useEffect(() => {
     fetchStaff();

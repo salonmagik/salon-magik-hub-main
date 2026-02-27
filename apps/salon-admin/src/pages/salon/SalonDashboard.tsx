@@ -46,7 +46,7 @@ const activityIcons: Record<string, typeof Calendar> = {
 
 export default function SalonDashboard() {
   const navigate = useNavigate();
-  const { currentTenant, profile } = useAuth();
+  const { currentTenant, profile, currentRole } = useAuth();
   const {
     stats,
     upcomingAppointments,
@@ -119,7 +119,7 @@ export default function SalonDashboard() {
         </div>
 
         {/* Onboarding Checklist Card - Only show if not complete */}
-        {!isChecklistComplete && (
+        {!isChecklistComplete && (currentRole === "owner" || currentRole === "manager") && (
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">

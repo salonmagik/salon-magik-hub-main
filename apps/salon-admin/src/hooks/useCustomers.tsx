@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 import type { Tables } from "@supabase-client";
 import { toast } from "@ui/ui/use-toast";
 
@@ -8,6 +9,7 @@ type Customer = Tables<"customers">;
 
 export function useCustomers() {
   const { currentTenant } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -23,11 +25,39 @@ export function useCustomers() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      if (hasScope && scopedLocationIds.length === 0) {
+        setCustomers([]);
+        return;
+      }
+
+      let customerQuery = supabase
         .from("customers")
         .select("*")
         .eq("tenant_id", currentTenant.id)
         .order("full_name", { ascending: true });
+
+      if (hasScope) {
+        const { data: appointmentCustomers, error: appointmentCustomerError } = await supabase
+          .from("appointments")
+          .select("customer_id")
+          .eq("tenant_id", currentTenant.id)
+          .in("location_id", scopedLocationIds);
+
+        if (appointmentCustomerError) throw appointmentCustomerError;
+
+        const scopedCustomerIds = [
+          ...new Set((appointmentCustomers || []).map((row) => row.customer_id).filter(Boolean)),
+        ];
+
+        if (scopedCustomerIds.length === 0) {
+          setCustomers([]);
+          return;
+        }
+
+        customerQuery = customerQuery.in("id", scopedCustomerIds);
+      }
+
+      const { data, error: fetchError } = await customerQuery;
 
       if (fetchError) throw fetchError;
 
@@ -38,7 +68,7 @@ export function useCustomers() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [currentTenant?.id, hasScope, scopedLocationIds]);
 
   useEffect(() => {
     fetchCustomers();

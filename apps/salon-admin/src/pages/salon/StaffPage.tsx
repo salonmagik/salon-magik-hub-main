@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -15,9 +16,27 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Skeleton } from "@ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
+import { Checkbox } from "@ui/checkbox";
+import { Input } from "@ui/input";
+import { Label } from "@ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 import { 
   UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
-  User, History, XCircle, CheckCircle, Trash, UserCog, Copy
+  User, History, XCircle, CheckCircle, Copy, Building2, Pencil
 } from "lucide-react";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
@@ -25,6 +44,7 @@ import { StaffDetailDialog } from "@/components/dialogs/StaffDetailDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useAuth } from "@/hooks/useAuth";
+import { MODULE_LABELS } from "@/hooks/usePermissions";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -36,6 +56,7 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import { PermissionsTab } from "@/components/staff/PermissionsTab";
+import type { Tables } from "@supabase-client";
 
 const roleLabels: Record<StaffMember["role"], string> = {
   owner: "Owner",
@@ -53,6 +74,9 @@ const roleVariants: Record<StaffMember["role"], "default" | "secondary" | "outli
   staff: "outline",
 };
 
+const editableRoles: Array<StaffMember["role"]> = ["manager", "supervisor", "receptionist", "staff"];
+const overrideModules = Object.keys(MODULE_LABELS);
+
 function getInitials(name: string | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(" ");
@@ -64,12 +88,30 @@ function getInitials(name: string | undefined): string {
 
 export default function StaffPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedInvitationId, setSelectedInvitationId] = useState<string | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
   const [staffToDeactivate, setStaffToDeactivate] = useState<StaffMember | null>(null);
+  const [staffTab, setStaffTab] = useState<"all" | "unassigned">("all");
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [confirmAssignDialogOpen, setConfirmAssignDialogOpen] = useState(false);
+  const [staffToAssign, setStaffToAssign] = useState<StaffMember | null>(null);
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+  const [assigning, setAssigning] = useState(false);
+  const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
+  const [staffToReactivate, setStaffToReactivate] = useState<StaffMember | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [confirmEditDialogOpen, setConfirmEditDialogOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [staffToEdit, setStaffToEdit] = useState<StaffMember | null>(null);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editRole, setEditRole] = useState<StaffMember["role"]>("staff");
+  const [overrideSelections, setOverrideSelections] = useState<Record<string, boolean>>({});
   const { staff, isLoading, refetch } = useStaff();
   const {
     invitations,
@@ -79,13 +121,44 @@ export default function StaffPage() {
     resendInvitation,
     canResend,
   } = useStaffInvitations();
-  const { user, currentTenant } = useAuth();
+  const { user, currentTenant, currentRole } = useAuth();
 
-  const currentUserIsOwner = staff.some(
-    (s) => s.userId === user?.id && s.role === "owner"
-  );
+  const currentUserIsOwner = currentRole === "owner";
+  const currentUserCanAssign = currentRole === "owner" || currentRole === "manager";
+  const isChainTenant = currentTenant?.plan === "chain";
+  const isOwnerHubStaffView = location.pathname === "/salon/overview/staff";
 
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
+  const filteredStaff = staffTab === "unassigned" ? staff.filter((member) => member.isUnassigned) : staff;
+
+  const { data: tenantLocations = [] } = useQuery({
+    queryKey: ["staff-assignment-locations", currentTenant?.id],
+    queryFn: async (): Promise<Array<Pick<Tables<"locations">, "id" | "name">>> => {
+      if (!currentTenant?.id) return [];
+      const { data, error } = await supabase
+        .from("locations")
+        .select("id, name")
+        .eq("tenant_id", currentTenant.id)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: Boolean(currentTenant?.id),
+  });
+
+  const { data: tenantUserOverrides = [] } = useQuery({
+    queryKey: ["staff-user-overrides", currentTenant?.id],
+    queryFn: async (): Promise<Array<Pick<Tables<"user_permission_overrides">, "user_id" | "module" | "allowed">>> => {
+      if (!currentTenant?.id) return [];
+      const { data, error } = await supabase
+        .from("user_permission_overrides")
+        .select("user_id, module, allowed")
+        .eq("tenant_id", currentTenant.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: Boolean(currentTenant?.id && currentUserIsOwner),
+  });
 
   const handleCancelClick = (id: string) => {
     setSelectedInvitationId(id);
@@ -119,6 +192,16 @@ export default function StaffPage() {
         .eq("tenant_id", currentTenant.id);
 
       if (error) throw error;
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "staff.deactivated",
+        _entity_type: "user",
+        _entity_id: staffToDeactivate.userId,
+        _metadata: {
+          deactivated_by_user_id: user?.id,
+        },
+      });
       
       toast({ title: "Success", description: "Staff member deactivated" });
       await refetch();
@@ -128,28 +211,226 @@ export default function StaffPage() {
     setStaffToDeactivate(null);
   };
 
-  const handleReactivate = async (member: StaffMember) => {
-    if (!currentTenant?.id) return;
-    
+  const handleReactivateClick = (member: StaffMember) => {
+    setStaffToReactivate(member);
+    setReactivateDialogOpen(true);
+  };
+
+  const handleConfirmReactivate = async () => {
+    if (!staffToReactivate || !currentTenant?.id) return;
+
     try {
       const { error } = await supabase
         .from("user_roles")
         .update({ is_active: true })
-        .eq("user_id", member.userId)
+        .eq("user_id", staffToReactivate.userId)
         .eq("tenant_id", currentTenant.id);
 
       if (error) throw error;
-      
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "staff.reactivated",
+        _entity_type: "user",
+        _entity_id: staffToReactivate.userId,
+        _metadata: {
+          reactivated_by_user_id: user?.id,
+        },
+      });
+
       toast({ title: "Success", description: "Staff member reactivated" });
       await refetch();
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to reactivate", variant: "destructive" });
+    } finally {
+      setStaffToReactivate(null);
     }
   };
 
   const copyTempPassword = (password: string) => {
     navigator.clipboard.writeText(password);
     toast({ title: "Copied", description: "Temporary password copied to clipboard" });
+  };
+
+  const openAssignDialog = (member: StaffMember) => {
+    setStaffToAssign(member);
+    setSelectedLocationIds(member.assignedLocationIds);
+    setAssignDialogOpen(true);
+    setConfirmAssignDialogOpen(false);
+  };
+
+  const openEditDialog = (member: StaffMember) => {
+    const [first = "", ...rest] = (member.profile?.full_name || "").trim().split(" ");
+    setStaffToEdit(member);
+    setEditFirstName(first);
+    setEditLastName(rest.join(" "));
+    setEditRole(member.role);
+
+    const memberOverrides = tenantUserOverrides.filter((override) => override.user_id === member.userId);
+    const initialOverrides: Record<string, boolean> = {};
+    memberOverrides.forEach((override) => {
+      initialOverrides[override.module] = override.allowed;
+    });
+    setOverrideSelections(initialOverrides);
+    setEditDialogOpen(true);
+  };
+
+  const toggleOverrideSelection = (module: string) => {
+    setOverrideSelections((prev) => {
+      if (Object.prototype.hasOwnProperty.call(prev, module)) {
+        const next = { ...prev };
+        delete next[module];
+        return next;
+      }
+      return { ...prev, [module]: true };
+    });
+  };
+
+  const handleToggleLocation = (locationId: string) => {
+    setSelectedLocationIds((prev) =>
+      prev.includes(locationId) ? prev.filter((id) => id !== locationId) : [...prev, locationId]
+    );
+  };
+
+  const handleSaveAssignments = async () => {
+    if (!staffToAssign || !currentTenant?.id || !user?.id) return;
+    setAssigning(true);
+    try {
+      const { error } = await (supabase.rpc as any)("assign_staff_locations", {
+        p_tenant_id: currentTenant.id,
+        p_user_id: staffToAssign.userId,
+        p_location_ids: selectedLocationIds,
+      });
+
+      if (error) throw error;
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "staff.assignment_updated",
+        _entity_type: "user",
+        _entity_id: staffToAssign.userId,
+        _metadata: {
+          location_ids: selectedLocationIds,
+        },
+      });
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "assignment.pending_cleared",
+        _entity_type: "user",
+        _entity_id: staffToAssign.userId,
+        _metadata: {
+          cleared_by_user_id: user.id,
+          location_count: selectedLocationIds.length,
+        },
+      });
+
+      toast({ title: "Assignments updated", description: "Staff salons updated successfully." });
+      setConfirmAssignDialogOpen(false);
+      setAssignDialogOpen(false);
+      setStaffToAssign(null);
+      await refetch();
+      void queryClient.invalidateQueries({ queryKey: ["auth"] });
+    } catch (error: any) {
+      toast({
+        title: "Failed to update assignments",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!staffToEdit || !currentTenant?.id || !user?.id) return;
+    const fullName = `${editFirstName} ${editLastName}`.trim();
+    if (!fullName) {
+      toast({ title: "Name required", description: "Enter first or last name.", variant: "destructive" });
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName })
+        .eq("user_id", staffToEdit.userId);
+      if (profileError) throw profileError;
+
+      if (staffToEdit.role !== editRole) {
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .update({ role: editRole })
+          .eq("tenant_id", currentTenant.id)
+          .eq("user_id", staffToEdit.userId);
+        if (roleError) throw roleError;
+      }
+
+      const { error: clearOverridesError } = await supabase
+        .from("user_permission_overrides")
+        .delete()
+        .eq("tenant_id", currentTenant.id)
+        .eq("user_id", staffToEdit.userId);
+      if (clearOverridesError) throw clearOverridesError;
+
+      const overrideRows = Object.entries(overrideSelections).map(([module, allowed]) => ({
+        tenant_id: currentTenant.id,
+        user_id: staffToEdit.userId,
+        module,
+        allowed,
+      }));
+
+      if (overrideRows.length > 0) {
+        const { error: insertOverrideError } = await supabase
+          .from("user_permission_overrides")
+          .insert(overrideRows);
+        if (insertOverrideError) throw insertOverrideError;
+      }
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "staff.profile_updated",
+        _entity_type: "user",
+        _entity_id: staffToEdit.userId,
+        _metadata: { full_name: fullName },
+      });
+
+      if (staffToEdit.role !== editRole) {
+        await (supabase.rpc as any)("log_audit_event", {
+          _tenant_id: currentTenant.id,
+          _action: "staff.role_updated",
+          _entity_type: "user",
+          _entity_id: staffToEdit.userId,
+          _metadata: { role: editRole },
+        });
+      }
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "staff.overrides_updated",
+        _entity_type: "user",
+        _entity_id: staffToEdit.userId,
+        _metadata: { modules: Object.keys(overrideSelections) },
+      });
+
+      toast({ title: "Staff updated", description: "Profile, role, and overrides saved." });
+      setConfirmEditDialogOpen(false);
+      setEditDialogOpen(false);
+      setStaffToEdit(null);
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ["staff-user-overrides", currentTenant.id] }),
+      ]);
+    } catch (error: any) {
+      toast({
+        title: "Failed to save changes",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   return (
@@ -160,7 +441,9 @@ export default function StaffPage() {
           <div>
             <h1 className="text-2xl font-semibold">Staff</h1>
             <p className="text-muted-foreground">
-              Manage your team members and their permissions
+              {isOwnerHubStaffView
+                ? "Manage staff across all your salon locations"
+                : "Manage your team members and their permissions"}
             </p>
           </div>
           <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
@@ -258,6 +541,22 @@ export default function StaffPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Team Members</CardTitle>
+                <div className="pt-2 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={staffTab === "all" ? "default" : "outline"}
+                    onClick={() => setStaffTab("all")}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={staffTab === "unassigned" ? "default" : "outline"}
+                    onClick={() => setStaffTab("unassigned")}
+                  >
+                    Unassigned
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -272,17 +571,23 @@ export default function StaffPage() {
                       </div>
                     ))}
                   </div>
-                ) : staff.length === 0 ? (
+                ) : filteredStaff.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Users className="w-12 h-12 text-muted-foreground mb-4" />
-                    <h3 className="font-medium mb-1">No team members yet</h3>
+                    <h3 className="font-medium mb-1">
+                      {staffTab === "unassigned" ? "No unassigned team members" : "No team members yet"}
+                    </h3>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Invite staff members to help manage your salon
+                      {staffTab === "unassigned"
+                        ? "All active team members currently have salon assignments."
+                        : "Invite staff members to help manage your salon"}
                     </p>
-                    <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
-                      <UserPlus className="w-4 h-4" />
-                      Invite Staff
-                    </Button>
+                    {staffTab !== "unassigned" && (
+                      <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
+                        <UserPlus className="w-4 h-4" />
+                        Invite Staff
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="overflow-x-auto -mx-4 sm:mx-0">
@@ -292,12 +597,13 @@ export default function StaffPage() {
                           <TableHead>Name</TableHead>
                           <TableHead className="hidden sm:table-cell">Email</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead>Assignments</TableHead>
                           <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {staff.map((member) => {
-                          const isActive = (member as any).isActive !== false;
+                        {filteredStaff.map((member) => {
+                          const isActive = member.isActive;
                           return (
                           <TableRow 
                             key={member.userId}
@@ -340,8 +646,23 @@ export default function StaffPage() {
                                 )}
                               </div>
                             </TableCell>
+                            <TableCell>
+                              {member.role === "owner" ? (
+                                <Badge>ALL</Badge>
+                              ) : member.isUnassigned ? (
+                                <Badge variant="outline">Unassigned</Badge>
+                              ) : (
+                                <div className="text-sm flex items-center gap-1">
+                                  <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                                  <span title={member.assignedLocationNames.join(", ")}>
+                                    {member.assignedLocationCount} salon
+                                    {member.assignedLocationCount > 1 ? "s" : ""}
+                                  </span>
+                                </div>
+                              )}
+                            </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              {currentUserIsOwner && member.role !== "owner" && (
+                              {currentUserCanAssign && member.role !== "owner" && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -353,19 +674,23 @@ export default function StaffPage() {
                                       <User className="w-4 h-4 mr-2" />
                                       View Details
                                     </DropdownMenuItem>
+                                    {currentUserIsOwner && (
+                                      <DropdownMenuItem onClick={() => openEditDialog(member)}>
+                                        <Pencil className="w-4 h-4 mr-2" />
+                                        Edit Staff
+                                      </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem onClick={() => navigate(`/salon/audit-log?userId=${member.userId}`)}>
                                       <History className="w-4 h-4 mr-2" />
                                       View Activities
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <Shield className="w-4 h-4 mr-2" />
-                                      Review Permissions
-                                    </DropdownMenuItem>
+                                    {isChainTenant && (
+                                      <DropdownMenuItem onClick={() => openAssignDialog(member)}>
+                                        <Building2 className="w-4 h-4 mr-2" />
+                                        Assign Locations
+                                      </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem>
-                                      <UserCog className="w-4 h-4 mr-2" />
-                                      Change Role
-                                    </DropdownMenuItem>
                                     {isActive ? (
                                       <DropdownMenuItem 
                                         onClick={() => handleDeactivateClick(member)}
@@ -376,17 +701,13 @@ export default function StaffPage() {
                                       </DropdownMenuItem>
                                     ) : (
                                       <DropdownMenuItem 
-                                        onClick={() => handleReactivate(member)}
+                                        onClick={() => handleReactivateClick(member)}
                                         className="text-success"
                                       >
                                         <CheckCircle className="w-4 h-4 mr-2" />
                                         Reactivate
                                       </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem className="text-destructive">
-                                      <Trash className="w-4 h-4 mr-2" />
-                                      Remove from Team
-                                    </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               )}
@@ -576,10 +897,144 @@ export default function StaffPage() {
         onConfirm={handleConfirmDeactivate}
       />
 
+      <ConfirmActionDialog
+        open={reactivateDialogOpen}
+        onOpenChange={setReactivateDialogOpen}
+        title="Reactivate Staff Member"
+        description={`Are you sure you want to reactivate ${staffToReactivate?.profile?.full_name || "this staff member"}?`}
+        confirmLabel="Reactivate"
+        onConfirm={handleConfirmReactivate}
+      />
+
       <StaffDetailDialog
         open={!!selectedStaff}
         onOpenChange={(open) => !open && setSelectedStaff(null)}
         staff={selectedStaff}
+      />
+
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Locations</DialogTitle>
+            <DialogDescription>
+              {staffToAssign?.profile?.full_name || "Staff member"} can be assigned to one or more locations.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {tenantLocations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No salons available for assignment.</p>
+            ) : (
+              tenantLocations.map((location) => (
+                <label key={location.id} className="flex items-center gap-3 text-sm">
+                  <Checkbox
+                    checked={selectedLocationIds.includes(location.id)}
+                    onCheckedChange={() => handleToggleLocation(location.id)}
+                  />
+                  <span>{location.name}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)} disabled={assigning}>
+              Cancel
+            </Button>
+            <Button onClick={() => setConfirmAssignDialogOpen(true)} disabled={assigning}>
+              {assigning ? "Saving..." : "Save Assignments"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmActionDialog
+        open={confirmAssignDialogOpen}
+        onOpenChange={setConfirmAssignDialogOpen}
+        title="Confirm Location Assignment"
+        description={`Apply ${selectedLocationIds.length} location assignment(s) for ${staffToAssign?.profile?.full_name || "this staff member"}?`}
+        confirmLabel={assigning ? "Saving..." : "Confirm"}
+        onConfirm={handleSaveAssignments}
+      />
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Staff</DialogTitle>
+            <DialogDescription>
+              Update staff name, role, and per-user permission overrides.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-first-name">First name</Label>
+                <Input
+                  id="staff-first-name"
+                  value={editFirstName}
+                  onChange={(event) => setEditFirstName(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-last-name">Last name</Label>
+                <Input
+                  id="staff-last-name"
+                  value={editLastName}
+                  onChange={(event) => setEditLastName(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Select value={editRole} onValueChange={(value) => setEditRole(value as StaffMember["role"])}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {editableRoles.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {roleLabels[role]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Per-user access overrides</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto border rounded-md p-3">
+                {overrideModules.map((moduleKey) => (
+                  <label key={moduleKey} className="flex items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={Object.prototype.hasOwnProperty.call(overrideSelections, moduleKey)}
+                      onCheckedChange={() => toggleOverrideSelection(moduleKey)}
+                    />
+                    <span>{MODULE_LABELS[moduleKey]}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Checking a module adds an explicit allow override for this team member.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button onClick={() => setConfirmEditDialogOpen(true)} disabled={savingEdit}>
+              Review Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmActionDialog
+        open={confirmEditDialogOpen}
+        onOpenChange={setConfirmEditDialogOpen}
+        title="Save Staff Changes"
+        description={`Apply updates for ${staffToEdit?.profile?.full_name || "this staff member"}?`}
+        confirmLabel={savingEdit ? "Saving..." : "Save changes"}
+        onConfirm={handleSaveEdit}
       />
     </SalonSidebar>
   );

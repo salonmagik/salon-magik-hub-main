@@ -233,6 +233,11 @@ export function usePermissions() {
         return false;
       }
 
+      // Owners always have full access across pages/actions.
+      if (currentRole === "owner") {
+        return true;
+      }
+
       // Check for user-specific override first
       const override = userOverrides.find(
         (o) => o.user_id === user.id && o.module === module

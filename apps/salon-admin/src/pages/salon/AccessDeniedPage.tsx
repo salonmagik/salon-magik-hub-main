@@ -2,25 +2,29 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ShieldX, Home } from "lucide-react";
 import { Button } from "@ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function AccessDeniedPage() {
   const navigate = useNavigate();
   const [countdown, setCountdown] = useState(5);
+  const { getFirstAllowedRoute } = useAuth();
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          navigate("/salon");
+          void getFirstAllowedRoute().then((route) => navigate(route, { replace: true }));
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [navigate]);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [getFirstAllowedRoute, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -44,9 +48,15 @@ export default function AccessDeniedPage() {
           </p>
         </div>
         
-        <Button onClick={() => navigate("/salon")} className="gap-2">
+        <Button
+          onClick={async () => {
+            const route = await getFirstAllowedRoute();
+            navigate(route, { replace: true });
+          }}
+          className="gap-2"
+        >
           <Home className="w-4 h-4" />
-          Go to Dashboard
+          Go to Allowed Page
         </Button>
       </div>
     </div>

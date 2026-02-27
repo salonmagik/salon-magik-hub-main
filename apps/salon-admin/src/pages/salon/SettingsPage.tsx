@@ -102,7 +102,7 @@ export default function SettingsPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const { currentTenant, profile } = useAuth();
-  const { defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
+  const { locations, defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
   const { 
     settings: dbNotificationSettings, 
     isLoading: notificationsLoading, 
@@ -389,9 +389,12 @@ export default function SettingsPage() {
 
       // Update location if exists
       if (defaultLocation?.id) {
+        const shouldSyncDefaultLocationName =
+          locations.length <= 1 || defaultLocation.name === currentTenant.name;
         const { error: locationError } = await supabase
           .from("locations")
           .update({
+            ...(shouldSyncDefaultLocationName ? { name: profileData.salonName } : {}),
             city: profileData.city,
             address: profileData.address,
           })
