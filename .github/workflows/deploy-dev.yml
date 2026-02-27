@@ -71,14 +71,14 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }} --workdir supabase
-          supabase db push --include-all --yes --workdir supabase
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }}
+          supabase db push --include-all --yes
 
       - name: Deploy edge functions (dev)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }} --workdir supabase
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }}
 
       - name: Write promotion manifest
         run: |

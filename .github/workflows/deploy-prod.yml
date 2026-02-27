@@ -73,14 +73,14 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_PROD }} --workdir supabase
-          supabase db push --include-all --yes --workdir supabase
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_PROD }}
+          supabase db push --include-all --yes
 
       - name: Deploy edge functions (prod)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_PROD }} --workdir supabase
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_PROD }}
 
       - name: Post-deploy smoke checks
         run: pnpm test
