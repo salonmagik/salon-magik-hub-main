@@ -4,7 +4,7 @@ import { Badge } from "@ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@ui/avatar";
 import { Separator } from "@ui/separator";
 import { Mail, Phone, Calendar, Shield, Activity, Building2 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import type { StaffMember } from "@/hooks/useStaff";
 
 interface StaffDetailDialogProps {
@@ -86,7 +86,7 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">—</p>
+                <p className="font-medium">{staff.email || "—"}</p>
               </div>
             </div>
 
@@ -155,7 +155,9 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Joined</p>
-                <p className="font-medium">—</p>
+                <p className="font-medium">
+                  {staff.joinedAt ? format(new Date(staff.joinedAt), "MMM d, yyyy") : "—"}
+                </p>
               </div>
             </div>
           </div>

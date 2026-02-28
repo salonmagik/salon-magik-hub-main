@@ -75,7 +75,7 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-md">
+      <SheetContent className="w-full sm:max-w-md flex flex-col">
         <SheetHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div className="flex items-center gap-3">
             <Bell className="w-5 h-5 text-primary" />
@@ -95,7 +95,7 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
           </Button>
         </SheetHeader>
 
-        <Tabs defaultValue="all" className="w-full">
+        <Tabs defaultValue="all" className="w-full flex-1 min-h-0 flex flex-col">
           <TabsList className="w-full grid grid-cols-3 mb-4">
             <TabsTrigger value="all" className="flex items-center gap-2">
               All
@@ -117,71 +117,73 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
             </TabsTrigger>
           </TabsList>
 
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border">
-                  <Skeleton className="w-10 h-10 rounded-lg" />
-                  <div className="flex-1">
-                    <Skeleton className="h-4 w-32 mb-2" />
-                    <Skeleton className="h-3 w-48" />
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1 pb-4 scrollbar-hide">
+            {isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg border">
+                    <Skeleton className="w-10 h-10 rounded-lg" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-32 mb-2" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : notifications.length === 0 ? (
-            <div className="text-center py-8">
-              <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-              <p className="text-muted-foreground">No notifications yet</p>
-            </div>
-          ) : (
-            <>
-              <TabsContent value="all" className="space-y-2 mt-0">
-                {notifications.map((notification) => (
-                  <NotificationItem
-                    key={notification.id}
-                    notification={notification}
-                    onMarkRead={() => markAsRead(notification.id)}
-                  />
                 ))}
-              </TabsContent>
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="text-center py-8">
+                <Bell className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-muted-foreground">No notifications yet</p>
+              </div>
+            ) : (
+              <>
+                <TabsContent value="all" className="space-y-2 mt-0">
+                  {notifications.map((notification) => (
+                    <NotificationItem
+                      key={notification.id}
+                      notification={notification}
+                      onMarkRead={() => markAsRead(notification.id)}
+                    />
+                  ))}
+                </TabsContent>
 
-              <TabsContent value="unread" className="space-y-2 mt-0">
-                {notifications.filter((n) => !n.read).length === 0 ? (
-                  <p className="text-center py-8 text-muted-foreground">All caught up!</p>
-                ) : (
-                  notifications
-                    .filter((n) => !n.read)
-                    .map((notification) => (
-                      <NotificationItem
-                        key={notification.id}
-                        notification={notification}
-                        onMarkRead={() => markAsRead(notification.id)}
-                      />
-                    ))
-                )}
-              </TabsContent>
+                <TabsContent value="unread" className="space-y-2 mt-0">
+                  {notifications.filter((n) => !n.read).length === 0 ? (
+                    <p className="text-center py-8 text-muted-foreground">All caught up!</p>
+                  ) : (
+                    notifications
+                      .filter((n) => !n.read)
+                      .map((notification) => (
+                        <NotificationItem
+                          key={notification.id}
+                          notification={notification}
+                          onMarkRead={() => markAsRead(notification.id)}
+                        />
+                      ))
+                  )}
+                </TabsContent>
 
-              <TabsContent value="urgent" className="space-y-2 mt-0">
-                {notifications.filter((n) => n.urgent).length === 0 ? (
-                  <p className="text-center py-8 text-muted-foreground">No urgent notifications</p>
-                ) : (
-                  notifications
-                    .filter((n) => n.urgent)
-                    .map((notification) => (
-                      <NotificationItem
-                        key={notification.id}
-                        notification={notification}
-                        onMarkRead={() => markAsRead(notification.id)}
-                      />
-                    ))
-                )}
-              </TabsContent>
-            </>
-          )}
+                <TabsContent value="urgent" className="space-y-2 mt-0">
+                  {notifications.filter((n) => n.urgent).length === 0 ? (
+                    <p className="text-center py-8 text-muted-foreground">No urgent notifications</p>
+                  ) : (
+                    notifications
+                      .filter((n) => n.urgent)
+                      .map((notification) => (
+                        <NotificationItem
+                          key={notification.id}
+                          notification={notification}
+                          onMarkRead={() => markAsRead(notification.id)}
+                        />
+                      ))
+                  )}
+                </TabsContent>
+              </>
+            )}
+          </div>
         </Tabs>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t bg-background flex items-center justify-between">
+        <div className="mt-auto p-4 border-t bg-background flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
             Notifications are updated in real-time
           </p>

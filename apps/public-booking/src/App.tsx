@@ -23,8 +23,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<BookingPage />} />
           <Route path="/b/:slug" element={<BookingPage />} />
-          <Route path="*" element={<Navigate to="/b/demo" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

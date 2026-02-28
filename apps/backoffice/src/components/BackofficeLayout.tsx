@@ -33,7 +33,7 @@ import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate"
    LogOut,
    Shield,
   ChevronDown,
-  DollarSign,
+  Coins,
   Eye,
   FileText,
   BriefcaseBusiness,
@@ -68,7 +68,7 @@ const navItems: NavItem[] = [
     ],
   },
   { href: "/feature-flags", label: "Feature Flags", icon: Flag, pageKey: "feature_flags" },
-  { href: "/plans", label: "Plans", icon: DollarSign, pageKey: "plans" },
+  { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
   {
     href: "/sales/campaigns",
     label: "Sales Ops",

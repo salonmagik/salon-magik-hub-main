@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
+import { usePermissions } from "./usePermissions";
 import { startOfDay, startOfWeek, startOfMonth, endOfDay } from "date-fns";
 
 export interface LocationPerformance {
@@ -39,12 +40,18 @@ function getDateRange(range: DateRange): { start: Date; end: Date } {
 
 export function useSalonsOverview(dateRange: DateRange = "week") {
   const { currentTenant } = useAuth();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { scopedLocationIds, hasScope } = useLocationScope();
   const [locations, setLocations] = useState<LocationPerformance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchOverview = useCallback(async () => {
+    if (permissionsLoading) {
+      setIsLoading(true);
+      return;
+    }
+
     if (!currentTenant?.id) {
       setLocations([]);
       setIsLoading(false);
@@ -53,6 +60,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
 
     setIsLoading(true);
     setError(null);
+    const canViewRevenueAnalytics = hasPermission("reports");
 
     try {
       const { start, end } = getDateRange(dateRange);
@@ -82,7 +90,11 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
       // Fetch appointments for revenue and booking counts
       let appointmentsQuery = supabase
         .from("appointments")
-        .select("id, location_id, total_amount, amount_paid, status, scheduled_start")
+        .select(
+          canViewRevenueAnalytics
+            ? "id, location_id, total_amount, amount_paid, status, scheduled_start"
+            : "id, location_id, status, scheduled_start"
+        )
         .eq("tenant_id", currentTenant.id)
         .gte("scheduled_start", start.toISOString())
         .lte("scheduled_start", end.toISOString());
@@ -126,7 +138,9 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
           (a) => a.status === "scheduled" || a.status === "started" || a.status === "paused"
         );
         
-        const revenue = completedAppointments.reduce((sum, a) => sum + Number(a.amount_paid || 0), 0);
+        const revenue = canViewRevenueAnalytics
+          ? completedAppointments.reduce((sum, a) => sum + Number(a.amount_paid || 0), 0)
+          : 0;
         
         // Use real staff session data
         const staffOnline = staffByLocation[loc.id] || 0;
@@ -151,7 +165,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, dateRange, hasScope, scopedLocationIds]);
+  }, [currentTenant?.id, dateRange, hasPermission, hasScope, permissionsLoading, scopedLocationIds]);
 
   useEffect(() => {
     fetchOverview();

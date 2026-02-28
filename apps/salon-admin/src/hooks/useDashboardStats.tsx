@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
+import { usePermissions } from "./usePermissions";
 import type { Tables } from "@supabase-client";
 
 type Appointment = Tables<"appointments">;
@@ -52,6 +53,7 @@ interface RecentActivity {
 
 export function useDashboardStats() {
   const { currentTenant } = useAuth();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { scopedLocationIds, hasScope } = useLocationScope();
   const [stats, setStats] = useState<DashboardStats>({
     todayAppointments: 0,
@@ -73,12 +75,20 @@ export function useDashboardStats() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
+    if (permissionsLoading) {
+      setIsLoading(true);
+      return;
+    }
+
     if (!currentTenant?.id) {
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
+    const canViewCustomers = hasPermission("customers");
+    const canViewPayments = hasPermission("payments");
+    const canViewReports = hasPermission("reports");
     const today = new Date().toISOString().split("T")[0];
     const startOfDay = `${today}T00:00:00`;
     const endOfDay = `${today}T23:59:59`;
@@ -128,30 +138,38 @@ export function useDashboardStats() {
         todayAppointmentsQuery,
 
         // Total customers
-        supabase
-          .from("customers")
-          .select("*", { count: "exact", head: true })
-          .eq("tenant_id", currentTenant.id),
+        canViewCustomers
+          ? supabase
+              .from("customers")
+              .select("*", { count: "exact", head: true })
+              .eq("tenant_id", currentTenant.id)
+          : Promise.resolve({ count: 0, data: null, error: null }),
 
         // Outstanding fees (sum of customers.outstanding_balance)
-        supabase
-          .from("customers")
-          .select("outstanding_balance")
-          .eq("tenant_id", currentTenant.id)
-          .gt("outstanding_balance", 0),
+        canViewCustomers && canViewPayments
+          ? supabase
+              .from("customers")
+              .select("outstanding_balance")
+              .eq("tenant_id", currentTenant.id)
+              .gt("outstanding_balance", 0)
+          : Promise.resolve({ data: [], error: null }),
 
         // Purse usage (sum of customer_purses.balance)
-        supabase
-          .from("customer_purses")
-          .select("balance")
-          .eq("tenant_id", currentTenant.id),
+        canViewPayments
+          ? supabase
+              .from("customer_purses")
+              .select("balance")
+              .eq("tenant_id", currentTenant.id)
+          : Promise.resolve({ data: [], error: null }),
 
         // Refunds pending approval
-        supabase
-          .from("refund_requests")
-          .select("*", { count: "exact", head: true })
-          .eq("tenant_id", currentTenant.id)
-          .eq("status", "pending"),
+        canViewPayments
+          ? supabase
+              .from("refund_requests")
+              .select("*", { count: "exact", head: true })
+              .eq("tenant_id", currentTenant.id)
+              .eq("status", "pending")
+          : Promise.resolve({ count: 0, data: null, error: null }),
 
         // Communication credits
         supabase
@@ -173,12 +191,14 @@ export function useDashboardStats() {
           .eq("tenant_id", currentTenant.id),
 
         // Recent transactions for activity
-        supabase
-          .from("transactions")
-          .select("id, type, amount, currency, created_at, customer:customers(full_name)")
-          .eq("tenant_id", currentTenant.id)
-          .order("created_at", { ascending: false })
-          .limit(5),
+        canViewPayments
+          ? supabase
+              .from("transactions")
+              .select("id, type, amount, currency, created_at, customer:customers(full_name)")
+              .eq("tenant_id", currentTenant.id)
+              .order("created_at", { ascending: false })
+              .limit(5)
+          : Promise.resolve({ data: [], error: null }),
 
         // Recent notifications for activity
         supabase
@@ -189,7 +209,9 @@ export function useDashboardStats() {
           .limit(5),
 
         // All completed appointments for insights
-        completedAppointmentsQuery,
+        canViewReports
+          ? completedAppointmentsQuery
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       // Process today's appointments
@@ -221,11 +243,11 @@ export function useDashboardStats() {
         confirmedCount,
         completedCount,
         cancelledCount,
-        totalCustomers: customerCountResult.count || 0,
-        revenueToday,
-        outstandingFees,
-        purseUsage,
-        refundsPendingApproval: refundsPendingResult.count || 0,
+        totalCustomers: canViewCustomers ? customerCountResult.count || 0 : 0,
+        revenueToday: canViewPayments ? revenueToday : 0,
+        outstandingFees: canViewCustomers && canViewPayments ? outstandingFees : 0,
+        purseUsage: canViewPayments ? purseUsage : 0,
+        refundsPendingApproval: canViewPayments ? refundsPendingResult.count || 0 : 0,
         communicationCredits,
         lowCommunicationCredits: communicationCredits < 5,
       });
@@ -282,12 +304,16 @@ export function useDashboardStats() {
           completed: currentTenant.online_booking_enabled || false,
           href: "/salon/settings?tab=booking",
         },
-        {
-          id: "customer",
-          label: "Add first customer",
-          completed: (customerCountResult.count || 0) > 0,
-          href: "/salon/customers",
-        },
+        ...(canViewCustomers
+          ? [
+              {
+                id: "customer",
+                label: "Add first customer",
+                completed: (customerCountResult.count || 0) > 0,
+                href: "/salon/customers",
+              },
+            ]
+          : []),
         {
           id: "appointment",
           label: "Book first appointment",
@@ -298,8 +324,8 @@ export function useDashboardStats() {
 
       setChecklistItems(checklist);
 
-      // Calculate insights (only if enough data)
-      const completedApts = completedAptsResult.data || [];
+      // Calculate insights (only if reports access exists and enough data).
+      const completedApts = canViewReports ? completedAptsResult.data || [] : [];
       const insightsData: Insight[] = [];
 
       // Busiest day (requires ≥10 completed appointments)
@@ -344,22 +370,24 @@ export function useDashboardStats() {
         }
       }
 
-      setInsights(insightsData);
+      setInsights(canViewReports ? insightsData : []);
 
       // Build recent activity
       const activity: RecentActivity[] = [];
 
       // Add recent transactions
-      (recentTransactionsResult.data || []).forEach((tx) => {
-        const customerData = tx.customer as { full_name: string } | null;
-        activity.push({
-          id: tx.id,
-          type: "payment",
-          title: `Payment ${tx.type}`,
-          description: `${tx.currency} ${tx.amount} from ${customerData?.full_name || "Customer"}`,
-          timestamp: tx.created_at,
+      if (canViewPayments) {
+        (recentTransactionsResult.data || []).forEach((tx) => {
+          const customerData = tx.customer as { full_name: string } | null;
+          activity.push({
+            id: tx.id,
+            type: "payment",
+            title: `Payment ${tx.type}`,
+            description: `${tx.currency} ${tx.amount} from ${customerData?.full_name || "Customer"}`,
+            timestamp: tx.created_at,
+          });
         });
-      });
+      }
 
       // Add recent notifications
       (recentNotificationsResult.data || []).forEach((notif) => {
@@ -380,7 +408,14 @@ export function useDashboardStats() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, currentTenant?.online_booking_enabled, hasScope, scopedLocationIds]);
+  }, [
+    currentTenant?.id,
+    currentTenant?.online_booking_enabled,
+    hasPermission,
+    hasScope,
+    permissionsLoading,
+    scopedLocationIds,
+  ]);
 
   useEffect(() => {
     fetchStats();

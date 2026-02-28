@@ -84,6 +84,30 @@ const FALLBACK_ROUTE_MODULES_BY_ROLE: Record<UserRole["role"], string[]> = {
   staff: [],
 };
 
+const normalizeUserRoles = (rows: UserRole[]) => {
+  const byTenant = new Map<string, UserRole>();
+
+  const sorted = [...rows].sort((a, b) => {
+    const activeA = a.is_active === false ? 0 : 1;
+    const activeB = b.is_active === false ? 0 : 1;
+    if (activeA !== activeB) return activeB - activeA;
+
+    const createdAtA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const createdAtB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (createdAtA !== createdAtB) return createdAtB - createdAtA;
+
+    return b.id.localeCompare(a.id);
+  });
+
+  for (const row of sorted) {
+    if (!byTenant.has(row.tenant_id)) {
+      byTenant.set(row.tenant_id, row);
+    }
+  }
+
+  return [...byTenant.values()];
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const CONTEXT_STORAGE_PREFIX = "activeContext:";
   const lastHydratedSessionRef = useRef<string | null>(null);
@@ -193,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { tenants: [], roles: [] };
     }
 
-    const roles = rolesData || [];
+    const roles = normalizeUserRoles((rolesData as UserRole[]) || []);
     const tenantIds = [...new Set(roles.map((r) => r.tenant_id))];
 
     if (tenantIds.length === 0) {
@@ -228,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : [];
           const availableContexts = [
             ...(rpcData.can_use_owner_hub
-              ? [{ type: "owner_hub" as const, locationId: null, label: "Owner Hub" }]
+              ? [{ type: "owner_hub" as const, locationId: null, label: "Management Hub" }]
               : []),
             ...availableLocations.map((location: any) => ({
               type: "location" as const,
@@ -351,7 +375,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const availableContexts = [
-        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Owner Hub" }] : []),
+        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Management Hub" }] : []),
         ...availableLocations.map((location) => ({
           type: "location" as const,
           locationId: location.locationId,
@@ -806,6 +830,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           event: "*",
           schema: "public",
           table: "user_roles",
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        () => {
+          void refreshTenants();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [state.user?.id]);
+
+
+  useEffect(() => {
+    if (!state.user?.id) return;
+    const channel = supabase
+      .channel(`auth-staff-location-updates:${state.user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "staff_locations",
           filter: `user_id=eq.${state.user.id}`,
         },
         () => {

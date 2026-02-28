@@ -36,7 +36,8 @@ export function ModuleProtectedRoute({
   } = useAuth();
   const isGuardBootstrapping =
     authLoading || (hasCompletedOnboarding && (!currentTenant?.id || !permissionRole));
-  const hasModuleAccess = hasPermission(module);
+  const hasOwnAppointmentsAccess = module === "appointments" && hasPermission("appointments:own");
+  const hasModuleAccess = hasPermission(module) || hasOwnAppointmentsAccess;
   const isContextAllowed = isModuleAllowedInContext(module, activeContextType, location.pathname);
   const requiresStrictContext = location.pathname === "/salon/overview/staff";
   const ownerBypass = currentRole === "owner";

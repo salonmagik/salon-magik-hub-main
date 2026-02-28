@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Skeleton } from "@ui/skeleton";
 import { Badge } from "@ui/badge";
 import { Progress } from "@ui/progress";
@@ -47,6 +48,7 @@ const activityIcons: Record<string, typeof Calendar> = {
 export default function SalonDashboard() {
   const navigate = useNavigate();
   const { currentTenant, profile, currentRole } = useAuth();
+  const { hasPermission } = usePermissions();
   const {
     stats,
     upcomingAppointments,
@@ -75,6 +77,10 @@ export default function SalonDashboard() {
     enabled: Boolean(currentTenant?.id),
   });
 
+  const canViewCustomers = hasPermission("customers");
+  const canViewPayments = hasPermission("payments");
+  const canViewReports = hasPermission("reports");
+
   const statCards = [
     {
       title: "Today's Appointments",
@@ -83,27 +89,35 @@ export default function SalonDashboard() {
       icon: Calendar,
       trend: "neutral",
     },
-    {
-      title: "Outstanding Fees",
-      value: `${currentTenant?.currency || "USD"} ${stats.outstandingFees.toFixed(2)}`,
-      change: "From customers",
-      icon: Coins,
-      trend: stats.outstandingFees > 0 ? "down" : "neutral",
-    },
-    {
-      title: "Purse Balance",
-      value: `${currentTenant?.currency || "USD"} ${stats.purseUsage.toFixed(2)}`,
-      change: "Customer wallets",
-      icon: Wallet,
-      trend: "neutral",
-    },
-    {
-      title: "Refunds Pending",
-      value: stats.refundsPendingApproval.toString(),
-      change: "Awaiting approval",
-      icon: RefreshCcw,
-      trend: stats.refundsPendingApproval > 0 ? "down" : "neutral",
-    },
+    ...(canViewCustomers && canViewPayments
+      ? [
+          {
+            title: "Outstanding Fees",
+            value: `${currentTenant?.currency || "USD"} ${stats.outstandingFees.toFixed(2)}`,
+            change: "From customers",
+            icon: Coins,
+            trend: stats.outstandingFees > 0 ? ("down" as const) : ("neutral" as const),
+          },
+        ]
+      : []),
+    ...(canViewPayments
+      ? [
+          {
+            title: "Purse Balance",
+            value: `${currentTenant?.currency || "USD"} ${stats.purseUsage.toFixed(2)}`,
+            change: "Customer wallets",
+            icon: Wallet,
+            trend: "neutral" as const,
+          },
+          {
+            title: "Refunds Pending",
+            value: stats.refundsPendingApproval.toString(),
+            change: "Awaiting approval",
+            icon: RefreshCcw,
+            trend: stats.refundsPendingApproval > 0 ? ("down" as const) : ("neutral" as const),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -211,48 +225,50 @@ export default function SalonDashboard() {
         </div>
 
         {/* Insights Preview */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg font-medium flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-primary" />
-              Insights
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-            ) : insights.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {insights.map((insight) => (
-                  <div
-                    key={insight.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-surface border"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      {insight.icon === "calendar" ? (
-                        <Calendar className="w-5 h-5 text-primary" />
-                      ) : (
-                        <Star className="w-5 h-5 text-primary" />
-                      )}
+        {canViewReports && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-medium flex items-center gap-2">
+                <Lightbulb className="w-5 h-5 text-primary" />
+                Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : insights.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {insights.map((insight) => (
+                    <div
+                      key={insight.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-surface border"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        {insight.icon === "calendar" ? (
+                          <Calendar className="w-5 h-5 text-primary" />
+                        ) : (
+                          <Star className="w-5 h-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">{insight.title}</p>
+                        <p className="font-medium">{insight.value}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{insight.title}</p>
-                      <p className="font-medium">{insight.value}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <Lightbulb className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p>Keep going! Insights will appear once you have more appointment history.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Lightbulb className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p>Keep going! Insights will appear once you have more appointment history.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Communication Credits Warning */}
         {stats.lowCommunicationCredits && (

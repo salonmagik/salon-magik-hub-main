@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
@@ -23,11 +23,27 @@ const notificationsCache = new Map<
   { fetchedAt: number; data: Notification[] }
 >();
 
+function dedupeNotifications(items: Notification[]) {
+  const seen = new Set<string>();
+  const unique: Notification[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    unique.push(item);
+  }
+  return unique;
+}
+
 export function useNotifications(enabled = true) {
   const { currentTenant, user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const notificationsRef = useRef<Notification[]>([]);
+
+  useEffect(() => {
+    notificationsRef.current = notifications;
+  }, [notifications]);
 
   const fetchNotifications = useCallback(async (force = false) => {
     if (!enabled || !currentTenant?.id) {
@@ -44,7 +60,9 @@ export function useNotifications(enabled = true) {
       return;
     }
 
-    setIsLoading(true);
+    if (notificationsRef.current.length === 0) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -58,10 +76,11 @@ export function useNotifications(enabled = true) {
 
       if (fetchError) throw fetchError;
 
-      setNotifications((data as Notification[]) || []);
+      const next = dedupeNotifications((data as Notification[]) || []);
+      setNotifications(next);
       notificationsCache.set(cacheKey, {
         fetchedAt: Date.now(),
-        data: (data as Notification[]) || [],
+        data: next,
       });
     } catch (err) {
       console.error("Error fetching notifications:", err);
@@ -95,7 +114,7 @@ export function useNotifications(enabled = true) {
           // Only add if it's for all users or this specific user
           if (!newNotification.user_id || newNotification.user_id === user?.id) {
             setNotifications((prev) => {
-              const next = [newNotification, ...prev];
+              const next = dedupeNotifications([newNotification, ...prev]);
               const cacheKey = `${currentTenant.id}:${user?.id || "all"}`;
               notificationsCache.set(cacheKey, {
                 fetchedAt: Date.now(),
@@ -170,6 +189,8 @@ export function useNotifications(enabled = true) {
     }
   };
 
+  const refetch = useCallback(() => fetchNotifications(true), [fetchNotifications]);
+
   const unreadCount = notifications.filter((n) => !n.read).length;
   const urgentNotifications = notifications.filter((n) => n.urgent && !n.read);
 
@@ -179,7 +200,7 @@ export function useNotifications(enabled = true) {
     urgentNotifications,
     isLoading,
     error,
-    refetch: () => fetchNotifications(true),
+    refetch,
     markAsRead,
     markAllAsRead,
   };
