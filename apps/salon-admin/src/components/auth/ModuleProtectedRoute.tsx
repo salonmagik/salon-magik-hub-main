@@ -23,22 +23,24 @@ export function ModuleProtectedRoute({
   fallback,
   redirectTo = "/salon",
 }: ModuleProtectedRouteProps) {
-  const { hasPermission, isLoading, currentRole } = usePermissions();
+  const { hasPermission, isLoading, currentRole: permissionRole } = usePermissions();
   const location = useLocation();
   const {
     user,
     currentTenant,
     activeContextType,
+    currentRole,
     isLoading: authLoading,
     hasCompletedOnboarding,
     isAssignmentPending,
   } = useAuth();
   const isGuardBootstrapping =
-    authLoading || (hasCompletedOnboarding && (!currentTenant?.id || !currentRole));
+    authLoading || (hasCompletedOnboarding && (!currentTenant?.id || !permissionRole));
   const hasModuleAccess = hasPermission(module);
   const isContextAllowed = isModuleAllowedInContext(module, activeContextType, location.pathname);
   const requiresStrictContext = location.pathname === "/salon/overview/staff";
-  const isAllowed = hasModuleAccess && (!requiresStrictContext || isContextAllowed);
+  const ownerBypass = currentRole === "owner";
+  const isAllowed = ownerBypass || (hasModuleAccess && (!requiresStrictContext || isContextAllowed));
 
   useEffect(() => {
     if (
@@ -78,7 +80,7 @@ export function ModuleProtectedRoute({
     return <Navigate to="/salon/assignment-pending" replace />;
   }
 
-  if (!isContextAllowed && requiresStrictContext) {
+  if (!ownerBypass && !isContextAllowed && requiresStrictContext) {
     return <Navigate to="/salon/staff" replace />;
   }
 

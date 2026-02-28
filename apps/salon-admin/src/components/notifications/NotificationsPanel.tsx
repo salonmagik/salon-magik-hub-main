@@ -15,9 +15,12 @@ import { Skeleton } from "@ui/skeleton";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 
+type NotificationsHookData = ReturnType<typeof useNotifications>;
+
 interface NotificationsPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  notificationsData?: NotificationsHookData;
 }
 
 const getIcon = (type: Notification["type"]) => {
@@ -50,9 +53,11 @@ const getIconColor = (type: Notification["type"]) => {
   }
 };
 
-export function NotificationsPanel({ open, onOpenChange }: NotificationsPanelProps) {
+export function NotificationsPanel({ open, onOpenChange, notificationsData }: NotificationsPanelProps) {
   const navigate = useNavigate();
-  const { notifications, isLoading, markAsRead, markAllAsRead, refetch } = useNotifications();
+  const notificationsHook = useNotifications(!notificationsData);
+  const { notifications, isLoading, markAsRead, markAllAsRead, refetch } =
+    notificationsData || notificationsHook;
 
   useEffect(() => {
     if (open) {

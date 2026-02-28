@@ -3,47 +3,63 @@ import { Toaster as Sonner } from "@ui/sonner";
 import { TooltipProvider } from "@ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
 
-// Auth pages
-import LoginPage from "./pages/auth/LoginPage";
-import SignupPage from "./pages/auth/SignupPage";
-import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
-import InvitationExpiredPage from "./pages/auth/InvitationExpiredPage";
-import VerifyEmailPage from "./pages/auth/VerifyEmailPage";
-
-// Onboarding
-import OnboardingPage from "./pages/onboarding/OnboardingPage";
-
-// Salon pages
-import SalonDashboard from "./pages/salon/SalonDashboard";
-import AppointmentsPage from "./pages/salon/AppointmentsPage";
-import CustomersPage from "./pages/salon/CustomersPage";
-import ServicesPage from "./pages/salon/ServicesPage";
-import SettingsPage from "./pages/salon/SettingsPage";
-import PaymentsPage from "./pages/salon/PaymentsPage";
-import ReportsPage from "./pages/salon/ReportsPage";
-import MessagingPage from "./pages/salon/MessagingPage";
-import JournalPage from "./pages/salon/JournalPage";
-import HelpPage from "./pages/salon/HelpPage";
-import StaffPage from "./pages/salon/StaffPage";
-import CalendarPage from "./pages/salon/CalendarPage";
-import EmailTemplatesPage from "./pages/salon/EmailTemplatesPage";
-import AccessDeniedPage from "./pages/salon/AccessDeniedPage";
-import AssignmentPendingPage from "./pages/salon/AssignmentPendingPage";
-import AuditLogPage from "./pages/salon/AuditLogPage";
-import SalonsOverviewPage from "./pages/salon/SalonsOverviewPage";
-
-// Other pages
-import NotFound from "./pages/NotFound";
+const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
+const SignupPage = lazy(() => import("./pages/auth/SignupPage"));
+const ForgotPasswordPage = lazy(() => import("./pages/auth/ForgotPasswordPage"));
+const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
+const InvitationExpiredPage = lazy(() => import("./pages/auth/InvitationExpiredPage"));
+const VerifyEmailPage = lazy(() => import("./pages/auth/VerifyEmailPage"));
+const OnboardingPage = lazy(() => import("./pages/onboarding/OnboardingPage"));
+const SalonDashboard = lazy(() => import("./pages/salon/SalonDashboard"));
+const AppointmentsPage = lazy(() => import("./pages/salon/AppointmentsPage"));
+const CustomersPage = lazy(() => import("./pages/salon/CustomersPage"));
+const ServicesPage = lazy(() => import("./pages/salon/ServicesPage"));
+const SettingsPage = lazy(() => import("./pages/salon/SettingsPage"));
+const PaymentsPage = lazy(() => import("./pages/salon/PaymentsPage"));
+const ReportsPage = lazy(() => import("./pages/salon/ReportsPage"));
+const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
+const JournalPage = lazy(() => import("./pages/salon/JournalPage"));
+const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
+const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
+const CalendarPage = lazy(() => import("./pages/salon/CalendarPage"));
+const EmailTemplatesPage = lazy(() => import("./pages/salon/EmailTemplatesPage"));
+const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
+const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
+const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
+const SalonsOverviewPage = lazy(() => import("./pages/salon/SalonsOverviewPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 // BackOffice (separate app; routes removed here)
  
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      refetchOnMount: false,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+});
+
+function RouteLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 // Smart root route component - redirects based on auth state
 function RootRoute() {
@@ -93,7 +109,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
+          <Suspense fallback={<RouteLoading />}>
+            <Routes>
             {/* Root - smart redirect based on auth */}
             <Route path="/" element={<RootRoute />} />
 
@@ -307,7 +324,8 @@ const App = () => (
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

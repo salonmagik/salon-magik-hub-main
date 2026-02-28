@@ -21,6 +21,16 @@ interface UserPermissionOverride {
   allowed: boolean;
 }
 
+const PERMISSIONS_TTL_MS = 30_000;
+const permissionsCache = new Map<
+  string,
+  {
+    fetchedAt: number;
+    rolePermissions: RolePermission[];
+    userOverrides: UserPermissionOverride[];
+  }
+>();
+
 // Default permissions by role - used to seed new tenants
 export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> = {
   owner: {
@@ -186,10 +196,18 @@ export function usePermissions() {
   const isOwner = currentRole === "owner";
 
   // Fetch permissions
-  const fetchPermissions = useCallback(async () => {
+  const fetchPermissions = useCallback(async (force = false) => {
     if (!currentTenant?.id) {
       setRolePermissions([]);
       setUserOverrides([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const cached = permissionsCache.get(currentTenant.id);
+    if (!force && cached && Date.now() - cached.fetchedAt < PERMISSIONS_TTL_MS) {
+      setRolePermissions(cached.rolePermissions);
+      setUserOverrides(cached.userOverrides);
       setIsLoading(false);
       return;
     }
@@ -215,6 +233,11 @@ export function usePermissions() {
 
       setRolePermissions((roleData as RolePermission[]) || []);
       setUserOverrides((overrideData as UserPermissionOverride[]) || []);
+      permissionsCache.set(currentTenant.id, {
+        fetchedAt: Date.now(),
+        rolePermissions: (roleData as RolePermission[]) || [],
+        userOverrides: (overrideData as UserPermissionOverride[]) || [],
+      });
     } catch (error) {
       console.error("Error fetching permissions:", error);
     } finally {
@@ -277,7 +300,7 @@ export function usePermissions() {
     currentRole,
     rolePermissions,
     userOverrides,
-    refetch: fetchPermissions,
+    refetch: () => fetchPermissions(true),
   };
 }
 

@@ -144,7 +144,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { unreadCount } = useNotifications();
+  const notificationsData = useNotifications();
+  const { unreadCount } = notificationsData;
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const {
     currentTenant,
@@ -561,6 +562,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         <NotificationsPanel
           open={notificationsOpen}
           onOpenChange={setNotificationsOpen}
+          notificationsData={notificationsData}
         />
       </InactivityGuard>
     </BannerProvider>

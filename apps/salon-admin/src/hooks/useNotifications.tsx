@@ -17,15 +17,29 @@ export interface Notification {
   created_at: string;
 }
 
-export function useNotifications() {
+const NOTIFICATIONS_TTL_MS = 20_000;
+const notificationsCache = new Map<
+  string,
+  { fetchedAt: number; data: Notification[] }
+>();
+
+export function useNotifications(enabled = true) {
   const { currentTenant, user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchNotifications = useCallback(async () => {
-    if (!currentTenant?.id) {
+  const fetchNotifications = useCallback(async (force = false) => {
+    if (!enabled || !currentTenant?.id) {
       setNotifications([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const cacheKey = `${currentTenant.id}:${user?.id || "all"}`;
+    const cached = notificationsCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.fetchedAt < NOTIFICATIONS_TTL_MS) {
+      setNotifications(cached.data);
       setIsLoading(false);
       return;
     }
@@ -45,21 +59,26 @@ export function useNotifications() {
       if (fetchError) throw fetchError;
 
       setNotifications((data as Notification[]) || []);
+      notificationsCache.set(cacheKey, {
+        fetchedAt: Date.now(),
+        data: (data as Notification[]) || [],
+      });
     } catch (err) {
       console.error("Error fetching notifications:", err);
       setError(err as Error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, user?.id]);
+  }, [enabled, currentTenant?.id, user?.id]);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchNotifications();
-  }, [fetchNotifications]);
+  }, [enabled, fetchNotifications]);
 
   // Subscribe to realtime notifications
   useEffect(() => {
-    if (!currentTenant?.id) return;
+    if (!enabled || !currentTenant?.id) return;
 
     const channel = supabase
       .channel("notifications")
@@ -75,7 +94,15 @@ export function useNotifications() {
           const newNotification = payload.new as Notification;
           // Only add if it's for all users or this specific user
           if (!newNotification.user_id || newNotification.user_id === user?.id) {
-            setNotifications((prev) => [newNotification, ...prev]);
+            setNotifications((prev) => {
+              const next = [newNotification, ...prev];
+              const cacheKey = `${currentTenant.id}:${user?.id || "all"}`;
+              notificationsCache.set(cacheKey, {
+                fetchedAt: Date.now(),
+                data: next,
+              });
+              return next;
+            });
             
             // Show toast for urgent notifications
             if (newNotification.urgent) {
@@ -92,7 +119,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentTenant?.id, user?.id]);
+  }, [enabled, currentTenant?.id, user?.id]);
 
   const markAsRead = async (notificationId: string) => {
     try {
@@ -103,9 +130,16 @@ export function useNotifications() {
 
       if (error) throw error;
 
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
-      );
+      setNotifications((prev) => {
+        const next = prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n));
+        if (currentTenant?.id) {
+          notificationsCache.set(`${currentTenant.id}:${user?.id || "all"}`, {
+            fetchedAt: Date.now(),
+            data: next,
+          });
+        }
+        return next;
+      });
     } catch (err) {
       console.error("Error marking notification as read:", err);
     }
@@ -123,7 +157,14 @@ export function useNotifications() {
 
       if (error) throw error;
 
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setNotifications((prev) => {
+        const next = prev.map((n) => ({ ...n, read: true }));
+        notificationsCache.set(`${currentTenant.id}:${user?.id || "all"}`, {
+          fetchedAt: Date.now(),
+          data: next,
+        });
+        return next;
+      });
     } catch (err) {
       console.error("Error marking all as read:", err);
     }
@@ -138,7 +179,7 @@ export function useNotifications() {
     urgentNotifications,
     isLoading,
     error,
-    refetch: fetchNotifications,
+    refetch: () => fetchNotifications(true),
     markAsRead,
     markAllAsRead,
   };

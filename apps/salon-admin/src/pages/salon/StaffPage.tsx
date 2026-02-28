@@ -365,6 +365,21 @@ export default function StaffPage() {
           .eq("tenant_id", currentTenant.id)
           .eq("user_id", staffToEdit.userId);
         if (roleError) throw roleError;
+
+        const actorName = user?.email || "An admin";
+        const { error: roleNotificationError } = await supabase.from("notifications").insert({
+          tenant_id: currentTenant.id,
+          user_id: staffToEdit.userId,
+          type: "staff",
+          title: "Role updated",
+          description: `${actorName} changed your role to ${roleLabels[editRole]}. Your access has been refreshed.`,
+          urgent: true,
+          entity_type: "user_role",
+          entity_id: staffToEdit.userId,
+        });
+        if (roleNotificationError) {
+          console.error("Failed to create role change notification:", roleNotificationError);
+        }
       }
 
       const { error: clearOverridesError } = await supabase
