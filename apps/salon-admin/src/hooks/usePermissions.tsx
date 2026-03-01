@@ -182,16 +182,17 @@ export const MODULE_LABELS: Record<string, string> = {
 
 export function usePermissions() {
   const { currentTenant, user, roles } = useAuth();
+  const safeRoles = Array.isArray(roles) ? roles : [];
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [userOverrides, setUserOverrides] = useState<UserPermissionOverride[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Get current user's role in this tenant
   const currentRole = useMemo(() => {
-    if (!currentTenant || !roles.length) return null;
-    const userRole = roles.find((r) => r.tenant_id === currentTenant.id);
+    if (!currentTenant || safeRoles.length === 0) return null;
+    const userRole = safeRoles.find((r) => r.tenant_id === currentTenant.id);
     return userRole?.role || null;
-  }, [currentTenant, roles]);
+  }, [currentTenant, safeRoles]);
 
   const isOwner = currentRole === "owner";
 
