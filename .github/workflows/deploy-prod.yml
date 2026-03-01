@@ -71,7 +71,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: ci.yml
           run_id: ${{ env.CI_RUN_ID }}
-          branch: main
           name: ${{ env.ARTIFACT_NAME }}
           path: artifacts
 
