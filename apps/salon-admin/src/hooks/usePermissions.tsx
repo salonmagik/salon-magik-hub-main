@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import type { Enums } from "@supabase-client";
@@ -183,6 +183,7 @@ export const MODULE_LABELS: Record<string, string> = {
 export function usePermissions() {
   const { currentTenant, user, roles } = useAuth();
   const safeRoles = Array.isArray(roles) ? roles : [];
+  const isMountedRef = useRef(true);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [userOverrides, setUserOverrides] = useState<UserPermissionOverride[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -196,24 +197,37 @@ export function usePermissions() {
 
   const isOwner = currentRole === "owner";
 
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Fetch permissions
   const fetchPermissions = useCallback(async (force = false) => {
     if (!currentTenant?.id) {
-      setRolePermissions([]);
-      setUserOverrides([]);
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setRolePermissions([]);
+        setUserOverrides([]);
+        setIsLoading(false);
+      }
       return;
     }
 
     const cached = permissionsCache.get(currentTenant.id);
     if (!force && cached && Date.now() - cached.fetchedAt < PERMISSIONS_TTL_MS) {
-      setRolePermissions(cached.rolePermissions);
-      setUserOverrides(cached.userOverrides);
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setRolePermissions(cached.rolePermissions);
+        setUserOverrides(cached.userOverrides);
+        setIsLoading(false);
+      }
       return;
     }
 
-    setIsLoading(true);
+    if (isMountedRef.current) {
+      setIsLoading(true);
+    }
 
     try {
       // Fetch role permissions
@@ -232,8 +246,10 @@ export function usePermissions() {
 
       if (overrideError) throw overrideError;
 
-      setRolePermissions((roleData as RolePermission[]) || []);
-      setUserOverrides((overrideData as UserPermissionOverride[]) || []);
+      if (isMountedRef.current) {
+        setRolePermissions((roleData as RolePermission[]) || []);
+        setUserOverrides((overrideData as UserPermissionOverride[]) || []);
+      }
       permissionsCache.set(currentTenant.id, {
         fetchedAt: Date.now(),
         rolePermissions: (roleData as RolePermission[]) || [],
@@ -242,7 +258,9 @@ export function usePermissions() {
     } catch (error) {
       console.error("Error fetching permissions:", error);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [currentTenant?.id]);
 
