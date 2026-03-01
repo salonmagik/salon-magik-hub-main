@@ -445,6 +445,17 @@ export default function StaffPage() {
           p_location_ids: selectedLocationIds,
         });
         if (assignmentError) throw assignmentError;
+
+        await (supabase.rpc as any)("log_audit_event", {
+          _tenant_id: currentTenant.id,
+          _action: "staff.assignment_updated",
+          _entity_type: "user",
+          _entity_id: staffToEdit.userId,
+          _metadata: {
+            location_ids: selectedLocationIds,
+            location_count: selectedLocationIds.length,
+          },
+        });
       }
 
       await (supabase.rpc as any)("log_audit_event", {
