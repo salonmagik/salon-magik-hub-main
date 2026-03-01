@@ -14,6 +14,9 @@ jobs:
     environment:
       name: production
       url: https://app.salonmagik.com
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,26 +51,35 @@ jobs:
         run: |
           test -f artifacts/promotion-manifest-staging.json
           MANIFEST_SHA=$(jq -r '.commit_sha' artifacts/promotion-manifest-staging.json)
+          MANIFEST_CI_RUN_ID=$(jq -r '.ci_run_id' artifacts/promotion-manifest-staging.json)
+          MANIFEST_ARTIFACT_NAME=$(jq -r '.artifact_name' artifacts/promotion-manifest-staging.json)
           MANIFEST_SOURCE=$(jq -r '.source' artifacts/promotion-manifest-staging.json)
           MANIFEST_READY_FOR=$(jq -r '.ready_for' artifacts/promotion-manifest-staging.json)
           test "$MANIFEST_SHA" = "${{ inputs.commit_sha }}"
+          test -n "$MANIFEST_CI_RUN_ID"
+          test "$MANIFEST_CI_RUN_ID" != "null"
+          test -n "$MANIFEST_ARTIFACT_NAME"
+          test "$MANIFEST_ARTIFACT_NAME" != "null"
           test "$MANIFEST_SOURCE" = "staging"
           test "$MANIFEST_READY_FOR" = "prod"
+          echo "CI_RUN_ID=$MANIFEST_CI_RUN_ID" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=$MANIFEST_ARTIFACT_NAME" >> "$GITHUB_ENV"
 
       - name: Download immutable build artifact from CI
         uses: dawidd6/action-download-artifact@v6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: ci.yml
-          commit: ${{ inputs.commit_sha }}
-          name: web-builds-${{ inputs.commit_sha }}
+          run_id: ${{ env.CI_RUN_ID }}
+          branch: main
+          name: ${{ env.ARTIFACT_NAME }}
           path: artifacts
 
       - name: Verify immutable build artifact
         run: |
-          test -f artifacts/web-builds-${{ inputs.commit_sha }}.tar.gz
+          test -f artifacts/${{ env.ARTIFACT_NAME }}.tar.gz
           mkdir -p promoted-build
-          tar -xzf artifacts/web-builds-${{ inputs.commit_sha }}.tar.gz -C promoted-build
+          tar -xzf artifacts/${{ env.ARTIFACT_NAME }}.tar.gz -C promoted-build
 
       - name: Apply DB migrations (prod)
         env:

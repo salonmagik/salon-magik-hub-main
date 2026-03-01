@@ -33,6 +33,7 @@ jobs:
         run: pnpm test
 
       - name: Create release manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p artifacts
           cat > artifacts/release-manifest.json <<JSON
@@ -44,12 +45,14 @@ jobs:
           JSON
 
       - name: Upload release manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: release-manifest
           path: artifacts/release-manifest.json
 
       - name: Package immutable build artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p artifacts
           tar -czf artifacts/web-builds-${GITHUB_SHA}.tar.gz \
@@ -60,6 +63,7 @@ jobs:
             apps/salon-admin/dist
 
       - name: Upload immutable build artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: web-builds-${{ github.sha }}
