@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@supabase-client";
-import type { ActiveContextType } from "@/lib/contextAccess";
+import { fallbackFirstRoute, type ActiveContextType } from "@/lib/contextAccess";
 
 type Profile = Tables<"profiles">;
 type Tenant = Tables<"tenants">;
@@ -47,8 +47,70 @@ const isAssignmentPendingState = (
   assignedLocationIds: string[]
 ) => Boolean(role && role !== "owner" && assignedLocationIds.length === 0);
 
+const FALLBACK_ROUTE_ORDER: Array<{ module: string; path: string }> = [
+  { module: "salons_overview", path: "/salon/overview" },
+  { module: "staff", path: "/salon/overview/staff" },
+  { module: "dashboard", path: "/salon" },
+  { module: "appointments", path: "/salon/appointments" },
+  { module: "calendar", path: "/salon/calendar" },
+  { module: "customers", path: "/salon/customers" },
+  { module: "services", path: "/salon/services" },
+  { module: "payments", path: "/salon/payments" },
+  { module: "reports", path: "/salon/reports" },
+  { module: "messaging", path: "/salon/messaging" },
+  { module: "journal", path: "/salon/journal" },
+  { module: "staff", path: "/salon/staff" },
+  { module: "settings", path: "/salon/settings" },
+  { module: "audit_log", path: "/salon/audit-log" },
+];
+
+const FALLBACK_ROUTE_MODULES_BY_ROLE: Record<UserRole["role"], string[]> = {
+  owner: FALLBACK_ROUTE_ORDER.map((item) => item.module),
+  manager: [
+    "salons_overview",
+    "dashboard",
+    "appointments",
+    "calendar",
+    "customers",
+    "services",
+    "payments",
+    "reports",
+    "messaging",
+    "journal",
+    "staff",
+  ],
+  supervisor: ["dashboard", "appointments", "calendar", "customers", "services", "messaging"],
+  receptionist: ["dashboard", "appointments", "calendar", "customers", "messaging"],
+  staff: [],
+};
+
+const normalizeUserRoles = (rows: UserRole[]) => {
+  const byTenant = new Map<string, UserRole>();
+
+  const sorted = [...rows].sort((a, b) => {
+    const activeA = a.is_active === false ? 0 : 1;
+    const activeB = b.is_active === false ? 0 : 1;
+    if (activeA !== activeB) return activeB - activeA;
+
+    const createdAtA = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const createdAtB = b.created_at ? new Date(b.created_at).getTime() : 0;
+    if (createdAtA !== createdAtB) return createdAtB - createdAtA;
+
+    return b.id.localeCompare(a.id);
+  });
+
+  for (const row of sorted) {
+    if (!byTenant.has(row.tenant_id)) {
+      byTenant.set(row.tenant_id, row);
+    }
+  }
+
+  return [...byTenant.values()];
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const CONTEXT_STORAGE_PREFIX = "activeContext:";
+  const lastHydratedSessionRef = useRef<string | null>(null);
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
@@ -70,6 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const getContextStorageKey = (tenantId: string) => `${CONTEXT_STORAGE_PREFIX}${tenantId}`;
+  const buildSessionHydrationKey = (session: Session) =>
+    `${session.user.id}:${session.access_token.slice(-12)}`;
 
   const parseStoredContext = (tenantId: string): { type: ActiveContextType; locationId: string | null } | null => {
     const raw = localStorage.getItem(getContextStorageKey(tenantId));
@@ -153,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { tenants: [], roles: [] };
     }
 
-    const roles = rolesData || [];
+    const roles = normalizeUserRoles((rolesData as UserRole[]) || []);
     const tenantIds = [...new Set(roles.map((r) => r.tenant_id))];
 
     if (tenantIds.length === 0) {
@@ -188,7 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : [];
           const availableContexts = [
             ...(rpcData.can_use_owner_hub
-              ? [{ type: "owner_hub" as const, locationId: null, label: "Owner Hub" }]
+              ? [{ type: "owner_hub" as const, locationId: null, label: "Management Hub" }]
               : []),
             ...availableLocations.map((location: any) => ({
               type: "location" as const,
@@ -311,7 +375,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const availableContexts = [
-        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Owner Hub" }] : []),
+        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Management Hub" }] : []),
         ...availableLocations.map((location) => ({
           type: "location" as const,
           locationId: location.locationId,
@@ -372,6 +436,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const resolveFallbackFirstRoute = (contextType: ActiveContextType): string => {
+    const role = state.currentRole;
+    if (!role) return fallbackFirstRoute(contextType);
+    if (role === "owner") return fallbackFirstRoute(contextType);
+
+    const allowedModules = new Set(FALLBACK_ROUTE_MODULES_BY_ROLE[role] || []);
+    const matchingRoute = FALLBACK_ROUTE_ORDER.find((route) => {
+      if (!allowedModules.has(route.module)) return false;
+      if (contextType === "owner_hub") {
+        return route.path === "/salon/overview" || route.path === "/salon/overview/staff";
+      }
+      return route.path !== "/salon/overview" && route.path !== "/salon/overview/staff";
+    });
+
+    if (matchingRoute) return matchingRoute.path;
+    return contextType === "owner_hub" ? "/salon/overview" : "/salon/access-denied";
+  };
+
   // Initialize auth state
   const initializeAuth = async () => {
     try {
@@ -381,6 +463,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log("Auth state changed:", event, session?.user?.id);
 
           if (event === "SIGNED_OUT" || !session) {
+            lastHydratedSessionRef.current = null;
             setState({
               user: null,
               session: null,
@@ -404,6 +487,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (session?.user) {
+            const hydrationKey = buildSessionHydrationKey(session);
+            if (lastHydratedSessionRef.current === hydrationKey) {
+              return;
+            }
+            lastHydratedSessionRef.current = hydrationKey;
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
               let profile = await fetchProfile(session.user.id);
@@ -492,6 +580,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
+        const hydrationKey = buildSessionHydrationKey(session);
+        if (lastHydratedSessionRef.current === hydrationKey) {
+          return () => {
+            subscription.unsubscribe();
+          };
+        }
+        lastHydratedSessionRef.current = hydrationKey;
         let profile = await fetchProfile(session.user.id);
         
         // If profile doesn't exist, try to create it from auth metadata
@@ -670,11 +765,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         p_location_id: locationId,
       });
       const routes = (Array.isArray(data) ? data : []).filter((route: unknown) => typeof route === "string");
-      if (routes.length > 0) return routes[0] as string;
+      const firstRoute = routes[0] as string | undefined;
+      if (firstRoute && firstRoute !== "/salon/access-denied") return firstRoute;
     } catch (error) {
       console.error("Failed to resolve first allowed route:", error);
     }
-    return contextType === "owner_hub" ? "/salon/overview" : "/salon";
+    return resolveFallbackFirstRoute(contextType);
   };
 
   const refreshProfile = async () => {
@@ -723,6 +819,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }));
     }, 0);
   };
+
+  useEffect(() => {
+    if (!state.user?.id) return;
+    const channel = supabase
+      .channel(`auth-user-role-updates:${state.user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "user_roles",
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        () => {
+          void refreshTenants();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [state.user?.id]);
+
+
+  useEffect(() => {
+    if (!state.user?.id) return;
+    const channel = supabase
+      .channel(`auth-staff-location-updates:${state.user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "staff_locations",
+          filter: `user_id=eq.${state.user.id}`,
+        },
+        () => {
+          void refreshTenants();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [state.user?.id]);
 
   const clearPasswordChangeFlag = () => {
     setState((prev) => ({ ...prev, requiresPasswordChange: false }));

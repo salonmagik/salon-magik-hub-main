@@ -6,7 +6,7 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
-import { CreditCard, DollarSign, Loader2 } from "lucide-react";
+import { CreditCard, Coins, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomers } from "@/hooks/useCustomers";
@@ -137,7 +137,7 @@ export function RecordPaymentDialog({
               Amount <span className="text-destructive">*</span>
             </Label>
             <div className="relative">
-              {/* <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
+              {/* <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
               <Input
                 type="number"
                 placeholder="0.00"

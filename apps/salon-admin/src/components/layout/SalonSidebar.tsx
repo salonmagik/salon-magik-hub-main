@@ -21,6 +21,7 @@ import {
   Bell,
   Plus,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
@@ -46,6 +47,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
@@ -141,10 +150,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
+  const [refreshingAccess, setRefreshingAccess] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { unreadCount } = useNotifications();
+  const notificationsData = useNotifications();
+  const { unreadCount } = notificationsData;
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const {
     currentTenant,
@@ -154,6 +166,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     isAssignmentPending,
     setActiveContext,
     getFirstAllowedRoute,
+    refreshTenants,
   } = useAuth();
   
   // Start staff session on mount
@@ -173,6 +186,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         return false;
       }
       if (!item.module) return true; // No module = always visible
+      if (item.module === "appointments") {
+        const canAccessOwnAppointments = hasPermission("appointments:own");
+        return (hasPermission("appointments") || canAccessOwnAppointments) &&
+          isModuleAllowedInContext(item.module, activeContextType);
+      }
       return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
     });
   }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
@@ -209,6 +227,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   };
 
   const planDisplay = getPlanDisplay();
+  const accessRefreshNotice = notificationsData.notifications.find(
+    (notification) =>
+      notification.id === accessRefreshNoticeId &&
+      !notification.read &&
+      (notification.entity_type === "user_role" || notification.entity_type === "staff_location")
+  );
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -238,6 +262,76 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    const latestAccessNotice = notificationsData.notifications.find(
+      (notification) =>
+        !notification.read &&
+        notification.type === "staff" &&
+        (notification.entity_type === "user_role" || notification.entity_type === "staff_location")
+    );
+
+    if (!latestAccessNotice) {
+      setAccessRefreshNoticeId(null);
+      return;
+    }
+
+    if (latestAccessNotice.id !== accessRefreshNoticeId) {
+      setAccessRefreshNoticeId(latestAccessNotice.id);
+      toast({
+        title: "Access updated",
+        description: "Your role or assignment changed. Refresh to continue.",
+      });
+    }
+  }, [accessRefreshNoticeId, notificationsData.notifications, toast]);
+
+  const handleRefreshAccess = async () => {
+    if (!accessRefreshNotice) return;
+    const noticeId = accessRefreshNotice.id;
+    setRefreshingAccess(true);
+    // Close immediately so one click is enough even before network round-trips finish.
+    setAccessRefreshNoticeId(null);
+    try {
+      await notificationsData.markAsRead(noticeId);
+      if (!currentTenant?.id) {
+        window.location.assign("/salon");
+        return;
+      }
+
+      // Resolve fresh context + routes directly from server so role/location changes
+      // are applied before choosing the redirect destination.
+      const { data: resolvedContext } = await (supabase.rpc as any)("resolve_user_contexts", {
+        p_tenant_id: currentTenant.id,
+      });
+
+      const nextContextType =
+        resolvedContext?.default_context_type === "owner_hub" ? "owner_hub" : "location";
+      const nextLocationId =
+        nextContextType === "location" ? resolvedContext?.default_location_id ?? null : null;
+
+      await (supabase.rpc as any)("set_active_context", {
+        p_tenant_id: currentTenant.id,
+        p_context_type: nextContextType,
+        p_location_id: nextLocationId,
+      });
+
+      const { data: routesData } = await (supabase.rpc as any)("list_accessible_routes", {
+        p_tenant_id: currentTenant.id,
+        p_context_type: nextContextType,
+        p_location_id: nextLocationId,
+      });
+
+      const routes = (Array.isArray(routesData) ? routesData : []).filter(
+        (route: unknown): route is string => typeof route === "string" && route !== "/salon/access-denied"
+      );
+      const destination = routes[0] || "/salon/appointments";
+
+      await refreshTenants();
+      window.location.assign(destination);
+    } finally {
+      setRefreshingAccess(false);
+    }
+  };
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -266,6 +360,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
   const isActive = (path: string) => {
     if (path === "/salon" && location.pathname === "/salon") return true;
+    // Keep the owner-hub overview root exact so /salon/overview/staff
+    // does not highlight both "Salons Overview" and "Staff".
+    if (path === "/salon/overview") return location.pathname === "/salon/overview";
     if (path !== "/salon" && location.pathname.startsWith(path)) return true;
     return false;
   };
@@ -561,7 +658,38 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         <NotificationsPanel
           open={notificationsOpen}
           onOpenChange={setNotificationsOpen}
+          notificationsData={notificationsData}
         />
+
+        <Dialog open={Boolean(accessRefreshNotice)} onOpenChange={() => {}}>
+          <DialogContent
+            className="sm:max-w-md"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle>Access Updated</DialogTitle>
+              <DialogDescription>
+                {accessRefreshNotice?.entity_type === "user_role"
+                  ? "Your role has been updated by an admin."
+                  : "Your location assignments have been updated by an admin."}{" "}
+                Refresh to continue with your updated access.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={handleRefreshAccess} disabled={refreshingAccess}>
+                {refreshingAccess ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  "Refresh"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </InactivityGuard>
     </BannerProvider>
     </SidebarContext.Provider>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
@@ -26,7 +26,6 @@ import {
   TrendingDown,
   Users,
   Calendar,
-  DollarSign,
   MapPin,
   Clock,
   ArrowUpRight,
@@ -35,9 +34,11 @@ import {
   Star,
   AlertCircle,
   Plus,
+  Coins,
 } from "lucide-react";
 import { useSalonsOverview, type LocationPerformance } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { formatCurrency } from "@shared/currency";
 import { Link } from "react-router-dom";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
@@ -48,6 +49,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { toast } from "@ui/ui/use-toast";
 
 type DateRange = "today" | "week" | "month";
 
@@ -56,7 +58,9 @@ export default function SalonsOverviewPage() {
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
-  const { currentTenant, activeContextType, activeLocationId, availableContexts } = useAuth();
+  const [selectedCompareLocationIds, setSelectedCompareLocationIds] = useState<string[]>([]);
+  const { currentTenant, currentRole, activeContextType, activeLocationId, availableContexts } = useAuth();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
   const activeLocationLabel =
     availableContexts.find((context) => context.type === "location" && context.locationId === activeLocationId)
@@ -65,16 +69,16 @@ export default function SalonsOverviewPage() {
   // Calculate aggregate stats
   const aggregateStats = useMemo(() => {
     if (!locations.length) return null;
-    
+
     const totalRevenue = locations.reduce((sum, loc) => sum + loc.revenue, 0);
     const totalBookings = locations.reduce((sum, loc) => sum + loc.bookingCount, 0);
     const totalStaffOnline = locations.reduce((sum, loc) => sum + loc.staffOnline, 0);
     const totalOutstanding = locations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
     const avgSatisfaction = locations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / locations.length;
-    
+
     const bestPerforming = [...locations].sort((a, b) => b.revenue - a.revenue)[0];
     const worstPerforming = [...locations].sort((a, b) => a.revenue - b.revenue)[0];
-    
+
     return {
       totalRevenue,
       totalBookings,
@@ -88,6 +92,8 @@ export default function SalonsOverviewPage() {
   }, [locations]);
 
   const currency = currentTenant?.currency || "USD";
+  const canViewRevenueAnalytics =
+    currentRole === "owner" || (!permissionsLoading && hasPermission("reports"));
   const canShowPerformanceInsights = (aggregateStats?.totalBookings || 0) >= 6;
   const bestRevenue = aggregateStats?.bestPerforming?.revenue ?? 0;
   const worstRevenue = aggregateStats?.worstPerforming?.revenue ?? 0;
@@ -100,6 +106,45 @@ export default function SalonsOverviewPage() {
   const insightLocations = insightDialogType === "best" ? bestPerformingLocations : needsAttentionLocations;
   const selectedInsightLocation =
     insightLocations.find((location) => location.id === insightLocationId) || insightLocations[0] || null;
+  const selectedCompareLocations = locations.filter((location) =>
+    selectedCompareLocationIds.includes(location.id)
+  );
+
+  useEffect(() => {
+    if (!locations.length) {
+      setSelectedCompareLocationIds([]);
+      return;
+    }
+    setSelectedCompareLocationIds((prev) => {
+      const validIds = prev.filter((id) => locations.some((location) => location.id === id));
+      if (validIds.length > 0) return validIds.slice(0, 3);
+      return locations.slice(0, Math.min(3, locations.length)).map((location) => location.id);
+    });
+  }, [locations]);
+
+  const toggleCompareLocation = (locationId: string) => {
+    setSelectedCompareLocationIds((prev) => {
+      if (prev.includes(locationId)) {
+        return prev.filter((id) => id !== locationId);
+      }
+      if (prev.length >= 3) {
+        toast({
+          title: "Comparison limit reached",
+          description: "You can compare up to 3 salons at a time.",
+        });
+        return prev;
+      }
+      return [...prev, locationId];
+    });
+  };
+
+  const compareLeader = useMemo(() => {
+    if (!selectedCompareLocations.length) return null;
+    return [...selectedCompareLocations].sort((a, b) => {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      return b.bookingCount - a.bookingCount;
+    })[0];
+  }, [selectedCompareLocations]);
 
   if (!currentTenant) {
     return (
@@ -175,7 +220,7 @@ export default function SalonsOverviewPage() {
           <>
             {/* Summary Stats */}
             {aggregateStats && (
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -187,19 +232,21 @@ export default function SalonsOverviewPage() {
                     <div className="text-2xl font-bold">{aggregateStats.locationCount}</div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />
-                      Total Revenue
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {formatCurrency(aggregateStats.totalRevenue, currency)}
-                    </div>
-                  </CardContent>
-                </Card>
+                {canViewRevenueAnalytics && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                        <Coins className="w-3 h-3" />
+                        Total Revenue
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">
+                        {formatCurrency(aggregateStats.totalRevenue, currency)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -241,7 +288,7 @@ export default function SalonsOverviewPage() {
             )}
 
             {/* Best & Worst Performers */}
-            {aggregateStats && aggregateStats.locationCount > 1 && (
+            {canViewRevenueAnalytics && aggregateStats && aggregateStats.locationCount > 1 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="border-success/30 bg-success/5">
                   <CardHeader className="pb-2">
@@ -320,6 +367,76 @@ export default function SalonsOverviewPage() {
               </div>
             )}
 
+            {canViewRevenueAnalytics &&
+              activeContextType === "owner_hub" &&
+              aggregateStats &&
+              aggregateStats.locationCount > 1 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Compare Salon Health</CardTitle>
+                  <CardDescription>
+                    Select up to 3 salons to compare transactions and bookings in this period.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {locations.map((location) => {
+                      const isSelected = selectedCompareLocationIds.includes(location.id);
+                      const selectionCapReached = selectedCompareLocationIds.length >= 3 && !isSelected;
+                      return (
+                        <Button
+                          key={location.id}
+                          size="sm"
+                          variant={isSelected ? "default" : "outline"}
+                          onClick={() => toggleCompareLocation(location.id)}
+                          disabled={selectionCapReached}
+                        >
+                          {location.name}
+                        </Button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedCompareLocations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Select at least one salon to compare health metrics.
+                    </p>
+                  ) : (
+                    <>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Salon</TableHead>
+                            <TableHead className="text-right">Revenue</TableHead>
+                            <TableHead className="text-right">Bookings</TableHead>
+                            <TableHead className="text-right">Outstanding</TableHead>
+                            <TableHead className="text-right">Staff Online</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {selectedCompareLocations.map((location) => (
+                            <TableRow key={location.id}>
+                              <TableCell>{location.name}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(location.revenue, currency)}</TableCell>
+                              <TableCell className="text-right">{location.bookingCount}</TableCell>
+                              <TableCell className="text-right">{location.outstandingAppointments}</TableCell>
+                              <TableCell className="text-right">{location.staffOnline}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                      {compareLeader && (
+                        <p className="text-sm text-muted-foreground">
+                          Current leader in selection:{" "}
+                          <span className="font-medium text-foreground">{compareLeader.name}</span>
+                        </p>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Location Breakdown Table */}
             <Card>
               <CardHeader>
@@ -339,13 +456,15 @@ export default function SalonsOverviewPage() {
                   </div>
                 ) : (
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Location</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
-                        <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>
-                        <TableHead className="text-right hidden lg:table-cell">Outstanding</TableHead>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Location</TableHead>
+                          {canViewRevenueAnalytics && (
+                            <TableHead className="text-right">Revenue</TableHead>
+                          )}
+                          <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
+                          <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>
+                          <TableHead className="text-right hidden lg:table-cell">Outstanding</TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -361,9 +480,11 @@ export default function SalonsOverviewPage() {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(location.revenue, currency)}
-                          </TableCell>
+                          {canViewRevenueAnalytics && (
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(location.revenue, currency)}
+                            </TableCell>
+                          )}
                           <TableCell className="text-right hidden sm:table-cell">
                             {location.bookingCount}
                           </TableCell>
@@ -395,7 +516,10 @@ export default function SalonsOverviewPage() {
         )}
 
         {/* Add Salon Dialog */}
-        <Dialog open={Boolean(insightDialogType)} onOpenChange={(open) => !open && setInsightDialogType(null)}>
+        <Dialog
+          open={canViewRevenueAnalytics && Boolean(insightDialogType)}
+          onOpenChange={(open) => !open && setInsightDialogType(null)}
+        >
           <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle>
@@ -449,9 +573,9 @@ export default function SalonsOverviewPage() {
           </DialogContent>
         </Dialog>
 
-        <AddSalonDialog 
-          open={addSalonOpen} 
-          onOpenChange={setAddSalonOpen} 
+        <AddSalonDialog
+          open={addSalonOpen}
+          onOpenChange={setAddSalonOpen}
           onSuccess={() => refetch()}
         />
       </div>

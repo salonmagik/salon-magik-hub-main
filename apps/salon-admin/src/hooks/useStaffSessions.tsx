@@ -60,13 +60,41 @@ export function useStaffSessions() {
   const startSession = useCallback(async (locationId?: string) => {
     if (!user?.id || !currentTenant?.id) return null;
 
-    // End any existing session first
-    await supabase
+    // Reuse current active session to avoid write amplification on route changes.
+    const { data: existingSession } = await supabase
       .from("staff_sessions")
-      .update({ ended_at: new Date().toISOString() })
+      .select("*")
       .eq("user_id", user.id)
       .eq("tenant_id", currentTenant.id)
-      .is("ended_at", null);
+      .is("ended_at", null)
+      .order("last_activity_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingSession) {
+      const shouldUpdateLocation =
+        locationId !== undefined &&
+        (existingSession.location_id || null) !== (locationId || null);
+
+      const { data: updatedSession, error: updateError } = await supabase
+        .from("staff_sessions")
+        .update({
+          last_activity_at: new Date().toISOString(),
+          ...(shouldUpdateLocation ? { location_id: locationId || null } : {}),
+        })
+        .eq("id", existingSession.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error("Error refreshing active session:", updateError);
+        return existingSession;
+      }
+
+      setCurrentSession(updatedSession);
+      fetchOnlineCounts();
+      return updatedSession;
+    }
 
     // Start new session
     const { data, error } = await supabase

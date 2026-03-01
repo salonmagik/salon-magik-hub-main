@@ -34,17 +34,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
-import { 
+import {
   UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
-  User, History, XCircle, CheckCircle, Copy, Building2, Pencil
+  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2
 } from "lucide-react";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
-import { StaffDetailDialog } from "@/components/dialogs/StaffDetailDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useAuth } from "@/hooks/useAuth";
-import { MODULE_LABELS } from "@/hooks/usePermissions";
+import { DEFAULT_ROLE_PERMISSIONS, MODULE_LABELS } from "@/hooks/usePermissions";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -93,15 +92,11 @@ export default function StaffPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedInvitationId, setSelectedInvitationId] = useState<string | null>(null);
-  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
+  const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
   const [staffToDeactivate, setStaffToDeactivate] = useState<StaffMember | null>(null);
   const [staffTab, setStaffTab] = useState<"all" | "unassigned">("all");
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [confirmAssignDialogOpen, setConfirmAssignDialogOpen] = useState(false);
-  const [staffToAssign, setStaffToAssign] = useState<StaffMember | null>(null);
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
-  const [assigning, setAssigning] = useState(false);
   const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
   const [staffToReactivate, setStaffToReactivate] = useState<StaffMember | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -112,7 +107,20 @@ export default function StaffPage() {
   const [editLastName, setEditLastName] = useState("");
   const [editRole, setEditRole] = useState<StaffMember["role"]>("staff");
   const [overrideSelections, setOverrideSelections] = useState<Record<string, boolean>>({});
-  const { staff, isLoading, refetch } = useStaff();
+  const [memberDialogTab, setMemberDialogTab] = useState<"profile" | "locations" | "permissions">("profile");
+  const [editableTabs, setEditableTabs] = useState({
+    profile: false,
+    locations: false,
+    permissions: false,
+  });
+  const [initialEditSnapshot, setInitialEditSnapshot] = useState<{
+    firstName: string;
+    lastName: string;
+    role: StaffMember["role"];
+    selectedLocationIds: string[];
+    overrideSelections: Record<string, boolean>;
+  } | null>(null);
+  const { staff, isLoading, refetch, updateStaffLocal } = useStaff();
   const {
     invitations,
     isLoading: invitationsLoading,
@@ -130,6 +138,23 @@ export default function StaffPage() {
 
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
   const filteredStaff = staffTab === "unassigned" ? staff.filter((member) => member.isUnassigned) : staff;
+  const isRoleChangedInDraft = Boolean(initialEditSnapshot && editRole !== initialEditSnapshot.role);
+  const normalizedSelectedLocations = [...selectedLocationIds].sort();
+  const normalizedInitialLocations = [...(initialEditSnapshot?.selectedLocationIds || [])].sort();
+  const locationsChanged = normalizedSelectedLocations.join(",") !== normalizedInitialLocations.join(",");
+  const profileChanged = Boolean(
+    initialEditSnapshot &&
+      (editFirstName !== initialEditSnapshot.firstName || editLastName !== initialEditSnapshot.lastName)
+  );
+  const roleChanged = Boolean(initialEditSnapshot && editRole !== initialEditSnapshot.role);
+  const overridesChanged = Boolean(
+    initialEditSnapshot &&
+      overrideModules.some(
+        (moduleKey) =>
+          (overrideSelections[moduleKey] ?? false) !== (initialEditSnapshot.overrideSelections[moduleKey] ?? false)
+      )
+  );
+  const isEditDirty = profileChanged || roleChanged || locationsChanged || (!roleChanged && overridesChanged);
 
   const { data: tenantLocations = [] } = useQuery({
     queryKey: ["staff-assignment-locations", currentTenant?.id],
@@ -160,6 +185,20 @@ export default function StaffPage() {
     enabled: Boolean(currentTenant?.id && currentUserIsOwner),
   });
 
+  const { data: tenantRolePermissions = [] } = useQuery({
+    queryKey: ["staff-role-permissions", currentTenant?.id],
+    queryFn: async (): Promise<Array<Pick<Tables<"role_permissions">, "role" | "module" | "allowed">>> => {
+      if (!currentTenant?.id) return [];
+      const { data, error } = await supabase
+        .from("role_permissions")
+        .select("role, module, allowed")
+        .eq("tenant_id", currentTenant.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: Boolean(currentTenant?.id && currentUserIsOwner),
+  });
+
   const handleCancelClick = (id: string) => {
     setSelectedInvitationId(id);
     setCancelDialogOpen(true);
@@ -173,7 +212,12 @@ export default function StaffPage() {
   };
 
   const handleResend = async (id: string) => {
-    await resendInvitation(id);
+    setResendingInvitationId(id);
+    try {
+      await resendInvitation(id);
+    } finally {
+      setResendingInvitationId(null);
+    }
   };
 
   const handleDeactivateClick = (member: StaffMember) => {
@@ -252,94 +296,59 @@ export default function StaffPage() {
     toast({ title: "Copied", description: "Temporary password copied to clipboard" });
   };
 
-  const openAssignDialog = (member: StaffMember) => {
-    setStaffToAssign(member);
-    setSelectedLocationIds(member.assignedLocationIds);
-    setAssignDialogOpen(true);
-    setConfirmAssignDialogOpen(false);
-  };
-
-  const openEditDialog = (member: StaffMember) => {
+  const openMemberDialog = (
+    member: StaffMember,
+    tab: "profile" | "locations" | "permissions" = "profile",
+    enableEdit = false
+  ) => {
     const [first = "", ...rest] = (member.profile?.full_name || "").trim().split(" ");
     setStaffToEdit(member);
     setEditFirstName(first);
     setEditLastName(rest.join(" "));
     setEditRole(member.role);
+    setSelectedLocationIds(member.assignedLocationIds);
 
+    const rolePermissions = tenantRolePermissions.filter((permission) => permission.role === member.role);
+    const rolePermissionMap = new Map(rolePermissions.map((permission) => [permission.module, permission.allowed]));
     const memberOverrides = tenantUserOverrides.filter((override) => override.user_id === member.userId);
+    const memberOverrideMap = new Map(memberOverrides.map((override) => [override.module, override.allowed]));
+
     const initialOverrides: Record<string, boolean> = {};
-    memberOverrides.forEach((override) => {
-      initialOverrides[override.module] = override.allowed;
+    overrideModules.forEach((moduleKey) => {
+      const roleAllowed =
+        rolePermissionMap.get(moduleKey) ??
+        DEFAULT_ROLE_PERMISSIONS[member.role]?.[moduleKey] ??
+        false;
+      initialOverrides[moduleKey] = memberOverrideMap.get(moduleKey) ?? roleAllowed;
     });
     setOverrideSelections(initialOverrides);
+    setInitialEditSnapshot({
+      firstName: first,
+      lastName: rest.join(" "),
+      role: member.role,
+      selectedLocationIds: member.assignedLocationIds,
+      overrideSelections: initialOverrides,
+    });
+    setMemberDialogTab(tab);
+    setEditableTabs({
+      profile: enableEdit && tab === "profile",
+      locations: enableEdit && tab === "locations",
+      permissions: enableEdit && tab === "permissions",
+    });
     setEditDialogOpen(true);
   };
 
   const toggleOverrideSelection = (module: string) => {
-    setOverrideSelections((prev) => {
-      if (Object.prototype.hasOwnProperty.call(prev, module)) {
-        const next = { ...prev };
-        delete next[module];
-        return next;
-      }
-      return { ...prev, [module]: true };
-    });
+    setOverrideSelections((prev) => ({
+      ...prev,
+      [module]: !(prev[module] ?? false),
+    }));
   };
 
   const handleToggleLocation = (locationId: string) => {
     setSelectedLocationIds((prev) =>
       prev.includes(locationId) ? prev.filter((id) => id !== locationId) : [...prev, locationId]
     );
-  };
-
-  const handleSaveAssignments = async () => {
-    if (!staffToAssign || !currentTenant?.id || !user?.id) return;
-    setAssigning(true);
-    try {
-      const { error } = await (supabase.rpc as any)("assign_staff_locations", {
-        p_tenant_id: currentTenant.id,
-        p_user_id: staffToAssign.userId,
-        p_location_ids: selectedLocationIds,
-      });
-
-      if (error) throw error;
-
-      await (supabase.rpc as any)("log_audit_event", {
-        _tenant_id: currentTenant.id,
-        _action: "staff.assignment_updated",
-        _entity_type: "user",
-        _entity_id: staffToAssign.userId,
-        _metadata: {
-          location_ids: selectedLocationIds,
-        },
-      });
-
-      await (supabase.rpc as any)("log_audit_event", {
-        _tenant_id: currentTenant.id,
-        _action: "assignment.pending_cleared",
-        _entity_type: "user",
-        _entity_id: staffToAssign.userId,
-        _metadata: {
-          cleared_by_user_id: user.id,
-          location_count: selectedLocationIds.length,
-        },
-      });
-
-      toast({ title: "Assignments updated", description: "Staff salons updated successfully." });
-      setConfirmAssignDialogOpen(false);
-      setAssignDialogOpen(false);
-      setStaffToAssign(null);
-      await refetch();
-      void queryClient.invalidateQueries({ queryKey: ["auth"] });
-    } catch (error: any) {
-      toast({
-        title: "Failed to update assignments",
-        description: error?.message || "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setAssigning(false);
-    }
   };
 
   const handleSaveEdit = async () => {
@@ -359,12 +368,27 @@ export default function StaffPage() {
       if (profileError) throw profileError;
 
       if (staffToEdit.role !== editRole) {
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .update({ role: editRole })
-          .eq("tenant_id", currentTenant.id)
-          .eq("user_id", staffToEdit.userId);
-        if (roleError) throw roleError;
+        const { error: roleUpdateError } = await (supabase.rpc as any)("update_staff_role", {
+          p_tenant_id: currentTenant.id,
+          p_user_id: staffToEdit.userId,
+          p_new_role: editRole,
+        });
+        if (roleUpdateError) throw roleUpdateError;
+
+        const actorName = user?.email || "An admin";
+        const { error: roleNotificationError } = await supabase.from("notifications").insert({
+          tenant_id: currentTenant.id,
+          user_id: staffToEdit.userId,
+          type: "staff",
+          title: "Role updated",
+          description: `${actorName} changed your role to ${roleLabels[editRole]}. Your access has been refreshed.`,
+          urgent: true,
+          entity_type: "user_role",
+          entity_id: staffToEdit.userId,
+        });
+        if (roleNotificationError) {
+          console.error("Failed to create role change notification:", roleNotificationError);
+        }
       }
 
       const { error: clearOverridesError } = await supabase
@@ -374,18 +398,53 @@ export default function StaffPage() {
         .eq("user_id", staffToEdit.userId);
       if (clearOverridesError) throw clearOverridesError;
 
-      const overrideRows = Object.entries(overrideSelections).map(([module, allowed]) => ({
-        tenant_id: currentTenant.id,
-        user_id: staffToEdit.userId,
-        module,
-        allowed,
-      }));
+      if (!isRoleChangedInDraft) {
+        const selectedRolePermissions = tenantRolePermissions.filter((permission) => permission.role === editRole);
+        const selectedRolePermissionMap = new Map(
+          selectedRolePermissions.map((permission) => [permission.module, permission.allowed])
+        );
 
-      if (overrideRows.length > 0) {
-        const { error: insertOverrideError } = await supabase
-          .from("user_permission_overrides")
-          .insert(overrideRows);
-        if (insertOverrideError) throw insertOverrideError;
+        const overrideRows = overrideModules
+          .map((moduleKey) => {
+            const desiredAllowed = overrideSelections[moduleKey] ?? false;
+            const roleAllowed =
+              selectedRolePermissionMap.get(moduleKey) ??
+              DEFAULT_ROLE_PERMISSIONS[editRole]?.[moduleKey] ??
+              false;
+
+            if (desiredAllowed === roleAllowed) {
+              return null;
+            }
+
+            return {
+              tenant_id: currentTenant.id,
+              user_id: staffToEdit.userId,
+              module: moduleKey,
+              allowed: desiredAllowed,
+            };
+          })
+          .filter(Boolean) as Array<{
+            tenant_id: string;
+            user_id: string;
+            module: string;
+            allowed: boolean;
+          }>;
+
+        if (overrideRows.length > 0) {
+          const { error: insertOverrideError } = await supabase
+            .from("user_permission_overrides")
+            .insert(overrideRows);
+          if (insertOverrideError) throw insertOverrideError;
+        }
+      }
+
+      if (isChainTenant && currentUserCanAssign && locationsChanged) {
+        const { error: assignmentError } = await (supabase.rpc as any)("assign_staff_locations", {
+          p_tenant_id: currentTenant.id,
+          p_user_id: staffToEdit.userId,
+          p_location_ids: selectedLocationIds,
+        });
+        if (assignmentError) throw assignmentError;
       }
 
       await (supabase.rpc as any)("log_audit_event", {
@@ -414,14 +473,23 @@ export default function StaffPage() {
         _metadata: { modules: Object.keys(overrideSelections) },
       });
 
+      updateStaffLocal(staffToEdit.userId, (member) => ({
+        ...member,
+        role: editRole,
+        profile: {
+          ...(member.profile || ({} as typeof member.profile)),
+          full_name: fullName,
+        } as typeof member.profile,
+      }));
+
       toast({ title: "Staff updated", description: "Profile, role, and overrides saved." });
       setConfirmEditDialogOpen(false);
       setEditDialogOpen(false);
       setStaffToEdit(null);
-      await Promise.all([
-        refetch(),
-        queryClient.invalidateQueries({ queryKey: ["staff-user-overrides", currentTenant.id] }),
-      ]);
+      setInitialEditSnapshot(null);
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ["staff-user-overrides", currentTenant.id] });
+      void queryClient.invalidateQueries({ queryKey: ["auth"] });
     } catch (error: any) {
       toast({
         title: "Failed to save changes",
@@ -608,7 +676,7 @@ export default function StaffPage() {
                           <TableRow 
                             key={member.userId}
                             className="cursor-pointer hover:bg-muted/50"
-                            onClick={() => setSelectedStaff(member)}
+                            onClick={() => openMemberDialog(member)}
                           >
                             <TableCell>
                               <div className="flex items-center gap-3">
@@ -631,7 +699,7 @@ export default function StaffPage() {
                             <TableCell className="hidden sm:table-cell">
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span className="truncate text-sm">—</span>
+                                <span className="truncate text-sm">{member.email || "—"}</span>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -670,26 +738,14 @@ export default function StaffPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => setSelectedStaff(member)}>
+                                    <DropdownMenuItem onClick={() => openMemberDialog(member)}>
                                       <User className="w-4 h-4 mr-2" />
                                       View Details
                                     </DropdownMenuItem>
-                                    {currentUserIsOwner && (
-                                      <DropdownMenuItem onClick={() => openEditDialog(member)}>
-                                        <Pencil className="w-4 h-4 mr-2" />
-                                        Edit Staff
-                                      </DropdownMenuItem>
-                                    )}
                                     <DropdownMenuItem onClick={() => navigate(`/salon/audit-log?userId=${member.userId}`)}>
                                       <History className="w-4 h-4 mr-2" />
                                       View Activities
                                     </DropdownMenuItem>
-                                    {isChainTenant && (
-                                      <DropdownMenuItem onClick={() => openAssignDialog(member)}>
-                                        <Building2 className="w-4 h-4 mr-2" />
-                                        Assign Locations
-                                      </DropdownMenuItem>
-                                    )}
                                     <DropdownMenuSeparator />
                                     {isActive ? (
                                       <DropdownMenuItem 
@@ -830,15 +886,24 @@ export default function StaffPage() {
                               size="sm"
                               className="gap-1"
                               onClick={() => handleResend(invitation.id)}
-                              disabled={!resendStatus.allowed}
+                              disabled={!resendStatus.allowed || resendingInvitationId === invitation.id}
                               title={
                                 resendStatus.allowed
                                   ? "Resend invitation"
                                   : `Wait ${resendStatus.minutesRemaining} min`
                               }
                             >
-                              <RefreshCw className="w-3 h-3" />
-                              {resendStatus.allowed ? "Resend" : `${resendStatus.minutesRemaining}m`}
+                              {resendingInvitationId === invitation.id ? (
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Resending...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-3 h-3" />
+                                  {resendStatus.allowed ? "Resend" : `${resendStatus.minutesRemaining}m`}
+                                </>
+                              )}
                             </Button>
                             <Button
                               variant="ghost"
@@ -906,123 +971,174 @@ export default function StaffPage() {
         onConfirm={handleConfirmReactivate}
       />
 
-      <StaffDetailDialog
-        open={!!selectedStaff}
-        onOpenChange={(open) => !open && setSelectedStaff(null)}
-        staff={selectedStaff}
-      />
-
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign Locations</DialogTitle>
-            <DialogDescription>
-              {staffToAssign?.profile?.full_name || "Staff member"} can be assigned to one or more locations.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
-            {tenantLocations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No salons available for assignment.</p>
-            ) : (
-              tenantLocations.map((location) => (
-                <label key={location.id} className="flex items-center gap-3 text-sm">
-                  <Checkbox
-                    checked={selectedLocationIds.includes(location.id)}
-                    onCheckedChange={() => handleToggleLocation(location.id)}
-                  />
-                  <span>{location.name}</span>
-                </label>
-              ))
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)} disabled={assigning}>
-              Cancel
-            </Button>
-            <Button onClick={() => setConfirmAssignDialogOpen(true)} disabled={assigning}>
-              {assigning ? "Saving..." : "Save Assignments"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <ConfirmActionDialog
-        open={confirmAssignDialogOpen}
-        onOpenChange={setConfirmAssignDialogOpen}
-        title="Confirm Location Assignment"
-        description={`Apply ${selectedLocationIds.length} location assignment(s) for ${staffToAssign?.profile?.full_name || "this staff member"}?`}
-        confirmLabel={assigning ? "Saving..." : "Confirm"}
-        onConfirm={handleSaveAssignments}
-      />
-
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Staff</DialogTitle>
+            <DialogTitle>Team Member</DialogTitle>
             <DialogDescription>
-              Update staff name, role, and per-user permission overrides.
+              View details and edit profile, locations, role, and permissions.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="staff-first-name">First name</Label>
-                <Input
-                  id="staff-first-name"
-                  value={editFirstName}
-                  onChange={(event) => setEditFirstName(event.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="staff-last-name">Last name</Label>
-                <Input
-                  id="staff-last-name"
-                  value={editLastName}
-                  onChange={(event) => setEditLastName(event.target.value)}
-                />
-              </div>
-            </div>
+          <Tabs value={memberDialogTab} onValueChange={(value) => setMemberDialogTab(value as typeof memberDialogTab)}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="locations">Locations</TabsTrigger>
+              <TabsTrigger value="permissions">Role & Permissions</TabsTrigger>
+            </TabsList>
 
-            <div className="space-y-1.5">
-              <Label>Role</Label>
-              <Select value={editRole} onValueChange={(value) => setEditRole(value as StaffMember["role"])}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {editableRoles.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {roleLabels[role]}
-                    </SelectItem>
+            <TabsContent value="profile" className="space-y-4 pt-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Basic information</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditableTabs((prev) => ({ ...prev, profile: !prev.profile }))}
+                >
+                  <Pencil className="w-4 h-4 mr-1" />
+                  {editableTabs.profile ? "Stop editing" : "Edit"}
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="staff-first-name">First name</Label>
+                  <Input
+                    id="staff-first-name"
+                    value={editFirstName}
+                    disabled={!editableTabs.profile}
+                    onChange={(event) => setEditFirstName(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="staff-last-name">Last name</Label>
+                  <Input
+                    id="staff-last-name"
+                    value={editLastName}
+                    disabled={!editableTabs.profile}
+                    onChange={(event) => setEditLastName(event.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input value={staffToEdit?.email || "—"} disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Joined</Label>
+                  <Input value={staffToEdit?.joinedAt ? format(new Date(staffToEdit.joinedAt), "MMM d, yyyy") : "—"} disabled />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="locations" className="space-y-4 pt-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Assigned salon locations</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!isChainTenant || !currentUserCanAssign}
+                  onClick={() => setEditableTabs((prev) => ({ ...prev, locations: !prev.locations }))}
+                >
+                  <Pencil className="w-4 h-4 mr-1" />
+                  {editableTabs.locations ? "Stop editing" : "Edit"}
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto border rounded-md p-3">
+                {!isChainTenant ? (
+                  <p className="text-sm text-muted-foreground">Location assignment is available on chain plan only.</p>
+                ) : tenantLocations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No salons available.</p>
+                ) : (
+                  tenantLocations.map((location) => (
+                    <label key={location.id} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={selectedLocationIds.includes(location.id)}
+                        disabled={!editableTabs.locations}
+                        onCheckedChange={() => handleToggleLocation(location.id)}
+                      />
+                      <span>{location.name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="permissions" className="space-y-4 pt-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">Role and per-user permissions</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditableTabs((prev) => ({ ...prev, permissions: !prev.permissions }))}
+                >
+                  <Pencil className="w-4 h-4 mr-1" />
+                  {editableTabs.permissions ? "Stop editing" : "Edit"}
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Role</Label>
+                <Select
+                  value={editRole}
+                  disabled={!editableTabs.permissions}
+                  onValueChange={(value) => {
+                    const nextRole = value as StaffMember["role"];
+                    setEditRole(nextRole);
+                    if (initialEditSnapshot && nextRole !== initialEditSnapshot.role) {
+                      const defaults: Record<string, boolean> = {};
+                      overrideModules.forEach((moduleKey) => {
+                        defaults[moduleKey] = DEFAULT_ROLE_PERMISSIONS[nextRole]?.[moduleKey] ?? false;
+                      });
+                      setOverrideSelections(defaults);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editableRoles.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {roleLabels[role]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Per-user access overrides</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto border rounded-md p-3">
+                  {overrideModules.map((moduleKey) => (
+                    <label key={moduleKey} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        checked={overrideSelections[moduleKey] === true}
+                        disabled={!editableTabs.permissions || isRoleChangedInDraft}
+                        onCheckedChange={() => toggleOverrideSelection(moduleKey)}
+                      />
+                      <span>{MODULE_LABELS[moduleKey]}</span>
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Per-user access overrides</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto border rounded-md p-3">
-                {overrideModules.map((moduleKey) => (
-                  <label key={moduleKey} className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={Object.prototype.hasOwnProperty.call(overrideSelections, moduleKey)}
-                      onCheckedChange={() => toggleOverrideSelection(moduleKey)}
-                    />
-                    <span>{MODULE_LABELS[moduleKey]}</span>
-                  </label>
-                ))}
+                </div>
+                {isRoleChangedInDraft && (
+                  <p className="text-xs text-muted-foreground">
+                    Role changed in this session. Overrides reset to role defaults and are read-only until save + reopen.
+                  </p>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Checking a module adds an explicit allow override for this team member.
-              </p>
-            </div>
-          </div>
+            </TabsContent>
+          </Tabs>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={savingEdit}>
               Cancel
             </Button>
-            <Button onClick={() => setConfirmEditDialogOpen(true)} disabled={savingEdit}>
-              Review Changes
+            <Button onClick={() => setConfirmEditDialogOpen(true)} disabled={savingEdit || !isEditDirty}>
+              {savingEdit ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Review Changes"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1031,8 +1147,18 @@ export default function StaffPage() {
       <ConfirmActionDialog
         open={confirmEditDialogOpen}
         onOpenChange={setConfirmEditDialogOpen}
-        title="Save Staff Changes"
-        description={`Apply updates for ${staffToEdit?.profile?.full_name || "this staff member"}?`}
+        title="Review Staff Changes"
+        description={
+          [
+            profileChanged ? `Profile: ${editFirstName} ${editLastName}` : null,
+            roleChanged ? `Role: ${initialEditSnapshot?.role} -> ${editRole}` : null,
+            locationsChanged ? `Locations: ${selectedLocationIds.length} selected` : null,
+            !roleChanged && overridesChanged ? "Permissions overrides: updated" : null,
+            roleChanged ? "Overrides will be reset to the new role defaults." : null,
+          ]
+            .filter(Boolean)
+            .join(" | ") || `Apply updates for ${staffToEdit?.profile?.full_name || "this staff member"}?`
+        }
         confirmLabel={savingEdit ? "Saving..." : "Save changes"}
         onConfirm={handleSaveEdit}
       />
