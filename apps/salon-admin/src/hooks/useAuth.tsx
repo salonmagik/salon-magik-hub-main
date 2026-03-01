@@ -111,6 +111,7 @@ const normalizeUserRoles = (rows: UserRole[]) => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const CONTEXT_STORAGE_PREFIX = "activeContext:";
   const lastHydratedSessionRef = useRef<string | null>(null);
+  const previousAssignmentPendingRef = useRef(false);
   const [state, setState] = useState<AuthState>({
     user: null,
     session: null,
@@ -842,6 +843,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.removeChannel(channel);
     };
   }, [state.user?.id]);
+
+  useEffect(() => {
+    const wasPending = previousAssignmentPendingRef.current;
+    const isPending = state.isAssignmentPending;
+    previousAssignmentPendingRef.current = isPending;
+
+    if (!wasPending || isPending) return;
+    if (!state.currentTenant?.id || !state.user?.id) return;
+
+    void logAuditEvent(
+      state.currentTenant.id,
+      "assignment.pending_cleared",
+      "user",
+      state.user.id,
+      {
+        role: state.currentRole,
+        assigned_location_count: state.assignedLocationIds.length,
+      }
+    );
+  }, [
+    state.assignedLocationIds.length,
+    state.currentRole,
+    state.currentTenant?.id,
+    state.isAssignmentPending,
+    state.user?.id,
+  ]);
 
 
   useEffect(() => {

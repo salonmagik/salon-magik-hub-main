@@ -24,7 +24,6 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<BookingPage />} />
-          <Route path="/b/:slug" element={<BookingPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
