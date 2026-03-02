@@ -48,6 +48,7 @@ import { useLocations } from "@/hooks/useLocations";
 import { useNotificationSettings } from "@/hooks/useNotificationSettings";
 import { useMyReferralCodes, useMyReferralDiscounts, useGenerateReferralCode } from "@/hooks/useReferrals";
 import { supabase } from "@/lib/supabase";
+import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { toast } from "@ui/ui/use-toast";
 import { differenceInDays, format } from "date-fns";
 
@@ -70,19 +71,6 @@ const weekDays = [
   { key: "saturday", label: "Saturday" },
   { key: "sunday", label: "Sunday" },
 ];
-
-function buildPublicBookingUrl(slug?: string | null): string | null {
-  if (!slug) return null;
-
-  const publicBookingDomain = (
-    import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined
-  )
-    ?.replace(/^https?:\/\//i, "")
-    .replace(/^\*\./, "")
-    .replace(/\/+$/, "") || "salonmagik.com";
-
-  return `https://${slug}.${publicBookingDomain}`;
-}
 
 export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -225,7 +213,10 @@ export default function SettingsPage() {
     });
   };
 
-  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug);
+  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug, {
+    configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
+    hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+  });
 
   const handleCopyUrl = () => {
     if (bookingUrl) {
@@ -1393,7 +1384,10 @@ export default function SettingsPage() {
   const generateCodeMutation = useGenerateReferralCode();
 
   const renderPromotionsTab = () => {
-    const bookingUrl = buildPublicBookingUrl(currentTenant?.slug);
+    const bookingUrl = buildPublicBookingUrl(currentTenant?.slug, {
+      configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
+      hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+    });
     
     return (
       <div className="space-y-6">
