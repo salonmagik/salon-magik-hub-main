@@ -1,66 +1,79 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@supabase-client/supabase/client";
 
-const waitlistEnv = import.meta.env.VITE_WAITLIST_MODE;
-const appVersion = import.meta.env.VITE_APP_VERSION || import.meta.env.VITE_VERCEL_GIT_COMMIT_SHA || "0.0.0";
-const appEnv = (import.meta.env.MODE === "production" ? "prod" : import.meta.env.MODE === "staging" ? "staging" : "dev") as
-  | "dev"
-  | "staging"
-  | "prod";
-
-const getFlagEnabled = async (featureKey: string, fallback = false) => {
-  const { data, error } = await supabase.rpc("evaluate_feature_flag", {
-    p_feature_key: featureKey,
-    p_environment: appEnv,
-    p_app_name: "marketing",
-    p_version: appVersion,
-    p_country_code: null,
-    p_tenant_id: null,
-    p_user_id: null,
-  });
-
-  if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  return typeof row?.enabled === "boolean" ? row.enabled : fallback;
+type MarketingFeatureToggles = {
+  waitlist_enabled: boolean;
+  other_countries_interest_enabled: boolean;
 };
 
+const FALLBACK_TOGGLES: MarketingFeatureToggles = {
+  waitlist_enabled: false,
+  other_countries_interest_enabled: false,
+};
+
+async function getMarketingFeatureToggles(): Promise<MarketingFeatureToggles> {
+  const { data, error } = await (supabase.rpc as any)("get_marketing_feature_toggles");
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row) return FALLBACK_TOGGLES;
+
+  return {
+    waitlist_enabled: Boolean(row.waitlist_enabled),
+    other_countries_interest_enabled: Boolean(row.other_countries_interest_enabled),
+  };
+}
+
+function useMarketingFeatureToggles() {
+  return useQuery({
+    queryKey: ["marketing-feature-toggles"],
+    queryFn: getMarketingFeatureToggles,
+    staleTime: 1000 * 5,
+    refetchInterval: 1000 * 15,
+    retry: 1,
+  });
+}
+
 export function useWaitlistMode() {
-	const envValue = String(waitlistEnv ?? "").toLowerCase() === "true";
+  const query = useMarketingFeatureToggles();
 
-	const query = useQuery({
-		queryKey: ["marketing-feature-flag", "waitlist_enabled"],
-		queryFn: () => getFlagEnabled("waitlist_enabled", envValue),
-		staleTime: 1000 * 60,
-		retry: 1,
-	});
+  if (query.error) {
+    console.error("Failed to read marketing feature toggles", query.error);
+  }
 
-	return {
-		isWaitlistMode: query.data ?? envValue,
-		isLoading: query.isLoading,
-	};
+  return {
+    isWaitlistMode: query.data?.waitlist_enabled ?? FALLBACK_TOGGLES.waitlist_enabled,
+    isLoading: query.isLoading,
+  };
 }
 
 export function useGeoInterestMode() {
-	const query = useQuery({
-		queryKey: ["marketing-feature-flag", "other_countries_interest_enabled"],
-		queryFn: () => getFlagEnabled("other_countries_interest_enabled", false),
-		staleTime: 1000 * 60,
-		retry: 1,
-	});
+  const query = useMarketingFeatureToggles();
 
-	return {
-		isEnabled: query.data ?? false,
-		isLoading: query.isLoading,
-	};
+  if (query.error) {
+    console.error("Failed to read marketing feature toggles", query.error);
+  }
+
+  return {
+    isEnabled:
+      query.data?.other_countries_interest_enabled ??
+      FALLBACK_TOGGLES.other_countries_interest_enabled,
+    isLoading: query.isLoading,
+  };
 }
 
 export function useFeatureFlags() {
-	const waitlist = useWaitlistMode();
-	const geoInterest = useGeoInterestMode();
+  const toggles = useMarketingFeatureToggles();
 
-	return {
-		waitlist: waitlist.isWaitlistMode,
-		geoInterest: geoInterest.isEnabled,
-		isLoading: waitlist.isLoading || geoInterest.isLoading,
-	};
+  if (toggles.error) {
+    console.error("Failed to read marketing feature toggles", toggles.error);
+  }
+
+  return {
+    waitlist: toggles.data?.waitlist_enabled ?? FALLBACK_TOGGLES.waitlist_enabled,
+    geoInterest:
+      toggles.data?.other_countries_interest_enabled ??
+      FALLBACK_TOGGLES.other_countries_interest_enabled,
+    isLoading: toggles.isLoading,
+  };
 }

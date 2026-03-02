@@ -3,11 +3,16 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useFeatureFlags, useGeoInterestMode, useWaitlistMode } from "./useFeatureFlags";
 
-const rpcMock = vi.fn();
+const getMarketingFeatureTogglesMock = vi.fn();
 
 vi.mock("@supabase-client/supabase/client", () => ({
   supabase: {
-    rpc: (...args: unknown[]) => rpcMock(...args),
+    rpc: (fn: string) => {
+      if (fn === "get_marketing_feature_toggles") {
+        return getMarketingFeatureTogglesMock();
+      }
+      throw new Error(`Unexpected rpc mock: ${fn}`);
+    },
   },
 }));
 
@@ -22,31 +27,37 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 describe("useFeatureFlags", () => {
   beforeEach(() => {
-    rpcMock.mockReset();
+    getMarketingFeatureTogglesMock.mockReset();
   });
 
-  it("resolves waitlist mode from feature evaluation", async () => {
-    rpcMock.mockResolvedValueOnce({ data: [{ enabled: true }], error: null });
+  it("resolves waitlist mode from master toggles", async () => {
+    getMarketingFeatureTogglesMock.mockResolvedValueOnce({
+      data: [{ waitlist_enabled: true, other_countries_interest_enabled: false }],
+      error: null,
+    });
+
     const { result } = renderHook(() => useWaitlistMode(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isWaitlistMode).toBe(true);
   });
 
-  it("resolves geo interest mode from feature evaluation", async () => {
-    rpcMock.mockResolvedValueOnce({ data: [{ enabled: false }], error: null });
+  it("resolves geo interest mode from master toggles", async () => {
+    getMarketingFeatureTogglesMock.mockResolvedValueOnce({
+      data: [{ waitlist_enabled: false, other_countries_interest_enabled: true }],
+      error: null,
+    });
+
     const { result } = renderHook(() => useGeoInterestMode(), { wrapper });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.isEnabled).toBe(false);
+    expect(result.current.isEnabled).toBe(true);
   });
 
-  it("combines both flags", async () => {
-    rpcMock
-      .mockResolvedValueOnce({ data: [{ enabled: true }], error: null })
-      .mockResolvedValueOnce({ data: [{ enabled: true }], error: null });
+  it("fails open when RPC fails", async () => {
+    getMarketingFeatureTogglesMock.mockRejectedValue(new Error("RPC unavailable"));
 
     const { result } = renderHook(() => useFeatureFlags(), { wrapper });
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.waitlist).toBe(true);
-    expect(result.current.geoInterest).toBe(true);
+    await waitFor(() => expect(result.current.waitlist).toBe(false));
+    expect(result.current.waitlist).toBe(false);
+    expect(result.current.geoInterest).toBe(false);
   });
 });

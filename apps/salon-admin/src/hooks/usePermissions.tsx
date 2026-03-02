@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import type { Enums } from "@supabase-client";
@@ -20,6 +20,16 @@ interface UserPermissionOverride {
   module: string;
   allowed: boolean;
 }
+
+const PERMISSIONS_TTL_MS = 30_000;
+const permissionsCache = new Map<
+  string,
+  {
+    fetchedAt: number;
+    rolePermissions: RolePermission[];
+    userOverrides: UserPermissionOverride[];
+  }
+>();
 
 // Default permissions by role - used to seed new tenants
 export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> = {
@@ -172,29 +182,52 @@ export const MODULE_LABELS: Record<string, string> = {
 
 export function usePermissions() {
   const { currentTenant, user, roles } = useAuth();
+  const safeRoles = Array.isArray(roles) ? roles : [];
+  const isMountedRef = useRef(true);
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [userOverrides, setUserOverrides] = useState<UserPermissionOverride[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Get current user's role in this tenant
   const currentRole = useMemo(() => {
-    if (!currentTenant || !roles.length) return null;
-    const userRole = roles.find((r) => r.tenant_id === currentTenant.id);
+    if (!currentTenant || safeRoles.length === 0) return null;
+    const userRole = safeRoles.find((r) => r.tenant_id === currentTenant.id);
     return userRole?.role || null;
-  }, [currentTenant, roles]);
+  }, [currentTenant, safeRoles]);
 
   const isOwner = currentRole === "owner";
 
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Fetch permissions
-  const fetchPermissions = useCallback(async () => {
+  const fetchPermissions = useCallback(async (force = false) => {
     if (!currentTenant?.id) {
-      setRolePermissions([]);
-      setUserOverrides([]);
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setRolePermissions([]);
+        setUserOverrides([]);
+        setIsLoading(false);
+      }
       return;
     }
 
-    setIsLoading(true);
+    const cached = permissionsCache.get(currentTenant.id);
+    if (!force && cached && Date.now() - cached.fetchedAt < PERMISSIONS_TTL_MS) {
+      if (isMountedRef.current) {
+        setRolePermissions(cached.rolePermissions);
+        setUserOverrides(cached.userOverrides);
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (isMountedRef.current) {
+      setIsLoading(true);
+    }
 
     try {
       // Fetch role permissions
@@ -213,12 +246,21 @@ export function usePermissions() {
 
       if (overrideError) throw overrideError;
 
-      setRolePermissions((roleData as RolePermission[]) || []);
-      setUserOverrides((overrideData as UserPermissionOverride[]) || []);
+      if (isMountedRef.current) {
+        setRolePermissions((roleData as RolePermission[]) || []);
+        setUserOverrides((overrideData as UserPermissionOverride[]) || []);
+      }
+      permissionsCache.set(currentTenant.id, {
+        fetchedAt: Date.now(),
+        rolePermissions: (roleData as RolePermission[]) || [],
+        userOverrides: (overrideData as UserPermissionOverride[]) || [],
+      });
     } catch (error) {
       console.error("Error fetching permissions:", error);
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [currentTenant?.id]);
 
@@ -231,6 +273,11 @@ export function usePermissions() {
     (module: string): boolean => {
       if (!user?.id || !currentTenant?.id || !currentRole) {
         return false;
+      }
+
+      // Owners always have full access across pages/actions.
+      if (currentRole === "owner") {
+        return true;
       }
 
       // Check for user-specific override first
@@ -272,7 +319,7 @@ export function usePermissions() {
     currentRole,
     rolePermissions,
     userOverrides,
-    refetch: fetchPermissions,
+    refetch: () => fetchPermissions(true),
   };
 }
 

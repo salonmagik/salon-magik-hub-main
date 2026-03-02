@@ -79,19 +79,9 @@ function buildPublicBookingUrl(slug?: string | null): string | null {
   )
     ?.replace(/^https?:\/\//i, "")
     .replace(/^\*\./, "")
-    .replace(/\/+$/, "");
+    .replace(/\/+$/, "") || "salonmagik.com";
 
-  if (publicBookingDomain) {
-    return `https://${slug}.${publicBookingDomain}`;
-  }
-
-  const manageBookingsUrl = import.meta.env
-    .VITE_MANAGE_BOOKINGS_URL as string | undefined;
-  if (manageBookingsUrl) {
-    return `${manageBookingsUrl.replace(/\/+$/, "")}/b/${slug}`;
-  }
-
-  return `${window.location.origin}/b/${slug}`;
+  return `https://${slug}.${publicBookingDomain}`;
 }
 
 export default function SettingsPage() {
@@ -102,7 +92,7 @@ export default function SettingsPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const { currentTenant, profile } = useAuth();
-  const { defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
+  const { locations, defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
   const { 
     settings: dbNotificationSettings, 
     isLoading: notificationsLoading, 
@@ -389,9 +379,12 @@ export default function SettingsPage() {
 
       // Update location if exists
       if (defaultLocation?.id) {
+        const shouldSyncDefaultLocationName =
+          locations.length <= 1 || defaultLocation.name === currentTenant.name;
         const { error: locationError } = await supabase
           .from("locations")
           .update({
+            ...(shouldSyncDefaultLocationName ? { name: profileData.salonName } : {}),
             city: profileData.city,
             address: profileData.address,
           })
@@ -400,8 +393,8 @@ export default function SettingsPage() {
         if (locationError) throw locationError;
       }
 
-      // Refresh tenant data in context for immediate UI update
-      await refreshTenants();
+      // Refresh tenant + location state so renamed salon/location labels propagate to switchers immediately.
+      await Promise.all([refreshTenants(), refetchLocations()]);
       
       toast({ title: "Saved", description: "Profile settings updated" });
     } catch (err) {
@@ -459,8 +452,8 @@ export default function SettingsPage() {
 
       if (error) throw error;
 
-      // Refresh tenant data in context for immediate UI update
-      await refreshTenants();
+      // Refresh tenant + location state so renamed salon/location labels propagate to switchers immediately.
+      await Promise.all([refreshTenants(), refetchLocations()]);
       
       toast({ title: "Saved", description: "Booking settings updated" });
     } catch (err) {

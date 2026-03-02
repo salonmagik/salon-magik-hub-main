@@ -21,6 +21,7 @@ import {
   Bell,
   Plus,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
@@ -40,11 +41,20 @@ import { TrialBanner } from "@/components/billing/TrialBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
+import { isModuleAllowedInContext } from "@/lib/contextAccess";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
@@ -95,6 +105,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
   { label: "Salons Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
+  { label: "Staff", icon: UserCog, path: "/salon/overview/staff", module: "staff" },
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
@@ -139,12 +150,24 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
+  const [refreshingAccess, setRefreshingAccess] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { unreadCount } = useNotifications();
+  const notificationsData = useNotifications();
+  const { unreadCount } = notificationsData;
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
-  const { currentTenant } = useAuth();
+  const {
+    currentTenant,
+    activeContextType,
+    activeLocationId,
+    availableContexts,
+    isAssignmentPending,
+    setActiveContext,
+    getFirstAllowedRoute,
+    refreshTenants,
+  } = useAuth();
   
   // Start staff session on mount
   const { startSession } = useStaffSessions();
@@ -154,12 +177,28 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
-    if (permissionsLoading) return []; // Return EMPTY to prevent flash
+    if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
     return mainNavItems.filter((item) => {
+      if (item.path === "/salon/overview/staff") {
+        return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
+      }
+      if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
+        return false;
+      }
       if (!item.module) return true; // No module = always visible
-      return hasPermission(item.module);
+      if (item.module === "appointments") {
+        const canAccessOwnAppointments = hasPermission("appointments:own");
+        return (hasPermission("appointments") || canAccessOwnAppointments) &&
+          isModuleAllowedInContext(item.module, activeContextType);
+      }
+      return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
     });
-  }, [hasPermission, permissionsLoading]);
+  }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
+
+  const contextValue = useMemo(() => {
+    if (activeContextType === "owner_hub") return "owner_hub";
+    return activeLocationId || "";
+  }, [activeContextType, activeLocationId]);
 
   // Get plan display info
   const getPlanDisplay = () => {
@@ -188,6 +227,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   };
 
   const planDisplay = getPlanDisplay();
+  const accessRefreshNotice = notificationsData.notifications.find(
+    (notification) =>
+      notification.id === accessRefreshNoticeId &&
+      !notification.read &&
+      (notification.entity_type === "user_role" || notification.entity_type === "staff_location")
+  );
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -217,6 +262,76 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    const latestAccessNotice = notificationsData.notifications.find(
+      (notification) =>
+        !notification.read &&
+        notification.type === "staff" &&
+        (notification.entity_type === "user_role" || notification.entity_type === "staff_location")
+    );
+
+    if (!latestAccessNotice) {
+      setAccessRefreshNoticeId(null);
+      return;
+    }
+
+    if (latestAccessNotice.id !== accessRefreshNoticeId) {
+      setAccessRefreshNoticeId(latestAccessNotice.id);
+      toast({
+        title: "Access updated",
+        description: "Your role or assignment changed. Refresh to continue.",
+      });
+    }
+  }, [accessRefreshNoticeId, notificationsData.notifications, toast]);
+
+  const handleRefreshAccess = async () => {
+    if (!accessRefreshNotice) return;
+    const noticeId = accessRefreshNotice.id;
+    setRefreshingAccess(true);
+    // Close immediately so one click is enough even before network round-trips finish.
+    setAccessRefreshNoticeId(null);
+    try {
+      await notificationsData.markAsRead(noticeId);
+      if (!currentTenant?.id) {
+        window.location.assign("/salon");
+        return;
+      }
+
+      // Resolve fresh context + routes directly from server so role/location changes
+      // are applied before choosing the redirect destination.
+      const { data: resolvedContext } = await (supabase.rpc as any)("resolve_user_contexts", {
+        p_tenant_id: currentTenant.id,
+      });
+
+      const nextContextType =
+        resolvedContext?.default_context_type === "owner_hub" ? "owner_hub" : "location";
+      const nextLocationId =
+        nextContextType === "location" ? resolvedContext?.default_location_id ?? null : null;
+
+      await (supabase.rpc as any)("set_active_context", {
+        p_tenant_id: currentTenant.id,
+        p_context_type: nextContextType,
+        p_location_id: nextLocationId,
+      });
+
+      const { data: routesData } = await (supabase.rpc as any)("list_accessible_routes", {
+        p_tenant_id: currentTenant.id,
+        p_context_type: nextContextType,
+        p_location_id: nextLocationId,
+      });
+
+      const routes = (Array.isArray(routesData) ? routesData : []).filter(
+        (route: unknown): route is string => typeof route === "string" && route !== "/salon/access-denied"
+      );
+      const destination = routes[0] || "/salon/appointments";
+
+      await refreshTenants();
+      window.location.assign(destination);
+    } finally {
+      setRefreshingAccess(false);
+    }
+  };
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -230,8 +345,24 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     }
   };
 
+  const handleContextChange = async (nextValue: string) => {
+    if (!nextValue) return;
+    if (nextValue === "owner_hub") {
+      await setActiveContext("owner_hub", null);
+      const route = await getFirstAllowedRoute("owner_hub", null);
+      navigate(route, { replace: true });
+      return;
+    }
+    await setActiveContext("location", nextValue);
+    const route = await getFirstAllowedRoute("location", nextValue);
+    navigate(route, { replace: true });
+  };
+
   const isActive = (path: string) => {
     if (path === "/salon" && location.pathname === "/salon") return true;
+    // Keep the owner-hub overview root exact so /salon/overview/staff
+    // does not highlight both "Salons Overview" and "Staff".
+    if (path === "/salon/overview") return location.pathname === "/salon/overview";
     if (path !== "/salon" && location.pathname.startsWith(path)) return true;
     return false;
   };
@@ -327,6 +458,33 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           {(isExpanded || isMobileOpen) && <span>{planDisplay.label}</span>}
         </div>
       </div>
+
+      {/* Context Switcher */}
+      {(isExpanded || isMobileOpen) && !isAssignmentPending && availableContexts.length > 1 && (
+        <div className="px-4 mb-2">
+          <label htmlFor="context-switcher" className="mb-1 block text-[11px] font-medium text-white/70">
+            Interface
+          </label>
+          <select
+            id="context-switcher"
+            value={contextValue}
+            onChange={(event) => {
+              void handleContextChange(event.target.value);
+            }}
+            className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+          >
+            {availableContexts.map((context) => (
+              <option
+                key={`${context.type}-${context.locationId || "owner_hub"}`}
+                value={context.type === "owner_hub" ? "owner_hub" : context.locationId || ""}
+                className="text-ink"
+              >
+                {context.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Global Banner (only when expanded) */}
       {(isExpanded || isMobileOpen) && <GlobalBanner />}
@@ -500,7 +658,38 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         <NotificationsPanel
           open={notificationsOpen}
           onOpenChange={setNotificationsOpen}
+          notificationsData={notificationsData}
         />
+
+        <Dialog open={Boolean(accessRefreshNotice)} onOpenChange={() => {}}>
+          <DialogContent
+            className="sm:max-w-md"
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle>Access Updated</DialogTitle>
+              <DialogDescription>
+                {accessRefreshNotice?.entity_type === "user_role"
+                  ? "Your role has been updated by an admin."
+                  : "Your location assignments have been updated by an admin."}{" "}
+                Refresh to continue with your updated access.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={handleRefreshAccess} disabled={refreshingAccess}>
+                {refreshingAccess ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  "Refresh"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </InactivityGuard>
     </BannerProvider>
     </SidebarContext.Provider>

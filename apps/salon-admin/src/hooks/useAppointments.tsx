@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 import type { Tables, TablesInsert, Enums } from "@supabase-client";
 import { toast } from "@ui/ui/use-toast";
 
@@ -30,6 +31,7 @@ interface UseAppointmentsOptions {
 
 export function useAppointments(options: UseAppointmentsOptions = {}) {
   const { currentTenant } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -86,6 +88,8 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
       // Apply location filter
       if (options.locationId) {
         query = query.eq("location_id", options.locationId);
+      } else if (hasScope) {
+        query = query.in("location_id", scopedLocationIds);
       }
 
       // Apply unscheduled filter
@@ -110,15 +114,17 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
       setIsLoading(false);
     }
   }, [
-    currentTenant?.id, 
-    options.startDate, 
-    options.endDate, 
-    options.bookingStatuses?.join(","), 
-    options.paymentStatuses?.join(","), 
-    options.locationId, 
-    options.isUnscheduled, 
-    options.isGifted, 
-    options.filterByBookingDate
+    currentTenant?.id,
+    options.startDate,
+    options.endDate,
+    options.bookingStatuses?.join(","),
+    options.paymentStatuses?.join(","),
+    options.locationId,
+    options.isUnscheduled,
+    options.isGifted,
+    options.filterByBookingDate,
+    hasScope,
+    scopedLocationIds,
   ]);
 
   useEffect(() => {

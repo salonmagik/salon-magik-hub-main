@@ -28,4 +28,8 @@ dist-ssr
 **/.turbo
 supabase/.temp
 supabase/supabase/.temp
+supabase/**/.temp
 .env
+
+# Local destructive reset scripts
+supabase/scripts/reset*.sql

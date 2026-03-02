@@ -13,20 +13,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type AllowedRole = "admin" | "support_agent";
-
 interface CreateBackofficeAdminBody {
   email: string;
-  role: AllowedRole;
+  roleId: string;
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  isSalesAgent?: boolean;
   origin?: string;
+  accessToken?: string;
 }
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
-}
-
-function isAllowedRole(role: string): role is AllowedRole {
-  return role === "admin" || role === "support_agent";
 }
 
 function generateSecurePassword(length = 14): string {
@@ -36,7 +35,7 @@ function generateSecurePassword(length = 14): string {
   return Array.from(bytes, (b) => chars[b % chars.length]).join("");
 }
 
-function displayNameFromEmail(email: string): string {
+function fallbackNameFromEmail(email: string): string {
   const local = email.split("@")[0] || "Backoffice Admin";
   return local
     .split(/[._-]/g)
@@ -73,40 +72,42 @@ Deno.serve(async (req) => {
       throw new Error("Missing Supabase environment configuration");
     }
 
+    const body: CreateBackofficeAdminBody = await req.json();
     const rawAuthHeader =
-			req.headers.get("authorization") ||
-			req.headers.get("Authorization") ||
-			"";
-		const accessToken = rawAuthHeader.replace(/^Bearer\s+/i, "").trim();
+      req.headers.get("authorization") ||
+      req.headers.get("Authorization") ||
+      "";
+    const accessTokenFromHeader = rawAuthHeader.replace(/^Bearer\s+/i, "").trim();
+    const accessToken = accessTokenFromHeader || body.accessToken?.trim() || "";
 
-		if (!accessToken) {
-			return new Response(
-				JSON.stringify({
-					error: "Missing or invalid Authorization bearer token",
-				}),
-				{
-					status: 401,
-					headers: { ...corsHeaders, "Content-Type": "application/json" },
-				},
-			);
-		}
+    if (!accessToken) {
+      return new Response(
+        JSON.stringify({
+          error: "Missing or invalid Authorization bearer token. Please sign in again.",
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     const userClient = createClient(supabaseUrl, anonKey);
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
     const {
-			data: { user: actor },
-			error: actorErr,
-		} = await userClient.auth.getUser(accessToken);
+      data: { user: actor },
+      error: actorErr,
+    } = await userClient.auth.getUser(accessToken);
 
     if (actorErr || !actor) {
       return new Response(
-				JSON.stringify({ error: actorErr?.message || "Unauthorized" }),
-				{
-					status: 401,
-					headers: { ...corsHeaders, "Content-Type": "application/json" },
-				},
-			);
+        JSON.stringify({ error: "Unauthorized session. Please sign in again in this environment." }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     const { data: actorBackofficeUser } = await adminClient
@@ -122,12 +123,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const body: CreateBackofficeAdminBody = await req.json();
     const email = normalizeEmail(body.email || "");
-    const role = body.role;
+    const roleId = body.roleId?.trim();
+    const isSalesAgent = Boolean(body.isSalesAgent);
+    const firstName = (body.firstName || "").trim();
+    const lastName = (body.lastName || "").trim();
+    const phone = (body.phone || "").trim() || null;
 
-    if (!email || !isAllowedRole(role)) {
-      return new Response(JSON.stringify({ error: "Valid email and role are required" }), {
+    if (!email || !roleId || !firstName || !lastName) {
+      return new Response(JSON.stringify({ error: "Email, first name, last name and role are required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -141,21 +145,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: allowedDomain } = await adminClient
-      .from("backoffice_allowed_domains")
-      .select("domain")
-      .eq("domain", domain)
+    if (!isSalesAgent) {
+      const { data: allowedDomain } = await adminClient
+        .from("backoffice_allowed_domains")
+        .select("domain")
+        .eq("domain", domain)
+        .maybeSingle();
+
+      if (!allowedDomain) {
+        return new Response(
+          JSON.stringify({ error: `Domain ${domain} is not allowed for backoffice access` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    const { data: roleTemplate, error: roleError } = await adminClient
+      .from("backoffice_role_templates")
+      .select("id, name, is_active")
+      .eq("id", roleId)
       .maybeSingle();
 
-    if (!allowedDomain) {
-      return new Response(
-        JSON.stringify({ error: `Domain ${domain} is not allowed for backoffice access` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    if (roleError || !roleTemplate) {
+      return new Response(JSON.stringify({ error: "Selected role was not found" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!roleTemplate.is_active) {
+      return new Response(JSON.stringify({ error: "Selected role is inactive" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const tempPassword = generateSecurePassword();
-    const fullName = displayNameFromEmail(email);
+    const fullName = `${firstName} ${lastName}`.trim() || fallbackNameFromEmail(email);
 
     const existingUser = await findUserByEmail(adminClient, email);
     let targetUserId: string;
@@ -167,6 +193,9 @@ Deno.serve(async (req) => {
         user_metadata: {
           ...(existingUser.user_metadata || {}),
           full_name: fullName,
+          first_name: firstName,
+          last_name: lastName,
+          phone,
           backoffice_invited_at: new Date().toISOString(),
         },
       });
@@ -183,6 +212,9 @@ Deno.serve(async (req) => {
         email_confirm: true,
         user_metadata: {
           full_name: fullName,
+          first_name: firstName,
+          last_name: lastName,
+          phone,
           backoffice_invited_at: new Date().toISOString(),
         },
       });
@@ -198,6 +230,7 @@ Deno.serve(async (req) => {
       {
         user_id: targetUserId,
         full_name: fullName,
+        phone,
       },
       { onConflict: "user_id" },
     );
@@ -208,8 +241,13 @@ Deno.serve(async (req) => {
     const { error: backofficeUpsertError } = await adminClient.from("backoffice_users").upsert(
       {
         user_id: targetUserId,
+        role: "support_agent",
+        email,
         email_domain: domain,
-        role,
+        first_name: firstName,
+        last_name: lastName,
+        phone,
+        is_sales_agent: isSalesAgent,
         is_active: true,
         totp_enabled: false,
         totp_secret: null,
@@ -225,11 +263,25 @@ Deno.serve(async (req) => {
       .select("id")
       .eq("user_id", targetUserId)
       .maybeSingle();
-    if (backofficeRecordError) {
-      throw new Error(`Failed to load backoffice user record: ${backofficeRecordError.message}`);
+    if (backofficeRecordError || !backofficeRecord) {
+      throw new Error(`Failed to load backoffice user record: ${backofficeRecordError?.message || "Unknown error"}`);
     }
 
-    // Best effort for newer flag columns (safe on older schemas).
+    const { error: assignmentError } = await adminClient
+      .from("backoffice_user_role_assignments")
+      .upsert(
+        {
+          backoffice_user_id: backofficeRecord.id,
+          role_template_id: roleId,
+          assigned_by: actor.id,
+        },
+        { onConflict: "backoffice_user_id" },
+      );
+
+    if (assignmentError) {
+      throw new Error(`Failed to assign role: ${assignmentError.message}`);
+    }
+
     await adminClient
       .from("backoffice_users")
       .update({
@@ -255,9 +307,9 @@ Deno.serve(async (req) => {
       const emailHtml = wrapEmailTemplate(
         `
           ${heading("You’ve been added to Salon Magik BackOffice")}
-          ${paragraph(`Your BackOffice access has been created with role <strong>${role.replace("_", " ")}</strong>.`)}
+          ${paragraph(`Your BackOffice access has been created with role <strong>${roleTemplate.name}</strong>.`)}
           ${paragraph(`<strong>Sign-in email:</strong> ${email}`)}
-          ${paragraph(`<strong>Temporary password:</strong> <code style="background:#e5e7eb;padding:4px 8px;border-radius:4px;">${tempPassword}</code>`)}
+          ${paragraph(`<strong>Temporary password:</strong> <code style=\"background:#e5e7eb;padding:4px 8px;border-radius:4px;\">${tempPassword}</code>`)}
           ${createButton("Go to BackOffice login", loginUrl)}
           ${smallText("You must change this password at first login before you can access the dashboard.")}
           ${smallText("After login, you can set up 2FA with an authenticator app.")}
@@ -290,15 +342,17 @@ Deno.serve(async (req) => {
       entity_type: "backoffice_users",
       entity_id: targetUserId,
       actor_user_id: actor.id,
-      metadata: { email, role, emailSent },
+      metadata: { email, roleId, roleName: roleTemplate.name, isSalesAgent, emailSent },
     });
 
     return new Response(
       JSON.stringify({
         success: true,
         email,
-        role,
-        backofficeUserId: backofficeRecord?.id ?? null,
+        roleId,
+        roleName: roleTemplate.name,
+        isSalesAgent,
+        backofficeUserId: backofficeRecord.id,
         emailSent,
         tempPassword: emailSent ? null : tempPassword,
       }),

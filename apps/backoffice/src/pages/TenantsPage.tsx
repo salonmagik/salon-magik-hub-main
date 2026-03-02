@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
  import { Button } from "@ui/button";
  import { Badge } from "@ui/badge";
  import { Input } from "@ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Label } from "@ui/label";
 import {
   Dialog,
@@ -44,7 +45,7 @@ interface ChainUnlockRequestRow {
   tenant?: { id: string; name: string; plan: string | null } | null;
 }
  
- export default function TenantsPage() {
+export default function TenantsPage() {
    const queryClient = useQueryClient();
    const { backofficeUser } = useBackofficeAuth();
    const { data: tenants, isLoading } = useTenants();
@@ -119,103 +120,54 @@ interface ChainUnlockRequestRow {
      <BackofficeLayout>
        <div className="p-6 space-y-6">
          <div>
-           <h1 className="text-2xl font-bold tracking-tight">Tenants</h1>
+           <h1 className="text-2xl font-bold tracking-tight">Customer Tenants</h1>
            <p className="text-muted-foreground">
              View and manage all salons on the platform
            </p>
          </div>
- 
-         <Card>
-           <CardHeader>
-             <CardTitle>Pending Chain Unlock Requests</CardTitle>
-             <CardDescription>Approve custom unlock for tenants requesting more than 10 stores.</CardDescription>
-           </CardHeader>
-           <CardContent>
-             {loadingUnlockRequests ? (
-               <div className="flex justify-center py-8">
-                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-               </div>
-             ) : chainUnlockRequests.length === 0 ? (
-               <p className="text-sm text-muted-foreground">No pending requests.</p>
-             ) : (
-               <div className="rounded-md border">
-                 <Table>
-                   <TableHeader>
-                     <TableRow>
-                       <TableHead>Tenant</TableHead>
-                       <TableHead>Requested</TableHead>
-                       <TableHead>Active</TableHead>
-                       <TableHead>Requested At</TableHead>
-                       <TableHead className="w-[120px]">Action</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                   <TableBody>
-                     {chainUnlockRequests.map((request) => (
-                       <TableRow key={request.id}>
-                         <TableCell>{request.tenant?.name || request.tenant_id}</TableCell>
-                         <TableCell>{request.requested_locations}</TableCell>
-                         <TableCell>{request.allowed_locations}</TableCell>
-                         <TableCell>{format(new Date(request.created_at), "MMM d, yyyy HH:mm")}</TableCell>
-                         <TableCell>
-                           <Button
-                             size="sm"
-                             disabled={backofficeUser?.role !== "super_admin"}
-                             onClick={() => {
-                               setSelectedRequest(request);
-                               setAllowedLocations(Math.max(request.requested_locations, 11));
-                               setAmount("0");
-                               setCurrency("USD");
-                               setReason("Approving chain unlock request from Backoffice.");
-                               setApproveDialogOpen(true);
-                             }}
-                           >
-                             Approve
-                           </Button>
-                         </TableCell>
-                       </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
-               </div>
-             )}
-           </CardContent>
-         </Card>
 
-         <Card>
-           <CardHeader>
-             <div className="flex items-center justify-between">
-               <div>
-                 <CardTitle className="flex items-center gap-2">
-                   <Building2 className="h-5 w-5" />
-                   All Tenants
-                 </CardTitle>
-                 <CardDescription>
-                   {filteredTenants?.length || 0} salons
-                 </CardDescription>
-               </div>
-               <div className="relative w-64">
-                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                 <Input
-                   placeholder="Search by name or owner..."
-                   value={searchQuery}
-                   onChange={(e) => setSearchQuery(e.target.value)}
-                   className="pl-9"
-                 />
-               </div>
-             </div>
-           </CardHeader>
-           <CardContent>
-             {isLoading ? (
-               <div className="flex justify-center py-12">
-                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-               </div>
-             ) : filteredTenants?.length === 0 ? (
-               <div className="text-center py-12 text-muted-foreground">
-                 No tenants found.
-               </div>
-             ) : (
-               <div className="rounded-md border">
-                 <Table>
+         <Tabs defaultValue="all-tenants">
+           <TabsList>
+             <TabsTrigger value="all-tenants">All Tenants</TabsTrigger>
+             <TabsTrigger value="unlock-requests">Unlock Requests</TabsTrigger>
+           </TabsList>
+
+           <TabsContent value="all-tenants" className="mt-4">
+             <Card>
+               <CardHeader>
+                 <div className="flex items-center justify-between">
+                   <div>
+                     <CardTitle className="flex items-center gap-2">
+                       <Building2 className="h-5 w-5" />
+                       All Tenants
+                     </CardTitle>
+                     <CardDescription>
+                       {filteredTenants?.length || 0} salons
+                     </CardDescription>
+                   </div>
+                   <div className="relative w-64">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                     <Input
+                       placeholder="Search by name or owner..."
+                       value={searchQuery}
+                       onChange={(e) => setSearchQuery(e.target.value)}
+                       className="pl-9"
+                     />
+                   </div>
+                 </div>
+               </CardHeader>
+               <CardContent>
+                 {isLoading ? (
+                   <div className="flex justify-center py-12">
+                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                   </div>
+                 ) : filteredTenants?.length === 0 ? (
+                   <div className="text-center py-12 text-muted-foreground">
+                     No tenants found.
+                   </div>
+                 ) : (
+                   <div className="rounded-md border">
+                     <Table>
                    <TableHeader>
                      <TableRow>
                        <TableHead>Salon Name</TableHead>
@@ -289,11 +241,71 @@ interface ChainUnlockRequestRow {
                        </TableRow>
                      ))}
                    </TableBody>
-                 </Table>
-               </div>
-             )}
-           </CardContent>
-         </Card>
+                     </Table>
+                   </div>
+                 )}
+               </CardContent>
+             </Card>
+           </TabsContent>
+
+           <TabsContent value="unlock-requests" className="mt-4">
+             <Card>
+               <CardHeader>
+                 <CardTitle>Pending Chain Unlock Requests</CardTitle>
+                 <CardDescription>Approve custom unlock for tenants requesting more than 10 stores.</CardDescription>
+               </CardHeader>
+               <CardContent>
+                 {loadingUnlockRequests ? (
+                   <div className="flex justify-center py-8">
+                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                   </div>
+                 ) : chainUnlockRequests.length === 0 ? (
+                   <p className="text-sm text-muted-foreground">No pending requests.</p>
+                 ) : (
+                   <div className="rounded-md border">
+                     <Table>
+                       <TableHeader>
+                         <TableRow>
+                           <TableHead>Tenant</TableHead>
+                           <TableHead>Requested</TableHead>
+                           <TableHead>Active</TableHead>
+                           <TableHead>Requested At</TableHead>
+                           <TableHead className="w-[120px]">Action</TableHead>
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                         {chainUnlockRequests.map((request) => (
+                           <TableRow key={request.id}>
+                             <TableCell>{request.tenant?.name || request.tenant_id}</TableCell>
+                             <TableCell>{request.requested_locations}</TableCell>
+                             <TableCell>{request.allowed_locations}</TableCell>
+                             <TableCell>{format(new Date(request.created_at), "MMM d, yyyy HH:mm")}</TableCell>
+                             <TableCell>
+                               <Button
+                                 size="sm"
+                                 disabled={backofficeUser?.role !== "super_admin"}
+                                 onClick={() => {
+                                   setSelectedRequest(request);
+                                   setAllowedLocations(Math.max(request.requested_locations, 11));
+                                   setAmount("0");
+                                   setCurrency("USD");
+                                   setReason("Approving chain unlock request from Backoffice.");
+                                   setApproveDialogOpen(true);
+                                 }}
+                               >
+                                 Approve
+                               </Button>
+                             </TableCell>
+                           </TableRow>
+                         ))}
+                       </TableBody>
+                     </Table>
+                   </div>
+                 )}
+               </CardContent>
+             </Card>
+           </TabsContent>
+         </Tabs>
        </div>
 
        <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>

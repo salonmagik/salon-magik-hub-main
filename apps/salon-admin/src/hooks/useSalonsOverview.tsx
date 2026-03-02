@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
+import { usePermissions } from "./usePermissions";
 import { startOfDay, startOfWeek, startOfMonth, endOfDay } from "date-fns";
 
 export interface LocationPerformance {
@@ -38,11 +40,18 @@ function getDateRange(range: DateRange): { start: Date; end: Date } {
 
 export function useSalonsOverview(dateRange: DateRange = "week") {
   const { currentTenant } = useAuth();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [locations, setLocations] = useState<LocationPerformance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchOverview = useCallback(async () => {
+    if (permissionsLoading) {
+      setIsLoading(true);
+      return;
+    }
+
     if (!currentTenant?.id) {
       setLocations([]);
       setIsLoading(false);
@@ -51,6 +60,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
 
     setIsLoading(true);
     setError(null);
+    const canViewRevenueAnalytics = hasPermission("reports");
 
     try {
       const { start, end } = getDateRange(dateRange);
@@ -58,10 +68,16 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
       activityThreshold.setMinutes(activityThreshold.getMinutes() - ACTIVITY_THRESHOLD_MINUTES);
 
       // Fetch locations for this tenant
-      const { data: locationsData, error: locationsError } = await supabase
+      let locationsQuery = supabase
         .from("locations")
         .select("id, name, city, country")
         .eq("tenant_id", currentTenant.id);
+
+      if (hasScope) {
+        locationsQuery = locationsQuery.in("id", scopedLocationIds);
+      }
+
+      const { data: locationsData, error: locationsError } = await locationsQuery;
 
       if (locationsError) throw locationsError;
 
@@ -72,22 +88,38 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
       }
 
       // Fetch appointments for revenue and booking counts
-      const { data: appointments, error: appointmentsError } = await supabase
+      let appointmentsQuery = supabase
         .from("appointments")
-        .select("id, location_id, total_amount, amount_paid, status, scheduled_start")
+        .select(
+          canViewRevenueAnalytics
+            ? "id, location_id, total_amount, amount_paid, status, scheduled_start"
+            : "id, location_id, status, scheduled_start"
+        )
         .eq("tenant_id", currentTenant.id)
         .gte("scheduled_start", start.toISOString())
         .lte("scheduled_start", end.toISOString());
 
+      if (hasScope) {
+        appointmentsQuery = appointmentsQuery.in("location_id", scopedLocationIds);
+      }
+
+      const { data: appointments, error: appointmentsError } = await appointmentsQuery;
+
       if (appointmentsError) throw appointmentsError;
 
       // Fetch active staff sessions for real-time online count
-      const { data: staffSessions, error: sessionsError } = await supabase
+      let staffSessionsQuery = supabase
         .from("staff_sessions")
         .select("location_id")
         .eq("tenant_id", currentTenant.id)
         .is("ended_at", null)
         .gte("last_activity_at", activityThreshold.toISOString());
+
+      if (hasScope) {
+        staffSessionsQuery = staffSessionsQuery.in("location_id", scopedLocationIds);
+      }
+
+      const { data: staffSessions, error: sessionsError } = await staffSessionsQuery;
 
       if (sessionsError) throw sessionsError;
 
@@ -106,7 +138,9 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
           (a) => a.status === "scheduled" || a.status === "started" || a.status === "paused"
         );
         
-        const revenue = completedAppointments.reduce((sum, a) => sum + Number(a.amount_paid || 0), 0);
+        const revenue = canViewRevenueAnalytics
+          ? completedAppointments.reduce((sum, a) => sum + Number(a.amount_paid || 0), 0)
+          : 0;
         
         // Use real staff session data
         const staffOnline = staffByLocation[loc.id] || 0;
@@ -131,7 +165,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, dateRange]);
+  }, [currentTenant?.id, dateRange, hasPermission, hasScope, permissionsLoading, scopedLocationIds]);
 
   useEffect(() => {
     fetchOverview();

@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.send-reactivation-campaign]
 verify_jwt = false
+
+[functions.create-backoffice-admin]
+verify_jwt = false

@@ -299,9 +299,9 @@ export default function CustomersPage() {
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{card.label}</p>
-                    <p className="text-2xl font-semibold mt-1">
+                    <div className="text-2xl font-semibold mt-1">
                       {isLoading ? <Skeleton className="h-8 w-8" /> : card.count}
-                    </p>
+                    </div>
                   </div>
                   <div className={`p-2 rounded-lg ${card.bgColor}`}>
                     <Icon className={`w-5 h-5 ${card.color}`} />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, format } from "date-fns";
 
 export interface StaffPerformance {
@@ -31,6 +32,7 @@ export interface ReportStats {
 
 export function useReports(period: "today" | "week" | "month" | "custom" = "month", customRange?: { start: Date; end: Date }) {
   const { currentTenant } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [stats, setStats] = useState<ReportStats>({
     totalRevenue: 0,
     totalAppointments: 0,
@@ -79,15 +81,24 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
       const { start, end } = getDateRange();
 
       // Fetch appointments in range with staff info
-      const { data: appointments } = await supabase
+      let appointmentsQuery = supabase
         .from("appointments")
         .select("*, appointment_services(*)")
         .eq("tenant_id", currentTenant.id)
         .gte("created_at", start.toISOString())
         .lte("created_at", end.toISOString());
 
+      if (hasScope) {
+        appointmentsQuery = appointmentsQuery.in("location_id", scopedLocationIds);
+      }
+
+      const { data: appointments } = await appointmentsQuery;
+
+      const scopedAppointmentIds = (appointments || []).map((appointment) => appointment.id);
+      const scopedCustomerIds = [...new Set((appointments || []).map((appointment) => appointment.customer_id))];
+
       // Fetch transactions in range
-      const { data: transactions } = await supabase
+      let transactionsQuery = supabase
         .from("transactions")
         .select("*")
         .eq("tenant_id", currentTenant.id)
@@ -95,13 +106,33 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         .gte("created_at", start.toISOString())
         .lte("created_at", end.toISOString());
 
+      if (hasScope) {
+        if (scopedAppointmentIds.length === 0) {
+          transactionsQuery = transactionsQuery.is("id", null);
+        } else {
+          transactionsQuery = transactionsQuery.in("appointment_id", scopedAppointmentIds);
+        }
+      }
+
+      const { data: transactions } = await transactionsQuery;
+
       // Fetch new customers in range
-      const { data: customers } = await supabase
+      let customersQuery = supabase
         .from("customers")
         .select("*")
         .eq("tenant_id", currentTenant.id)
         .gte("created_at", start.toISOString())
         .lte("created_at", end.toISOString());
+
+      if (hasScope) {
+        if (scopedCustomerIds.length === 0) {
+          customersQuery = customersQuery.is("id", null);
+        } else {
+          customersQuery = customersQuery.in("id", scopedCustomerIds);
+        }
+      }
+
+      const { data: customers } = await customersQuery;
 
       // Fetch profiles for staff names
       const { data: profiles } = await supabase
@@ -255,7 +286,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, getDateRange]);
+  }, [currentTenant?.id, getDateRange, hasScope, scopedLocationIds]);
 
   useEffect(() => {
     fetchReports();

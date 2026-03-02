@@ -47,7 +47,7 @@ import {
   Gift,
   Bell,
   ChevronDown,
-  DollarSign,
+  Coins,
 } from "lucide-react";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -93,14 +93,14 @@ export default function AppointmentsPage() {
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | "schedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  
+
   const [activeTab, setActiveTab] = useState<"scheduled" | "unscheduled">("scheduled");
-  
+
   // Date range state
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("this_week");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  
+
   // Multi-select status filters
   const [bookingStatuses, setBookingStatuses] = useState<Set<AppointmentStatus | "all">>(new Set(["all"]));
   const [paymentStatuses, setPaymentStatuses] = useState<Set<PaymentStatus | "all">>(new Set(["all"]));
@@ -110,7 +110,7 @@ export default function AppointmentsPage() {
   const handlePresetChange = useCallback((preset: DateRangePreset) => {
     setDateRangePreset(preset);
     const now = new Date();
-    
+
     switch (preset) {
       case "today": {
         const today = format(now, "yyyy-MM-dd");
@@ -178,13 +178,13 @@ export default function AppointmentsPage() {
 
   // Get filter label for display
   const getFilterLabel = () => {
-    const bookingLabel = bookingStatuses.has("all") 
-      ? "" 
+    const bookingLabel = bookingStatuses.has("all")
+      ? ""
       : `${bookingStatuses.size} booking${bookingStatuses.size > 1 ? "s" : ""}`;
-    const paymentLabel = paymentStatuses.has("all") 
-      ? "" 
+    const paymentLabel = paymentStatuses.has("all")
+      ? ""
       : `${paymentStatuses.size} payment${paymentStatuses.size > 1 ? "s" : ""}`;
-    
+
     if (!bookingLabel && !paymentLabel) return "All statuses";
     return [bookingLabel, paymentLabel].filter(Boolean).join(", ");
   };
@@ -242,7 +242,7 @@ export default function AppointmentsPage() {
 
   const handleAction = async (action: string, appointment: AppointmentWithDetails) => {
     setSelectedAppointment(appointment);
-    
+
     switch (action) {
       case "start":
         await startAppointment(appointment.id);
@@ -310,17 +310,17 @@ export default function AppointmentsPage() {
   // Check if reminder cooldown is active (30 minutes)
   const getReminderCooldownInfo = useCallback((lastReminderSent: string | null) => {
     if (!lastReminderSent) return { canSend: true, remainingMinutes: 0 };
-    
+
     const lastSent = new Date(lastReminderSent);
     const now = new Date();
     const diffMs = now.getTime() - lastSent.getTime();
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     const cooldownMinutes = 30;
-    
+
     if (diffMinutes >= cooldownMinutes) {
       return { canSend: true, remainingMinutes: 0 };
     }
-    
+
     return { canSend: false, remainingMinutes: cooldownMinutes - diffMinutes };
   }, []);
 
@@ -431,7 +431,7 @@ export default function AppointmentsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-destructive/10">
-                    <DollarSign className="w-5 h-5 text-destructive" />
+                    <Coins className="w-5 h-5 text-destructive" />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Amount Due</p>
@@ -692,7 +692,7 @@ export default function AppointmentsPage() {
               {/* Payments Submenu */}
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
-                  <DollarSign className="w-4 h-4 mr-2" />
+                  <Coins className="w-4 h-4 mr-2" />
                   Payments
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
@@ -778,7 +778,7 @@ export default function AppointmentsPage() {
                     <TableCell colSpan={activeTab === "scheduled" ? 7 : 6} className="text-center py-12">
                       <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                       <p className="text-muted-foreground">
-                        {activeTab === "unscheduled" 
+                        {activeTab === "unscheduled"
                           ? "No unscheduled bookings awaiting confirmation"
                           : "No appointments found"}
                       </p>
@@ -794,15 +794,15 @@ export default function AppointmentsPage() {
                     const actions = getAvailableActions(apt.status, apt.is_unscheduled);
                     const amountDue = (apt.total_amount || 0) - (apt.amount_paid || 0);
                     return (
-                      <TableRow 
-                        key={apt.id} 
+                      <TableRow
+                        key={apt.id}
                         className="hover:bg-muted/50 cursor-pointer"
                         onClick={() => handleRowClick(apt)}
                       >
                         <TableCell>
                           <div>
                             <p className="font-medium">
-                              {apt.scheduled_start 
+                              {apt.scheduled_start
                                 ? `${formatTime(apt.scheduled_start)} — ${formatTime(apt.scheduled_end)}`
                                 : "Unscheduled"}
                             </p>
@@ -903,7 +903,7 @@ export default function AppointmentsPage() {
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <span>
-                                            <DropdownMenuItem 
+                                            <DropdownMenuItem
                                               onClick={() => handleAction("reminder", apt)}
                                               disabled={!cooldownInfo.canSend}
                                               className={!cooldownInfo.canSend ? "opacity-50 cursor-not-allowed" : ""}
@@ -952,7 +952,7 @@ export default function AppointmentsPage() {
                                   </DropdownMenuItem>
                                 )}
                                 {actions.includes("cancel") && (
-                                  <DropdownMenuItem 
+                                  <DropdownMenuItem
                                     onClick={() => handleAction("cancel", apt)}
                                     className="text-destructive"
                                   >

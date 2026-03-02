@@ -1,0 +1,25 @@
+name: Release Prod Source Guard
+
+on:
+  pull_request:
+    branches:
+      - release/prod
+
+jobs:
+  only-main-can-merge-into-release-prod:
+    name: Source Branch Policy (main -> release/prod only)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR source branch
+        run: |
+          echo "base_ref=${{ github.base_ref }}"
+          echo "head_ref=${{ github.head_ref }}"
+          if [ "${{ github.base_ref }}" != "release/prod" ]; then
+            echo "This workflow only validates PRs targeting release/prod."
+            exit 1
+          fi
+          if [ "${{ github.head_ref }}" != "main" ]; then
+            echo "Blocked: only PRs from 'main' can merge into 'release/prod'."
+            exit 1
+          fi
+          echo "Allowed: main -> release/prod."
