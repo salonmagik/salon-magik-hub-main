@@ -5,7 +5,6 @@ import {
   usePublicCatalog,
   BookingCartProvider,
 } from "@/hooks";
-import { resolvePublicBookingSlug } from "@/lib/slugResolution";
 import { BookingLayout } from "./components/BookingLayout";
 import { SalonHeader } from "./components/SalonHeader";
 import { CatalogView } from "./components/CatalogView";
@@ -13,15 +12,34 @@ import { BookingWizard } from "./components/BookingWizard";
 import { Skeleton } from "@ui/skeleton";
 import { isLightColor } from "@shared/color";
 
+function resolveSlugFromHostname() {
+  const configuredBaseDomain = (
+    import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined
+  )
+    ?.replace(/^https?:\/\//i, "")
+    .replace(/^\*\./, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+
+  const baseDomain = configuredBaseDomain || "salonmagik.com";
+  const hostname = window.location.hostname.toLowerCase();
+
+  if (!hostname || hostname === "localhost") return null;
+
+  if (hostname.endsWith(`.${baseDomain}`)) {
+    const prefix = hostname.slice(0, -(baseDomain.length + 1));
+    if (!prefix) return null;
+    const [slug] = prefix.split(".");
+    return slug || null;
+  }
+
+  return null;
+}
+
 function BookingPageContent() {
   const { slug: routeSlug } = useParams<{ slug: string }>();
-  const slug = resolvePublicBookingSlug({
-    routeSlug,
-    hostname: window.location.hostname,
-    search: window.location.search,
-    configuredBaseDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
-    isDev: import.meta.env.DEV,
-  });
+  const subdomainSlug = resolveSlugFromHostname();
+  const slug = routeSlug || subdomainSlug || undefined;
   const { salon, locations, isLoading: salonLoading, notFound } = usePublicSalon(slug);
   const { services, packages, products, categories, isLoading: catalogLoading } = usePublicCatalog(salon?.id);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
