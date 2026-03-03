@@ -20,6 +20,10 @@ vi.mock("@/hooks", () => ({
   useDepositCalculation: () => ({
     depositAmount: 20,
   }),
+  useBookingEligibleStaff: () => ({
+    data: [],
+    isLoading: false,
+  }),
 }));
 
 vi.mock("./CartStep", () => ({ CartStep: () => <div>Cart step</div> }));

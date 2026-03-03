@@ -1,15 +1,33 @@
 import { MapPin, Phone } from "lucide-react";
 import { Badge } from "@ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@ui/select";
+import { getCountryByCode } from "@shared/countries";
 import { BannerCarousel } from "@/components/BannerCarousel";
 import type { PublicTenant, PublicLocation } from "@/hooks";
 
 interface SalonHeaderProps {
   salon: PublicTenant;
   locations: PublicLocation[];
+  supportedCountryCodes?: string[];
+  selectedCountryCode?: string | null;
+  onCountryChange?: (countryCode: string) => void;
 }
 
-export function SalonHeader({ salon, locations }: SalonHeaderProps) {
+export function SalonHeader({
+  salon,
+  locations,
+  supportedCountryCodes = [],
+  selectedCountryCode,
+  onCountryChange,
+}: SalonHeaderProps) {
   const primaryLocation = locations[0];
+  const showCountryToggle = supportedCountryCodes.length > 1;
   
   return (
     <div className="space-y-4">
@@ -24,6 +42,27 @@ export function SalonHeader({ salon, locations }: SalonHeaderProps) {
         /* Salon Info (if no banner) */
         <div className="space-y-2">
           <h1 className="text-2xl md:text-3xl font-bold">{salon.name}</h1>
+        </div>
+      )}
+
+      {showCountryToggle && onCountryChange && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">Country:</span>
+          <Select value={selectedCountryCode || undefined} onValueChange={onCountryChange}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select country" />
+            </SelectTrigger>
+            <SelectContent>
+              {supportedCountryCodes.map((code) => {
+                const country = getCountryByCode(code);
+                return (
+                  <SelectItem key={code} value={code}>
+                    {country ? `${country.flag} ${country.name}` : code}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
       )}
 

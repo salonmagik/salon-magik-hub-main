@@ -10,7 +10,14 @@ import {
 } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Separator } from "@ui/separator";
-import { useBookingCart, useDepositCalculation, type PublicTenant, type PublicLocation, type GiftRecipient } from "@/hooks";
+import {
+  useBookingCart,
+  useDepositCalculation,
+  useBookingEligibleStaff,
+  type PublicTenant,
+  type PublicLocation,
+  type GiftRecipient,
+} from "@/hooks";
 import { CartStep } from "./CartStep";
 import { SchedulingStep } from "./SchedulingStep";
 import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
@@ -27,11 +34,18 @@ interface BookingWizardProps {
   onOpenChange: (open: boolean) => void;
   salon: PublicTenant;
   locations: PublicLocation[];
+  selectedCountryCode?: string | null;
 }
 
 type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "payment" | "confirmation";
 
-export function BookingWizard({ open, onOpenChange, salon, locations }: BookingWizardProps) {
+export function BookingWizard({
+  open,
+  onOpenChange,
+  salon,
+  locations,
+  selectedCountryCode,
+}: BookingWizardProps) {
   const { items, getTotal, getTotalDuration, clearCart, getGiftItems, getItemCount } = useBookingCart();
   const [step, setStep] = useState<WizardStep>("cart");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,6 +55,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | undefined>(undefined);
   const [leaveUnscheduled, setLeaveUnscheduled] = useState(false);
 
   // Customer state
@@ -71,6 +86,27 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const totalDuration = getTotalDuration();
   const giftItems = getGiftItems();
   const hasSchedulableItems = items.some((item) => item.type !== "product");
+  const selectedServiceIds = items
+    .filter((item) => item.type === "service")
+    .map((item) => item.itemId);
+
+  const { data: eligibleStaff = [], isLoading: eligibleStaffLoading } = useBookingEligibleStaff({
+    tenantId: salon.id,
+    locationId: selectedLocation?.id,
+    serviceIds: selectedServiceIds,
+    enabled:
+      Boolean(selectedLocation?.id) &&
+      Boolean(salon.allow_staff_selection || salon.require_staff_selection) &&
+      !leaveUnscheduled &&
+      hasSchedulableItems,
+  });
+
+  useEffect(() => {
+    if (!selectedStaffId) return;
+    if (!eligibleStaff.some((staff) => staff.userId === selectedStaffId)) {
+      setSelectedStaffId(undefined);
+    }
+  }, [eligibleStaff, selectedStaffId]);
 
   // Calculate deposit
   const depositCalc = useDepositCalculation(
@@ -161,6 +197,14 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         });
         return;
       }
+      if (!leaveUnscheduled && hasSchedulableItems && salon.require_staff_selection && !selectedStaffId) {
+        toast({
+          title: "Staff selection required",
+          description: "Please select a staff member before continuing.",
+          variant: "destructive",
+        });
+        return;
+      }
       setStep("booker");
     } else if (step === "booker") {
       if (!bookerInfo.firstName || !bookerInfo.lastName || !bookerInfo.email) {
@@ -247,6 +291,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           voucherDiscount: voucherDiscount,
           purseAmount: purseAmount,
           depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+          selectedStaffId: selectedStaffId || null,
         },
       });
 
@@ -307,6 +352,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           voucherDiscount: voucherDiscount,
           purseAmount: purseAmount,
           depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+          selectedStaffId: selectedStaffId || null,
         },
       });
 
@@ -333,6 +379,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setStep("cart");
       setSelectedDate(undefined);
       setSelectedTime(undefined);
+      setSelectedStaffId(undefined);
       setLeaveUnscheduled(false);
       setBookerInfo({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
       setGiftRecipients({});
@@ -428,6 +475,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 leaveUnscheduled={leaveUnscheduled}
                 onLeaveUnscheduledChange={setLeaveUnscheduled}
                 totalDuration={totalDuration}
+                allowStaffSelection={Boolean(salon.allow_staff_selection)}
+                requireStaffSelection={Boolean(salon.require_staff_selection)}
+                eligibleStaff={eligibleStaff}
+                selectedStaffId={selectedStaffId}
+                onStaffChange={setSelectedStaffId}
+                staffLoading={eligibleStaffLoading}
               />
             )}
 
@@ -465,6 +518,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 onVoucherApplied={setAppliedVoucher}
                 purseAmount={purseAmount}
                 onPurseApplied={setPurseAmount}
+                selectedCountryCode={selectedCountryCode}
                 subtotal={subtotal}
                 voucherDiscount={voucherDiscount}
                 afterVoucher={afterVoucher}
@@ -479,7 +533,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               <PaymentStep
                 amountDue={amountDueNow}
                 currency={salon.currency}
-                country={salon.country || "US"}
+                country={selectedCountryCode || salon.country || "US"}
                 onGatewaySelect={setSelectedGateway}
                 onSubmit={handlePaymentSubmit}
                 isSubmitting={isSubmitting}

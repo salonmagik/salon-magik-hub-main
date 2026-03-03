@@ -136,6 +136,9 @@ export default function SettingsPage() {
     bookingStatusMessage: "",
     slotCapacityDefault: 1,
     brandColor: "#2563EB",
+    allowStaffSelection: true,
+    requireStaffSelection: false,
+    autoAssignStaff: true,
   });
 
   const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
@@ -165,6 +168,9 @@ export default function SettingsPage() {
         bookingStatusMessage: currentTenant.booking_status_message || "",
         slotCapacityDefault: currentTenant.slot_capacity_default || 1,
         brandColor: (currentTenant as any).brand_color || "#2563EB",
+        allowStaffSelection: (currentTenant as any).allow_staff_selection ?? true,
+        requireStaffSelection: (currentTenant as any).require_staff_selection ?? false,
+        autoAssignStaff: (currentTenant as any).auto_assign_staff ?? true,
       });
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
@@ -438,6 +444,9 @@ export default function SettingsPage() {
           booking_status_message: bookingSettings.bookingStatusMessage || null,
           slot_capacity_default: bookingSettings.slotCapacityDefault,
           brand_color: bookingSettings.brandColor,
+          allow_staff_selection: bookingSettings.allowStaffSelection,
+          require_staff_selection: bookingSettings.requireStaffSelection,
+          auto_assign_staff: bookingSettings.autoAssignStaff,
         })
         .eq("id", currentTenant.id);
 
@@ -939,6 +948,61 @@ export default function SettingsPage() {
               checked={bookingSettings.autoConfirmBookings}
               onCheckedChange={(checked) =>
                 setBookingSettings((prev) => ({ ...prev, autoConfirmBookings: checked }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Allow Staff Selection</p>
+              <p className="text-sm text-muted-foreground">
+                Let customers choose a preferred staff member during booking.
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.allowStaffSelection}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  allowStaffSelection: checked,
+                  requireStaffSelection: checked ? prev.requireStaffSelection : false,
+                }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Require Staff Selection</p>
+              <p className="text-sm text-muted-foreground">
+                Force customers to select a staff member before checkout.
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.requireStaffSelection}
+              disabled={!bookingSettings.allowStaffSelection}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  requireStaffSelection: checked,
+                  autoAssignStaff: checked ? false : prev.autoAssignStaff,
+                }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Auto-Assign Staff</p>
+              <p className="text-sm text-muted-foreground">
+                Automatically assign an eligible staff member when customer does not select one.
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.autoAssignStaff}
+              disabled={bookingSettings.requireStaffSelection}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({ ...prev, autoAssignStaff: checked }))
               }
             />
           </div>
