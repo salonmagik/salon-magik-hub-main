@@ -215,6 +215,31 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
       if (error) throw error;
 
+      if (isChainPlan) {
+        const nextActiveLocations = currentLocationCount + 1;
+        await (supabase.rpc as any)("create_tenant_addon_quote_snapshot", {
+          p_tenant_id: currentTenant.id,
+          p_country_code: formData.country || currentTenant.country,
+          p_currency: expansionResult?.currency || currentTenant.currency,
+          p_included_locations: 1,
+          p_active_locations: nextActiveLocations,
+          p_extra_locations: Math.max(0, nextActiveLocations - 1),
+          p_unit_price_per_extra_location: expansionResult?.unit_price ?? null,
+          p_monthly_addon_total: expansionResult?.subtotal ?? null,
+          p_snapshot: {
+            source: "add_salon_dialog",
+            location_name: formData.name,
+            location_city: formData.city,
+            location_country: formData.country,
+            allowed_before: allowedLocations,
+            used_before: currentLocationCount,
+            used_after: nextActiveLocations,
+            expansion_result: expansionResult,
+          },
+          p_mark_accepted: true,
+        });
+      }
+
       if (expansionResult?.billing_effective_at) {
         toast({
           title: "Salon added",

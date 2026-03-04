@@ -20,6 +20,7 @@ import {
 import { BookingTimePicker } from "@/components/BookingTimePicker";
 import { useAvailableDays, useAvailableSlots, type PublicTenant, type PublicLocation } from "@/hooks";
 import { cn } from "@shared/utils";
+import type { BookingEligibleStaff } from "@/hooks";
 
 interface SchedulingStepProps {
   salon: PublicTenant;
@@ -33,6 +34,12 @@ interface SchedulingStepProps {
   leaveUnscheduled: boolean;
   onLeaveUnscheduledChange: (value: boolean) => void;
   totalDuration: number;
+  allowStaffSelection?: boolean;
+  requireStaffSelection?: boolean;
+  eligibleStaff?: BookingEligibleStaff[];
+  selectedStaffId?: string;
+  onStaffChange?: (staffUserId: string | undefined) => void;
+  staffLoading?: boolean;
 }
 
 export function SchedulingStep({
@@ -47,6 +54,12 @@ export function SchedulingStep({
   leaveUnscheduled,
   onLeaveUnscheduledChange,
   totalDuration,
+  allowStaffSelection = false,
+  requireStaffSelection = false,
+  eligibleStaff = [],
+  selectedStaffId,
+  onStaffChange,
+  staffLoading = false,
 }: SchedulingStepProps) {
   const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -198,6 +211,39 @@ export function SchedulingStep({
               />
             </div>
           </div>
+
+          {/* Staff Selection */}
+          {allowStaffSelection && onStaffChange && (
+            <div className="space-y-2">
+              <Label>
+                Select Staff {requireStaffSelection ? "*" : "(Optional)"}
+              </Label>
+              <Select
+                value={selectedStaffId}
+                onValueChange={(value) => onStaffChange(value === "__auto__" ? undefined : value)}
+                disabled={staffLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={staffLoading ? "Loading staff..." : "Auto-assign best match"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {!requireStaffSelection && (
+                    <SelectItem value="__auto__">Auto-assign best match</SelectItem>
+                  )}
+                  {eligibleStaff.map((staff) => (
+                    <SelectItem key={staff.userId} value={staff.userId}>
+                      {staff.fullName} ({staff.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!staffLoading && eligibleStaff.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No eligible staff is configured for this location and service selection.
+                </p>
+              )}
+            </div>
+          )}
         </>
       )}
 

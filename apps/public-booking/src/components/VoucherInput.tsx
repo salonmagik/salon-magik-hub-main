@@ -11,6 +11,8 @@ interface VoucherInputProps {
   tenantId: string;
   currency: string;
   subtotal: number;
+  selectedLocationId?: string;
+  selectedCountryCode?: string | null;
   onVoucherApplied: (voucher: AppliedVoucher | null) => void;
   appliedVoucher: AppliedVoucher | null;
 }
@@ -27,6 +29,8 @@ export function VoucherInput({
   tenantId,
   currency,
   subtotal,
+  selectedLocationId,
+  selectedCountryCode,
   onVoucherApplied,
   appliedVoucher,
 }: VoucherInputProps) {
@@ -44,15 +48,60 @@ export function VoucherInput({
     setError(null);
 
     try {
-      // Look up voucher in database
-      // The vouchers table stores gift cards with amount/balance
-      const { data: voucher, error: fetchError } = await supabase
+      let allowedVoucherIds: string[] | null = null;
+
+      if (selectedLocationId) {
+        const { data: scopedVoucherRows, error: scopedVoucherError } = await (supabase.from as any)("voucher_locations")
+          .select("voucher_id")
+          .eq("tenant_id", tenantId)
+          .eq("location_id", selectedLocationId)
+          .eq("is_enabled", true);
+
+        if (scopedVoucherError) throw scopedVoucherError;
+        allowedVoucherIds = (scopedVoucherRows ?? []).map((row: { voucher_id: string }) => row.voucher_id);
+      } else if (selectedCountryCode) {
+        const { data: locationRows, error: locationError } = await supabase
+          .from("locations")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("availability", "open")
+          .eq("country", selectedCountryCode);
+
+        if (locationError) throw locationError;
+
+        const countryLocationIds = (locationRows ?? []).map((row) => row.id);
+        if (countryLocationIds.length > 0) {
+          const { data: scopedVoucherRows, error: scopedVoucherError } = await (supabase.from as any)("voucher_locations")
+            .select("voucher_id")
+            .eq("tenant_id", tenantId)
+            .eq("is_enabled", true)
+            .in("location_id", countryLocationIds);
+
+          if (scopedVoucherError) throw scopedVoucherError;
+          allowedVoucherIds = (scopedVoucherRows ?? []).map((row: { voucher_id: string }) => row.voucher_id);
+        } else {
+          allowedVoucherIds = [];
+        }
+      }
+
+      if (allowedVoucherIds && allowedVoucherIds.length === 0) {
+        setError("This voucher is not available for the selected location");
+        return;
+      }
+
+      let voucherQuery = supabase
         .from("vouchers")
         .select("*")
         .eq("tenant_id", tenantId)
         .eq("code", code.toUpperCase().trim())
         .eq("status", "active")
-        .single();
+        .maybeSingle();
+
+      if (allowedVoucherIds) {
+        voucherQuery = voucherQuery.in("id", allowedVoucherIds);
+      }
+
+      const { data: voucher, error: fetchError } = await voucherQuery;
 
       if (fetchError || !voucher) {
         setError("Invalid or expired voucher code");

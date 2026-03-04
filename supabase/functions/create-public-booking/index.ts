@@ -29,6 +29,7 @@ interface CartItem {
 interface BookingRequest {
   tenantId: string;
   locationId?: string;
+  selectedStaffId?: string | null;
   scheduledDate?: string;
   scheduledTime?: string;
   customer: {
@@ -54,7 +55,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: BookingRequest = await req.json();
-    const { tenantId, locationId, scheduledDate, scheduledTime, customer, items, payAtSalon } = body;
+    const { tenantId, locationId, selectedStaffId, scheduledDate, scheduledTime, customer, items, payAtSalon } = body;
 
     // Validate required fields
     if (!tenantId || !customer.email || !customer.firstName || !customer.lastName || items.length === 0) {
@@ -67,7 +68,7 @@ serve(async (req) => {
     // Verify tenant exists and has online booking enabled
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency")
+      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, allow_staff_selection, require_staff_selection, auto_assign_staff")
       .eq("id", tenantId)
       .eq("online_booking_enabled", true)
       .single();
@@ -145,6 +146,79 @@ serve(async (req) => {
     // Check for gift items
     const hasGifts = items.some((item) => item.isGift);
 
+    // Resolve eligible/selected staff for this booking.
+    const selectedServiceIds = items
+      .filter((item) => item.type === "service")
+      .map((item) => item.itemId);
+
+    let assignedStaffId: string | null = null;
+    if (locationId) {
+      const { data: eligibleStaffRows, error: eligibleStaffError } = await supabase.rpc(
+        "list_public_booking_eligible_staff",
+        {
+          p_tenant_id: tenantId,
+          p_location_id: locationId,
+          p_service_ids: selectedServiceIds.length > 0 ? selectedServiceIds : null,
+        },
+      );
+
+      if (eligibleStaffError) {
+        console.error("Error resolving eligible staff:", eligibleStaffError);
+      }
+
+      const eligibleStaff = (eligibleStaffRows || []) as Array<{ user_id: string }>;
+
+      if (selectedStaffId) {
+        if (!tenant.allow_staff_selection) {
+          await supabase.from("audit_logs").insert({
+            tenant_id: tenantId,
+            actor_user_id: null,
+            action: "booking.staff_selection_denied",
+            entity_type: "booking",
+            metadata: { reason: "staff_selection_disabled", selectedStaffId },
+          });
+
+          return new Response(
+            JSON.stringify({ error: "Staff selection is not enabled for this booking site" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const isSelectedStaffEligible = eligibleStaff.some((staff) => staff.user_id === selectedStaffId);
+        if (!isSelectedStaffEligible) {
+          await supabase.from("audit_logs").insert({
+            tenant_id: tenantId,
+            actor_user_id: null,
+            action: "booking.staff_selection_denied",
+            entity_type: "booking",
+            metadata: { reason: "staff_not_eligible", selectedStaffId, locationId, selectedServiceIds },
+          });
+
+          return new Response(
+            JSON.stringify({ error: "Selected staff member is not eligible for this booking" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        assignedStaffId = selectedStaffId;
+      } else if (tenant.require_staff_selection) {
+        await supabase.from("audit_logs").insert({
+          tenant_id: tenantId,
+          actor_user_id: null,
+          action: "booking.staff_selection_denied",
+          entity_type: "booking",
+          metadata: { reason: "staff_selection_required", locationId, selectedServiceIds },
+        });
+
+        return new Response(
+          JSON.stringify({ error: "Staff selection is required for this booking" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } else if (tenant.auto_assign_staff && eligibleStaff.length > 0) {
+        assignedStaffId = eligibleStaff[0].user_id;
+      }
+    }
+
     // Create appointment
     const { data: appointment, error: appointmentError } = await supabase
       .from("appointments")
@@ -152,6 +226,7 @@ serve(async (req) => {
         tenant_id: tenantId,
         customer_id: customerId,
         location_id: locationId || null,
+        assigned_staff_id: assignedStaffId,
         scheduled_start: scheduledStart,
         scheduled_end: scheduledEnd,
         is_unscheduled: !scheduledStart,
@@ -170,6 +245,22 @@ serve(async (req) => {
         JSON.stringify({ error: "Failed to create appointment" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (assignedStaffId) {
+      await supabase.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: null,
+        action: selectedStaffId ? "booking.staff_assignment_changed" : "booking.staff_auto_assigned",
+        entity_type: "appointment",
+        entity_id: appointment.id,
+        metadata: {
+          assignedStaffId,
+          selectedStaffId: selectedStaffId || null,
+          locationId: locationId || null,
+          selectedServiceIds,
+        },
+      });
     }
 
     // Add services and products to appointment
