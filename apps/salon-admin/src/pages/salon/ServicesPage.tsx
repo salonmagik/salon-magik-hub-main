@@ -37,6 +37,7 @@ import {
   Archive,
   Trash2,
   Undo2,
+  Loader2,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -114,14 +115,16 @@ export default function ServicesPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [binOpen, setBinOpen] = useState(false);
   const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
+  const [binSelectMode, setBinSelectMode] = useState(false);
+  const [selectedBinItemKeys, setSelectedBinItemKeys] = useState<Set<string>>(new Set());
   
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
   
   // Pending deletion with undo
-  const [pendingDeletions, setPendingDeletions] = useState<Map<string, { timer: NodeJS.Timeout; countdown: number; reason: string }>>(new Map());
   const undoRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const undoToastRef = useRef<Map<string, { dismiss: () => void; update: (props: any) => void }>>(new Map());
 
   const { currentTenant, user } = useAuth();
   const { isOwner, currentRole, hasPermission } = usePermissions();
@@ -129,7 +132,7 @@ export default function ServicesPage() {
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
-  const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem } = useBinItems();
+  const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem, refetch: refetchBinItems } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
   const currency = currentTenant?.currency || "USD";
@@ -143,6 +146,8 @@ export default function ServicesPage() {
   const canFlag = hasPermission("catalog:flag");
   const canRestoreBinItems = hasPermission("catalog:edit");
   const canDeleteBinItems = hasPermission("catalog:delete");
+  const isBinBusy = binProcessingItemId !== null;
+  const makeBinKey = (item: { id: string; type: ItemType | "voucher" }) => `${item.type}:${item.id}`;
 
   const formatCurrency = (amount: number) => {
     return `${currency} ${Number(amount).toLocaleString(undefined, {
@@ -285,11 +290,8 @@ export default function ServicesPage() {
   const showDeleteOption = (canDelete || canRequestDelete) && activeTab !== "packages" && activeTab !== "vouchers";
 
   // Refetch all data
-  const refetchAll = () => {
-    refetchServices();
-    refetchPackages();
-    refetchProducts();
-    refetchVouchers();
+  const refetchAll = async () => {
+    await Promise.all([refetchServices(), refetchPackages(), refetchProducts(), refetchVouchers()]);
   };
 
   // Get selected items info for dialogs
@@ -380,7 +382,6 @@ export default function ServicesPage() {
     if (!user?.id) return;
     
     const itemsToDelete = Array.from(selectedItemsInfo);
-    const itemIds = itemsToDelete.map((i) => i.id);
     
     // Close dialog and clear selection
     setDeleteDialogOpen(false);
@@ -390,45 +391,49 @@ export default function ServicesPage() {
     let countdown = 5;
     const batchId = Date.now().toString();
     
-    const showUndoToast = () => {
-      toast({
+    const undoToast = toast({
         title: `Deleting ${itemsToDelete.length} item(s)...`,
         description: `Click Undo to cancel (${countdown}s)`,
-        duration: 1500,
+        duration: 6000,
         action: (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleUndo(batchId, itemIds)}
+            onClick={() => handleUndo(batchId)}
           >
             <Undo2 className="w-4 h-4 mr-1" />
             Undo
           </Button>
         ),
       });
-    };
-    
-    showUndoToast();
+    undoToastRef.current.set(batchId, { dismiss: undoToast.dismiss, update: undoToast.update });
     
     const interval = setInterval(() => {
       countdown--;
       if (countdown <= 0) {
         clearInterval(interval);
         undoRef.current.delete(batchId);
+        undoToastRef.current.get(batchId)?.dismiss();
+        undoToastRef.current.delete(batchId);
         executeSoftDelete(itemsToDelete);
       } else {
-        showUndoToast();
+        undoToastRef.current.get(batchId)?.update({
+          title: `Deleting ${itemsToDelete.length} item(s)...`,
+          description: `Click Undo to cancel (${countdown}s)`,
+        });
       }
     }, 1000);
     
     undoRef.current.set(batchId, interval);
   };
 
-  const handleUndo = (batchId: string, itemIds: string[]) => {
+  const handleUndo = (batchId: string) => {
     const interval = undoRef.current.get(batchId);
     if (interval) {
       clearInterval(interval);
       undoRef.current.delete(batchId);
+      undoToastRef.current.get(batchId)?.dismiss();
+      undoToastRef.current.delete(batchId);
       toast({ title: "Deletion Cancelled", description: "Items were not deleted" });
     }
   };
@@ -462,7 +467,7 @@ export default function ServicesPage() {
         title: "Sent to Bin", 
         description: `${items.length} item(s) moved to bin. Can be restored within 7 days.` 
       });
-      refetchAll();
+      await Promise.all([refetchAll(), refetchBinItems()]);
     } catch (err) {
       console.error("Error deleting items:", err);
       toast({ title: "Error", description: "Failed to delete items", variant: "destructive" });
@@ -643,6 +648,7 @@ export default function ServicesPage() {
   useEffect(() => {
     return () => {
       undoRef.current.forEach((interval) => clearInterval(interval));
+      undoToastRef.current.forEach((toastController) => toastController.dismiss());
     };
   }, []);
 
@@ -1077,14 +1083,133 @@ export default function ServicesPage() {
         </button>
       )}
 
-      <Dialog open={binOpen} onOpenChange={setBinOpen}>
+      <Dialog
+        open={binOpen}
+        onOpenChange={(open) => {
+          setBinOpen(open);
+          if (!open) {
+            setBinSelectMode(false);
+            setSelectedBinItemKeys(new Set());
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bin</DialogTitle>
             <DialogDescription>
               Restore deleted services, products, packages, and vouchers within 7 days.
             </DialogDescription>
+            <div className="text-xs text-muted-foreground">Total: {binItems.length}</div>
           </DialogHeader>
+
+          <div className={cn("space-y-4", isBinBusy && "pointer-events-none opacity-60")}>
+          {!binLoading && binItems.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isBinBusy}
+                  onClick={() => {
+                    if (binSelectMode) {
+                      setBinSelectMode(false);
+                      setSelectedBinItemKeys(new Set());
+                      return;
+                    }
+                    setBinSelectMode(true);
+                  }}
+                >
+                  {binSelectMode ? "Cancel Select" : "Select"}
+                </Button>
+                {binSelectMode && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isBinBusy}
+                    onClick={() => {
+                      if (selectedBinItemKeys.size === binItems.length) {
+                        setSelectedBinItemKeys(new Set());
+                        return;
+                      }
+                      setSelectedBinItemKeys(new Set(binItems.map((item) => makeBinKey(item))));
+                    }}
+                  >
+                    {selectedBinItemKeys.size === binItems.length ? "Clear All" : "Select All"}
+                  </Button>
+                )}
+              </div>
+
+              {binSelectMode && selectedBinItemKeys.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{selectedBinItemKeys.size} selected</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canRestoreBinItems || isBinBusy}
+                    onClick={async () => {
+                      const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
+                      setBinProcessingItemId("__bulk_restore__");
+                      let restoredCount = 0;
+                      for (const item of selectedItems) {
+                        const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+                        if (expiresAt.getTime() <= Date.now()) continue;
+                        const restored = await restoreItem(item.id, item.type, { silent: true, skipRefetch: true });
+                        if (restored) restoredCount++;
+                      }
+                      await Promise.all([refetchBinItems(), refetchAll()]);
+                      setBinProcessingItemId(null);
+                      setSelectedBinItemKeys(new Set());
+                      setBinSelectMode(false);
+                      toast({
+                        title: "Restore complete",
+                        description: restoredCount > 0 ? `${restoredCount} item(s) restored.` : "No selected items could be restored.",
+                      });
+                    }}
+                  >
+                    {binProcessingItemId === "__bulk_restore__" ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Restoring...
+                      </>
+                    ) : (
+                      "Restore selected"
+                    )}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={!canDeleteBinItems || isBinBusy}
+                    onClick={async () => {
+                      const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
+                      setBinProcessingItemId("__bulk_delete__");
+                      let deletedCount = 0;
+                      for (const item of selectedItems) {
+                        const deleted = await permanentlyDeleteItem(item.id, item.type, { silent: true, skipRefetch: true });
+                        if (deleted) deletedCount++;
+                      }
+                      await Promise.all([refetchBinItems(), refetchAll()]);
+                      setBinProcessingItemId(null);
+                      setSelectedBinItemKeys(new Set());
+                      setBinSelectMode(false);
+                      toast({
+                        title: "Delete complete",
+                        description: deletedCount > 0 ? `${deletedCount} item(s) permanently deleted.` : "No selected items were deleted.",
+                      });
+                    }}
+                  >
+                    {binProcessingItemId === "__bulk_delete__" ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      "Delete selected"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           {binLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1107,13 +1232,27 @@ export default function ServicesPage() {
                 return (
                   <Card key={`${item.type}-${item.id}`}>
                     <CardContent className="p-4 space-y-3">
-                      {item.image_urls && item.image_urls.length > 0 ? (
-                        <img
-                          src={item.image_urls[0]}
-                          alt={item.name}
-                          className="h-28 w-full rounded-md object-cover"
-                        />
-                      ) : null}
+                      {binSelectMode && (
+                        <div className="flex justify-end">
+                          <Checkbox
+                            checked={selectedBinItemKeys.has(makeBinKey(item))}
+                            onCheckedChange={(checked) => {
+                              setSelectedBinItemKeys((prev) => {
+                                const next = new Set(prev);
+                                const key = makeBinKey(item);
+                                if (checked) next.add(key);
+                                else next.delete(key);
+                                return next;
+                              });
+                            }}
+                          />
+                        </div>
+                      )}
+                      <img
+                        src={item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : "/placeholder.svg"}
+                        alt={item.name}
+                        className="h-28 w-full rounded-md object-cover"
+                      />
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h4 className="font-medium leading-tight">{item.name}</h4>
@@ -1132,30 +1271,68 @@ export default function ServicesPage() {
                           ? `${remainingDays} day(s) left before permanent deletion`
                           : "Restore window expired"}
                       </div>
+                      {item.location_names && item.location_names.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.location_names.map((locationName) => (
+                            <Badge key={`${item.id}-${locationName}`} variant="secondary" className="text-[10px]">
+                              {locationName}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={!canRestoreBinItems || !canStillRestore || binProcessingItemId === item.id}
-                          onClick={async () => {
-                            setBinProcessingItemId(item.id);
-                            await restoreItem(item.id, item.type);
-                            setBinProcessingItemId(null);
-                          }}
+                        disabled={
+                          binSelectMode ||
+                          !canRestoreBinItems ||
+                          !canStillRestore ||
+                          binProcessingItemId === item.id ||
+                          binProcessingItemId === "__bulk_restore__" ||
+                          binProcessingItemId === "__bulk_delete__"
+                        }
+                        onClick={async () => {
+                          setBinProcessingItemId(item.id);
+                          await restoreItem(item.id, item.type);
+                          await refetchAll();
+                          setBinProcessingItemId(null);
+                        }}
                         >
-                          Restore
+                          {binProcessingItemId === item.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Working...
+                            </>
+                          ) : (
+                            "Restore"
+                          )}
                         </Button>
                         <Button
                           variant="destructive"
                           size="sm"
-                          disabled={!canDeleteBinItems || binProcessingItemId === item.id}
-                          onClick={async () => {
-                            setBinProcessingItemId(item.id);
-                            await permanentlyDeleteItem(item.id, item.type);
-                            setBinProcessingItemId(null);
-                          }}
+                        disabled={
+                          binSelectMode ||
+                          !canDeleteBinItems ||
+                          binProcessingItemId === item.id ||
+                          binProcessingItemId === "__bulk_restore__" ||
+                          binProcessingItemId === "__bulk_delete__"
+                        }
+                        onClick={async () => {
+                          setBinProcessingItemId(item.id);
+                          await permanentlyDeleteItem(item.id, item.type);
+                          await refetchAll();
+                          setBinProcessingItemId(null);
+                        }}
                         >
-                          Delete now
+                          {binProcessingItemId === item.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Deleting...
+                            </>
+                          ) : (
+                            "Delete now"
+                          )}
                         </Button>
                       </div>
                     </CardContent>
@@ -1164,6 +1341,7 @@ export default function ServicesPage() {
               })}
             </div>
           )}
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -177,15 +177,21 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
             <Label>
               Amount ({currencySymbol}) <span className="text-destructive">*</span>
             </Label>
-            <Input
-              type="number"
-              placeholder="0.00"
-              value={formData.amount}
-              onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-              required
-              min="1"
-              step="0.01"
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                {currencySymbol}
+              </span>
+              <Input
+                type="number"
+                placeholder="0.00"
+                className="pl-8"
+                value={formData.amount}
+                onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                required
+                min="1"
+                step="0.01"
+              />
+            </div>
           </div>
 
           {/* Expiry Date */}

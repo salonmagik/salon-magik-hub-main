@@ -182,11 +182,11 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
                 Price ({currencySymbol}) <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
-                {/* <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <Input
                   type="number"
                   placeholder="0.00"
-                  className="pl-9"
+                  className="pl-8"
                   value={formData.price}
                   onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                   required

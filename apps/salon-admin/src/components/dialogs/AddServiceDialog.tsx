@@ -227,12 +227,12 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                 <Input
                   type="number"
                   placeholder="0.00"
-                  className="pl-9 pr-12"
+                  className="pl-8 pr-3"
                   value={formData.price}
                   onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                   required
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
               </div>
             </div>
             <div className="space-y-2">
