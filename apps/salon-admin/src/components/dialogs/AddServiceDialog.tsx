@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
@@ -10,6 +10,7 @@ import { Scissors, Clock, Loader2, Plus } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useServices } from "@/hooks/useServices";
 import { useAuth } from "@/hooks/useAuth";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { AddCategoryDialog } from "./AddCategoryDialog";
 import { getCurrencySymbol } from "@shared/currency";
@@ -40,6 +41,7 @@ const paymentOptions = [
 
 export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDialogProps) {
   const { currentTenant } = useAuth();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const { createService, createCategory, categories } = useServices();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addCategoryOpen, setAddCategoryOpen] = useState(false);
@@ -54,7 +56,17 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     buffer: "15",
     description: "",
     images: [] as string[],
+    locationId: "",
   });
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
+
+  useEffect(() => {
+    if (!open) return;
+    if (!formData.locationId && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    }
+  }, [defaultLocationId, formData.locationId, open]);
 
   const resetForm = () => {
     setFormData({
@@ -67,6 +79,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       buffer: "15",
       description: "",
       images: [],
+      locationId: defaultLocationId || "",
     });
   };
 
@@ -77,9 +90,10 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       formData.price !== "" &&
       parseFloat(formData.price) > 0 &&
       formData.duration !== "" &&
-      parseInt(formData.duration) > 0
+      parseInt(formData.duration) > 0 &&
+      selectedLocationId !== ""
     );
-  }, [formData]);
+  }, [formData, selectedLocationId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,6 +108,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         categoryId: formData.category || undefined,
         depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
         imageUrls: formData.images,
+        locationIds: [selectedLocationId],
       });
 
       if (result) {
@@ -121,6 +136,30 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {isChainTier && (
+            <div className="space-y-2">
+              <Label>
+                Branch <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.locationId}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
+                disabled={locationsLoading || manageableLocations.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {manageableLocations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Name & Category Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">

@@ -76,6 +76,41 @@ export function usePackages() {
     fetchPackages();
   }, [fetchPackages]);
 
+  const assignPackageToLocations = async (
+    tenantId: string,
+    packageId: string,
+    locationIds?: string[],
+  ) => {
+    let query = supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("availability", "open");
+
+    if (locationIds && locationIds.length > 0) {
+      query = query.in("id", locationIds);
+    }
+
+    const { data: locations, error: locationsError } = await query;
+
+    if (locationsError) throw locationsError;
+    if (!locations || locations.length === 0) return;
+
+    const rows = locations.map((location) => ({
+      tenant_id: tenantId,
+      package_id: packageId,
+      location_id: location.id,
+      is_enabled: true,
+    }));
+
+    const { error: mappingError } = await (supabase.from as any)("package_locations")
+      .upsert(rows, { onConflict: "package_id,location_id" });
+
+    if (mappingError) {
+      throw mappingError;
+    }
+  };
+
   const createPackage = async (data: {
     name: string;
     price: number;
@@ -83,6 +118,7 @@ export function usePackages() {
     originalPrice?: number;
     imageUrls?: string[];
     serviceItems?: { serviceId: string; quantity: number }[];
+    locationIds?: string[];
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -105,6 +141,7 @@ export function usePackages() {
         .single();
 
       if (pkgError) throw pkgError;
+      await assignPackageToLocations(currentTenant.id, pkg.id, data.locationIds);
 
       // Add package items if provided
       if (data.serviceItems && data.serviceItems.length > 0) {

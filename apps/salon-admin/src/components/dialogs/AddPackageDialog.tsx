@@ -5,6 +5,7 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Checkbox } from "@ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { ScrollArea } from "@ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Gift, Loader2, Save, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
@@ -12,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useServices } from "@/hooks/useServices";
 import { useProducts } from "@/hooks/useProducts";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
@@ -47,6 +49,7 @@ interface SelectedProduct {
 
 export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedItems = [] }: AddPackageDialogProps) {
   const { currentTenant } = useAuth();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const { services, isLoading: servicesLoading } = useServices();
   const { products, isLoading: productsLoading } = useProducts();
@@ -57,7 +60,10 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     price: "",
     description: "",
     images: [] as string[],
+    locationId: "",
   });
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
 
@@ -100,12 +106,20 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     }
   }, [open, preSelectedItems]);
 
+  useEffect(() => {
+    if (!open) return;
+    if (!formData.locationId && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    }
+  }, [defaultLocationId, formData.locationId, open]);
+
   const resetForm = () => {
     setFormData({
       name: "",
       price: "",
       description: "",
       images: [],
+      locationId: defaultLocationId || "",
     });
     setSelectedServices([]);
     setSelectedProducts([]);
@@ -205,6 +219,17 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
         if (productItemsError) throw productItemsError;
       }
 
+      const { error: mappingError } = await (supabase.from as any)("package_locations").upsert(
+        {
+          tenant_id: currentTenant.id,
+          package_id: pkg.id,
+          location_id: selectedLocationId,
+          is_enabled: true,
+        },
+        { onConflict: "package_id,location_id" },
+      );
+      if (mappingError) throw mappingError;
+
       toast({ title: "Success", description: "Package created successfully" });
       resetForm();
       onOpenChange(false);
@@ -228,9 +253,10 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       formData.name.trim() !== "" &&
       formData.price !== "" &&
       parseFloat(formData.price) > 0 &&
+      selectedLocationId !== "" &&
       totalItemsSelected > 0
     );
-  }, [formData, totalItemsSelected]);
+  }, [formData, selectedLocationId, totalItemsSelected]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -261,6 +287,30 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
               required
             />
           </div>
+
+          {isChainTier && (
+            <div className="space-y-2">
+              <Label>
+                Branch <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.locationId}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
+                disabled={locationsLoading || manageableLocations.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {manageableLocations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Select Items - Tabbed Interface */}
           <div className="space-y-2">

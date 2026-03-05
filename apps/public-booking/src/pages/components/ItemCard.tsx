@@ -1,6 +1,8 @@
-import { ShoppingBag, Clock, Package as PackageIcon } from "lucide-react";
+import { useState } from "react";
+import { ShoppingBag, Clock, Package as PackageIcon, MapPin } from "lucide-react";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
 import { useBookingCart } from "@/hooks";
 import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
@@ -18,6 +20,7 @@ interface ItemCardProps {
   imageUrls?: string[];
   durationMinutes?: number;
   stockQuantity?: number;
+  locationNames?: string[];
 }
 
 export function ItemCard({
@@ -31,7 +34,9 @@ export function ItemCard({
   imageUrls = [],
   durationMinutes,
   stockQuantity,
+  locationNames = [],
 }: ItemCardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const { addItem, getItemInCart, updateQuantity } = useBookingCart();
 
   const itemInCart = getItemInCart(id, type);
@@ -93,7 +98,19 @@ export function ItemCard({
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
 
   return (
-    <div className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px]">
+    <>
+    <div
+      className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px] cursor-pointer"
+      onClick={() => setDetailsOpen(true)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setDetailsOpen(true);
+        }
+      }}
+    >
       {/* Image + Content Row */}
       <div className="flex gap-3 mb-3">
         {/* Image Slider */}
@@ -132,6 +149,22 @@ export function ItemCard({
           {description && (
             <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{description}</p>
           )}
+
+          {locationNames.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {locationNames.slice(0, 3).map((locationName) => (
+                <Badge key={locationName} variant="outline" className="text-[10px] gap-1">
+                  <MapPin className="h-2.5 w-2.5" />
+                  {locationName}
+                </Badge>
+              ))}
+              {locationNames.length > 3 && (
+                <Badge variant="outline" className="text-[10px]">
+                  +{locationNames.length - 3} more
+                </Badge>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -169,7 +202,10 @@ export function ItemCard({
           <Button
             variant="outline"
             size="sm"
-            onClick={handleAddToCart}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleAddToCart();
+            }}
             disabled={isOutOfStock}
             className="gap-1.5 shrink-0 border-0"
             style={{ 
@@ -183,5 +219,89 @@ export function ItemCard({
         )}
       </div>
     </div>
+    <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{name}</DialogTitle>
+          <DialogDescription>
+            {typeLabel} details
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <ImageSlider images={imageUrls} alt={name} className="w-full h-56" />
+
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="text-xl font-bold">{formatCurrency(price, currency)}</div>
+              {hasDiscount && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground line-through">
+                    {formatCurrency(originalPrice, currency)}
+                  </span>
+                  <Badge variant="destructive">-{discountPercent}%</Badge>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              {type === "service" && durationMinutes && (
+                <Badge variant="secondary" className="gap-1">
+                  <Clock className="h-3 w-3" />
+                  {durationMinutes} min
+                </Badge>
+              )}
+              {type === "package" && (
+                <Badge variant="secondary" className="gap-1">
+                  <PackageIcon className="h-3 w-3" />
+                  Bundle
+                </Badge>
+              )}
+              {isOutOfStock && <Badge variant="outline">Out of Stock</Badge>}
+            </div>
+          </div>
+
+          {locationNames.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Available locations</div>
+              <div className="flex flex-wrap gap-2">
+                {locationNames.map((locationName) => (
+                  <Badge key={locationName} variant="outline" className="gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {locationName}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            {isInCart ? (
+              <QuantityControl
+                quantity={itemInCart.quantity}
+                onIncrement={handleIncrement}
+                onDecrement={handleDecrement}
+                size="sm"
+              />
+            ) : (
+              <Button
+                onClick={handleAddToCart}
+                disabled={isOutOfStock}
+                className="gap-1.5 border-0"
+                style={{
+                  backgroundColor: isOutOfStock ? undefined : "var(--brand-color)",
+                  color: isOutOfStock ? undefined : "var(--brand-foreground, white)",
+                }}
+              >
+                <ShoppingBag className="h-4 w-4" />
+                Add to cart
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

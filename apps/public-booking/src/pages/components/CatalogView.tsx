@@ -10,13 +10,20 @@ import {
   SelectValue,
 } from "@ui/select";
 import { ItemCard } from "./ItemCard";
-import type { PublicService, PublicPackage, PublicProduct, PublicCategory } from "@/hooks";
+import type {
+  PublicService,
+  PublicPackage,
+  PublicProduct,
+  PublicCategory,
+  PublicLocation,
+} from "@/hooks";
 
 interface CatalogViewProps {
   services: PublicService[];
   packages: PublicPackage[];
   products: PublicProduct[];
   categories: PublicCategory[];
+  locations: PublicLocation[];
   currency: string;
 }
 
@@ -33,6 +40,7 @@ type CatalogItem = {
   stockQuantity?: number;
   type: "service" | "package" | "product";
   categoryId?: string | null;
+  locationNames?: string[];
 };
 
 export function CatalogView({
@@ -40,12 +48,18 @@ export function CatalogView({
   packages,
   products,
   categories,
+  locations,
   currency,
 }: CatalogViewProps) {
   const [activeTab, setActiveTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name");
+
+  const locationNameById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location.name])),
+    [locations],
+  );
 
   // Normalize all items into a common format
   const allItems: CatalogItem[] = useMemo(() => {
@@ -58,6 +72,13 @@ export function CatalogView({
       durationMinutes: s.duration_minutes,
       type: "service" as const,
       categoryId: s.category_id,
+      locationNames: Array.from(
+        new Set(
+          (s.location_ids ?? [])
+            .map((locationId) => locationNameById.get(locationId))
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ),
     }));
 
     const packageItems: CatalogItem[] = packages.map((p) => ({
@@ -68,6 +89,13 @@ export function CatalogView({
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
       imageUrls: p.image_urls || [],
       type: "package" as const,
+      locationNames: Array.from(
+        new Set(
+          (p.location_ids ?? [])
+            .map((locationId) => locationNameById.get(locationId))
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ),
     }));
 
     const productItems: CatalogItem[] = products.map((p) => ({
@@ -78,10 +106,17 @@ export function CatalogView({
       imageUrls: p.image_urls || [],
       stockQuantity: p.stock_quantity,
       type: "product" as const,
+      locationNames: Array.from(
+        new Set(
+          (p.location_ids ?? [])
+            .map((locationId) => locationNameById.get(locationId))
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ),
     }));
 
     return [...serviceItems, ...packageItems, ...productItems];
-  }, [services, packages, products]);
+  }, [services, packages, products, locationNameById]);
 
   // Filter function
   const filterItems = (items: CatalogItem[]) => {
@@ -163,6 +198,7 @@ export function CatalogView({
             imageUrls={item.imageUrls}
             durationMinutes={item.durationMinutes}
             stockQuantity={item.stockQuantity}
+            locationNames={item.locationNames}
           />
         ))}
       </div>

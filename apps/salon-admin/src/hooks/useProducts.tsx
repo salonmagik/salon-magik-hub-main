@@ -56,12 +56,48 @@ export function useProducts() {
     fetchProducts();
   }, [fetchProducts]);
 
+  const assignProductToLocations = async (
+    tenantId: string,
+    productId: string,
+    locationIds?: string[],
+  ) => {
+    let query = supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("availability", "open");
+
+    if (locationIds && locationIds.length > 0) {
+      query = query.in("id", locationIds);
+    }
+
+    const { data: locations, error: locationsError } = await query;
+
+    if (locationsError) throw locationsError;
+    if (!locations || locations.length === 0) return;
+
+    const rows = locations.map((location) => ({
+      tenant_id: tenantId,
+      product_id: productId,
+      location_id: location.id,
+      is_enabled: true,
+    }));
+
+    const { error: mappingError } = await (supabase.from as any)("product_locations")
+      .upsert(rows, { onConflict: "product_id,location_id" });
+
+    if (mappingError) {
+      throw mappingError;
+    }
+  };
+
   const createProduct = async (data: {
     name: string;
     price: number;
     description?: string;
     stockQuantity?: number;
     imageUrls?: string[];
+    locationIds?: string[];
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -83,6 +119,7 @@ export function useProducts() {
         .single();
 
       if (error) throw error;
+      await assignProductToLocations(currentTenant.id, product.id, data.locationIds);
 
       toast({ title: "Success", description: "Product created successfully" });
       await fetchProducts();

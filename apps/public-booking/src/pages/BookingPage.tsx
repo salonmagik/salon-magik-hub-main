@@ -57,8 +57,8 @@ function BookingPageContent() {
   const { salon, locations, isLoading: salonLoading, notFound } = usePublicSalon(slug, selectedCountryCode);
 
   const locationIds = useMemo(
-    () => (selectedCountryCode ? locations.map((location) => location.id) : []),
-    [locations, selectedCountryCode],
+    () => locations.map((location) => location.id),
+    [locations],
   );
 
   const {
@@ -164,6 +164,7 @@ function BookingPageContent() {
                 packages={packages}
                 products={products}
                 categories={categories}
+                locations={locations}
                 currency={salon.currency}
               />
             ) : (

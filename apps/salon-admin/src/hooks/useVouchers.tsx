@@ -56,11 +56,47 @@ export function useVouchers() {
     fetchVouchers();
   }, [fetchVouchers]);
 
+  const assignVoucherToLocations = async (
+    tenantId: string,
+    voucherId: string,
+    locationIds?: string[],
+  ) => {
+    let query = supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("availability", "open");
+
+    if (locationIds && locationIds.length > 0) {
+      query = query.in("id", locationIds);
+    }
+
+    const { data: locations, error: locationsError } = await query;
+
+    if (locationsError) throw locationsError;
+    if (!locations || locations.length === 0) return;
+
+    const rows = locations.map((location) => ({
+      tenant_id: tenantId,
+      voucher_id: voucherId,
+      location_id: location.id,
+      is_enabled: true,
+    }));
+
+    const { error: mappingError } = await (supabase.from as any)("voucher_locations")
+      .upsert(rows, { onConflict: "voucher_id,location_id" });
+
+    if (mappingError) {
+      throw mappingError;
+    }
+  };
+
   const createVoucher = async (data: {
     code: string;
     amount: number;
     expiresAt?: string;
     purchasedByCustomerId?: string;
+    locationIds?: string[];
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -82,6 +118,7 @@ export function useVouchers() {
         .single();
 
       if (error) throw error;
+      await assignVoucherToLocations(currentTenant.id, voucher.id, data.locationIds);
 
       toast({ title: "Success", description: "Voucher created successfully" });
       await fetchVouchers();

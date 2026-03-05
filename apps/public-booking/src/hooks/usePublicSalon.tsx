@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@/lib/supabase";
+import { getCountryByCode } from "@shared/countries";
 
 export type PublicTenant = Pick<
   Tables<"tenants">,
@@ -70,15 +71,11 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
     queryFn: async (): Promise<PublicLocation[]> => {
       if (!tenantQuery.data?.id) return [];
 
-      let query = supabase
+      const query = supabase
         .from("locations")
         .select("id, name, city, country, address, opening_time, closing_time, opening_days, availability")
         .eq("tenant_id", tenantQuery.data.id)
         .eq("availability", "open");
-
-      if (countryCode) {
-        query = query.eq("country", countryCode);
-      }
 
       const { data, error } = await query;
 
@@ -87,7 +84,22 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
         throw error;
       }
 
-      return data || [];
+      const locations = data || [];
+
+      if (!countryCode) {
+        return locations;
+      }
+
+      const normalizedCode = countryCode.trim().toUpperCase();
+      const countryName = getCountryByCode(normalizedCode)?.name?.toUpperCase() ?? null;
+
+      return locations.filter((location) => {
+        const normalizedLocationCountry = (location.country || "").trim().toUpperCase();
+        return (
+          normalizedLocationCountry === normalizedCode ||
+          (countryName !== null && normalizedLocationCountry === countryName)
+        );
+      });
     },
     enabled: !!tenantQuery.data?.id,
   });

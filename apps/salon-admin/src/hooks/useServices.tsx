@@ -67,6 +67,41 @@ export function useServices() {
     fetchServices();
   }, [fetchServices]);
 
+  const assignServiceToLocations = async (
+    tenantId: string,
+    serviceId: string,
+    locationIds?: string[],
+  ) => {
+    let query = supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("availability", "open");
+
+    if (locationIds && locationIds.length > 0) {
+      query = query.in("id", locationIds);
+    }
+
+    const { data: locations, error: locationsError } = await query;
+
+    if (locationsError) throw locationsError;
+    if (!locations || locations.length === 0) return;
+
+    const rows = locations.map((location) => ({
+      tenant_id: tenantId,
+      service_id: serviceId,
+      location_id: location.id,
+      is_enabled: true,
+    }));
+
+    const { error: mappingError } = await (supabase.from as any)("service_locations")
+      .upsert(rows, { onConflict: "service_id,location_id" });
+
+    if (mappingError) {
+      throw mappingError;
+    }
+  };
+
   const createService = async (data: {
     name: string;
     price: number;
@@ -77,6 +112,7 @@ export function useServices() {
     depositAmount?: number;
     depositPercentage?: number;
     imageUrls?: string[];
+    locationIds?: string[];
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -102,6 +138,7 @@ export function useServices() {
         .single();
 
       if (error) throw error;
+      await assignServiceToLocations(currentTenant.id, service.id, data.locationIds);
 
       toast({ title: "Success", description: "Service created successfully" });
       await fetchServices();

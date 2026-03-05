@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Package, Hash, Loader2, Save } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { getCurrencySymbol } from "@shared/currency";
@@ -20,6 +21,7 @@ interface AddProductDialogProps {
 
 export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
   const { currentTenant } = useAuth();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -29,7 +31,17 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     status: "active",
     description: "",
     images: [] as string[],
+    locationId: "",
   });
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
+
+  useEffect(() => {
+    if (!open) return;
+    if (!formData.locationId && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    }
+  }, [defaultLocationId, formData.locationId, open]);
 
   const resetForm = () => {
     setFormData({
@@ -39,6 +51,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       status: "active",
       description: "",
       images: [],
+      locationId: defaultLocationId || "",
     });
   };
 
@@ -47,9 +60,10 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     return (
       formData.name.trim() !== "" &&
       formData.price !== "" &&
-      parseFloat(formData.price) > 0
+      parseFloat(formData.price) > 0 &&
+      selectedLocationId !== ""
     );
-  }, [formData]);
+  }, [formData, selectedLocationId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +76,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("products").insert({
+      const { data: product, error } = await supabase.from("products").insert({
         tenant_id: currentTenant.id,
         name: formData.name,
         price: parseFloat(formData.price),
@@ -70,9 +84,21 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
         status: formData.status as "active" | "inactive" | "archived",
         description: formData.description || null,
         image_urls: formData.images,
-      });
+      }).select("id").single();
 
       if (error) throw error;
+      if (product?.id) {
+        const { error: mappingError } = await (supabase.from as any)("product_locations").upsert(
+          {
+            tenant_id: currentTenant.id,
+            product_id: product.id,
+            location_id: selectedLocationId,
+            is_enabled: true,
+          },
+          { onConflict: "product_id,location_id" },
+        );
+        if (mappingError) throw mappingError;
+      }
 
       toast({ title: "Success", description: "Product created successfully" });
       resetForm();
@@ -112,6 +138,31 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
               required
             />
           </div>
+
+          {/* Price & Stock Row */}
+          {isChainTier && (
+            <div className="space-y-2">
+              <Label>
+                Branch <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={formData.locationId}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
+                disabled={locationsLoading || manageableLocations.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {manageableLocations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Price & Stock Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -14,17 +14,23 @@ export type PublicService = Pick<
   | "deposit_required"
   | "deposit_amount"
   | "deposit_percentage"
->;
+> & {
+  location_ids?: string[];
+};
 
 export type PublicPackage = Pick<
   Tables<"packages">,
   "id" | "name" | "description" | "price" | "original_price" | "image_urls"
->;
+> & {
+  location_ids?: string[];
+};
 
 export type PublicProduct = Pick<
   Tables<"products">,
   "id" | "name" | "description" | "price" | "image_urls" | "stock_quantity"
->;
+> & {
+  location_ids?: string[];
+};
 
 export type PublicCategory = Pick<
   Tables<"service_categories">,
@@ -53,28 +59,55 @@ export function usePublicCatalog(
   countryCode?: string | null,
   locationIds: string[] = [],
 ) {
+  const shouldUseLocationMappings = locationIds.length > 0;
+
   const servicesQuery = useQuery({
     queryKey: ["public-services", tenantId, countryCode ?? null, locationIds],
     queryFn: async (): Promise<PublicService[]> => {
-      if (!tenantId || locationIds.length === 0) return [];
+      if (!tenantId) return [];
 
-      const { data: serviceMappings, error: mappingError } = await (supabase.from as any)("service_locations")
-        .select("service_id, location_id, price_override")
-        .eq("tenant_id", tenantId)
-        .eq("is_enabled", true)
-        .in("location_id", locationIds);
+      let mappedRows: Array<LocationMappedRow & { service_id: string }> = [];
+      let serviceIds: string[] = [];
 
-      if (mappingError) {
-        console.error("Error fetching service mappings:", mappingError);
-        throw mappingError;
+      if (shouldUseLocationMappings) {
+        const { data: serviceMappings, error: mappingError } = await (supabase.from as any)("service_locations")
+          .select("service_id, location_id, price_override")
+          .eq("tenant_id", tenantId)
+          .eq("is_enabled", true)
+          .in("location_id", locationIds);
+
+        if (mappingError) {
+          console.warn("Service location mappings unavailable, falling back to base services:", mappingError);
+        } else {
+          mappedRows = (serviceMappings ?? []) as Array<
+            LocationMappedRow & { service_id: string }
+          >;
+          serviceIds = Array.from(new Set(mappedRows.map((row) => row.service_id)));
+        }
       }
 
-      const mappedRows = (serviceMappings ?? []) as Array<
-        LocationMappedRow & { service_id: string }
-      >;
+      // Backward-compatible fallback for tenants that do not have location mappings yet.
+      if (!shouldUseLocationMappings || serviceIds.length === 0) {
+        const { data, error } = await supabase
+          .from("services")
+          .select(
+            `id, name, description, price, duration_minutes, image_urls, category_id,
+             deposit_required, deposit_amount, deposit_percentage`,
+          )
+          .eq("tenant_id", tenantId)
+          .eq("status", "active")
+          .is("deleted_at", null);
 
-      const serviceIds = Array.from(new Set(mappedRows.map((row) => row.service_id)));
-      if (serviceIds.length === 0) return [];
+        if (error) {
+          console.error("Error fetching fallback services:", error);
+          throw error;
+        }
+
+        return (data ?? []).map((service) => ({
+          ...service,
+          location_ids: locationIds,
+        }));
+      }
 
       const { data, error } = await supabase
         .from("services")
@@ -94,9 +127,13 @@ export function usePublicCatalog(
 
       return (data ?? []).map((service) => {
         const mappingsForService = mappedRows.filter((row) => row.service_id === service.id);
+        const mappedLocationIds = Array.from(
+          new Set(mappingsForService.map((row) => row.location_id)),
+        );
         return {
           ...service,
           price: buildEffectivePrice(service.price, mappingsForService),
+          location_ids: mappedLocationIds,
         };
       });
     },
@@ -106,25 +143,47 @@ export function usePublicCatalog(
   const packagesQuery = useQuery({
     queryKey: ["public-packages", tenantId, countryCode ?? null, locationIds],
     queryFn: async (): Promise<PublicPackage[]> => {
-      if (!tenantId || locationIds.length === 0) return [];
+      if (!tenantId) return [];
 
-      const { data: packageMappings, error: mappingError } = await (supabase.from as any)("package_locations")
-        .select("package_id, location_id, price_override")
-        .eq("tenant_id", tenantId)
-        .eq("is_enabled", true)
-        .in("location_id", locationIds);
+      let mappedRows: Array<LocationMappedRow & { package_id: string }> = [];
+      let packageIds: string[] = [];
 
-      if (mappingError) {
-        console.error("Error fetching package mappings:", mappingError);
-        throw mappingError;
+      if (shouldUseLocationMappings) {
+        const { data: packageMappings, error: mappingError } = await (supabase.from as any)("package_locations")
+          .select("package_id, location_id, price_override")
+          .eq("tenant_id", tenantId)
+          .eq("is_enabled", true)
+          .in("location_id", locationIds);
+
+        if (mappingError) {
+          console.warn("Package location mappings unavailable, falling back to base packages:", mappingError);
+        } else {
+          mappedRows = (packageMappings ?? []) as Array<
+            LocationMappedRow & { package_id: string }
+          >;
+          packageIds = Array.from(new Set(mappedRows.map((row) => row.package_id)));
+        }
       }
 
-      const mappedRows = (packageMappings ?? []) as Array<
-        LocationMappedRow & { package_id: string }
-      >;
+      // Backward-compatible fallback for tenants that do not have location mappings yet.
+      if (!shouldUseLocationMappings || packageIds.length === 0) {
+        const { data, error } = await supabase
+          .from("packages")
+          .select("id, name, description, price, original_price, image_urls")
+          .eq("tenant_id", tenantId)
+          .eq("status", "active")
+          .is("deleted_at", null);
 
-      const packageIds = Array.from(new Set(mappedRows.map((row) => row.package_id)));
-      if (packageIds.length === 0) return [];
+        if (error) {
+          console.error("Error fetching fallback packages:", error);
+          throw error;
+        }
+
+        return (data ?? []).map((pkg) => ({
+          ...pkg,
+          location_ids: locationIds,
+        }));
+      }
 
       const { data, error } = await supabase
         .from("packages")
@@ -141,9 +200,13 @@ export function usePublicCatalog(
 
       return (data ?? []).map((pkg) => {
         const mappingsForPackage = mappedRows.filter((row) => row.package_id === pkg.id);
+        const mappedLocationIds = Array.from(
+          new Set(mappingsForPackage.map((row) => row.location_id)),
+        );
         return {
           ...pkg,
           price: buildEffectivePrice(pkg.price, mappingsForPackage),
+          location_ids: mappedLocationIds,
         };
       });
     },
@@ -153,25 +216,47 @@ export function usePublicCatalog(
   const productsQuery = useQuery({
     queryKey: ["public-products", tenantId, countryCode ?? null, locationIds],
     queryFn: async (): Promise<PublicProduct[]> => {
-      if (!tenantId || locationIds.length === 0) return [];
+      if (!tenantId) return [];
 
-      const { data: productMappings, error: mappingError } = await (supabase.from as any)("product_locations")
-        .select("product_id, location_id, price_override")
-        .eq("tenant_id", tenantId)
-        .eq("is_enabled", true)
-        .in("location_id", locationIds);
+      let mappedRows: Array<LocationMappedRow & { product_id: string }> = [];
+      let productIds: string[] = [];
 
-      if (mappingError) {
-        console.error("Error fetching product mappings:", mappingError);
-        throw mappingError;
+      if (shouldUseLocationMappings) {
+        const { data: productMappings, error: mappingError } = await (supabase.from as any)("product_locations")
+          .select("product_id, location_id, price_override")
+          .eq("tenant_id", tenantId)
+          .eq("is_enabled", true)
+          .in("location_id", locationIds);
+
+        if (mappingError) {
+          console.warn("Product location mappings unavailable, falling back to base products:", mappingError);
+        } else {
+          mappedRows = (productMappings ?? []) as Array<
+            LocationMappedRow & { product_id: string }
+          >;
+          productIds = Array.from(new Set(mappedRows.map((row) => row.product_id)));
+        }
       }
 
-      const mappedRows = (productMappings ?? []) as Array<
-        LocationMappedRow & { product_id: string }
-      >;
+      // Backward-compatible fallback for tenants that do not have location mappings yet.
+      if (!shouldUseLocationMappings || productIds.length === 0) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("id, name, description, price, image_urls, stock_quantity")
+          .eq("tenant_id", tenantId)
+          .eq("status", "active")
+          .is("deleted_at", null);
 
-      const productIds = Array.from(new Set(mappedRows.map((row) => row.product_id)));
-      if (productIds.length === 0) return [];
+        if (error) {
+          console.error("Error fetching fallback products:", error);
+          throw error;
+        }
+
+        return (data ?? []).map((product) => ({
+          ...product,
+          location_ids: locationIds,
+        }));
+      }
 
       const { data, error } = await supabase
         .from("products")
@@ -188,9 +273,13 @@ export function usePublicCatalog(
 
       return (data ?? []).map((product) => {
         const mappingsForProduct = mappedRows.filter((row) => row.product_id === product.id);
+        const mappedLocationIds = Array.from(
+          new Set(mappingsForProduct.map((row) => row.location_id)),
+        );
         return {
           ...product,
           price: buildEffectivePrice(product.price, mappingsForProduct),
+          location_ids: mappedLocationIds,
         };
       });
     },
