@@ -20,7 +20,7 @@ export interface BinItem {
 }
 
 export function useBinItems() {
-  const { currentTenant, user } = useAuth();
+  const { currentTenant } = useAuth();
   const [binItems, setBinItems] = useState<BinItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -37,7 +37,6 @@ export function useBinItems() {
 
     try {
       const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
       // Fetch deleted services
       const { data: deletedServices, error: servicesError } = await supabase
@@ -45,7 +44,6 @@ export function useBinItems() {
         .select("id, name, description, price, deleted_at, deleted_by_id, deletion_reason, image_urls")
         .eq("tenant_id", currentTenant.id)
         .not("deleted_at", "is", null)
-        .gte("deleted_at", sevenDaysAgo.toISOString())
         .order("deleted_at", { ascending: false });
 
       if (servicesError) throw servicesError;
@@ -56,7 +54,6 @@ export function useBinItems() {
         .select("id, name, description, price, deleted_at, deleted_by_id, deletion_reason, image_urls")
         .eq("tenant_id", currentTenant.id)
         .not("deleted_at", "is", null)
-        .gte("deleted_at", sevenDaysAgo.toISOString())
         .order("deleted_at", { ascending: false });
 
       if (productsError) throw productsError;
@@ -67,7 +64,6 @@ export function useBinItems() {
         .select("id, name, description, price, deleted_at, deleted_by_id, deletion_reason, image_urls")
         .eq("tenant_id", currentTenant.id)
         .not("deleted_at", "is", null)
-        .gte("deleted_at", sevenDaysAgo.toISOString())
         .order("deleted_at", { ascending: false });
 
       if (packagesError) throw packagesError;
@@ -78,7 +74,6 @@ export function useBinItems() {
         .select("id, code, amount, deleted_at, deleted_by_id, deletion_reason")
         .eq("tenant_id", currentTenant.id)
         .not("deleted_at", "is", null)
-        .gte("deleted_at", sevenDaysAgo.toISOString())
         .order("deleted_at", { ascending: false });
 
       if (vouchersError) throw vouchersError;

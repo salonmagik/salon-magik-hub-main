@@ -29,6 +29,7 @@ import {
 } from "@ui/select";
 import { isLightColor } from "@shared/color";
 import { getCountryByCode } from "@shared/countries";
+import { getCurrencyForCountryCode } from "@shared/country-currency";
 
 function BookingPageContent() {
   const { slug: routeSlug } = useParams<{ slug: string }>();
@@ -42,6 +43,7 @@ function BookingPageContent() {
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [modalCountryCode, setModalCountryCode] = useState<string | null>(null);
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
 
   const {
     selectedCountryCode,
@@ -60,6 +62,10 @@ function BookingPageContent() {
     () => locations.map((location) => location.id),
     [locations],
   );
+  const scopedLocationIds = useMemo(() => {
+    if (selectedLocationIds.length === 0) return locationIds;
+    return selectedLocationIds.filter((locationId) => locationIds.includes(locationId));
+  }, [locationIds, selectedLocationIds]);
 
   const {
     services,
@@ -67,9 +73,10 @@ function BookingPageContent() {
     products,
     categories,
     isLoading: catalogLoading,
-  } = usePublicCatalog(salon?.id, selectedCountryCode, locationIds);
+  } = usePublicCatalog(salon?.id, selectedCountryCode, scopedLocationIds);
 
   const cartScopeKey = `${slug ?? "unknown"}:${selectedCountryCode ?? "unselected"}`;
+  const storefrontCurrency = getCurrencyForCountryCode(selectedCountryCode, salon?.currency || "USD");
   const isCatalogBlocked = requiresCountrySelection && !selectedCountryCode;
   const isLoading = salonLoading || countryContextLoading || (!isCatalogBlocked && catalogLoading);
 
@@ -111,6 +118,14 @@ function BookingPageContent() {
       setModalCountryCode(supportedCountryCodes[0]);
     }
   }, [isCatalogBlocked, supportedCountryCodes, modalCountryCode]);
+
+  useEffect(() => {
+    if (locationIds.length === 0) {
+      setSelectedLocationIds([]);
+      return;
+    }
+    setSelectedLocationIds((prev) => prev.filter((locationId) => locationIds.includes(locationId)));
+  }, [locationIds]);
 
   if (isLoading) {
     return (
@@ -165,7 +180,9 @@ function BookingPageContent() {
                 products={products}
                 categories={categories}
                 locations={locations}
-                currency={salon.currency}
+                currency={storefrontCurrency}
+                selectedLocationIds={selectedLocationIds}
+                onLocationFilterChange={setSelectedLocationIds}
               />
             ) : (
               <div className="rounded-xl border bg-muted/20 p-8 text-center space-y-2">

@@ -5,6 +5,8 @@ import { useAuth } from "@/hooks/useAuth";
 export interface ManageableLocationOption {
   id: string;
   name: string;
+  city: string | null;
+  country: string | null;
 }
 
 export function useManageableLocations() {
@@ -26,7 +28,7 @@ export function useManageableLocations() {
       try {
         let query = supabase
           .from("locations")
-          .select("id, name")
+          .select("id, name, city, country")
           .eq("tenant_id", currentTenant.id)
           .eq("availability", "open")
           .order("name", { ascending: true });
@@ -73,4 +75,3 @@ export function useManageableLocations() {
     isLoading,
   };
 }
-

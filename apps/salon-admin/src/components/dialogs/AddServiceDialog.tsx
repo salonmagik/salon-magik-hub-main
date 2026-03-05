@@ -12,8 +12,10 @@ import { useServices } from "@/hooks/useServices";
 import { useAuth } from "@/hooks/useAuth";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { AddCategoryDialog } from "./AddCategoryDialog";
 import { getCurrencySymbol } from "@shared/currency";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 
 interface AddServiceDialogProps {
   open: boolean;
@@ -45,41 +47,56 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
   const { createService, createCategory, categories } = useServices();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addCategoryOpen, setAddCategoryOpen] = useState(false);
-  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const [formData, setFormData] = useState({
     name: "",
     category: "",
     price: "",
-    currency: currentTenant?.currency || "USD",
     duration: "60",
     paymentOption: "full",
     buffer: "15",
     description: "",
     images: [] as string[],
-    locationId: "",
+    locationIds: [] as string[],
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
-  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = defaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [defaultLocationId, formData.locationIds, isChainTier, manageableLocations]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+  const hasMixedCurrencies = locationCurrencies.length > 1;
 
   useEffect(() => {
     if (!open) return;
-    if (!formData.locationId && defaultLocationId) {
-      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    if (isChainTier) {
+      if (formData.locationIds.length === 0 && defaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+      }
+      return;
     }
-  }, [defaultLocationId, formData.locationId, open]);
+    if (formData.locationIds.length === 0 && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+    }
+  }, [defaultLocationId, formData.locationIds.length, isChainTier, open]);
 
   const resetForm = () => {
     setFormData({
       name: "",
       category: "",
       price: "",
-      currency: currentTenant?.currency || "USD",
       duration: "60",
       paymentOption: "full",
       buffer: "15",
       description: "",
       images: [],
-      locationId: defaultLocationId || "",
+      locationIds: defaultLocationId ? [defaultLocationId] : [],
     });
   };
 
@@ -91,9 +108,10 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       parseFloat(formData.price) > 0 &&
       formData.duration !== "" &&
       parseInt(formData.duration) > 0 &&
-      selectedLocationId !== ""
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies
     );
-  }, [formData, selectedLocationId]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,7 +126,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         categoryId: formData.category || undefined,
         depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
         imageUrls: formData.images,
-        locationIds: [selectedLocationId],
+        locationIds: selectedLocationIds,
       });
 
       if (result) {
@@ -137,27 +155,17 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           {isChainTier && (
-            <div className="space-y-2">
-              <Label>
-                Branch <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.locationId}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
-                disabled={locationsLoading || manageableLocations.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {manageableLocations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LocationScopePicker
+              locations={manageableLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || manageableLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
           )}
 
           {/* Name & Category Row */}
@@ -229,19 +237,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             </div>
             <div className="space-y-2">
               <Label>Currency</Label>
-              <Select
-                value={formData.currency}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, currency: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GHS">Ghanaian Cedi</SelectItem>
-                  <SelectItem value="NGN">Nigerian Naira</SelectItem>
-                  <SelectItem value="USD">US Dollar</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input value={selectedCurrency} disabled />
             </div>
             <div className="space-y-2">
               <Label>

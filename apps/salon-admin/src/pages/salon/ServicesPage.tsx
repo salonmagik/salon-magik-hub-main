@@ -8,6 +8,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Skeleton } from "@ui/skeleton";
 import { Checkbox } from "@ui/checkbox";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -54,6 +61,7 @@ import { useServices } from "@/hooks/useServices";
 import { usePackages } from "@/hooks/usePackages";
 import { useProducts } from "@/hooks/useProducts";
 import { useVouchers } from "@/hooks/useVouchers";
+import { useBinItems } from "@/hooks/useBinItems";
 import { useDeletionRequests } from "@/hooks/useDeletionRequests";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -104,6 +112,8 @@ export default function ServicesPage() {
   const [requestDeleteDialogOpen, setRequestDeleteDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [binOpen, setBinOpen] = useState(false);
+  const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
   
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
@@ -119,6 +129,7 @@ export default function ServicesPage() {
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
+  const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
   const currency = currentTenant?.currency || "USD";
@@ -130,6 +141,8 @@ export default function ServicesPage() {
   const canRequestDelete = hasPermission("catalog:request_delete");
   const canArchive = hasPermission("catalog:archive");
   const canFlag = hasPermission("catalog:flag");
+  const canRestoreBinItems = hasPermission("catalog:edit");
+  const canDeleteBinItems = hasPermission("catalog:delete");
 
   const formatCurrency = (amount: number) => {
     return `${currency} ${Number(amount).toLocaleString(undefined, {
@@ -1052,6 +1065,107 @@ export default function ServicesPage() {
         templateFileName={importType}
         onImport={handleImportCatalog}
       />
+
+      {selectedItems.size === 0 && (
+        <button
+          type="button"
+          onClick={() => setBinOpen(true)}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg hover:opacity-95"
+        >
+          <Trash2 className="h-4 w-4" />
+          Bin ({binItems.length})
+        </button>
+      )}
+
+      <Dialog open={binOpen} onOpenChange={setBinOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bin</DialogTitle>
+            <DialogDescription>
+              Restore deleted services, products, packages, and vouchers within 7 days.
+            </DialogDescription>
+          </DialogHeader>
+
+          {binLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-36 rounded-xl" />
+              ))}
+            </div>
+          ) : binItems.length === 0 ? (
+            <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+              Bin is empty.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {binItems.map((item) => {
+                const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+                const remainingMs = expiresAt.getTime() - Date.now();
+                const canStillRestore = remainingMs > 0;
+                const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
+
+                return (
+                  <Card key={`${item.type}-${item.id}`}>
+                    <CardContent className="p-4 space-y-3">
+                      {item.image_urls && item.image_urls.length > 0 ? (
+                        <img
+                          src={item.image_urls[0]}
+                          alt={item.name}
+                          className="h-28 w-full rounded-md object-cover"
+                        />
+                      ) : null}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-medium leading-tight">{item.name}</h4>
+                          {item.description ? (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {item.description}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Badge variant="outline" className="uppercase text-[10px]">
+                          {item.type}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {canStillRestore
+                          ? `${remainingDays} day(s) left before permanent deletion`
+                          : "Restore window expired"}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={!canRestoreBinItems || !canStillRestore || binProcessingItemId === item.id}
+                          onClick={async () => {
+                            setBinProcessingItemId(item.id);
+                            await restoreItem(item.id, item.type);
+                            setBinProcessingItemId(null);
+                          }}
+                        >
+                          Restore
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={!canDeleteBinItems || binProcessingItemId === item.id}
+                          onClick={async () => {
+                            setBinProcessingItemId(item.id);
+                            await permanentlyDeleteItem(item.id, item.type);
+                            setBinProcessingItemId(null);
+                          }}
+                        >
+                          Delete now
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View/Edit Dialogs */}
       <EditServiceDialog

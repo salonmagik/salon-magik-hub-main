@@ -9,12 +9,14 @@ import {
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
 import { Gift, Loader2, Save, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useVouchers } from "@/hooks/useVouchers";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
+import { getCurrencySymbol } from "@shared/currency";
 
 interface AddVoucherDialogProps {
   open: boolean;
@@ -35,29 +37,47 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
   const { currentTenant } = useAuth();
   const { createVoucher } = useVouchers();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     code: generateVoucherCode(),
     amount: "",
     expiresAt: "",
-    locationId: "",
+    locationIds: [] as string[],
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
-  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = defaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [defaultLocationId, formData.locationIds, isChainTier, manageableLocations]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const hasMixedCurrencies = locationCurrencies.length > 1;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
 
   useEffect(() => {
     if (!open) return;
-    if (!formData.locationId && defaultLocationId) {
-      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    if (isChainTier) {
+      if (formData.locationIds.length === 0 && defaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+      }
+      return;
     }
-  }, [defaultLocationId, formData.locationId, open]);
+    if (formData.locationIds.length === 0 && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+    }
+  }, [defaultLocationId, formData.locationIds.length, isChainTier, open]);
 
   const resetForm = () => {
     setFormData({
       code: generateVoucherCode(),
       amount: "",
       expiresAt: "",
-      locationId: defaultLocationId || "",
+      locationIds: defaultLocationId ? [defaultLocationId] : [],
     });
   };
 
@@ -71,9 +91,10 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
       formData.code.trim() !== "" &&
       formData.amount !== "" &&
       parseFloat(formData.amount) > 0 &&
-      selectedLocationId !== ""
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies
     );
-  }, [formData, selectedLocationId]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +105,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
         code: formData.code,
         amount: parseFloat(formData.amount),
         expiresAt: formData.expiresAt || undefined,
-        locationIds: [selectedLocationId],
+        locationIds: selectedLocationIds,
       });
 
       if (result) {
@@ -139,32 +160,22 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
 
           {/* Amount */}
           {isChainTier && (
-            <div className="space-y-2">
-              <Label>
-                Branch <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.locationId}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
-                disabled={locationsLoading || manageableLocations.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {manageableLocations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LocationScopePicker
+              locations={manageableLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || manageableLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
           )}
 
           <div className="space-y-2">
             <Label>
-              Amount <span className="text-destructive">*</span>
+              Amount ({currencySymbol}) <span className="text-destructive">*</span>
             </Label>
             <Input
               type="number"

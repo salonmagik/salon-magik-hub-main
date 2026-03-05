@@ -11,7 +11,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrencySymbol } from "@shared/currency";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -22,7 +24,7 @@ interface AddProductDialogProps {
 export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
   const { currentTenant } = useAuth();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
-  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -31,17 +33,34 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     status: "active",
     description: "",
     images: [] as string[],
-    locationId: "",
+    locationIds: [] as string[],
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
-  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = defaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [defaultLocationId, formData.locationIds, isChainTier, manageableLocations]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+  const hasMixedCurrencies = locationCurrencies.length > 1;
 
   useEffect(() => {
     if (!open) return;
-    if (!formData.locationId && defaultLocationId) {
-      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    if (isChainTier) {
+      if (formData.locationIds.length === 0 && defaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+      }
+      return;
     }
-  }, [defaultLocationId, formData.locationId, open]);
+    if (formData.locationIds.length === 0 && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+    }
+  }, [defaultLocationId, formData.locationIds.length, isChainTier, open]);
 
   const resetForm = () => {
     setFormData({
@@ -51,7 +70,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       status: "active",
       description: "",
       images: [],
-      locationId: defaultLocationId || "",
+      locationIds: defaultLocationId ? [defaultLocationId] : [],
     });
   };
 
@@ -61,9 +80,10 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       formData.name.trim() !== "" &&
       formData.price !== "" &&
       parseFloat(formData.price) > 0 &&
-      selectedLocationId !== ""
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies
     );
-  }, [formData, selectedLocationId]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,13 +108,14 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
 
       if (error) throw error;
       if (product?.id) {
+        const mappingRows = selectedLocationIds.map((locationId) => ({
+          tenant_id: currentTenant.id,
+          product_id: product.id,
+          location_id: locationId,
+          is_enabled: true,
+        }));
         const { error: mappingError } = await (supabase.from as any)("product_locations").upsert(
-          {
-            tenant_id: currentTenant.id,
-            product_id: product.id,
-            location_id: selectedLocationId,
-            is_enabled: true,
-          },
+          mappingRows,
           { onConflict: "product_id,location_id" },
         );
         if (mappingError) throw mappingError;
@@ -141,27 +162,17 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
 
           {/* Price & Stock Row */}
           {isChainTier && (
-            <div className="space-y-2">
-              <Label>
-                Branch <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.locationId}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
-                disabled={locationsLoading || manageableLocations.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {manageableLocations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LocationScopePicker
+              locations={manageableLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || manageableLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
           )}
 
           {/* Price & Stock Row */}

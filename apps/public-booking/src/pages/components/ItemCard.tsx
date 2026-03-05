@@ -233,6 +233,17 @@ export function ItemCard({
 
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
 
+          {locationNames.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {locationNames.map((locationName) => (
+                <Badge key={locationName} variant="outline" className="text-xs gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {locationName}
+                </Badge>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-xl font-bold">{formatCurrency(price, currency)}</div>

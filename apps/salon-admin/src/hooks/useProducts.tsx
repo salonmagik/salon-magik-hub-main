@@ -17,7 +17,7 @@ export interface Product {
 }
 
 export function useProducts() {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -33,13 +33,37 @@ export function useProducts() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let scopedProductIds: string[] | null = null;
+      if (activeLocationId) {
+        const { data: mappings, error: mappingError } = await (supabase.from as any)("product_locations")
+          .select("product_id")
+          .eq("tenant_id", currentTenant.id)
+          .eq("location_id", activeLocationId)
+          .eq("is_enabled", true);
+        if (mappingError) throw mappingError;
+        scopedProductIds = Array.from(
+          new Set(((mappings ?? []) as Array<{ product_id: string }>).map((row) => row.product_id)),
+        );
+      }
+
+      if (scopedProductIds && scopedProductIds.length === 0) {
+        setProducts([]);
+        return;
+      }
+
+      let query = supabase
         .from("products")
         .select("*")
         .eq("tenant_id", currentTenant.id)
         .neq("status", "archived")
         .is("deleted_at", null)
         .order("name", { ascending: true });
+
+      if (scopedProductIds) {
+        query = query.in("id", scopedProductIds);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
 
@@ -50,7 +74,7 @@ export function useProducts() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [activeLocationId, currentTenant?.id]);
 
   useEffect(() => {
     fetchProducts();

@@ -31,7 +31,7 @@ export interface Package {
 }
 
 export function usePackages() {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const [packages, setPackages] = useState<Package[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -47,7 +47,25 @@ export function usePackages() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let scopedPackageIds: string[] | null = null;
+      if (activeLocationId) {
+        const { data: mappings, error: mappingError } = await (supabase.from as any)("package_locations")
+          .select("package_id")
+          .eq("tenant_id", currentTenant.id)
+          .eq("location_id", activeLocationId)
+          .eq("is_enabled", true);
+        if (mappingError) throw mappingError;
+        scopedPackageIds = Array.from(
+          new Set(((mappings ?? []) as Array<{ package_id: string }>).map((row) => row.package_id)),
+        );
+      }
+
+      if (scopedPackageIds && scopedPackageIds.length === 0) {
+        setPackages([]);
+        return;
+      }
+
+      let query = supabase
         .from("packages")
         .select(`
           *,
@@ -61,6 +79,12 @@ export function usePackages() {
         .is("deleted_at", null)
         .order("name", { ascending: true });
 
+      if (scopedPackageIds) {
+        query = query.in("id", scopedPackageIds);
+      }
+
+      const { data, error: fetchError } = await query;
+
       if (fetchError) throw fetchError;
 
       setPackages((data as Package[]) || []);
@@ -70,7 +94,7 @@ export function usePackages() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [activeLocationId, currentTenant?.id]);
 
   useEffect(() => {
     fetchPackages();

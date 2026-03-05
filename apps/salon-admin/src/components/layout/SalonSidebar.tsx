@@ -150,6 +150,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
   const [refreshingAccess, setRefreshingAccess] = useState(false);
   const location = useLocation();
@@ -490,7 +491,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       {(isExpanded || isMobileOpen) && <GlobalBanner />}
 
       {/* Main Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 space-y-1 relative z-10">
+  <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 space-y-1 relative z-10">
         {permissionsLoading ? (
           // Show skeleton during loading to prevent flash
           <div className="space-y-2">
@@ -515,7 +516,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} />
 
         <button
-          onClick={handleLogout}
+          onClick={() => setConfirmSignOutOpen(true)}
           className={cn(
             "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
             "text-white/80 hover:text-white hover:bg-white/10"
@@ -686,6 +687,31 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 ) : (
                   "Refresh"
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Sign out?</DialogTitle>
+              <DialogDescription>
+                You are about to sign out of your account.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmSignOutOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  setConfirmSignOutOpen(false);
+                  await handleLogout();
+                }}
+              >
+                Sign out
               </Button>
             </DialogFooter>
           </DialogContent>

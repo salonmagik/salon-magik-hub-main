@@ -68,6 +68,7 @@ export function usePublicCatalog(
 
       let mappedRows: Array<LocationMappedRow & { service_id: string }> = [];
       let serviceIds: string[] = [];
+      let mappingLookupFailed = false;
 
       if (shouldUseLocationMappings) {
         const { data: serviceMappings, error: mappingError } = await (supabase.from as any)("service_locations")
@@ -78,6 +79,7 @@ export function usePublicCatalog(
 
         if (mappingError) {
           console.warn("Service location mappings unavailable, falling back to base services:", mappingError);
+          mappingLookupFailed = true;
         } else {
           mappedRows = (serviceMappings ?? []) as Array<
             LocationMappedRow & { service_id: string }
@@ -87,7 +89,7 @@ export function usePublicCatalog(
       }
 
       // Backward-compatible fallback for tenants that do not have location mappings yet.
-      if (!shouldUseLocationMappings || serviceIds.length === 0) {
+      if (!shouldUseLocationMappings || mappingLookupFailed) {
         const { data, error } = await supabase
           .from("services")
           .select(
@@ -108,6 +110,8 @@ export function usePublicCatalog(
           location_ids: locationIds,
         }));
       }
+
+      if (serviceIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("services")
@@ -147,6 +151,7 @@ export function usePublicCatalog(
 
       let mappedRows: Array<LocationMappedRow & { package_id: string }> = [];
       let packageIds: string[] = [];
+      let mappingLookupFailed = false;
 
       if (shouldUseLocationMappings) {
         const { data: packageMappings, error: mappingError } = await (supabase.from as any)("package_locations")
@@ -157,6 +162,7 @@ export function usePublicCatalog(
 
         if (mappingError) {
           console.warn("Package location mappings unavailable, falling back to base packages:", mappingError);
+          mappingLookupFailed = true;
         } else {
           mappedRows = (packageMappings ?? []) as Array<
             LocationMappedRow & { package_id: string }
@@ -166,7 +172,7 @@ export function usePublicCatalog(
       }
 
       // Backward-compatible fallback for tenants that do not have location mappings yet.
-      if (!shouldUseLocationMappings || packageIds.length === 0) {
+      if (!shouldUseLocationMappings || mappingLookupFailed) {
         const { data, error } = await supabase
           .from("packages")
           .select("id, name, description, price, original_price, image_urls")
@@ -184,6 +190,8 @@ export function usePublicCatalog(
           location_ids: locationIds,
         }));
       }
+
+      if (packageIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("packages")
@@ -220,6 +228,7 @@ export function usePublicCatalog(
 
       let mappedRows: Array<LocationMappedRow & { product_id: string }> = [];
       let productIds: string[] = [];
+      let mappingLookupFailed = false;
 
       if (shouldUseLocationMappings) {
         const { data: productMappings, error: mappingError } = await (supabase.from as any)("product_locations")
@@ -230,6 +239,7 @@ export function usePublicCatalog(
 
         if (mappingError) {
           console.warn("Product location mappings unavailable, falling back to base products:", mappingError);
+          mappingLookupFailed = true;
         } else {
           mappedRows = (productMappings ?? []) as Array<
             LocationMappedRow & { product_id: string }
@@ -239,7 +249,7 @@ export function usePublicCatalog(
       }
 
       // Backward-compatible fallback for tenants that do not have location mappings yet.
-      if (!shouldUseLocationMappings || productIds.length === 0) {
+      if (!shouldUseLocationMappings || mappingLookupFailed) {
         const { data, error } = await supabase
           .from("products")
           .select("id, name, description, price, image_urls, stock_quantity")
@@ -257,6 +267,8 @@ export function usePublicCatalog(
           location_ids: locationIds,
         }));
       }
+
+      if (productIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("products")

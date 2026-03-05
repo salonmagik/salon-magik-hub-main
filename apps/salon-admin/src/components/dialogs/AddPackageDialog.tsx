@@ -5,7 +5,6 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Checkbox } from "@ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { ScrollArea } from "@ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Gift, Loader2, Save, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
@@ -18,6 +17,8 @@ import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { formatCurrency, getCurrencySymbol } from "@shared/currency";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 
 interface PreSelectedItem {
   id: string;
@@ -50,7 +51,7 @@ interface SelectedProduct {
 export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedItems = [] }: AddPackageDialogProps) {
   const { currentTenant } = useAuth();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
-  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const { services, isLoading: servicesLoading } = useServices();
   const { products, isLoading: productsLoading } = useProducts();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,10 +61,21 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     price: "",
     description: "",
     images: [] as string[],
-    locationId: "",
+    locationIds: [] as string[],
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
-  const selectedLocationId = formData.locationId || defaultLocationId || manageableLocations[0]?.id || "";
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = defaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [defaultLocationId, formData.locationIds, isChainTier, manageableLocations]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+  const hasMixedCurrencies = locationCurrencies.length > 1;
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
 
@@ -108,10 +120,16 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
 
   useEffect(() => {
     if (!open) return;
-    if (!formData.locationId && defaultLocationId) {
-      setFormData((prev) => ({ ...prev, locationId: defaultLocationId }));
+    if (isChainTier) {
+      if (formData.locationIds.length === 0 && defaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+      }
+      return;
     }
-  }, [defaultLocationId, formData.locationId, open]);
+    if (formData.locationIds.length === 0 && defaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+    }
+  }, [defaultLocationId, formData.locationIds.length, isChainTier, open]);
 
   const resetForm = () => {
     setFormData({
@@ -119,7 +137,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       price: "",
       description: "",
       images: [],
-      locationId: defaultLocationId || "",
+      locationIds: defaultLocationId ? [defaultLocationId] : [],
     });
     setSelectedServices([]);
     setSelectedProducts([]);
@@ -220,12 +238,12 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       }
 
       const { error: mappingError } = await (supabase.from as any)("package_locations").upsert(
-        {
+        selectedLocationIds.map((locationId) => ({
           tenant_id: currentTenant.id,
           package_id: pkg.id,
-          location_id: selectedLocationId,
+          location_id: locationId,
           is_enabled: true,
-        },
+        })),
         { onConflict: "package_id,location_id" },
       );
       if (mappingError) throw mappingError;
@@ -253,10 +271,11 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       formData.name.trim() !== "" &&
       formData.price !== "" &&
       parseFloat(formData.price) > 0 &&
-      selectedLocationId !== "" &&
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies &&
       totalItemsSelected > 0
     );
-  }, [formData, selectedLocationId, totalItemsSelected]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length, totalItemsSelected]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -289,27 +308,17 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
           </div>
 
           {isChainTier && (
-            <div className="space-y-2">
-              <Label>
-                Branch <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={formData.locationId}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
-                disabled={locationsLoading || manageableLocations.length === 0}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={locationsLoading ? "Loading branches..." : "Select branch"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {manageableLocations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>
-                      {location.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <LocationScopePicker
+              locations={manageableLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || manageableLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
           )}
 
           {/* Select Items - Tabbed Interface */}
@@ -372,7 +381,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                               <div>
                                 <p className="font-medium text-sm">{service.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(Number(service.price), currentTenant?.currency || "USD")} • {service.duration_minutes} mins
+                                  {formatCurrency(Number(service.price), selectedCurrency)} • {service.duration_minutes} mins
                                 </p>
                               </div>
                             </div>
@@ -434,7 +443,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                               <div>
                                 <p className="font-medium text-sm">{product.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(Number(product.price), currentTenant?.currency || "USD")}
+                                  {formatCurrency(Number(product.price), selectedCurrency)}
                                   {product.stock_quantity !== undefined && ` • ${product.stock_quantity} in stock`}
                                 </p>
                               </div>
@@ -476,7 +485,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Original Value</Label>
-              <Input value={formatCurrency(originalPrice, currentTenant?.currency || "USD")} disabled className="bg-muted" />
+              <Input value={formatCurrency(originalPrice, selectedCurrency)} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
               <Label>
@@ -499,7 +508,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
 
           {savings > 0 && (
             <div className="text-sm text-success bg-success/10 rounded-lg p-3 text-center">
-              Customers save {formatCurrency(savings, currentTenant?.currency || "USD")} ({savingsPercent}% off)
+              Customers save {formatCurrency(savings, selectedCurrency)} ({savingsPercent}% off)
             </div>
           )}
 

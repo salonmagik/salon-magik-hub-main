@@ -18,7 +18,7 @@ export interface Voucher {
 }
 
 export function useVouchers() {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -34,12 +34,36 @@ export function useVouchers() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let scopedVoucherIds: string[] | null = null;
+      if (activeLocationId) {
+        const { data: mappings, error: mappingError } = await (supabase.from as any)("voucher_locations")
+          .select("voucher_id")
+          .eq("tenant_id", currentTenant.id)
+          .eq("location_id", activeLocationId)
+          .eq("is_enabled", true);
+        if (mappingError) throw mappingError;
+        scopedVoucherIds = Array.from(
+          new Set(((mappings ?? []) as Array<{ voucher_id: string }>).map((row) => row.voucher_id)),
+        );
+      }
+
+      if (scopedVoucherIds && scopedVoucherIds.length === 0) {
+        setVouchers([]);
+        return;
+      }
+
+      let query = supabase
         .from("vouchers")
         .select("*")
         .eq("tenant_id", currentTenant.id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
+
+      if (scopedVoucherIds) {
+        query = query.in("id", scopedVoucherIds);
+      }
+
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
 
@@ -50,7 +74,7 @@ export function useVouchers() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [activeLocationId, currentTenant?.id]);
 
   useEffect(() => {
     fetchVouchers();

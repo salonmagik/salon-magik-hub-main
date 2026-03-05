@@ -12,7 +12,7 @@ export interface ServiceWithCategory extends Service {
 }
 
 export function useServices() {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const [services, setServices] = useState<ServiceWithCategory[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,8 +30,36 @@ export function useServices() {
     setError(null);
 
     try {
+      let scopedServiceIds: string[] | null = null;
+      if (activeLocationId) {
+        const { data: mappings, error: mappingError } = await (supabase.from as any)("service_locations")
+          .select("service_id")
+          .eq("tenant_id", currentTenant.id)
+          .eq("location_id", activeLocationId)
+          .eq("is_enabled", true);
+        if (mappingError) throw mappingError;
+        scopedServiceIds = Array.from(
+          new Set(((mappings ?? []) as Array<{ service_id: string }>).map((row) => row.service_id)),
+        );
+        if (scopedServiceIds.length === 0) {
+          setServices([]);
+        }
+      }
+
+      if (scopedServiceIds && scopedServiceIds.length === 0) {
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from("service_categories")
+          .select("*")
+          .eq("tenant_id", currentTenant.id)
+          .order("sort_order", { ascending: true });
+
+        if (categoriesError) throw categoriesError;
+        setCategories(categoriesData || []);
+        return;
+      }
+
       // Fetch services with categories (exclude soft-deleted)
-      const { data: servicesData, error: servicesError } = await supabase
+      let servicesQuery = supabase
         .from("services")
         .select(`
           *,
@@ -41,6 +69,12 @@ export function useServices() {
         .eq("status", "active")
         .is("deleted_at", null)
         .order("name", { ascending: true });
+
+      if (scopedServiceIds) {
+        servicesQuery = servicesQuery.in("id", scopedServiceIds);
+      }
+
+      const { data: servicesData, error: servicesError } = await servicesQuery;
 
       if (servicesError) throw servicesError;
 
@@ -61,7 +95,7 @@ export function useServices() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id]);
+  }, [activeLocationId, currentTenant?.id]);
 
   useEffect(() => {
     fetchServices();
