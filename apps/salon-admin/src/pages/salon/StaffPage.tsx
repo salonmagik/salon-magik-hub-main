@@ -676,6 +676,7 @@ export default function StaffPage() {
                           <TableHead>Name</TableHead>
                           <TableHead className="hidden sm:table-cell">Email</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead className="hidden lg:table-cell">Last Login</TableHead>
                           <TableHead>Assignments</TableHead>
                           <TableHead className="w-[50px]"></TableHead>
                         </TableRow>
@@ -724,6 +725,9 @@ export default function StaffPage() {
                                   </Badge>
                                 )}
                               </div>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                              {member.lastLoginAt ? format(new Date(member.lastLoginAt), "MMM d, yyyy p") : "Never"}
                             </TableCell>
                             <TableCell>
                               {member.role === "owner" ? (
@@ -1037,6 +1041,15 @@ export default function StaffPage() {
                 <div className="space-y-1.5">
                   <Label>Joined</Label>
                   <Input value={staffToEdit?.joinedAt ? format(new Date(staffToEdit.joinedAt), "MMM d, yyyy") : "—"} disabled />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Last login</Label>
+                  <Input
+                    value={staffToEdit?.lastLoginAt ? format(new Date(staffToEdit.lastLoginAt), "MMM d, yyyy p") : "Never"}
+                    disabled
+                  />
                 </div>
               </div>
             </TabsContent>
