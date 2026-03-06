@@ -179,7 +179,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
     if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
-    return mainNavItems.filter((item) => {
+    const visibleItems = mainNavItems.filter((item) => {
       if (item.path === "/salon/overview/staff") {
         return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
       }
@@ -193,6 +193,16 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           isModuleAllowedInContext(item.module, activeContextType);
       }
       return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
+    });
+    if (currentTenant?.plan !== "chain") {
+      return visibleItems;
+    }
+    return visibleItems.map((item) => {
+      if (item.path !== "/salon/settings") return item;
+      if (activeContextType === "owner_hub") {
+        return { ...item, label: "Business Settings", path: "/salon/business-settings" };
+      }
+      return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
     });
   }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
 

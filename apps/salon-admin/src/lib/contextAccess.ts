@@ -20,16 +20,26 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { module: "journal", path: "/salon/journal", order: 100 },
   { module: "staff", path: "/salon/staff", order: 110 },
   { module: "settings", path: "/salon/settings", order: 120 },
+  { module: "settings", path: "/salon/business-settings", order: 121 },
+  { module: "settings", path: "/salon/branch-settings", order: 122 },
   { module: "audit_log", path: "/salon/audit-log", order: 130 },
 ];
 
-const HUB_ALLOWED_MODULES = new Set<string>(["salons_overview", "staff"]);
+const HUB_ALLOWED_MODULES = new Set<string>(["salons_overview", "staff", "settings"]);
 
 export function isModuleAllowedInContext(
   module: string,
   contextType: ActiveContextType,
   routePath?: string
 ): boolean {
+  if (routePath === "/salon/business-settings") {
+    return contextType === "owner_hub";
+  }
+
+  if (routePath === "/salon/branch-settings") {
+    return contextType === "location";
+  }
+
   if (routePath === "/salon/overview/staff" && contextType !== "owner_hub") {
     return false;
   }
