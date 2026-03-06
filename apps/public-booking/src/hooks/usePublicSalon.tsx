@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@/lib/supabase";
-import { COUNTRIES, getCountryByCode } from "@shared/countries";
 
 export type PublicTenant = Pick<
   Tables<"tenants">,
@@ -52,23 +51,8 @@ export function usePublicSalon(
   countryCode?: string | null,
   mode: PublicCatalogMode = "legacy",
 ) {
-  const normalizeCountryKey = (value: string | null | undefined): string =>
-    (value || "")
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z]/g, "");
-
-  const getCountryCodeForLocationCountry = (value: string | null | undefined): string | null => {
-    const normalized = normalizeCountryKey(value);
-    if (!normalized) return null;
-
-    if (normalized.length === 2 && getCountryByCode(normalized)) {
-      return normalized;
-    }
-
-    const byName = COUNTRIES.find((country) => normalizeCountryKey(country.name) === normalized);
-    return byName?.code ?? null;
-  };
+  void countryCode;
+  void mode;
 
   const tenantQuery = useQuery({
     queryKey: ["public-tenant", slug],
@@ -93,7 +77,7 @@ export function usePublicSalon(
   });
 
   const locationsQuery = useQuery({
-    queryKey: ["public-locations", tenantQuery.data?.id, countryCode ?? null, mode],
+    queryKey: ["public-locations", tenantQuery.data?.id],
     queryFn: async (): Promise<PublicLocation[]> => {
       if (!tenantQuery.data?.id) return [];
 
@@ -110,18 +94,7 @@ export function usePublicSalon(
         throw error;
       }
 
-      const locations = data || [];
-
-      if (mode !== "chain_country_scoped" || !countryCode) {
-        return locations;
-      }
-
-      const normalizedCode = countryCode.trim().toUpperCase();
-
-      return locations.filter((location) => {
-        const locationCountryCode = getCountryCodeForLocationCountry(location.country);
-        return locationCountryCode === normalizedCode;
-      });
+      return data || [];
     },
     enabled: !!tenantQuery.data?.id,
   });

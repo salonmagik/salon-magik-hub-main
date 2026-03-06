@@ -154,20 +154,24 @@ export function usePublicCatalog(
         return fetchLegacyServices(tenantId);
       }
 
-      if (locationIds.length === 0) return [];
-
-      const { data: serviceMappings, error: mappingError } = await (supabase.from as any)("service_locations")
+      let mappingsQuery = (supabase.from as any)("service_locations")
         .select("service_id, location_id, price_override")
         .eq("tenant_id", tenantId)
-        .eq("is_enabled", true)
-        .in("location_id", locationIds);
+        .eq("is_enabled", true);
+      if (locationIds.length > 0) {
+        mappingsQuery = mappingsQuery.in("location_id", locationIds);
+      }
+      const { data: serviceMappings, error: mappingError } = await mappingsQuery;
 
       if (mappingError) {
         console.warn("Error fetching service location mappings:", mappingError);
-        return [];
+        return fetchLegacyServices(tenantId);
       }
 
       const mappedRows = (serviceMappings ?? []) as Array<LocationMappedRow & { service_id: string }>;
+      if (mappedRows.length === 0) {
+        return fetchLegacyServices(tenantId);
+      }
       const serviceIds = Array.from(new Set(mappedRows.map((row) => row.service_id)));
       if (serviceIds.length === 0) return [];
 
@@ -215,20 +219,24 @@ export function usePublicCatalog(
         return fetchLegacyPackages(tenantId);
       }
 
-      if (locationIds.length === 0) return [];
-
-      const { data: packageMappings, error: mappingError } = await (supabase.from as any)("package_locations")
+      let mappingsQuery = (supabase.from as any)("package_locations")
         .select("package_id, location_id, price_override")
         .eq("tenant_id", tenantId)
-        .eq("is_enabled", true)
-        .in("location_id", locationIds);
+        .eq("is_enabled", true);
+      if (locationIds.length > 0) {
+        mappingsQuery = mappingsQuery.in("location_id", locationIds);
+      }
+      const { data: packageMappings, error: mappingError } = await mappingsQuery;
 
       if (mappingError) {
         console.warn("Error fetching package location mappings:", mappingError);
-        return [];
+        return fetchLegacyPackages(tenantId);
       }
 
       const mappedRows = (packageMappings ?? []) as Array<LocationMappedRow & { package_id: string }>;
+      if (mappedRows.length === 0) {
+        return fetchLegacyPackages(tenantId);
+      }
       const packageIds = Array.from(new Set(mappedRows.map((row) => row.package_id)));
       if (packageIds.length === 0) return [];
 
@@ -269,20 +277,24 @@ export function usePublicCatalog(
         return fetchLegacyProducts(tenantId);
       }
 
-      if (locationIds.length === 0) return [];
-
-      const { data: productMappings, error: mappingError } = await (supabase.from as any)("product_locations")
+      let mappingsQuery = (supabase.from as any)("product_locations")
         .select("product_id, location_id, price_override")
         .eq("tenant_id", tenantId)
-        .eq("is_enabled", true)
-        .in("location_id", locationIds);
+        .eq("is_enabled", true);
+      if (locationIds.length > 0) {
+        mappingsQuery = mappingsQuery.in("location_id", locationIds);
+      }
+      const { data: productMappings, error: mappingError } = await mappingsQuery;
 
       if (mappingError) {
         console.warn("Error fetching product location mappings:", mappingError);
-        return [];
+        return fetchLegacyProducts(tenantId);
       }
 
       const mappedRows = (productMappings ?? []) as Array<LocationMappedRow & { product_id: string }>;
+      if (mappedRows.length === 0) {
+        return fetchLegacyProducts(tenantId);
+      }
       const productIds = Array.from(new Set(mappedRows.map((row) => row.product_id)));
       if (productIds.length === 0) return [];
 

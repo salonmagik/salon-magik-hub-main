@@ -29,8 +29,22 @@ import {
   SelectValue,
 } from "@ui/select";
 import { isLightColor } from "@shared/color";
-import { getCountryByCode } from "@shared/countries";
+import { COUNTRIES, getCountryByCode } from "@shared/countries";
 import { getCurrencyForCountryCode } from "@shared/country-currency";
+
+const normalizeCountryValue = (value: string | null | undefined): string =>
+  (value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+
+const toCountryCode = (value: string | null | undefined): string | null => {
+  const normalized = normalizeCountryValue(value);
+  if (!normalized) return null;
+  if (normalized.length === 2 && getCountryByCode(normalized)) return normalized;
+  const byName = COUNTRIES.find((country) => normalizeCountryValue(country.name) === normalized);
+  return byName?.code ?? null;
+};
 
 function BookingPageContent() {
   const { slug: routeSlug } = useParams<{ slug: string }>();
@@ -67,9 +81,17 @@ function BookingPageContent() {
     catalogMode,
   );
 
+  const countryScopedLocations = useMemo(() => {
+    if (!countryContextEnabled || !selectedCountryCode) return locations;
+    const matches = locations.filter(
+      (location) => toCountryCode(location.country) === selectedCountryCode,
+    );
+    // Keep storefront functional if legacy country values cannot be normalized.
+    return matches.length > 0 ? matches : locations;
+  }, [countryContextEnabled, selectedCountryCode, locations]);
   const locationIds = useMemo(
-    () => locations.map((location) => location.id),
-    [locations],
+    () => countryScopedLocations.map((location) => location.id),
+    [countryScopedLocations],
   );
   const scopedLocationIds = useMemo(() => {
     if (!countryContextEnabled) return [];
@@ -89,46 +111,6 @@ function BookingPageContent() {
   const storefrontCurrency = getCurrencyForCountryCode(effectiveCountryCode, salon?.currency || "USD");
   const isCatalogBlocked = countryContextEnabled && requiresCountrySelection && !selectedCountryCode;
   const isLoading = salonLoading || countryContextLoading || (!isCatalogBlocked && catalogLoading);
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    if (isLoading) return;
-
-    console.groupCollapsed("[Booking Debug] catalog payload");
-    console.log("slug", slug);
-    console.log("catalogMode", catalogMode);
-    console.log("countryContextEnabled", countryContextEnabled);
-    console.log("selectedCountryCode", selectedCountryCode);
-    console.log("supportedCountryCodes", supportedCountryCodes);
-    console.log("isCatalogBlocked", isCatalogBlocked);
-    console.log("locationIds", locationIds);
-    console.log("selectedLocationIds", selectedLocationIds);
-    console.log("scopedLocationIds", scopedLocationIds);
-    console.log("salon", salon);
-    console.log("locations", locations);
-    console.log("services", services);
-    console.log("packages", packages);
-    console.log("products", products);
-    console.log("categories", categories);
-    console.groupEnd();
-  }, [
-    isLoading,
-    slug,
-    catalogMode,
-    countryContextEnabled,
-    selectedCountryCode,
-    supportedCountryCodes,
-    isCatalogBlocked,
-    locationIds,
-    selectedLocationIds,
-    scopedLocationIds,
-    salon,
-    locations,
-    services,
-    packages,
-    products,
-    categories,
-  ]);
 
   useEffect(() => {
     if (salon?.name) {
@@ -224,7 +206,7 @@ function BookingPageContent() {
           <div className="space-y-8">
             <SalonHeader
               salon={salon}
-              locations={locations}
+              locations={countryScopedLocations}
               supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
               selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
               onCountryChange={countryContextEnabled ? setCountry : undefined}
@@ -236,7 +218,7 @@ function BookingPageContent() {
                 packages={packages}
                 products={products}
                 categories={categories}
-                locations={locations}
+                locations={countryScopedLocations}
                 currency={storefrontCurrency}
                 selectedLocationIds={selectedLocationIds}
                 onLocationFilterChange={setSelectedLocationIds}
@@ -256,7 +238,7 @@ function BookingPageContent() {
           open={checkoutOpen}
           onOpenChange={setCheckoutOpen}
           salon={salon}
-          locations={locations}
+          locations={countryScopedLocations}
           selectedCountryCode={selectedCountryCode}
         />
 
