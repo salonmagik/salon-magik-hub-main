@@ -263,7 +263,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       const tenantCurrency = currentTenant.currency || "USD";
       setProfileData((prev) => ({
         ...prev,
-        salonName: tenantName,
+        salonName: resolvedScope === "branch" ? prev.salonName : tenantName,
         country: currentTenant.country || "",
         currency: tenantCurrency,
       }));
@@ -284,7 +284,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       setBookingBaseline(nextBooking);
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
-      setProfileBaseline((prev) => ({ ...prev, salonName: tenantName, currency: tenantCurrency }));
+      setProfileBaseline((prev) => ({
+        ...prev,
+        salonName: resolvedScope === "branch" ? prev.salonName : tenantName,
+        currency: tenantCurrency,
+      }));
     }
     if (profile) {
       const ownerName = profile.full_name || "";
@@ -303,6 +307,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       const closingTime = activeLocation.closing_time?.substring(0, 5) || "18:00";
       setProfileData((prev) => ({
         ...prev,
+        salonName: resolvedScope === "branch" ? activeLocation.name || prev.salonName : prev.salonName,
         city: activeLocation.city || "",
         address: activeLocation.address || "",
       }));
@@ -314,11 +319,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       setHoursBaseline({ openingDays, openingTime, closingTime });
       setProfileBaseline((prev) => ({
         ...prev,
+        salonName: resolvedScope === "branch" ? activeLocation.name || prev.salonName : prev.salonName,
         city: activeLocation.city || "",
         address: activeLocation.address || "",
       }));
     }
-  }, [currentTenant, profile, user?.email, activeLocation]);
+  }, [currentTenant, profile, user?.email, activeLocation, resolvedScope]);
 
   useEffect(() => {
     if (!currentTenant?.id) return;
@@ -664,6 +670,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     if (!currentTenant?.id) return;
     const windowEndIso =
       endsAtIso || new Date(new Date(startsAtIso).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const targetLocation = locations.find((location) => location.id === locationId);
+    const branchLabel = targetLocation?.name?.trim() || "This branch";
+    const bookingUrl = currentTenant?.slug ? buildPublicBookingUrl(currentTenant.slug) : "";
+    const contactPhone = (currentTenant as any)?.contact_phone || "";
+    const contactLine = contactPhone ? ` You can also call ${contactPhone}.` : "";
+    const bookingLine = bookingUrl ? ` Please rebook here: ${bookingUrl}.` : " Please rebook from the booking site.";
+    const reasonText =
+      reason?.trim() ||
+      `${branchLabel} is temporarily unavailable during the selected period.${bookingLine}${contactLine}`;
     try {
       const { data: impactedAppointments, error } = await supabase
         .from("appointments")
@@ -688,8 +703,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         await supabase.functions.invoke("send-appointment-notification", {
           body: {
             appointmentId: appointment.id,
-            action: "rescheduled",
-            reason,
+            action: "branch_unavailable",
+            reason: reasonText,
           },
         });
       }

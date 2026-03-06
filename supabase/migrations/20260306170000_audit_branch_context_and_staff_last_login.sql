@@ -3,7 +3,27 @@ add column if not exists branch_location_id uuid references public.locations(id)
 
 create index if not exists idx_audit_logs_branch_location_id on public.audit_logs(branch_location_id);
 
-create or replace function public.log_audit_event(
+drop function if exists public.log_audit_event(
+  uuid,
+  text,
+  text,
+  uuid,
+  jsonb,
+  jsonb,
+  jsonb
+);
+drop function if exists public.log_audit_event(
+  uuid,
+  text,
+  text,
+  uuid,
+  jsonb,
+  jsonb,
+  jsonb,
+  uuid
+);
+
+create function public.log_audit_event(
     _tenant_id uuid,
     _action text,
     _entity_type text,
@@ -57,7 +77,13 @@ begin
 end;
 $$;
 
-create or replace function public.list_tenant_staff_members(
+grant execute on function public.log_audit_event(uuid, text, text, uuid, jsonb, jsonb, jsonb, uuid) to authenticated;
+
+drop function if exists public.list_tenant_staff_members(uuid, text, uuid);
+drop function if exists public.list_tenant_staff_members(uuid, text);
+drop function if exists public.list_tenant_staff_members(uuid);
+
+create function public.list_tenant_staff_members(
   p_tenant_id uuid,
   p_context_type text default 'location',
   p_location_id uuid default null
