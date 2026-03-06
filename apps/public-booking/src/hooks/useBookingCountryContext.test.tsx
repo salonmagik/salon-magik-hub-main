@@ -37,6 +37,7 @@ describe("useBookingCountryContext", () => {
         selected_country_code: "GH",
         supported_country_codes: ["GH", "GB"],
         requires_country_selection: false,
+        country_context_enabled: true,
       },
       error: null,
     });
@@ -66,6 +67,7 @@ describe("useBookingCountryContext", () => {
         selected_country_code: null,
         supported_country_codes: ["GH", "GB"],
         requires_country_selection: true,
+        country_context_enabled: true,
       },
       error: null,
     });

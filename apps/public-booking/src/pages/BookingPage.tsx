@@ -6,6 +6,7 @@ import {
   useBookingCountryContext,
   BookingCartProvider,
 } from "@/hooks";
+import type { PublicCatalogMode } from "@/hooks/usePublicCatalog";
 import { resolvePublicBookingSlug } from "@/lib/slugResolution";
 import { BookingLayout } from "./components/BookingLayout";
 import { SalonHeader } from "./components/SalonHeader";
@@ -46,6 +47,7 @@ function BookingPageContent() {
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
 
   const {
+    countryContextEnabled,
     selectedCountryCode,
     supportedCountryCodes,
     requiresCountrySelection,
@@ -56,16 +58,24 @@ function BookingPageContent() {
     enabled: Boolean(slug),
   });
 
-  const { salon, locations, isLoading: salonLoading, notFound } = usePublicSalon(slug, selectedCountryCode);
+  const catalogMode: PublicCatalogMode = countryContextEnabled ? "chain_country_scoped" : "legacy";
+  const effectiveCountryCode = countryContextEnabled ? selectedCountryCode : null;
+
+  const { salon, locations, isLoading: salonLoading, notFound } = usePublicSalon(
+    slug,
+    effectiveCountryCode,
+    catalogMode,
+  );
 
   const locationIds = useMemo(
     () => locations.map((location) => location.id),
     [locations],
   );
   const scopedLocationIds = useMemo(() => {
+    if (!countryContextEnabled) return [];
     if (selectedLocationIds.length === 0) return locationIds;
     return selectedLocationIds.filter((locationId) => locationIds.includes(locationId));
-  }, [locationIds, selectedLocationIds]);
+  }, [countryContextEnabled, locationIds, selectedLocationIds]);
 
   const {
     services,
@@ -73,12 +83,52 @@ function BookingPageContent() {
     products,
     categories,
     isLoading: catalogLoading,
-  } = usePublicCatalog(salon?.id, selectedCountryCode, scopedLocationIds);
+  } = usePublicCatalog(salon?.id, effectiveCountryCode, scopedLocationIds, catalogMode);
 
-  const cartScopeKey = `${slug ?? "unknown"}:${selectedCountryCode ?? "unselected"}`;
-  const storefrontCurrency = getCurrencyForCountryCode(selectedCountryCode, salon?.currency || "USD");
-  const isCatalogBlocked = requiresCountrySelection && !selectedCountryCode;
+  const cartScopeKey = `${slug ?? "unknown"}:${effectiveCountryCode ?? "legacy"}`;
+  const storefrontCurrency = getCurrencyForCountryCode(effectiveCountryCode, salon?.currency || "USD");
+  const isCatalogBlocked = countryContextEnabled && requiresCountrySelection && !selectedCountryCode;
   const isLoading = salonLoading || countryContextLoading || (!isCatalogBlocked && catalogLoading);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (isLoading) return;
+
+    console.groupCollapsed("[Booking Debug] catalog payload");
+    console.log("slug", slug);
+    console.log("catalogMode", catalogMode);
+    console.log("countryContextEnabled", countryContextEnabled);
+    console.log("selectedCountryCode", selectedCountryCode);
+    console.log("supportedCountryCodes", supportedCountryCodes);
+    console.log("isCatalogBlocked", isCatalogBlocked);
+    console.log("locationIds", locationIds);
+    console.log("selectedLocationIds", selectedLocationIds);
+    console.log("scopedLocationIds", scopedLocationIds);
+    console.log("salon", salon);
+    console.log("locations", locations);
+    console.log("services", services);
+    console.log("packages", packages);
+    console.log("products", products);
+    console.log("categories", categories);
+    console.groupEnd();
+  }, [
+    isLoading,
+    slug,
+    catalogMode,
+    countryContextEnabled,
+    selectedCountryCode,
+    supportedCountryCodes,
+    isCatalogBlocked,
+    locationIds,
+    selectedLocationIds,
+    scopedLocationIds,
+    salon,
+    locations,
+    services,
+    packages,
+    products,
+    categories,
+  ]);
 
   useEffect(() => {
     if (salon?.name) {
@@ -120,11 +170,18 @@ function BookingPageContent() {
   }, [isCatalogBlocked, supportedCountryCodes, modalCountryCode]);
 
   useEffect(() => {
-    if (locationIds.length === 0) {
-      setSelectedLocationIds([]);
-      return;
-    }
-    setSelectedLocationIds((prev) => prev.filter((locationId) => locationIds.includes(locationId)));
+    setSelectedLocationIds((prev) => {
+      if (locationIds.length === 0) {
+        return prev.length === 0 ? prev : [];
+      }
+
+      const next = prev.filter((locationId) => locationIds.includes(locationId));
+      if (next.length === prev.length && next.every((locationId, idx) => locationId === prev[idx])) {
+        return prev;
+      }
+
+      return next;
+    });
   }, [locationIds]);
 
   if (isLoading) {
@@ -168,9 +225,9 @@ function BookingPageContent() {
             <SalonHeader
               salon={salon}
               locations={locations}
-              supportedCountryCodes={supportedCountryCodes}
-              selectedCountryCode={selectedCountryCode}
-              onCountryChange={setCountry}
+              supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
+              selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
+              onCountryChange={countryContextEnabled ? setCountry : undefined}
             />
 
             {!isCatalogBlocked ? (

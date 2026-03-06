@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@/lib/supabase";
-import { getCountryByCode } from "@shared/countries";
+import { COUNTRIES, getCountryByCode } from "@shared/countries";
 
 export type PublicTenant = Pick<
   Tables<"tenants">,
@@ -43,7 +43,33 @@ export type PublicLocation = Pick<
   | "availability"
 >;
 
-export function usePublicSalon(slug: string | undefined, countryCode?: string | null) {
+export type PublicCatalogMode = "legacy" | "chain_country_scoped";
+
+const EMPTY_LOCATIONS: PublicLocation[] = [];
+
+export function usePublicSalon(
+  slug: string | undefined,
+  countryCode?: string | null,
+  mode: PublicCatalogMode = "legacy",
+) {
+  const normalizeCountryKey = (value: string | null | undefined): string =>
+    (value || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, "");
+
+  const getCountryCodeForLocationCountry = (value: string | null | undefined): string | null => {
+    const normalized = normalizeCountryKey(value);
+    if (!normalized) return null;
+
+    if (normalized.length === 2 && getCountryByCode(normalized)) {
+      return normalized;
+    }
+
+    const byName = COUNTRIES.find((country) => normalizeCountryKey(country.name) === normalized);
+    return byName?.code ?? null;
+  };
+
   const tenantQuery = useQuery({
     queryKey: ["public-tenant", slug],
     queryFn: async (): Promise<PublicTenant | null> => {
@@ -67,7 +93,7 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
   });
 
   const locationsQuery = useQuery({
-    queryKey: ["public-locations", tenantQuery.data?.id, countryCode ?? null],
+    queryKey: ["public-locations", tenantQuery.data?.id, countryCode ?? null, mode],
     queryFn: async (): Promise<PublicLocation[]> => {
       if (!tenantQuery.data?.id) return [];
 
@@ -75,7 +101,7 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
         .from("locations")
         .select("id, name, city, country, address, opening_time, closing_time, opening_days, availability")
         .eq("tenant_id", tenantQuery.data.id)
-        .eq("availability", "open");
+        .or("availability.is.null,availability.eq.open");
 
       const { data, error } = await query;
 
@@ -86,19 +112,15 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
 
       const locations = data || [];
 
-      if (!countryCode) {
+      if (mode !== "chain_country_scoped" || !countryCode) {
         return locations;
       }
 
       const normalizedCode = countryCode.trim().toUpperCase();
-      const countryName = getCountryByCode(normalizedCode)?.name?.toUpperCase() ?? null;
 
       return locations.filter((location) => {
-        const normalizedLocationCountry = (location.country || "").trim().toUpperCase();
-        return (
-          normalizedLocationCountry === normalizedCode ||
-          (countryName !== null && normalizedLocationCountry === countryName)
-        );
+        const locationCountryCode = getCountryCodeForLocationCountry(location.country);
+        return locationCountryCode === normalizedCode;
       });
     },
     enabled: !!tenantQuery.data?.id,
@@ -106,7 +128,7 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
 
   return {
     salon: tenantQuery.data,
-    locations: locationsQuery.data || [],
+    locations: locationsQuery.data || EMPTY_LOCATIONS,
     isLoading: tenantQuery.isLoading || locationsQuery.isLoading,
     error: tenantQuery.error || locationsQuery.error,
     notFound: !tenantQuery.isLoading && !tenantQuery.data,

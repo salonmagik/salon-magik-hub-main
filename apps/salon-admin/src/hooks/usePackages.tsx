@@ -109,7 +109,7 @@ export function usePackages() {
       .from("locations")
       .select("id")
       .eq("tenant_id", tenantId)
-      .eq("availability", "open");
+      .or("availability.is.null,availability.eq.open");
 
     if (locationIds && locationIds.length > 0) {
       query = query.in("id", locationIds);

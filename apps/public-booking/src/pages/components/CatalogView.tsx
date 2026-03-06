@@ -42,6 +42,7 @@ type CatalogItem = {
   stockQuantity?: number;
   type: "service" | "package" | "product";
   categoryId?: string | null;
+  locationIds?: string[];
   locationNames?: string[];
 };
 
@@ -76,6 +77,7 @@ export function CatalogView({
       durationMinutes: s.duration_minutes,
       type: "service" as const,
       categoryId: s.category_id,
+      locationIds: s.location_ids ?? [],
       locationNames: Array.from(
         new Set(
           (s.location_ids ?? [])
@@ -93,6 +95,7 @@ export function CatalogView({
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
       imageUrls: p.image_urls || [],
       type: "package" as const,
+      locationIds: p.location_ids ?? [],
       locationNames: Array.from(
         new Set(
           (p.location_ids ?? [])
@@ -110,6 +113,7 @@ export function CatalogView({
       imageUrls: p.image_urls || [],
       stockQuantity: p.stock_quantity,
       type: "product" as const,
+      locationIds: p.location_ids ?? [],
       locationNames: Array.from(
         new Set(
           (p.location_ids ?? [])
@@ -143,12 +147,10 @@ export function CatalogView({
 
     if (selectedLocationIds.length > 0) {
       filtered = filtered.filter((item) =>
-        (item.locationNames ?? []).some((name) =>
-          selectedLocationIds
-            .map((locationId) => locationNameById.get(locationId))
-            .filter((city): city is string => Boolean(city))
-            .includes(name),
-        ),
+        // Keep legacy/unmapped rows visible so catalog doesn't disappear when location mappings are absent.
+        !item.locationIds ||
+        item.locationIds.length === 0 ||
+        item.locationIds.some((locationId) => selectedLocationIds.includes(locationId)),
       );
     }
 

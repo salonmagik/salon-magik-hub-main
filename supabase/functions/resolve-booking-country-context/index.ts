@@ -16,6 +16,7 @@ interface ResolveResponse {
   selected_country_code: string | null;
   supported_country_codes: string[];
   requires_country_selection: boolean;
+  country_context_enabled: boolean;
 }
 
 function normalizeCountryCode(value: string | null | undefined): string | null {
@@ -125,7 +126,7 @@ serve(async (req) => {
       .from("locations")
       .select("country")
       .eq("tenant_id", tenant.id)
-      .eq("availability", "open");
+      .or("availability.is.null,availability.eq.open");
 
     if (locationsError) {
       console.error("resolve-booking-country-context locations fetch error", locationsError);
@@ -174,6 +175,7 @@ serve(async (req) => {
       supported_country_codes: shouldUseCountryContext ? supportedCountryCodes : [],
       requires_country_selection:
         shouldUseCountryContext && selectedCountryCode === null,
+      country_context_enabled: shouldUseCountryContext,
     };
 
     return new Response(JSON.stringify(response), {

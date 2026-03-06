@@ -26,7 +26,7 @@ const fromMock = vi.fn((table: string) => {
   return {
     select: () => ({
       eq: () => ({
-        eq: async () => ({
+        or: async () => ({
           data: [{ id: "loc-1", name: "Main Branch", city: "Accra", country: "GH", availability: "open" }],
           error: null,
         }),

@@ -37,9 +37,16 @@ export type PublicCategory = Pick<
   "id" | "name" | "description" | "sort_order"
 >;
 
+export type PublicCatalogMode = "legacy" | "chain_country_scoped";
+
 type LocationMappedRow = {
   location_id: string;
   price_override: number | null;
+};
+
+type CatalogVisibilityRow = {
+  status?: string | null;
+  deleted_at?: string | null;
 };
 
 function buildEffectivePrice(basePrice: number, mappings: LocationMappedRow[]): number {
@@ -54,74 +61,123 @@ function buildEffectivePrice(basePrice: number, mappings: LocationMappedRow[]): 
   return Math.min(...validOverrides);
 }
 
+function isPubliclyVisible<T extends CatalogVisibilityRow>(row: T): boolean {
+  if (row.deleted_at) return false;
+  if (!row.status) return true;
+  return row.status === "active";
+}
+
+async function fetchLegacyServices(tenantId: string): Promise<PublicService[]> {
+  const { data, error } = await supabase
+    .from("services")
+    .select(
+      `id, name, description, price, duration_minutes, image_urls, category_id,
+       deposit_required, deposit_amount, deposit_percentage, status, deleted_at`,
+    )
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? [])
+    .filter(isPubliclyVisible)
+    .map((service) => ({
+      id: service.id,
+      name: service.name,
+      description: service.description,
+      price: service.price,
+      duration_minutes: service.duration_minutes,
+      image_urls: service.image_urls,
+      category_id: service.category_id,
+      deposit_required: service.deposit_required,
+      deposit_amount: service.deposit_amount,
+      deposit_percentage: service.deposit_percentage,
+      location_ids: [],
+    }));
+}
+
+async function fetchLegacyPackages(tenantId: string): Promise<PublicPackage[]> {
+  const { data, error } = await supabase
+    .from("packages")
+    .select("id, name, description, price, original_price, image_urls, status, deleted_at")
+    .eq("tenant_id", tenantId);
+
+  if (error) throw error;
+  return (data ?? [])
+    .filter(isPubliclyVisible)
+    .map((pkg) => ({
+      id: pkg.id,
+      name: pkg.name,
+      description: pkg.description,
+      price: pkg.price,
+      original_price: pkg.original_price,
+      image_urls: pkg.image_urls,
+      location_ids: [],
+    }));
+}
+
+async function fetchLegacyProducts(tenantId: string): Promise<PublicProduct[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, description, price, image_urls, stock_quantity, status, deleted_at")
+    .eq("tenant_id", tenantId);
+
+  if (error) throw error;
+  return (data ?? [])
+    .filter(isPubliclyVisible)
+    .map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      image_urls: product.image_urls,
+      stock_quantity: product.stock_quantity,
+      location_ids: [],
+    }));
+}
+
 export function usePublicCatalog(
   tenantId: string | undefined,
   countryCode?: string | null,
   locationIds: string[] = [],
+  mode: PublicCatalogMode = "legacy",
 ) {
-  const shouldUseLocationMappings = locationIds.length > 0;
+  const isChainCountryScoped = mode === "chain_country_scoped";
 
   const servicesQuery = useQuery({
-    queryKey: ["public-services", tenantId, countryCode ?? null, locationIds],
+    queryKey: ["public-services", tenantId, countryCode ?? null, locationIds, mode],
     queryFn: async (): Promise<PublicService[]> => {
       if (!tenantId) return [];
 
-      let mappedRows: Array<LocationMappedRow & { service_id: string }> = [];
-      let serviceIds: string[] = [];
-      let mappingLookupFailed = false;
-
-      if (shouldUseLocationMappings) {
-        const { data: serviceMappings, error: mappingError } = await (supabase.from as any)("service_locations")
-          .select("service_id, location_id, price_override")
-          .eq("tenant_id", tenantId)
-          .eq("is_enabled", true)
-          .in("location_id", locationIds);
-
-        if (mappingError) {
-          console.warn("Service location mappings unavailable, falling back to base services:", mappingError);
-          mappingLookupFailed = true;
-        } else {
-          mappedRows = (serviceMappings ?? []) as Array<
-            LocationMappedRow & { service_id: string }
-          >;
-          serviceIds = Array.from(new Set(mappedRows.map((row) => row.service_id)));
-        }
+      if (!isChainCountryScoped) {
+        return fetchLegacyServices(tenantId);
       }
 
-      // Backward-compatible fallback for tenants that do not have location mappings yet.
-      if (!shouldUseLocationMappings || mappingLookupFailed) {
-        const { data, error } = await supabase
-          .from("services")
-          .select(
-            `id, name, description, price, duration_minutes, image_urls, category_id,
-             deposit_required, deposit_amount, deposit_percentage`,
-          )
-          .eq("tenant_id", tenantId)
-          .eq("status", "active")
-          .is("deleted_at", null);
+      if (locationIds.length === 0) return [];
 
-        if (error) {
-          console.error("Error fetching fallback services:", error);
-          throw error;
-        }
+      const { data: serviceMappings, error: mappingError } = await (supabase.from as any)("service_locations")
+        .select("service_id, location_id, price_override")
+        .eq("tenant_id", tenantId)
+        .eq("is_enabled", true)
+        .in("location_id", locationIds);
 
-        return (data ?? []).map((service) => ({
-          ...service,
-          location_ids: locationIds,
-        }));
+      if (mappingError) {
+        console.warn("Error fetching service location mappings:", mappingError);
+        return [];
       }
 
+      const mappedRows = (serviceMappings ?? []) as Array<LocationMappedRow & { service_id: string }>;
+      const serviceIds = Array.from(new Set(mappedRows.map((row) => row.service_id)));
       if (serviceIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("services")
         .select(
           `id, name, description, price, duration_minutes, image_urls, category_id,
-           deposit_required, deposit_amount, deposit_percentage`,
+           deposit_required, deposit_amount, deposit_percentage, status, deleted_at`,
         )
         .eq("tenant_id", tenantId)
-        .eq("status", "active")
-        .is("deleted_at", null)
         .in("id", serviceIds);
 
       if (error) {
@@ -129,14 +185,20 @@ export function usePublicCatalog(
         throw error;
       }
 
-      return (data ?? []).map((service) => {
+      return (data ?? []).filter(isPubliclyVisible).map((service) => {
         const mappingsForService = mappedRows.filter((row) => row.service_id === service.id);
-        const mappedLocationIds = Array.from(
-          new Set(mappingsForService.map((row) => row.location_id)),
-        );
+        const mappedLocationIds = Array.from(new Set(mappingsForService.map((row) => row.location_id)));
         return {
-          ...service,
+          id: service.id,
+          name: service.name,
+          description: service.description,
           price: buildEffectivePrice(service.price, mappingsForService),
+          duration_minutes: service.duration_minutes,
+          image_urls: service.image_urls,
+          category_id: service.category_id,
+          deposit_required: service.deposit_required,
+          deposit_amount: service.deposit_amount,
+          deposit_percentage: service.deposit_percentage,
           location_ids: mappedLocationIds,
         };
       });
@@ -145,60 +207,35 @@ export function usePublicCatalog(
   });
 
   const packagesQuery = useQuery({
-    queryKey: ["public-packages", tenantId, countryCode ?? null, locationIds],
+    queryKey: ["public-packages", tenantId, countryCode ?? null, locationIds, mode],
     queryFn: async (): Promise<PublicPackage[]> => {
       if (!tenantId) return [];
 
-      let mappedRows: Array<LocationMappedRow & { package_id: string }> = [];
-      let packageIds: string[] = [];
-      let mappingLookupFailed = false;
-
-      if (shouldUseLocationMappings) {
-        const { data: packageMappings, error: mappingError } = await (supabase.from as any)("package_locations")
-          .select("package_id, location_id, price_override")
-          .eq("tenant_id", tenantId)
-          .eq("is_enabled", true)
-          .in("location_id", locationIds);
-
-        if (mappingError) {
-          console.warn("Package location mappings unavailable, falling back to base packages:", mappingError);
-          mappingLookupFailed = true;
-        } else {
-          mappedRows = (packageMappings ?? []) as Array<
-            LocationMappedRow & { package_id: string }
-          >;
-          packageIds = Array.from(new Set(mappedRows.map((row) => row.package_id)));
-        }
+      if (!isChainCountryScoped) {
+        return fetchLegacyPackages(tenantId);
       }
 
-      // Backward-compatible fallback for tenants that do not have location mappings yet.
-      if (!shouldUseLocationMappings || mappingLookupFailed) {
-        const { data, error } = await supabase
-          .from("packages")
-          .select("id, name, description, price, original_price, image_urls")
-          .eq("tenant_id", tenantId)
-          .eq("status", "active")
-          .is("deleted_at", null);
+      if (locationIds.length === 0) return [];
 
-        if (error) {
-          console.error("Error fetching fallback packages:", error);
-          throw error;
-        }
+      const { data: packageMappings, error: mappingError } = await (supabase.from as any)("package_locations")
+        .select("package_id, location_id, price_override")
+        .eq("tenant_id", tenantId)
+        .eq("is_enabled", true)
+        .in("location_id", locationIds);
 
-        return (data ?? []).map((pkg) => ({
-          ...pkg,
-          location_ids: locationIds,
-        }));
+      if (mappingError) {
+        console.warn("Error fetching package location mappings:", mappingError);
+        return [];
       }
 
+      const mappedRows = (packageMappings ?? []) as Array<LocationMappedRow & { package_id: string }>;
+      const packageIds = Array.from(new Set(mappedRows.map((row) => row.package_id)));
       if (packageIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("packages")
-        .select("id, name, description, price, original_price, image_urls")
+        .select("id, name, description, price, original_price, image_urls, status, deleted_at")
         .eq("tenant_id", tenantId)
-        .eq("status", "active")
-        .is("deleted_at", null)
         .in("id", packageIds);
 
       if (error) {
@@ -206,14 +243,16 @@ export function usePublicCatalog(
         throw error;
       }
 
-      return (data ?? []).map((pkg) => {
+      return (data ?? []).filter(isPubliclyVisible).map((pkg) => {
         const mappingsForPackage = mappedRows.filter((row) => row.package_id === pkg.id);
-        const mappedLocationIds = Array.from(
-          new Set(mappingsForPackage.map((row) => row.location_id)),
-        );
+        const mappedLocationIds = Array.from(new Set(mappingsForPackage.map((row) => row.location_id)));
         return {
-          ...pkg,
+          id: pkg.id,
+          name: pkg.name,
+          description: pkg.description,
           price: buildEffectivePrice(pkg.price, mappingsForPackage),
+          original_price: pkg.original_price,
+          image_urls: pkg.image_urls,
           location_ids: mappedLocationIds,
         };
       });
@@ -222,60 +261,35 @@ export function usePublicCatalog(
   });
 
   const productsQuery = useQuery({
-    queryKey: ["public-products", tenantId, countryCode ?? null, locationIds],
+    queryKey: ["public-products", tenantId, countryCode ?? null, locationIds, mode],
     queryFn: async (): Promise<PublicProduct[]> => {
       if (!tenantId) return [];
 
-      let mappedRows: Array<LocationMappedRow & { product_id: string }> = [];
-      let productIds: string[] = [];
-      let mappingLookupFailed = false;
-
-      if (shouldUseLocationMappings) {
-        const { data: productMappings, error: mappingError } = await (supabase.from as any)("product_locations")
-          .select("product_id, location_id, price_override")
-          .eq("tenant_id", tenantId)
-          .eq("is_enabled", true)
-          .in("location_id", locationIds);
-
-        if (mappingError) {
-          console.warn("Product location mappings unavailable, falling back to base products:", mappingError);
-          mappingLookupFailed = true;
-        } else {
-          mappedRows = (productMappings ?? []) as Array<
-            LocationMappedRow & { product_id: string }
-          >;
-          productIds = Array.from(new Set(mappedRows.map((row) => row.product_id)));
-        }
+      if (!isChainCountryScoped) {
+        return fetchLegacyProducts(tenantId);
       }
 
-      // Backward-compatible fallback for tenants that do not have location mappings yet.
-      if (!shouldUseLocationMappings || mappingLookupFailed) {
-        const { data, error } = await supabase
-          .from("products")
-          .select("id, name, description, price, image_urls, stock_quantity")
-          .eq("tenant_id", tenantId)
-          .eq("status", "active")
-          .is("deleted_at", null);
+      if (locationIds.length === 0) return [];
 
-        if (error) {
-          console.error("Error fetching fallback products:", error);
-          throw error;
-        }
+      const { data: productMappings, error: mappingError } = await (supabase.from as any)("product_locations")
+        .select("product_id, location_id, price_override")
+        .eq("tenant_id", tenantId)
+        .eq("is_enabled", true)
+        .in("location_id", locationIds);
 
-        return (data ?? []).map((product) => ({
-          ...product,
-          location_ids: locationIds,
-        }));
+      if (mappingError) {
+        console.warn("Error fetching product location mappings:", mappingError);
+        return [];
       }
 
+      const mappedRows = (productMappings ?? []) as Array<LocationMappedRow & { product_id: string }>;
+      const productIds = Array.from(new Set(mappedRows.map((row) => row.product_id)));
       if (productIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, description, price, image_urls, stock_quantity")
+        .select("id, name, description, price, image_urls, stock_quantity, status, deleted_at")
         .eq("tenant_id", tenantId)
-        .eq("status", "active")
-        .is("deleted_at", null)
         .in("id", productIds);
 
       if (error) {
@@ -283,14 +297,16 @@ export function usePublicCatalog(
         throw error;
       }
 
-      return (data ?? []).map((product) => {
+      return (data ?? []).filter(isPubliclyVisible).map((product) => {
         const mappingsForProduct = mappedRows.filter((row) => row.product_id === product.id);
-        const mappedLocationIds = Array.from(
-          new Set(mappingsForProduct.map((row) => row.location_id)),
-        );
+        const mappedLocationIds = Array.from(new Set(mappingsForProduct.map((row) => row.location_id)));
         return {
-          ...product,
+          id: product.id,
+          name: product.name,
+          description: product.description,
           price: buildEffectivePrice(product.price, mappingsForProduct),
+          image_urls: product.image_urls,
+          stock_quantity: product.stock_quantity,
           location_ids: mappedLocationIds,
         };
       });
@@ -299,7 +315,7 @@ export function usePublicCatalog(
   });
 
   const categoriesQuery = useQuery({
-    queryKey: ["public-categories", tenantId, countryCode ?? null, locationIds],
+    queryKey: ["public-categories", tenantId, countryCode ?? null, locationIds, mode],
     queryFn: async (): Promise<PublicCategory[]> => {
       if (!tenantId) return [];
 

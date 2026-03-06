@@ -211,6 +211,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         country: formData.country,
         address: formData.address,
         is_default: false,
+        availability: "open",
       });
 
       if (error) throw error;

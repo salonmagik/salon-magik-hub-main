@@ -30,7 +30,7 @@ export function useManageableLocations() {
           .from("locations")
           .select("id, name, city, country")
           .eq("tenant_id", currentTenant.id)
-          .eq("availability", "open")
+          .or("availability.is.null,availability.eq.open")
           .order("name", { ascending: true });
 
         if (currentRole !== "owner") {

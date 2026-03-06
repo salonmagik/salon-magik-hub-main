@@ -64,7 +64,7 @@ export function VoucherInput({
           .from("locations")
           .select("id")
           .eq("tenant_id", tenantId)
-          .eq("availability", "open")
+          .or("availability.is.null,availability.eq.open")
           .eq("country", selectedCountryCode);
 
         if (locationError) throw locationError;
