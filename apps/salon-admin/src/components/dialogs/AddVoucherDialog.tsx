@@ -24,6 +24,19 @@ interface AddVoucherDialogProps {
   onSuccess?: () => void;
 }
 
+const formatAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) return "";
+  const [intPart, ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, "");
+  const withCommas = (normalizedInt || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decimal.length > 0) return `${withCommas}.${decimal}`;
+  return cleaned.endsWith(".") ? `${withCommas}.` : withCommas;
+};
+
+const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
+
 function generateVoucherCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
@@ -116,7 +129,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
     return (
       formData.code.trim() !== "" &&
       formData.amount !== "" &&
-      parseFloat(formData.amount) > 0 &&
+      parseAmountInput(formData.amount) > 0 &&
       selectedLocationIds.length > 0 &&
       !hasMixedCurrencies
     );
@@ -129,7 +142,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
     try {
       const result = await createVoucher({
         code: formData.code,
-        amount: parseFloat(formData.amount),
+        amount: parseAmountInput(formData.amount),
         expiresAt: formData.expiresAt || undefined,
         locationIds: selectedLocationIds,
       });
@@ -208,14 +221,15 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
                 {currencySymbol}
               </span>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 placeholder="0.00"
                 className="pl-8"
                 value={formData.amount}
-                onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, amount: formatAmountInput(e.target.value) }))
+                }
                 required
-                min="1"
-                step="0.01"
               />
             </div>
           </div>

@@ -104,7 +104,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
-  { label: "Salons Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
+  { label: "Business Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
   { label: "Staff", icon: UserCog, path: "/salon/overview/staff", module: "staff" },
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
@@ -421,7 +421,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const isActive = (path: string) => {
     if (path === "/salon" && location.pathname === "/salon") return true;
     // Keep the owner-hub overview root exact so /salon/overview/staff
-    // does not highlight both "Salons Overview" and "Staff".
+    // does not highlight both "Business Overview" and "Staff".
     if (path === "/salon/overview") return location.pathname === "/salon/overview";
     if (path !== "/salon" && location.pathname.startsWith(path)) return true;
     return false;

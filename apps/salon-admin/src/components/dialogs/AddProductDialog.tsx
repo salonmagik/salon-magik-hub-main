@@ -21,6 +21,19 @@ interface AddProductDialogProps {
   onSuccess?: () => void;
 }
 
+const formatAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) return "";
+  const [intPart, ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, "");
+  const withCommas = (normalizedInt || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decimal.length > 0) return `${withCommas}.${decimal}`;
+  return cleaned.endsWith(".") ? `${withCommas}.` : withCommas;
+};
+
+const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
+
 export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
   const { currentTenant, activeLocationId } = useAuth();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
@@ -105,7 +118,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     return (
       formData.name.trim() !== "" &&
       formData.price !== "" &&
-      parseFloat(formData.price) > 0 &&
+      parseAmountInput(formData.price) > 0 &&
       selectedLocationIds.length > 0 &&
       !hasMixedCurrencies
     );
@@ -125,7 +138,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       const { data: product, error } = await supabase.from("products").insert({
         tenant_id: currentTenant.id,
         name: formData.name,
-        price: parseFloat(formData.price),
+        price: parseAmountInput(formData.price),
         stock_quantity: parseInt(formData.stockQuantity),
         status: formData.status as "active" | "inactive" | "archived",
         description: formData.description || null,
@@ -210,14 +223,15 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
                   className="pl-8"
                   value={formData.price}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, price: formatAmountInput(e.target.value) }))
+                  }
                   required
-                  min="0"
-                  step="0.01"
                 />
               </div>
             </div>
