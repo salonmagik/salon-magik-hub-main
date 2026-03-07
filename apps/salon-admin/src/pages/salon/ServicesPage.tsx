@@ -11,6 +11,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
@@ -38,6 +39,8 @@ import {
   Trash2,
   Undo2,
   Loader2,
+  AlertTriangle,
+  Wrench,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -64,13 +67,22 @@ import { useProducts } from "@/hooks/useProducts";
 import { useVouchers } from "@/hooks/useVouchers";
 import { useBinItems } from "@/hooks/useBinItems";
 import { useDeletionRequests } from "@/hooks/useDeletionRequests";
+import {
+  useCatalogIntegrityIssues,
+  type CatalogIntegrityIssue,
+  type CatalogIntegrityItemType,
+} from "@/hooks/useCatalogIntegrityIssues";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 import * as XLSX from "xlsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
 type ProductSubTab = "inventory" | "fulfillment";
@@ -89,6 +101,14 @@ interface CatalogItem {
   images?: string[];
   status?: string;
   is_flagged?: boolean;
+}
+
+interface IntegrityFixTarget {
+  itemId: string;
+  itemType: CatalogIntegrityItemType;
+  itemName: string;
+  issueCodes: string[];
+  locationIds: string[];
 }
 
 export default function ServicesPage() {
@@ -117,6 +137,11 @@ export default function ServicesPage() {
   const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
   const [binSelectMode, setBinSelectMode] = useState(false);
   const [selectedBinItemKeys, setSelectedBinItemKeys] = useState<Set<string>>(new Set());
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
+  const [fixDialogOpen, setFixDialogOpen] = useState(false);
+  const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
+  const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
+  const [isApplyingFix, setIsApplyingFix] = useState(false);
   
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
@@ -128,10 +153,13 @@ export default function ServicesPage() {
 
   const { currentTenant, user } = useAuth();
   const { isOwner, currentRole, hasPermission } = usePermissions();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } =
+    useManageableLocations();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
+  const { issuesByItemKey, refetch: refetchIssues } = useCatalogIntegrityIssues();
   const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem, refetch: refetchBinItems } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
@@ -146,6 +174,8 @@ export default function ServicesPage() {
   const canFlag = hasPermission("catalog:flag");
   const canRestoreBinItems = hasPermission("catalog:edit");
   const canDeleteBinItems = hasPermission("catalog:delete");
+  const canApplyIntegrityFix = currentRole === "owner" || currentRole === "manager";
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
   const isBinBusy = binProcessingItemId !== null;
   const makeBinKey = (item: { id: string; type: ItemType | "voucher" }) => `${item.type}:${item.id}`;
 
@@ -154,6 +184,20 @@ export default function ServicesPage() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  };
+
+  const getItemIssues = (itemType: CatalogIntegrityItemType, itemId: string): CatalogIntegrityIssue[] =>
+    issuesByItemKey.get(`${itemType}:${itemId}`) || [];
+
+  const hasBlockingIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
+    getItemIssues(itemType, itemId).some((issue) => issue.severity === "blocking");
+
+  const hasWarningIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
+    getItemIssues(itemType, itemId).some((issue) => issue.severity === "warning");
+
+  const shouldShowItem = (itemType: CatalogIntegrityItemType, itemId: string) => {
+    if (!showFlaggedOnly) return true;
+    return getItemIssues(itemType, itemId).length > 0;
   };
 
   const IMPORT_TEMPLATES: Record<CatalogImportType, TemplateColumn[]> = {
@@ -291,7 +335,13 @@ export default function ServicesPage() {
 
   // Refetch all data
   const refetchAll = async () => {
-    await Promise.all([refetchServices(), refetchPackages(), refetchProducts(), refetchVouchers()]);
+    await Promise.all([
+      refetchServices(),
+      refetchPackages(),
+      refetchProducts(),
+      refetchVouchers(),
+      refetchIssues(),
+    ]);
   };
 
   // Get selected items info for dialogs
@@ -533,6 +583,120 @@ export default function ServicesPage() {
     }
   };
 
+  const openFixConfigDialog = (item: CatalogItem) => {
+    const itemIssues = getItemIssues(item.type, item.id);
+    if (itemIssues.length === 0) return;
+    const inferredLocationIds = Array.from(
+      new Set(itemIssues.flatMap((issue) => issue.branch_location_ids || [])),
+    );
+    setFixTarget({
+      itemId: item.id,
+      itemType: item.type,
+      itemName: item.name,
+      issueCodes: Array.from(new Set(itemIssues.map((issue) => issue.issue_code))),
+      locationIds: inferredLocationIds,
+    });
+    setFixLocationIds(
+      inferredLocationIds.length > 0
+        ? inferredLocationIds
+        : defaultLocationId
+          ? [defaultLocationId]
+          : [],
+    );
+    setFixDialogOpen(true);
+  };
+
+  const applyIntegrityFix = async () => {
+    if (!currentTenant?.id || !fixTarget) return;
+    if (hasFixMixedCurrencies) {
+      toast({
+        title: "Mixed currency mapping",
+        description: "Select branches that share the same currency.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isChainTier && fixLocationIds.length === 0) {
+      toast({
+        title: "Select branches",
+        description: "Choose at least one branch before applying this fix.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsApplyingFix(true);
+    try {
+      if (isChainTier) {
+        const tableMap = {
+          service: { table: "service_locations", column: "service_id" },
+          product: { table: "product_locations", column: "product_id" },
+          package: { table: "package_locations", column: "package_id" },
+          voucher: { table: "voucher_locations", column: "voucher_id" },
+        } as const;
+        const mappingMeta = tableMap[fixTarget.itemType];
+
+        const { error: deleteError } = await (supabase.from as any)(mappingMeta.table)
+          .delete()
+          .eq("tenant_id", currentTenant.id)
+          .eq(mappingMeta.column, fixTarget.itemId);
+        if (deleteError) throw deleteError;
+
+        const mappingRows = fixLocationIds.map((locationId) => ({
+          tenant_id: currentTenant.id,
+          location_id: locationId,
+          is_enabled: true,
+          [mappingMeta.column]: fixTarget.itemId,
+        }));
+        if (mappingRows.length > 0) {
+          const { error: upsertError } = await (supabase.from as any)(mappingMeta.table).upsert(
+            mappingRows,
+            { onConflict: `${mappingMeta.column},location_id` },
+          );
+          if (upsertError) throw upsertError;
+        }
+      }
+
+      const { error: validateError } = await (supabase.rpc as any)("validate_catalog_item_integrity", {
+        p_tenant_id: currentTenant.id,
+        p_item_type: fixTarget.itemType,
+        p_item_id: fixTarget.itemId,
+      });
+      if (validateError) throw validateError;
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "catalog.integrity_fix_applied",
+        _target_type: fixTarget.itemType,
+        _target_id: fixTarget.itemId,
+        _summary: `Integrity fix applied to ${fixTarget.itemType}`,
+        _details: {
+          issue_codes: fixTarget.issueCodes,
+          fixed_location_ids: fixLocationIds,
+        },
+        _branch_location_id: fixLocationIds[0] || null,
+      });
+
+      toast({
+        title: "Config fixed",
+        description: `${fixTarget.itemName} has been revalidated.`,
+      });
+      setFixDialogOpen(false);
+      setFixTarget(null);
+      setFixLocationIds([]);
+      await refetchAll();
+    } catch (error) {
+      console.error("Error applying integrity fix:", error);
+      toast({
+        title: "Failed to apply fix",
+        description: "Please review branch mappings and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplyingFix(false);
+    }
+  };
+
   const parseBoolean = (value: unknown): boolean | undefined => {
     if (value === null || value === undefined || value === "") return undefined;
     if (typeof value === "boolean") return value;
@@ -652,6 +816,12 @@ export default function ServicesPage() {
     };
   }, []);
 
+  const fixCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, fixLocationIds, currency),
+    [currency, fixLocationIds, manageableLocations],
+  );
+  const hasFixMixedCurrencies = fixCurrencies.length > 1;
+
   return (
     <SalonSidebar>
       <div className="space-y-6">
@@ -742,6 +912,14 @@ export default function ServicesPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+              <Button
+                variant={showFlaggedOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowFlaggedOnly((prev) => !prev)}
+              >
+                <AlertTriangle className="mr-2 h-4 w-4" />
+                {showFlaggedOnly ? "Showing flagged only" : "Show flagged only"}
+              </Button>
             </div>
 
             {/* Loading State */}
@@ -761,11 +939,13 @@ export default function ServicesPage() {
               <>
                 {/* All Tab */}
                 <TabsContent value="all" className="mt-0">
-                  {filteredItems.length === 0 ? (
+                  {filteredItems.filter((item) => shouldShowItem(item.type, item.id)).length === 0 ? (
                     <EmptyState message="No items yet. Add services, products, or packages to get started." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredItems.map((item) => (
+                      {filteredItems
+                        .filter((item) => shouldShowItem(item.type, item.id))
+                        .map((item) => (
                         <SelectableItemCard 
                           key={item.id} 
                           item={item} 
@@ -776,6 +956,8 @@ export default function ServicesPage() {
                           canEdit={canEdit}
                           onViewDetails={() => setViewDetailItem(item)}
                           onEdit={() => setEditItem(item)}
+                          integrityIssues={getItemIssues(item.type, item.id)}
+                          onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog(item) : undefined}
                         />
                       ))}
                     </div>
@@ -784,15 +966,22 @@ export default function ServicesPage() {
 
                 {/* Services Tab */}
                 <TabsContent value="services" className="mt-0">
-                  {services.length === 0 ? (
+                  {services
+                    .filter(
+                      (s) =>
+                        (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                        shouldShowItem("service", s.id),
+                    ).length === 0 ? (
                     <EmptyState message="No services yet. Add your first service." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {services
                         .filter(
                           (s) =>
-                            s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                            (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                            shouldShowItem("service", s.id)
                         )
                         .map((s) => (
                           <SelectableItemCard
@@ -813,6 +1002,20 @@ export default function ServicesPage() {
                             isSelected={selectedItems.has(s.id)}
                             onSelect={handleSelectItem}
                             canEdit={canEdit}
+                            onViewDetails={() => setViewDetailItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
+                            onEdit={() => setEditItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
+                            integrityIssues={getItemIssues("service", s.id)}
+                            onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog({
+                              id: s.id,
+                              type: "service",
+                              name: s.name,
+                              description: s.description || "",
+                              price: Number(s.price),
+                              duration: s.duration_minutes,
+                              images: s.image_urls || [],
+                              status: s.status,
+                              is_flagged: s.is_flagged,
+                            }) : undefined}
                           />
                         ))}
                     </div>
@@ -821,15 +1024,22 @@ export default function ServicesPage() {
 
                 {/* Packages Tab */}
                 <TabsContent value="packages" className="mt-0">
-                  {packages.length === 0 ? (
+                  {packages
+                    .filter(
+                      (p) =>
+                        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                        shouldShowItem("package", p.id),
+                    ).length === 0 ? (
                     <EmptyState message="No packages yet. Bundle services together." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {packages
                         .filter(
                           (p) =>
-                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                            (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                            shouldShowItem("package", p.id)
                         )
                         .map((p) => (
                           <SelectableItemCard
@@ -850,6 +1060,20 @@ export default function ServicesPage() {
                             isSelected={selectedItems.has(p.id)}
                             onSelect={handleSelectItem}
                             canEdit={canEdit}
+                            onViewDetails={() => setViewDetailItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
+                            onEdit={() => setEditItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
+                            integrityIssues={getItemIssues("package", p.id)}
+                            onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog({
+                              id: p.id,
+                              type: "package",
+                              name: p.name,
+                              description: p.description || "",
+                              price: Number(p.price),
+                              originalPrice: p.original_price ? Number(p.original_price) : undefined,
+                              images: p.image_urls || [],
+                              status: p.status,
+                              is_flagged: (p as any).is_flagged || false,
+                            }) : undefined}
                           />
                         ))}
                     </div>
@@ -871,15 +1095,22 @@ export default function ServicesPage() {
                     </TabsList>
 
                     <TabsContent value="inventory" className="mt-0">
-                      {products.length === 0 ? (
+                      {products
+                        .filter(
+                          (p) =>
+                            (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                            shouldShowItem("product", p.id),
+                        ).length === 0 ? (
                         <EmptyState message="No products yet. Add items to sell." />
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {products
                             .filter(
                               (p) =>
-                                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                                (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                  (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                                shouldShowItem("product", p.id)
                             )
                             .map((p) => (
                               <SelectableItemCard
@@ -900,6 +1131,20 @@ export default function ServicesPage() {
                                 isSelected={selectedItems.has(p.id)}
                                 onSelect={handleSelectItem}
                                 canEdit={canEdit}
+                                onViewDetails={() => setViewDetailItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
+                                onEdit={() => setEditItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
+                                integrityIssues={getItemIssues("product", p.id)}
+                                onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog({
+                                  id: p.id,
+                                  type: "product",
+                                  name: p.name,
+                                  description: p.description || "",
+                                  price: Number(p.price),
+                                  stock: p.stock_quantity,
+                                  images: p.image_urls || [],
+                                  status: p.status,
+                                  is_flagged: (p as any).is_flagged,
+                                }) : undefined}
                               />
                             ))}
                         </div>
@@ -925,11 +1170,15 @@ export default function ServicesPage() {
                         </Card>
                       ))}
                     </div>
-                  ) : vouchers.length === 0 ? (
+                  ) : vouchers.filter((v) => shouldShowItem("voucher", v.id)).length === 0 ? (
                     <EmptyState message="No vouchers yet. Create gift cards for customers." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {vouchers.map((v) => (
+                      {vouchers.filter((v) => shouldShowItem("voucher", v.id)).map((v) => {
+                        const voucherIssues = getItemIssues("voucher", v.id);
+                        const blocking = voucherIssues.some((issue) => issue.severity === "blocking");
+                        const warning = voucherIssues.some((issue) => issue.severity === "warning");
+                        return (
                         <Card key={v.id} className="hover:shadow-md transition-shadow">
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between">
@@ -956,6 +1205,20 @@ export default function ServicesPage() {
                                       Expires {format(new Date(v.expires_at), "MMM d, yyyy")}
                                     </span>
                                   )}
+                                  {(blocking || warning) && (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-xs",
+                                        blocking
+                                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                                          : "border-warning/40 bg-warning/10 text-warning",
+                                      )}
+                                    >
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      {blocking ? "Blocking config issue" : "Config warning"}
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                               <div className="text-right">
@@ -965,9 +1228,32 @@ export default function ServicesPage() {
                                 </p>
                               </div>
                             </div>
+                            {voucherIssues.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs text-muted-foreground">{voucherIssues[0].issue_message}</p>
+                                {canApplyIntegrityFix && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      openFixConfigDialog({
+                                        id: v.id,
+                                        type: "voucher",
+                                        name: v.code,
+                                        description: "",
+                                        price: Number(v.amount),
+                                      })
+                                    }
+                                  >
+                                    <Wrench className="mr-2 h-4 w-4" />
+                                    Fix config
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
-                      ))}
+                      )})}
                     </div>
                   )}
                 </TabsContent>
@@ -1345,6 +1631,86 @@ export default function ServicesPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={fixDialogOpen}
+        onOpenChange={(open) => {
+          setFixDialogOpen(open);
+          if (!open) {
+            setFixTarget(null);
+            setFixLocationIds([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Fix config: {fixTarget?.itemName || "Item"}</DialogTitle>
+            <DialogDescription>
+              Resolve flagged mapping/currency issues. Blocking issues stay hidden on storefront until fixed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {fixTarget?.issueCodes?.length ? (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Detected issues</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {fixTarget.issueCodes.map((issueCode) => (
+                    <Badge key={issueCode} variant="outline">
+                      {issueCode}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {isChainTier ? (
+              <LocationScopePicker
+                locations={manageableLocations}
+                selectedLocationIds={fixLocationIds}
+                onChange={setFixLocationIds}
+                disabled={isApplyingFix || locationsLoading || manageableLocations.length === 0}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Non-chain tenants use legacy visibility rules. Save to re-run validation.
+              </p>
+            )}
+
+            {hasFixMixedCurrencies && (
+              <p className="text-sm text-destructive">
+                Selected branches use different currencies. Choose one currency group.
+              </p>
+            )}
+
+            {!canApplyIntegrityFix && (
+              <p className="text-sm text-muted-foreground">
+                Only owner and manager roles can apply integrity fixes.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setFixDialogOpen(false)}
+              disabled={isApplyingFix}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={applyIntegrityFix}
+              disabled={
+                isApplyingFix ||
+                !canApplyIntegrityFix ||
+                (isChainTier && fixLocationIds.length === 0) ||
+                hasFixMixedCurrencies
+              }
+            >
+              {isApplyingFix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Apply fix
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* View/Edit Dialogs */}
       <EditServiceDialog
         open={!!editItem && editItem.type === "service"}
@@ -1434,6 +1800,8 @@ interface SelectableItemCardProps {
   canEdit?: boolean;
   onViewDetails?: () => void;
   onEdit?: () => void;
+  integrityIssues?: CatalogIntegrityIssue[];
+  onFixConfig?: () => void;
 }
 
 function SelectableItemCard({
@@ -1445,6 +1813,8 @@ function SelectableItemCard({
   canEdit = false,
   onViewDetails,
   onEdit,
+  integrityIssues = [],
+  onFixConfig,
 }: SelectableItemCardProps) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
@@ -1453,6 +1823,9 @@ function SelectableItemCard({
   };
 
   const typeInfo = typeLabels[item.type] || typeLabels.service;
+  const blockingIssue = integrityIssues.find((issue) => issue.severity === "blocking");
+  const warningIssue = integrityIssues.find((issue) => issue.severity === "warning");
+  const firstIssue = blockingIssue || warningIssue;
 
   return (
     <Card className={cn(
@@ -1491,11 +1864,41 @@ function SelectableItemCard({
                 {typeInfo.label}
               </p>
               <StatusChip status={item.status} isFlagged={item.is_flagged} />
+              {firstIssue && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        blockingIssue
+                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                          : "border-warning/40 bg-warning/10 text-warning",
+                      )}
+                    >
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      {blockingIssue ? "Blocking" : "Warning"}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-sm">
+                    <p className="text-xs">{firstIssue.issue_message}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             <h3 className="font-semibold mt-1 truncate">{item.name}</h3>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
               {item.description || "No description"}
             </p>
+            {firstIssue && firstIssue.branch_location_names.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {firstIssue.branch_location_names.map((branchName) => (
+                  <Badge key={`${item.id}-${branchName}`} variant="secondary" className="text-[10px]">
+                    {branchName}
+                  </Badge>
+                ))}
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {item.duration && (
@@ -1538,6 +1941,12 @@ function SelectableItemCard({
                   <DropdownMenuItem onClick={onEdit}>
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
+                  </DropdownMenuItem>
+                )}
+                {onFixConfig && integrityIssues.length > 0 && (
+                  <DropdownMenuItem onClick={onFixConfig}>
+                    <Wrench className="w-4 h-4 mr-2" />
+                    Fix config
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>

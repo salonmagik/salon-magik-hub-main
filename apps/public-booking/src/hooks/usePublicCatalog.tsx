@@ -67,7 +67,27 @@ function isPubliclyVisible<T extends CatalogVisibilityRow>(row: T): boolean {
   return row.status === "active";
 }
 
+async function fetchBlockingIssueItemIds(
+  tenantId: string,
+  itemType: "service" | "product" | "package" | "voucher",
+): Promise<Set<string>> {
+  const { data, error } = await (supabase.from as any)("catalog_item_integrity_issues")
+    .select("item_id")
+    .eq("tenant_id", tenantId)
+    .eq("item_type", itemType)
+    .eq("severity", "blocking")
+    .is("resolved_at", null);
+
+  if (error) {
+    console.warn("Error fetching catalog integrity blocking issues:", error);
+    return new Set();
+  }
+
+  return new Set(((data ?? []) as Array<{ item_id: string }>).map((row) => row.item_id));
+}
+
 async function fetchLegacyServices(tenantId: string): Promise<PublicService[]> {
+  const blockedItemIds = await fetchBlockingIssueItemIds(tenantId, "service");
   const { data, error } = await supabase
     .from("services")
     .select(
@@ -82,6 +102,7 @@ async function fetchLegacyServices(tenantId: string): Promise<PublicService[]> {
 
   return (data ?? [])
     .filter(isPubliclyVisible)
+    .filter((service) => !blockedItemIds.has(service.id))
     .map((service) => ({
       id: service.id,
       name: service.name,
@@ -98,6 +119,7 @@ async function fetchLegacyServices(tenantId: string): Promise<PublicService[]> {
 }
 
 async function fetchLegacyPackages(tenantId: string): Promise<PublicPackage[]> {
+  const blockedItemIds = await fetchBlockingIssueItemIds(tenantId, "package");
   const { data, error } = await supabase
     .from("packages")
     .select("id, name, description, price, original_price, image_urls, status, deleted_at")
@@ -106,6 +128,7 @@ async function fetchLegacyPackages(tenantId: string): Promise<PublicPackage[]> {
   if (error) throw error;
   return (data ?? [])
     .filter(isPubliclyVisible)
+    .filter((pkg) => !blockedItemIds.has(pkg.id))
     .map((pkg) => ({
       id: pkg.id,
       name: pkg.name,
@@ -118,6 +141,7 @@ async function fetchLegacyPackages(tenantId: string): Promise<PublicPackage[]> {
 }
 
 async function fetchLegacyProducts(tenantId: string): Promise<PublicProduct[]> {
+  const blockedItemIds = await fetchBlockingIssueItemIds(tenantId, "product");
   const { data, error } = await supabase
     .from("products")
     .select("id, name, description, price, image_urls, stock_quantity, status, deleted_at")
@@ -126,6 +150,7 @@ async function fetchLegacyProducts(tenantId: string): Promise<PublicProduct[]> {
   if (error) throw error;
   return (data ?? [])
     .filter(isPubliclyVisible)
+    .filter((product) => !blockedItemIds.has(product.id))
     .map((product) => ({
       id: product.id,
       name: product.name,
@@ -189,23 +214,30 @@ export function usePublicCatalog(
         throw error;
       }
 
-      return (data ?? []).filter(isPubliclyVisible).map((service) => {
-        const mappingsForService = mappedRows.filter((row) => row.service_id === service.id);
-        const mappedLocationIds = Array.from(new Set(mappingsForService.map((row) => row.location_id)));
-        return {
-          id: service.id,
-          name: service.name,
-          description: service.description,
-          price: buildEffectivePrice(service.price, mappingsForService),
-          duration_minutes: service.duration_minutes,
-          image_urls: service.image_urls,
-          category_id: service.category_id,
-          deposit_required: service.deposit_required,
-          deposit_amount: service.deposit_amount,
-          deposit_percentage: service.deposit_percentage,
-          location_ids: mappedLocationIds,
-        };
-      });
+      const blockedItemIds = await fetchBlockingIssueItemIds(tenantId, "service");
+
+      return (data ?? [])
+        .filter(isPubliclyVisible)
+        .filter((service) => !blockedItemIds.has(service.id))
+        .map((service) => {
+          const mappingsForService = mappedRows.filter((row) => row.service_id === service.id);
+          const mappedLocationIds = Array.from(
+            new Set(mappingsForService.map((row) => row.location_id)),
+          );
+          return {
+            id: service.id,
+            name: service.name,
+            description: service.description,
+            price: buildEffectivePrice(service.price, mappingsForService),
+            duration_minutes: service.duration_minutes,
+            image_urls: service.image_urls,
+            category_id: service.category_id,
+            deposit_required: service.deposit_required,
+            deposit_amount: service.deposit_amount,
+            deposit_percentage: service.deposit_percentage,
+            location_ids: mappedLocationIds,
+          };
+        });
     },
     enabled: !!tenantId,
   });
@@ -251,19 +283,26 @@ export function usePublicCatalog(
         throw error;
       }
 
-      return (data ?? []).filter(isPubliclyVisible).map((pkg) => {
-        const mappingsForPackage = mappedRows.filter((row) => row.package_id === pkg.id);
-        const mappedLocationIds = Array.from(new Set(mappingsForPackage.map((row) => row.location_id)));
-        return {
-          id: pkg.id,
-          name: pkg.name,
-          description: pkg.description,
-          price: buildEffectivePrice(pkg.price, mappingsForPackage),
-          original_price: pkg.original_price,
-          image_urls: pkg.image_urls,
-          location_ids: mappedLocationIds,
-        };
-      });
+      const blockedItemIds = await fetchBlockingIssueItemIds(tenantId, "package");
+
+      return (data ?? [])
+        .filter(isPubliclyVisible)
+        .filter((pkg) => !blockedItemIds.has(pkg.id))
+        .map((pkg) => {
+          const mappingsForPackage = mappedRows.filter((row) => row.package_id === pkg.id);
+          const mappedLocationIds = Array.from(
+            new Set(mappingsForPackage.map((row) => row.location_id)),
+          );
+          return {
+            id: pkg.id,
+            name: pkg.name,
+            description: pkg.description,
+            price: buildEffectivePrice(pkg.price, mappingsForPackage),
+            original_price: pkg.original_price,
+            image_urls: pkg.image_urls,
+            location_ids: mappedLocationIds,
+          };
+        });
     },
     enabled: !!tenantId,
   });
@@ -309,19 +348,26 @@ export function usePublicCatalog(
         throw error;
       }
 
-      return (data ?? []).filter(isPubliclyVisible).map((product) => {
-        const mappingsForProduct = mappedRows.filter((row) => row.product_id === product.id);
-        const mappedLocationIds = Array.from(new Set(mappingsForProduct.map((row) => row.location_id)));
-        return {
-          id: product.id,
-          name: product.name,
-          description: product.description,
-          price: buildEffectivePrice(product.price, mappingsForProduct),
-          image_urls: product.image_urls,
-          stock_quantity: product.stock_quantity,
-          location_ids: mappedLocationIds,
-        };
-      });
+      const blockedItemIds = await fetchBlockingIssueItemIds(tenantId, "product");
+
+      return (data ?? [])
+        .filter(isPubliclyVisible)
+        .filter((product) => !blockedItemIds.has(product.id))
+        .map((product) => {
+          const mappingsForProduct = mappedRows.filter((row) => row.product_id === product.id);
+          const mappedLocationIds = Array.from(
+            new Set(mappingsForProduct.map((row) => row.location_id)),
+          );
+          return {
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            price: buildEffectivePrice(product.price, mappingsForProduct),
+            image_urls: product.image_urls,
+            stock_quantity: product.stock_quantity,
+            location_ids: mappedLocationIds,
+          };
+        });
     },
     enabled: !!tenantId,
   });
