@@ -358,14 +358,63 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
   const handleContextChange = async (nextValue: string) => {
     if (!nextValue) return;
+
+    const previousContextType = activeContextType;
+    const previousLocationId = activeLocationId;
+
+    const resolveContinuationRoute = async (
+      contextType: "owner_hub" | "location",
+      locationId: string | null,
+    ) => {
+      const { data } = await (supabase.rpc as any)("list_accessible_routes", {
+        p_tenant_id: currentTenant?.id,
+        p_context_type: contextType,
+        p_location_id: locationId,
+      });
+      const routes = (Array.isArray(data) ? data : []).filter(
+        (route: unknown): route is string => typeof route === "string" && route !== "/salon/access-denied",
+      );
+      const currentPath = location.pathname;
+      if (routes.includes(currentPath)) {
+        return currentPath;
+      }
+      // Preserve intent between old/new settings routes when switching branch context.
+      if (currentPath === "/salon/settings" || currentPath === "/salon/branch-settings" || currentPath === "/salon/business-settings") {
+        if (contextType === "owner_hub" && routes.includes("/salon/business-settings")) {
+          return "/salon/business-settings";
+        }
+        if (contextType === "location" && routes.includes("/salon/branch-settings")) {
+          return "/salon/branch-settings";
+        }
+        if (routes.includes("/salon/settings")) {
+          return "/salon/settings";
+        }
+      }
+      return routes[0] || getFirstAllowedRoute(contextType, locationId);
+    };
+
     if (nextValue === "owner_hub") {
       await setActiveContext("owner_hub", null);
-      const route = await getFirstAllowedRoute("owner_hub", null);
+      const route = await resolveContinuationRoute("owner_hub", null);
       navigate(route, { replace: true });
       return;
     }
+
+    const targetContext = availableContexts.find(
+      (context) => context.type === "location" && context.locationId === nextValue,
+    );
     await setActiveContext("location", nextValue);
-    const route = await getFirstAllowedRoute("location", nextValue);
+    if (
+      previousContextType === "location" &&
+      previousLocationId &&
+      previousLocationId !== nextValue
+    ) {
+      toast({
+        title: "Branch switched",
+        description: `Successfully switched to ${targetContext?.label || "selected"} branch`,
+      });
+    }
+    const route = await resolveContinuationRoute("location", nextValue);
     navigate(route, { replace: true });
   };
 

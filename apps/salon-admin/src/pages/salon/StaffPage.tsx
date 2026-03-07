@@ -38,6 +38,7 @@ import {
   UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
   User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2
 } from "lucide-react";
+import { cn } from "@shared/utils";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
@@ -139,9 +140,11 @@ export default function StaffPage() {
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
   const filteredStaff = staffTab === "unassigned" ? staff.filter((member) => member.isUnassigned) : staff;
   const isRoleChangedInDraft = Boolean(initialEditSnapshot && editRole !== initialEditSnapshot.role);
+  const isEditingOwner = staffToEdit?.role === "owner";
   const normalizedSelectedLocations = [...selectedLocationIds].sort();
   const normalizedInitialLocations = [...(initialEditSnapshot?.selectedLocationIds || [])].sort();
-  const locationsChanged = normalizedSelectedLocations.join(",") !== normalizedInitialLocations.join(",");
+  const locationsChanged =
+    !isEditingOwner && normalizedSelectedLocations.join(",") !== normalizedInitialLocations.join(",");
   const profileChanged = Boolean(
     initialEditSnapshot &&
       (editFirstName !== initialEditSnapshot.firstName || editLastName !== initialEditSnapshot.lastName)
@@ -149,6 +152,7 @@ export default function StaffPage() {
   const roleChanged = Boolean(initialEditSnapshot && editRole !== initialEditSnapshot.role);
   const overridesChanged = Boolean(
     initialEditSnapshot &&
+      !isEditingOwner &&
       overrideModules.some(
         (moduleKey) =>
           (overrideSelections[moduleKey] ?? false) !== (initialEditSnapshot.overrideSelections[moduleKey] ?? false)
@@ -329,11 +333,12 @@ export default function StaffPage() {
       selectedLocationIds: member.assignedLocationIds,
       overrideSelections: initialOverrides,
     });
-    setMemberDialogTab(tab);
+    const resolvedTab = member.role === "owner" ? "profile" : tab;
+    setMemberDialogTab(resolvedTab);
     setEditableTabs({
-      profile: enableEdit && tab === "profile",
-      locations: enableEdit && tab === "locations",
-      permissions: enableEdit && tab === "permissions",
+      profile: enableEdit && resolvedTab === "profile",
+      locations: member.role === "owner" ? false : enableEdit && resolvedTab === "locations",
+      permissions: member.role === "owner" ? false : enableEdit && resolvedTab === "permissions",
     });
     setEditDialogOpen(true);
   };
@@ -995,10 +1000,10 @@ export default function StaffPage() {
             </DialogDescription>
           </DialogHeader>
           <Tabs value={memberDialogTab} onValueChange={(value) => setMemberDialogTab(value as typeof memberDialogTab)}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={cn("grid w-full", isEditingOwner ? "grid-cols-1" : "grid-cols-3")}>
               <TabsTrigger value="profile">Profile</TabsTrigger>
-              <TabsTrigger value="locations">Locations</TabsTrigger>
-              <TabsTrigger value="permissions">Role & Permissions</TabsTrigger>
+              {!isEditingOwner && <TabsTrigger value="locations">Locations</TabsTrigger>}
+              {!isEditingOwner && <TabsTrigger value="permissions">Role & Permissions</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="profile" className="space-y-4 pt-4">
@@ -1060,13 +1065,18 @@ export default function StaffPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={!isChainTenant || !currentUserCanAssign}
+                  disabled={!isChainTenant || !currentUserCanAssign || isEditingOwner}
                   onClick={() => setEditableTabs((prev) => ({ ...prev, locations: !prev.locations }))}
                 >
                   <Pencil className="w-4 h-4 mr-1" />
                   {editableTabs.locations ? "Stop editing" : "Edit"}
                 </Button>
               </div>
+              {isEditingOwner && (
+                <p className="text-sm text-muted-foreground">
+                  Owners always have access to all branches.
+                </p>
+              )}
               <div className="space-y-2 max-h-56 overflow-y-auto border rounded-md p-3">
                 {!isChainTenant ? (
                   <p className="text-sm text-muted-foreground">Location assignment is available on chain plan only.</p>
@@ -1077,7 +1087,7 @@ export default function StaffPage() {
                     <label key={location.id} className="flex items-center gap-2 text-sm">
                       <Checkbox
                         checked={selectedLocationIds.includes(location.id)}
-                        disabled={!editableTabs.locations}
+                        disabled={!editableTabs.locations || isEditingOwner}
                         onCheckedChange={() => handleToggleLocation(location.id)}
                       />
                       <span>{location.name}</span>
@@ -1093,17 +1103,23 @@ export default function StaffPage() {
                 <Button
                   variant="ghost"
                   size="sm"
+                  disabled={isEditingOwner}
                   onClick={() => setEditableTabs((prev) => ({ ...prev, permissions: !prev.permissions }))}
                 >
                   <Pencil className="w-4 h-4 mr-1" />
                   {editableTabs.permissions ? "Stop editing" : "Edit"}
                 </Button>
               </div>
+              {isEditingOwner && (
+                <p className="text-sm text-muted-foreground">
+                  Owner permissions are fixed and include full access.
+                </p>
+              )}
               <div className="space-y-1.5">
                 <Label>Role</Label>
                 <Select
                   value={editRole}
-                  disabled={!editableTabs.permissions}
+                  disabled={!editableTabs.permissions || isEditingOwner}
                   onValueChange={(value) => {
                     const nextRole = value as StaffMember["role"];
                     setEditRole(nextRole);
@@ -1135,7 +1151,7 @@ export default function StaffPage() {
                     <label key={moduleKey} className="flex items-center gap-2 text-sm">
                       <Checkbox
                         checked={overrideSelections[moduleKey] === true}
-                        disabled={!editableTabs.permissions || isRoleChangedInDraft}
+                        disabled={!editableTabs.permissions || isRoleChangedInDraft || isEditingOwner}
                         onCheckedChange={() => toggleOverrideSelection(moduleKey)}
                       />
                       <span>{MODULE_LABELS[moduleKey]}</span>

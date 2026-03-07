@@ -42,7 +42,7 @@ const paymentOptions = [
 ];
 
 export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDialogProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const { createService, createCategory, categories } = useServices();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,11 +60,30 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     locationIds: [] as string[],
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const normalizeCountry = (value: string | null | undefined) =>
+    (value || "").toLowerCase().replace(/[^a-z]/g, "");
+  const activeLocationCountry = useMemo(() => {
+    if (!activeLocationId) return null;
+    return manageableLocations.find((location) => location.id === activeLocationId)?.country || null;
+  }, [activeLocationId, manageableLocations]);
+  const scopedLocations = useMemo(() => {
+    if (!isChainTier || !activeLocationCountry) return manageableLocations;
+    const activeCountryKey = normalizeCountry(activeLocationCountry);
+    return manageableLocations.filter(
+      (location) => normalizeCountry(location.country) === activeCountryKey,
+    );
+  }, [activeLocationCountry, isChainTier, manageableLocations]);
+  const scopedDefaultLocationId = useMemo(() => {
+    if (defaultLocationId && scopedLocations.some((location) => location.id === defaultLocationId)) {
+      return defaultLocationId;
+    }
+    return scopedLocations[0]?.id || "";
+  }, [defaultLocationId, scopedLocations]);
   const selectedLocationIds = useMemo(() => {
     if (isChainTier) return formData.locationIds;
-    const fallbackLocationId = defaultLocationId || manageableLocations[0]?.id || "";
+    const fallbackLocationId = scopedDefaultLocationId || manageableLocations[0]?.id || "";
     return fallbackLocationId ? [fallbackLocationId] : [];
-  }, [defaultLocationId, formData.locationIds, isChainTier, manageableLocations]);
+  }, [formData.locationIds, isChainTier, manageableLocations, scopedDefaultLocationId]);
   const locationCurrencies = useMemo(
     () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
     [fallbackCurrency, manageableLocations, selectedLocationIds],
@@ -76,15 +95,22 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
   useEffect(() => {
     if (!open) return;
     if (isChainTier) {
-      if (formData.locationIds.length === 0 && defaultLocationId) {
-        setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+      const validSelected = formData.locationIds.filter((locationId) =>
+        scopedLocations.some((location) => location.id === locationId),
+      );
+      if (validSelected.length !== formData.locationIds.length) {
+        setFormData((prev) => ({ ...prev, locationIds: validSelected }));
+        return;
+      }
+      if (validSelected.length === 0 && scopedDefaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
       }
       return;
     }
-    if (formData.locationIds.length === 0 && defaultLocationId) {
-      setFormData((prev) => ({ ...prev, locationIds: [defaultLocationId] }));
+    if (formData.locationIds.length === 0 && scopedDefaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
     }
-  }, [defaultLocationId, formData.locationIds.length, isChainTier, open]);
+  }, [formData.locationIds, isChainTier, open, scopedDefaultLocationId, scopedLocations]);
 
   const resetForm = () => {
     setFormData({
@@ -96,7 +122,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       buffer: "15",
       description: "",
       images: [],
-      locationIds: defaultLocationId ? [defaultLocationId] : [],
+      locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
   };
 
@@ -156,10 +182,10 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           {isChainTier && (
             <LocationScopePicker
-              locations={manageableLocations}
+              locations={scopedLocations}
               selectedLocationIds={formData.locationIds}
               onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
-              disabled={locationsLoading || manageableLocations.length === 0}
+              disabled={locationsLoading || scopedLocations.length === 0}
             />
           )}
           {hasMixedCurrencies && (
