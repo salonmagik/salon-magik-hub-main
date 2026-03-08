@@ -158,9 +158,9 @@ export function LocationsStep({
         <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
           <MapPin className="w-6 h-6 text-primary" />
         </div>
-        <CardTitle>Your locations</CardTitle>
+        <CardTitle>Your branches</CardTitle>
         <CardDescription>
-          Add all your salon locations. You can add more later.
+          Add all your salon branches. You can add more later.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -168,7 +168,7 @@ export function LocationsStep({
         <div className="space-y-3 p-4 bg-muted rounded-lg">
           <div className="flex items-center justify-between">
             <Label htmlFor="sameCountry" className="cursor-pointer">
-              All locations in the same country
+              All branches in the same country
             </Label>
             <Switch
               id="sameCountry"
@@ -178,7 +178,7 @@ export function LocationsStep({
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="sameName" className="cursor-pointer">
-              All locations share the business name
+              All branches share the business name
             </Label>
             <Switch
               id="sameName"
@@ -188,7 +188,7 @@ export function LocationsStep({
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="sameHours" className="cursor-pointer">
-              All locations have the same hours
+              All branches have the same hours
             </Label>
             <Switch
               id="sameHours"
@@ -210,7 +210,7 @@ export function LocationsStep({
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Location {index + 1}</span>
+                  <span className="text-sm font-medium">Branch {index + 1}</span>
                   {location.isDefault && (
                     <span className="text-xs text-primary flex items-center gap-1">
                       <Star className="w-3 h-3 fill-primary" /> Default

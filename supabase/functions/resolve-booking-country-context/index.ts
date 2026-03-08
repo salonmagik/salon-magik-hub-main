@@ -16,6 +16,7 @@ interface ResolveResponse {
   selected_country_code: string | null;
   supported_country_codes: string[];
   requires_country_selection: boolean;
+  country_context_enabled: boolean;
 }
 
 function normalizeCountryCode(value: string | null | undefined): string | null {
@@ -101,7 +102,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id")
+      .select("id, plan")
       .eq("slug", tenantSlug)
       .eq("online_booking_enabled", true)
       .maybeSingle();
@@ -125,7 +126,7 @@ serve(async (req) => {
       .from("locations")
       .select("country")
       .eq("tenant_id", tenant.id)
-      .eq("availability", "open");
+      .or("availability.is.null,availability.eq.open");
 
     if (locationsError) {
       console.error("resolve-booking-country-context locations fetch error", locationsError);
@@ -134,6 +135,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const isChainTenant = String((tenant as any).plan ?? "").toLowerCase() === "chain";
 
     const supportedCountryCodes = Array.from(
       new Set(
@@ -153,19 +156,26 @@ serve(async (req) => {
     const isCountrySupported = (countryCode: string | null) =>
       Boolean(countryCode && supportedCountryCodes.includes(countryCode));
 
+    const shouldUseCountryContext = isChainTenant && supportedCountryCodes.length > 1;
+
     let selectedCountryCode: string | null = null;
-    if (isCountrySupported(preferredCountryCode)) {
-      selectedCountryCode = preferredCountryCode;
-    } else if (isCountrySupported(detectedCountryCode)) {
-      selectedCountryCode = detectedCountryCode;
+    if (shouldUseCountryContext) {
+      if (isCountrySupported(preferredCountryCode)) {
+        selectedCountryCode = preferredCountryCode;
+      } else if (isCountrySupported(detectedCountryCode)) {
+        selectedCountryCode = detectedCountryCode;
+      }
+    } else if (supportedCountryCodes.length === 1) {
+      selectedCountryCode = supportedCountryCodes[0];
     }
 
     const response: ResolveResponse = {
       detected_country_code: detectedCountryCode,
       selected_country_code: selectedCountryCode,
-      supported_country_codes: supportedCountryCodes,
+      supported_country_codes: shouldUseCountryContext ? supportedCountryCodes : [],
       requires_country_selection:
-        supportedCountryCodes.length > 0 && selectedCountryCode === null,
+        shouldUseCountryContext && selectedCountryCode === null,
+      country_context_enabled: shouldUseCountryContext,
     };
 
     return new Response(JSON.stringify(response), {

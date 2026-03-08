@@ -253,7 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : [];
           const availableContexts = [
             ...(rpcData.can_use_owner_hub
-              ? [{ type: "owner_hub" as const, locationId: null, label: "Management Hub" }]
+              ? [{ type: "owner_hub" as const, locationId: null, label: "Business Hub" }]
               : []),
             ...availableLocations.map((location: any) => ({
               type: "location" as const,
@@ -376,7 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const availableContexts = [
-        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Management Hub" }] : []),
+        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Business Hub" }] : []),
         ...availableLocations.map((location) => ({
           type: "location" as const,
           locationId: location.locationId,

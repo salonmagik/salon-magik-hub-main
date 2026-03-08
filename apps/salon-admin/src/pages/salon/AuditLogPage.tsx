@@ -36,27 +36,36 @@ import {
 } from "lucide-react";
 import { useAuditLogs, type AuditLogFilters } from "@/hooks/useAuditLogs";
 import { format } from "date-fns";
+import { useAuth } from "@/hooks/useAuth";
 
 // Action type labels for display
 const actionLabels: Record<string, string> = {
-  create: "Created",
-  update: "Updated",
-  delete: "Deleted",
-  login: "Logged In",
-  logout: "Logged Out",
-  payment: "Payment",
-  refund: "Refund",
-  appointment_created: "Appointment Created",
-  appointment_updated: "Appointment Updated",
-  appointment_cancelled: "Appointment Cancelled",
-  service_created: "Service Created",
-  service_updated: "Service Updated",
-  customer_created: "Customer Created",
-  customer_updated: "Customer Updated",
-  staff_invited: "Staff Invited",
-  staff_removed: "Staff Removed",
-  settings_updated: "Settings Updated",
-  tenant_auto_deactivated: "Tenant Deactivated",
+  create: "Created record",
+  update: "Updated record",
+  delete: "Deleted record",
+  login: "Signed in",
+  logout: "Signed out",
+  payment: "Payment recorded",
+  refund: "Refund recorded",
+  appointment_created: "Appointment created",
+  appointment_updated: "Appointment updated",
+  appointment_cancelled: "Appointment cancelled",
+  service_created: "Service created",
+  service_updated: "Service updated",
+  customer_created: "Customer added",
+  customer_updated: "Customer updated",
+  staff_invited: "Staff invited",
+  staff_removed: "Staff removed",
+  settings_updated: "Settings updated",
+  tenant_auto_deactivated: "Business deactivated",
+  "auth.login": "Signed in",
+  "auth.logout": "Signed out",
+  "staff.deactivated": "Staff deactivated",
+  "staff.reactivated": "Staff reactivated",
+  "staff.role_updated": "Staff role updated",
+  "booking.staff_assignment_changed": "Booking staff changed",
+  "booking.staff_auto_assigned": "Staff auto-assigned to booking",
+  "booking.staff_selection_denied": "Staff selection was blocked",
 };
 
 // Entity type labels
@@ -102,6 +111,7 @@ function getCriticalityBadge(score: number | null) {
 }
 
 export default function AuditLogPage() {
+  const { currentTenant } = useAuth();
   const [filters, setFilters] = useState<AuditLogFilters>({});
   const [searchQuery, setSearchQuery] = useState("");
   
@@ -128,6 +138,16 @@ export default function AuditLogPage() {
     const lowCriticality = logs.filter((l) => (l.criticality_score ?? 0) < 40).length;
     return { highCriticality, mediumCriticality, lowCriticality, total: logs.length };
   }, [logs]);
+  const isChainTenant = currentTenant?.plan === "chain";
+
+  const humanizeAction = (action: string) => {
+    if (actionLabels[action]) return actionLabels[action];
+    return action
+      .replace(/[._]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
 
   return (
     <SalonSidebar>
@@ -293,6 +313,7 @@ export default function AuditLogPage() {
                       <TableRow>
                         <TableHead>Action Type</TableHead>
                         <TableHead>Entity</TableHead>
+                        {isChainTenant ? <TableHead className="hidden lg:table-cell">Branch</TableHead> : null}
                         <TableHead className="hidden md:table-cell">Staff</TableHead>
                         <TableHead>Time Started</TableHead>
                         <TableHead className="hidden lg:table-cell">Time Ended</TableHead>
@@ -304,7 +325,7 @@ export default function AuditLogPage() {
                         <TableRow key={log.id}>
                           <TableCell>
                             <div className="font-medium">
-                              {actionLabels[log.action] || log.action}
+                              {humanizeAction(log.action)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -312,11 +333,16 @@ export default function AuditLogPage() {
                               {entityLabels[log.entity_type] || log.entity_type}
                             </Badge>
                           </TableCell>
+                          {isChainTenant ? (
+                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                              {log.branchName || "—"}
+                            </TableCell>
+                          ) : null}
                           <TableCell className="hidden md:table-cell">
                             <div className="flex items-center gap-2">
                               <User className="w-3 h-3 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">
-                                {log.actor_user_id ? "Staff" : "System"}
+                                {log.actor_user_id ? log.actorName || "Staff" : "System"}
                               </span>
                             </div>
                           </TableCell>

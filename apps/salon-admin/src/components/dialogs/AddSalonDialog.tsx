@@ -31,7 +31,7 @@ import {
 interface AddSalonDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: () => void;
+  onSuccess?: () => Promise<void> | void;
 }
 
 interface LocationGate {
@@ -148,17 +148,17 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
   const upgradeMessage = useMemo(() => {
     if (isChainPlan) {
       if (isOverEntitlement) {
-        return `Your account currently has ${currentLocationCount} configured locations, which is above your active entitlement of ${allowedLocations}. New locations are blocked until entitlement is updated.`;
+        return `Your account currently has ${currentLocationCount} configured branches, which is above your active entitlement of ${allowedLocations}. New branches are blocked until entitlement is updated.`;
       }
       if (hasPendingChainUnlock && chainUnlockRequest) {
-        return `Your request to unlock up to ${chainUnlockRequest.requested_locations} stores is pending approval.`;
+        return `Your request to unlock up to ${chainUnlockRequest.requested_locations} branches is pending approval.`;
       }
       if (locationGate?.requires_custom || crossesSelfServeLimit) {
         return "The next tier is marked as custom. Contact sales/support to expand this chain plan.";
       }
-      return "You need more location slots for this chain plan.";
+      return "You need more branch slots for this chain plan.";
     }
-    return "Upgrade to the Chain plan to add more locations and unlock multi-salon management features.";
+    return "Upgrade to the Chain plan to add more branches and unlock multi-branch management features.";
   }, [
     allowedLocations,
     chainUnlockRequest,
@@ -211,6 +211,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         country: formData.country,
         address: formData.address,
         is_default: false,
+        availability: "open",
       });
 
       if (error) throw error;
@@ -227,7 +228,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
           p_unit_price_per_extra_location: expansionResult?.unit_price ?? null,
           p_monthly_addon_total: expansionResult?.subtotal ?? null,
           p_snapshot: {
-            source: "add_salon_dialog",
+            source: "add_branch_dialog",
             location_name: formData.name,
             location_city: formData.city,
             location_country: formData.country,
@@ -242,20 +243,20 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
       if (expansionResult?.billing_effective_at) {
         toast({
-          title: "Salon added",
-          description: `Location added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
+          title: "Branch added",
+          description: `Branch added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
         });
       } else {
-        toast({ title: "Success", description: "New salon location added" });
+        toast({ title: "Success", description: "New branch added" });
       }
       await refetchLocations();
-      onSuccess?.();
+      await onSuccess?.();
       onOpenChange(false);
       setFormData({ name: "", city: "", country: currentTenant?.country || "", address: "" });
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to add location",
+        description: error.message || "Failed to add branch",
         variant: "destructive",
       });
     } finally {
@@ -268,8 +269,8 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
       title: isChainPlan ? "Expansion required" : "Upgrade Required",
       description: isChainPlan
         ? hasPendingChainUnlock
-          ? "Your request is pending approval. We'll notify you once extra stores are activated."
-          : "Contact support to unlock this custom location tier."
+          ? "Your request is pending approval. We'll notify you once extra branches are activated."
+          : "Contact support to unlock this custom branch tier."
         : "Please visit Settings > Subscription to upgrade your plan.",
     });
     onOpenChange(false);
@@ -285,7 +286,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         p_tenant_id: currentTenant.id,
         p_plan_id: currentPlan.id,
         p_requested_locations: requestedLocations,
-        p_reason: `Requested from Add Salon dialog for ${requestedLocations} locations.`,
+        p_reason: `Requested from Add Branch dialog for ${requestedLocations} branches.`,
       });
       if (error) throw error;
 
@@ -294,7 +295,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
       onOpenChange(false);
       toast({
         title: "Request submitted",
-        description: `Your request for ${requestedLocations} stores has been submitted. Support will contact you for activation.`,
+        description: `Your request for ${requestedLocations} branches has been submitted. Support will contact you for activation.`,
       });
     } catch (error: any) {
       toast({
@@ -323,7 +324,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               Upgrade Required
             </DialogTitle>
             <DialogDescription>
-              You've reached the maximum number of locations for your current plan.
+              You've reached the maximum number of branches for your current plan.
             </DialogDescription>
           </DialogHeader>
 
@@ -332,7 +333,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               <AlertDescription>
                 <div className="space-y-2">
                   <p className="font-medium">
-                    Current: {currentLocationCount} / {allowedLocations} locations
+                    Current: {currentLocationCount} / {allowedLocations} branches
                   </p>
                   <p className="text-sm text-muted-foreground">{upgradeMessage}</p>
                 </div>
@@ -376,7 +377,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               Request chain unlock
             </DialogTitle>
             <DialogDescription>
-              This location would push your chain into the custom 11+ tier.
+              This branch would push your chain into the custom 11+ tier.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -384,10 +385,10 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               <AlertDescription>
                 <div className="space-y-2">
                   <p className="font-medium">
-                    Current: {currentLocationCount} / {allowedLocations} locations
+                    Current: {currentLocationCount} / {allowedLocations} branches
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Submit a request to activate up to {Math.max(11, nextRequestedLocationCount)} stores.
+                    Submit a request to activate up to {Math.max(11, nextRequestedLocationCount)} branches.
                     Support will contact you with custom pricing and approval details.
                   </p>
                 </div>
@@ -421,16 +422,16 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="w-5 h-5" />
-            Add New Salon
+            Add New Branch
           </DialogTitle>
           <DialogDescription>
-            Add a new location ({currentLocationCount} / {allowedLocations} used)
+            Add a new branch ({currentLocationCount} / {allowedLocations} used)
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Salon Name *</Label>
+            <Label htmlFor="name">Branch Name *</Label>
             <Input
               id="name"
               placeholder="e.g., Downtown Branch"
@@ -496,7 +497,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               }
             >
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Add Salon
+              Add Branch
             </Button>
           </DialogFooter>
         </form>

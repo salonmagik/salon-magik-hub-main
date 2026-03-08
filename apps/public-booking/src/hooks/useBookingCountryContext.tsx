@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { COUNTRIES, getCountryByCode } from "@shared/countries";
 
 export interface PublicBookingCountryContext {
   detectedCountryCode: string | null;
   selectedCountryCode: string | null;
   supportedCountryCodes: string[];
   requiresCountrySelection: boolean;
+  countryContextEnabled: boolean;
 }
 
 interface UseBookingCountryContextArgs {
@@ -19,12 +21,20 @@ interface ResolveCountryContextResponse {
   selected_country_code: string | null;
   supported_country_codes: string[];
   requires_country_selection: boolean;
+  country_context_enabled?: boolean;
 }
 
 function normalizeCountryCode(value: string | null | undefined): string | null {
   if (!value) return null;
   const normalized = value.trim().toUpperCase();
-  return normalized.length >= 2 ? normalized : null;
+  if (normalized.length === 2 && getCountryByCode(normalized)) return normalized;
+
+  const normalizedName = normalized.replace(/[^A-Z]/g, "");
+  if (!normalizedName) return null;
+  const byName = COUNTRIES.find(
+    (country) => country.name.toUpperCase().replace(/[^A-Z]/g, "") === normalizedName,
+  );
+  return byName?.code ?? null;
 }
 
 function getStorageKey(tenantSlug: string | undefined): string | null {
@@ -88,6 +98,7 @@ export function useBookingCountryContext({
           selected_country_code: null,
           supported_country_codes: [],
           requires_country_selection: false,
+          country_context_enabled: false,
         };
       }
 
@@ -130,6 +141,10 @@ export function useBookingCountryContext({
 
   const setCountry = useCallback(
     (countryCode: string) => {
+      if (!(countryQuery.data?.country_context_enabled ?? false)) {
+        return;
+      }
+
       const normalized = normalizeCountryCode(countryCode);
       if (!normalized || !supportedCountryCodes.includes(normalized)) {
         return;
@@ -150,14 +165,16 @@ export function useBookingCountryContext({
         },
       );
     },
-    [queryClient, supportedCountryCodes, tenantSlug],
+    [countryQuery.data?.country_context_enabled, queryClient, supportedCountryCodes, tenantSlug],
   );
 
   const context: PublicBookingCountryContext = {
     detectedCountryCode: normalizeCountryCode(countryQuery.data?.detected_country_code),
     selectedCountryCode: effectiveSelectedCountryCode,
     supportedCountryCodes,
+    countryContextEnabled: countryQuery.data?.country_context_enabled ?? false,
     requiresCountrySelection:
+      (countryQuery.data?.country_context_enabled ?? false) &&
       supportedCountryCodes.length > 0 &&
       (countryQuery.data?.requires_country_selection ?? false) &&
       !effectiveSelectedCountryCode,

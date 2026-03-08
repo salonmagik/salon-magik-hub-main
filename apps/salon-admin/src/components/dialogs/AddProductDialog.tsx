@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
@@ -6,11 +6,14 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Package, Hash, Loader2, Save } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { useProducts } from "@/hooks/useProducts";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrencySymbol } from "@shared/currency";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -18,9 +21,24 @@ interface AddProductDialogProps {
   onSuccess?: () => void;
 }
 
+const formatAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) return "";
+  const [intPart, ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, "");
+  const withCommas = (normalizedInt || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decimal.length > 0) return `${withCommas}.${decimal}`;
+  return cleaned.endsWith(".") ? `${withCommas}.` : withCommas;
+};
+
+const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
+
 export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
-  const { currentTenant } = useAuth();
-  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
+  const { currentTenant, activeLocationId } = useAuth();
+  const { createProduct } = useProducts();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -29,7 +47,60 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     status: "active",
     description: "",
     images: [] as string[],
+    locationIds: [] as string[],
   });
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const normalizeCountry = (value: string | null | undefined) =>
+    (value || "").toLowerCase().replace(/[^a-z]/g, "");
+  const activeLocationCountry = useMemo(() => {
+    if (!activeLocationId) return null;
+    return manageableLocations.find((location) => location.id === activeLocationId)?.country || null;
+  }, [activeLocationId, manageableLocations]);
+  const scopedLocations = useMemo(() => {
+    if (!isChainTier || !activeLocationCountry) return manageableLocations;
+    const activeCountryKey = normalizeCountry(activeLocationCountry);
+    return manageableLocations.filter(
+      (location) => normalizeCountry(location.country) === activeCountryKey,
+    );
+  }, [activeLocationCountry, isChainTier, manageableLocations]);
+  const scopedDefaultLocationId = useMemo(() => {
+    if (defaultLocationId && scopedLocations.some((location) => location.id === defaultLocationId)) {
+      return defaultLocationId;
+    }
+    return scopedLocations[0]?.id || "";
+  }, [defaultLocationId, scopedLocations]);
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = scopedDefaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [formData.locationIds, isChainTier, manageableLocations, scopedDefaultLocationId]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+  const hasMixedCurrencies = locationCurrencies.length > 1;
+
+  useEffect(() => {
+    if (!open) return;
+    if (isChainTier) {
+      const validSelected = formData.locationIds.filter((locationId) =>
+        scopedLocations.some((location) => location.id === locationId),
+      );
+      if (validSelected.length !== formData.locationIds.length) {
+        setFormData((prev) => ({ ...prev, locationIds: validSelected }));
+        return;
+      }
+      if (validSelected.length === 0 && scopedDefaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+      }
+      return;
+    }
+    if (formData.locationIds.length === 0 && scopedDefaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+    }
+  }, [formData.locationIds, isChainTier, open, scopedDefaultLocationId, scopedLocations]);
 
   const resetForm = () => {
     setFormData({
@@ -39,6 +110,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       status: "active",
       description: "",
       images: [],
+      locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
   };
 
@@ -47,9 +119,11 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     return (
       formData.name.trim() !== "" &&
       formData.price !== "" &&
-      parseFloat(formData.price) > 0
+      parseAmountInput(formData.price) > 0 &&
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies
     );
-  }, [formData]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,25 +136,21 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase.from("products").insert({
-        tenant_id: currentTenant.id,
+      const product = await createProduct({
         name: formData.name,
-        price: parseFloat(formData.price),
-        stock_quantity: parseInt(formData.stockQuantity),
+        price: parseAmountInput(formData.price),
+        stockQuantity: parseInt(formData.stockQuantity),
         status: formData.status as "active" | "inactive" | "archived",
         description: formData.description || null,
-        image_urls: formData.images,
+        imageUrls: formData.images,
+        locationIds: selectedLocationIds,
       });
 
-      if (error) throw error;
-
-      toast({ title: "Success", description: "Product created successfully" });
-      resetForm();
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (err) {
-      console.error("Error creating product:", err);
-      toast({ title: "Error", description: "Failed to create product", variant: "destructive" });
+      if (product) {
+        resetForm();
+        onOpenChange(false);
+        onSuccess?.();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -114,22 +184,38 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
           </div>
 
           {/* Price & Stock Row */}
+          {isChainTier && (
+            <LocationScopePicker
+              locations={scopedLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || scopedLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
+          )}
+
+          {/* Price & Stock Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>
-                Price ({currencySymbol}) <span className="text-destructive">*</span>
+                Price <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
-                {/* <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
-                  className="pl-9"
+                  className="pl-8"
                   value={formData.price}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, price: formatAmountInput(e.target.value) }))
+                  }
                   required
-                  min="0"
-                  step="0.01"
                 />
               </div>
             </div>

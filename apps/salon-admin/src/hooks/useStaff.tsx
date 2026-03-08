@@ -22,6 +22,7 @@ export interface StaffMember {
   roleAssignedAt: string | null;
   email: string | null;
   joinedAt: string | null;
+  lastLoginAt: string | null;
   profile: StaffProfile | null;
   assignedLocationIds: string[];
   assignedLocationNames: string[];
@@ -36,6 +37,7 @@ interface StaffMemberRow {
   role_assigned_at: string | null;
   email: string | null;
   joined_at: string | null;
+  last_login_at: string | null;
   profile_id: string | null;
   full_name: string | null;
   phone: string | null;
@@ -85,6 +87,7 @@ export function useStaff() {
         roleAssignedAt: row.role_assigned_at,
         email: row.email,
         joinedAt: row.joined_at,
+        lastLoginAt: row.last_login_at,
         profile: {
           id: row.profile_id,
           user_id: row.user_id,

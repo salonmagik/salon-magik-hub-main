@@ -4,6 +4,13 @@ import { useAuth } from "./useAuth";
 import type { Tables } from "@supabase-client";
 
 type AuditLog = Tables<"audit_logs">;
+type Profile = Tables<"profiles">;
+type Location = Tables<"locations">;
+
+export interface AuditLogEntry extends AuditLog {
+  actorName: string | null;
+  branchName: string | null;
+}
 
 export interface AuditLogFilters {
   action?: string;
@@ -15,7 +22,7 @@ export interface AuditLogFilters {
 
 export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
   const { currentTenant } = useAuth();
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -59,7 +66,45 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
 
       if (fetchError) throw fetchError;
 
-      const logData = data || [];
+      const rawLogs = (data || []) as AuditLog[];
+      const actorIds = [...new Set(rawLogs.map((log) => log.actor_user_id).filter((id): id is string => Boolean(id)))];
+      const branchIds = [
+        ...new Set(
+          rawLogs
+            .map((log) => (log as AuditLog & { branch_location_id?: string | null }).branch_location_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+
+      const [profilesResult, locationsResult] = await Promise.all([
+        actorIds.length
+          ? supabase.from("profiles").select("user_id, full_name").in("user_id", actorIds)
+          : Promise.resolve({ data: [] as Pick<Profile, "user_id" | "full_name">[], error: null }),
+        branchIds.length
+          ? supabase.from("locations").select("id, name").in("id", branchIds)
+          : Promise.resolve({ data: [] as Pick<Location, "id" | "name">[], error: null }),
+      ]);
+
+      const profileMap = new Map(
+        ((profilesResult.data || []) as Array<Pick<Profile, "user_id" | "full_name">>).map((profile) => [
+          profile.user_id,
+          profile.full_name,
+        ]),
+      );
+      const locationMap = new Map(
+        ((locationsResult.data || []) as Array<Pick<Location, "id" | "name">>).map((location) => [
+          location.id,
+          location.name,
+        ]),
+      );
+      const logData: AuditLogEntry[] = rawLogs.map((log) => {
+        const branchLocationId = (log as AuditLog & { branch_location_id?: string | null }).branch_location_id || null;
+        return {
+          ...log,
+          actorName: log.actor_user_id ? profileMap.get(log.actor_user_id) || null : null,
+          branchName: branchLocationId ? locationMap.get(branchLocationId) || null : null,
+        };
+      });
       
       if (pageNum === 0) {
         setLogs(logData);
