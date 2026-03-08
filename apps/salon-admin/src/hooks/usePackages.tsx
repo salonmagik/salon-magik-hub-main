@@ -100,38 +100,62 @@ export function usePackages() {
     fetchPackages();
   }, [fetchPackages]);
 
-  const assignPackageToLocations = async (
-    tenantId: string,
-    packageId: string,
-    locationIds?: string[],
-  ) => {
-    let query = supabase
+  const resolveCreateLocationScope = async (tenantId: string, requestedLocationIds?: string[]) => {
+    const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+    const normalizedRequested = Array.from(new Set((requestedLocationIds ?? []).filter(Boolean)));
+    const targetLocationIds = isChainTier
+      ? normalizedRequested
+      : Array.from(new Set([activeLocationId, ...normalizedRequested].filter(Boolean) as string[]));
+
+    if (targetLocationIds.length === 0) {
+      throw new Error(
+        isChainTier
+          ? "Select at least one branch before creating this item."
+          : "No branch context found. Switch to a branch and try again.",
+      );
+    }
+
+    const { data: locations, error } = await supabase
       .from("locations")
       .select("id")
       .eq("tenant_id", tenantId)
+      .in("id", targetLocationIds)
       .or("availability.is.null,availability.eq.open");
+    if (error) throw error;
+    const validLocationIds = Array.from(new Set((locations ?? []).map((row) => row.id)));
+    if (validLocationIds.length !== targetLocationIds.length) {
+      throw new Error("Some selected branches are unavailable. Refresh and try again.");
+    }
+    return validLocationIds;
+  };
 
-    if (locationIds && locationIds.length > 0) {
-      query = query.in("id", locationIds);
+  const assignPackageToLocations = async (tenantId: string, packageId: string, locationIds: string[]) => {
+    if (locationIds.length === 0) {
+      throw new Error("No branch scope was provided for this package.");
     }
 
-    const { data: locations, error: locationsError } = await query;
-
-    if (locationsError) throw locationsError;
-    if (!locations || locations.length === 0) return;
-
-    const rows = locations.map((location) => ({
+    const rows = locationIds.map((locationId) => ({
       tenant_id: tenantId,
       package_id: packageId,
-      location_id: location.id,
+      location_id: locationId,
       is_enabled: true,
     }));
 
-    const { error: mappingError } = await (supabase.from as any)("package_locations")
-      .upsert(rows, { onConflict: "package_id,location_id" });
+    const { error: mappingError } = await (supabase.from as any)("package_locations").upsert(rows, {
+      onConflict: "package_id,location_id",
+    });
+    if (mappingError) throw mappingError;
 
-    if (mappingError) {
-      throw mappingError;
+    const { data: verifyRows, error: verifyError } = await (supabase.from as any)("package_locations")
+      .select("location_id")
+      .eq("tenant_id", tenantId)
+      .eq("package_id", packageId)
+      .eq("is_enabled", true)
+      .in("location_id", locationIds);
+    if (verifyError) throw verifyError;
+    const verifiedLocationIds = new Set(((verifyRows ?? []) as Array<{ location_id: string }>).map((row) => row.location_id));
+    if (verifiedLocationIds.size !== locationIds.length) {
+      throw new Error("Package branch mapping could not be verified. Please retry.");
     }
   };
 
@@ -142,6 +166,8 @@ export function usePackages() {
     originalPrice?: number;
     imageUrls?: string[];
     serviceItems?: { serviceId: string; quantity: number }[];
+    productItems?: { productId: string; quantity: number }[];
+    fallbackServiceId?: string;
     locationIds?: string[];
   }) => {
     if (!currentTenant?.id) {
@@ -150,6 +176,7 @@ export function usePackages() {
     }
 
     try {
+      const locationScope = await resolveCreateLocationScope(currentTenant.id, data.locationIds);
       // Create package
       const { data: pkg, error: pkgError } = await supabase
         .from("packages")
@@ -165,7 +192,6 @@ export function usePackages() {
         .single();
 
       if (pkgError) throw pkgError;
-      await assignPackageToLocations(currentTenant.id, pkg.id, data.locationIds);
 
       // Add package items if provided
       if (data.serviceItems && data.serviceItems.length > 0) {
@@ -181,13 +207,34 @@ export function usePackages() {
 
         if (itemsError) throw itemsError;
       }
+      if (data.productItems && data.productItems.length > 0) {
+        const fallbackServiceId = data.fallbackServiceId || data.serviceItems?.[0]?.serviceId;
+        if (!fallbackServiceId) {
+          throw new Error("Add at least one service or provide a fallback service for package products.");
+        }
+        const items = data.productItems.map((item) => ({
+          package_id: pkg.id,
+          service_id: fallbackServiceId,
+          product_id: item.productId,
+          quantity: item.quantity,
+        }));
+
+        const { error: itemsError } = await supabase.from("package_items").insert(items);
+        if (itemsError) throw itemsError;
+      }
+
+      await assignPackageToLocations(currentTenant.id, pkg.id, locationScope);
 
       toast({ title: "Success", description: "Package created successfully" });
       await fetchPackages();
       return pkg;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error creating package:", err);
-      toast({ title: "Error", description: "Failed to create package", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to create package",
+        variant: "destructive",
+      });
       return null;
     }
   };

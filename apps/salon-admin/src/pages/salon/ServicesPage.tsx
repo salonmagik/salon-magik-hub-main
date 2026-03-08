@@ -40,7 +40,6 @@ import {
   Undo2,
   Loader2,
   AlertTriangle,
-  Wrench,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -137,7 +136,6 @@ export default function ServicesPage() {
   const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
   const [binSelectMode, setBinSelectMode] = useState(false);
   const [selectedBinItemKeys, setSelectedBinItemKeys] = useState<Set<string>>(new Set());
-  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const [fixDialogOpen, setFixDialogOpen] = useState(false);
   const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
   const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
@@ -195,10 +193,7 @@ export default function ServicesPage() {
   const hasWarningIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
     getItemIssues(itemType, itemId).some((issue) => issue.severity === "warning");
 
-  const shouldShowItem = (itemType: CatalogIntegrityItemType, itemId: string) => {
-    if (!showFlaggedOnly) return true;
-    return getItemIssues(itemType, itemId).length > 0;
-  };
+  const shouldShowItem = (_itemType: CatalogIntegrityItemType, _itemId: string) => true;
 
   const IMPORT_TEMPLATES: Record<CatalogImportType, TemplateColumn[]> = {
     services: [
@@ -657,12 +652,28 @@ export default function ServicesPage() {
         }
       }
 
-      const { error: validateError } = await (supabase.rpc as any)("validate_catalog_item_integrity", {
+      const { data: revalidationIssues, error: validateError } = await (supabase.rpc as any)(
+        "validate_catalog_item_integrity",
+        {
         p_tenant_id: currentTenant.id,
         p_item_type: fixTarget.itemType,
         p_item_id: fixTarget.itemId,
       });
       if (validateError) throw validateError;
+
+      const activeIssues = ((revalidationIssues ?? []) as CatalogIntegrityIssue[]).filter(
+        (issue) => !issue.resolved_at,
+      );
+      if (activeIssues.length > 0) {
+        const issueLabel = activeIssues.map((issue) => issue.issue_code).join(", ");
+        toast({
+          title: "Fix still incomplete",
+          description: `Remaining issue(s): ${issueLabel}.`,
+          variant: "destructive",
+        });
+        await refetchAll();
+        return;
+      }
 
       await (supabase.rpc as any)("log_audit_event", {
         _tenant_id: currentTenant.id,
@@ -912,14 +923,6 @@ export default function ServicesPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button
-                variant={showFlaggedOnly ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowFlaggedOnly((prev) => !prev)}
-              >
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                {showFlaggedOnly ? "Showing flagged only" : "Show flagged only"}
-              </Button>
             </div>
 
             {/* Loading State */}
@@ -957,7 +960,6 @@ export default function ServicesPage() {
                           onViewDetails={() => setViewDetailItem(item)}
                           onEdit={() => setEditItem(item)}
                           integrityIssues={getItemIssues(item.type, item.id)}
-                          onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog(item) : undefined}
                         />
                       ))}
                     </div>
@@ -1005,17 +1007,6 @@ export default function ServicesPage() {
                             onViewDetails={() => setViewDetailItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
                             onEdit={() => setEditItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
                             integrityIssues={getItemIssues("service", s.id)}
-                            onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog({
-                              id: s.id,
-                              type: "service",
-                              name: s.name,
-                              description: s.description || "",
-                              price: Number(s.price),
-                              duration: s.duration_minutes,
-                              images: s.image_urls || [],
-                              status: s.status,
-                              is_flagged: s.is_flagged,
-                            }) : undefined}
                           />
                         ))}
                     </div>
@@ -1063,17 +1054,6 @@ export default function ServicesPage() {
                             onViewDetails={() => setViewDetailItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
                             onEdit={() => setEditItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
                             integrityIssues={getItemIssues("package", p.id)}
-                            onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog({
-                              id: p.id,
-                              type: "package",
-                              name: p.name,
-                              description: p.description || "",
-                              price: Number(p.price),
-                              originalPrice: p.original_price ? Number(p.original_price) : undefined,
-                              images: p.image_urls || [],
-                              status: p.status,
-                              is_flagged: (p as any).is_flagged || false,
-                            }) : undefined}
                           />
                         ))}
                     </div>
@@ -1134,17 +1114,6 @@ export default function ServicesPage() {
                                 onViewDetails={() => setViewDetailItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
                                 onEdit={() => setEditItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
                                 integrityIssues={getItemIssues("product", p.id)}
-                                onFixConfig={canApplyIntegrityFix ? () => openFixConfigDialog({
-                                  id: p.id,
-                                  type: "product",
-                                  name: p.name,
-                                  description: p.description || "",
-                                  price: Number(p.price),
-                                  stock: p.stock_quantity,
-                                  images: p.image_urls || [],
-                                  status: p.status,
-                                  is_flagged: (p as any).is_flagged,
-                                }) : undefined}
                               />
                             ))}
                         </div>
@@ -1231,24 +1200,6 @@ export default function ServicesPage() {
                             {voucherIssues.length > 0 && (
                               <div className="mt-3 space-y-2">
                                 <p className="text-xs text-muted-foreground">{voucherIssues[0].issue_message}</p>
-                                {canApplyIntegrityFix && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() =>
-                                      openFixConfigDialog({
-                                        id: v.id,
-                                        type: "voucher",
-                                        name: v.code,
-                                        description: "",
-                                        price: Number(v.amount),
-                                      })
-                                    }
-                                  >
-                                    <Wrench className="mr-2 h-4 w-4" />
-                                    Fix config
-                                  </Button>
-                                )}
                               </div>
                             )}
                           </CardContent>
@@ -1801,7 +1752,6 @@ interface SelectableItemCardProps {
   onViewDetails?: () => void;
   onEdit?: () => void;
   integrityIssues?: CatalogIntegrityIssue[];
-  onFixConfig?: () => void;
 }
 
 function SelectableItemCard({
@@ -1814,7 +1764,6 @@ function SelectableItemCard({
   onViewDetails,
   onEdit,
   integrityIssues = [],
-  onFixConfig,
 }: SelectableItemCardProps) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
@@ -1941,12 +1890,6 @@ function SelectableItemCard({
                   <DropdownMenuItem onClick={onEdit}>
                     <Edit className="w-4 h-4 mr-2" />
                     Edit
-                  </DropdownMenuItem>
-                )}
-                {onFixConfig && integrityIssues.length > 0 && (
-                  <DropdownMenuItem onClick={onFixConfig}>
-                    <Wrench className="w-4 h-4 mr-2" />
-                    Fix config
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>

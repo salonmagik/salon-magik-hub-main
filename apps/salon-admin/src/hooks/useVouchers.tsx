@@ -80,38 +80,62 @@ export function useVouchers() {
     fetchVouchers();
   }, [fetchVouchers]);
 
-  const assignVoucherToLocations = async (
-    tenantId: string,
-    voucherId: string,
-    locationIds?: string[],
-  ) => {
-    let query = supabase
+  const resolveCreateLocationScope = async (tenantId: string, requestedLocationIds?: string[]) => {
+    const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+    const normalizedRequested = Array.from(new Set((requestedLocationIds ?? []).filter(Boolean)));
+    const targetLocationIds = isChainTier
+      ? normalizedRequested
+      : Array.from(new Set([activeLocationId, ...normalizedRequested].filter(Boolean) as string[]));
+
+    if (targetLocationIds.length === 0) {
+      throw new Error(
+        isChainTier
+          ? "Select at least one branch before creating this item."
+          : "No branch context found. Switch to a branch and try again.",
+      );
+    }
+
+    const { data: locations, error } = await supabase
       .from("locations")
       .select("id")
       .eq("tenant_id", tenantId)
+      .in("id", targetLocationIds)
       .or("availability.is.null,availability.eq.open");
+    if (error) throw error;
+    const validLocationIds = Array.from(new Set((locations ?? []).map((row) => row.id)));
+    if (validLocationIds.length !== targetLocationIds.length) {
+      throw new Error("Some selected branches are unavailable. Refresh and try again.");
+    }
+    return validLocationIds;
+  };
 
-    if (locationIds && locationIds.length > 0) {
-      query = query.in("id", locationIds);
+  const assignVoucherToLocations = async (tenantId: string, voucherId: string, locationIds: string[]) => {
+    if (locationIds.length === 0) {
+      throw new Error("No branch scope was provided for this voucher.");
     }
 
-    const { data: locations, error: locationsError } = await query;
-
-    if (locationsError) throw locationsError;
-    if (!locations || locations.length === 0) return;
-
-    const rows = locations.map((location) => ({
+    const rows = locationIds.map((locationId) => ({
       tenant_id: tenantId,
       voucher_id: voucherId,
-      location_id: location.id,
+      location_id: locationId,
       is_enabled: true,
     }));
 
-    const { error: mappingError } = await (supabase.from as any)("voucher_locations")
-      .upsert(rows, { onConflict: "voucher_id,location_id" });
+    const { error: mappingError } = await (supabase.from as any)("voucher_locations").upsert(rows, {
+      onConflict: "voucher_id,location_id",
+    });
+    if (mappingError) throw mappingError;
 
-    if (mappingError) {
-      throw mappingError;
+    const { data: verifyRows, error: verifyError } = await (supabase.from as any)("voucher_locations")
+      .select("location_id")
+      .eq("tenant_id", tenantId)
+      .eq("voucher_id", voucherId)
+      .eq("is_enabled", true)
+      .in("location_id", locationIds);
+    if (verifyError) throw verifyError;
+    const verifiedLocationIds = new Set(((verifyRows ?? []) as Array<{ location_id: string }>).map((row) => row.location_id));
+    if (verifiedLocationIds.size !== locationIds.length) {
+      throw new Error("Voucher branch mapping could not be verified. Please retry.");
     }
   };
 
@@ -128,6 +152,7 @@ export function useVouchers() {
     }
 
     try {
+      const locationScope = await resolveCreateLocationScope(currentTenant.id, data.locationIds);
       const { data: voucher, error } = await supabase
         .from("vouchers")
         .insert({
@@ -142,16 +167,20 @@ export function useVouchers() {
         .single();
 
       if (error) throw error;
-      await assignVoucherToLocations(currentTenant.id, voucher.id, data.locationIds);
+      await assignVoucherToLocations(currentTenant.id, voucher.id, locationScope);
 
       toast({ title: "Success", description: "Voucher created successfully" });
       await fetchVouchers();
       return voucher;
     } catch (err: any) {
       console.error("Error creating voucher:", err);
+      const customMessage = typeof err?.message === "string" ? err.message : null;
       toast({
         title: "Error",
-        description: err.message?.includes("unique") ? "Voucher code already exists" : "Failed to create voucher",
+        description:
+          customMessage?.includes("unique")
+            ? "Voucher code already exists"
+            : customMessage || "Failed to create voucher",
         variant: "destructive",
       });
       return null;

@@ -83,11 +83,9 @@ function BookingPageContent() {
 
   const countryScopedLocations = useMemo(() => {
     if (!countryContextEnabled || !selectedCountryCode) return locations;
-    const matches = locations.filter(
+    return locations.filter(
       (location) => toCountryCode(location.country) === selectedCountryCode,
     );
-    // Keep storefront functional if legacy country values cannot be normalized.
-    return matches.length > 0 ? matches : locations;
   }, [countryContextEnabled, selectedCountryCode, locations]);
   const locationIds = useMemo(
     () => countryScopedLocations.map((location) => location.id),
@@ -220,6 +218,8 @@ function BookingPageContent() {
                 categories={categories}
                 locations={countryScopedLocations}
                 currency={storefrontCurrency}
+                strictLocationScope={countryContextEnabled}
+                strictScopedLocationIds={scopedLocationIds}
                 selectedLocationIds={selectedLocationIds}
                 onLocationFilterChange={setSelectedLocationIds}
               />

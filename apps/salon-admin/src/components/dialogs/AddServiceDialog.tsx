@@ -384,6 +384,9 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       onOpenChange={setAddCategoryOpen}
       onSubmit={async (data) => {
         const result = await createCategory(data);
+        if (result?.id) {
+          setFormData((prev) => ({ ...prev, category: result.id }));
+        }
         return !!result;
       }}
     />

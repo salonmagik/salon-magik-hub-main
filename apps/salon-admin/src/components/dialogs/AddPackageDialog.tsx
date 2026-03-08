@@ -8,10 +8,10 @@ import { Checkbox } from "@ui/checkbox";
 import { ScrollArea } from "@ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Gift, Loader2, Save, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useServices } from "@/hooks/useServices";
 import { useProducts } from "@/hooks/useProducts";
+import { usePackages } from "@/hooks/usePackages";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
@@ -67,6 +67,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   const fallbackCurrency = currentTenant?.currency || "USD";
   const { services, isLoading: servicesLoading } = useServices();
   const { products, isLoading: productsLoading } = useProducts();
+  const { createPackage } = usePackages();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"services" | "products">("services");
   const [formData, setFormData] = useState({
@@ -235,65 +236,29 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     setIsSubmitting(true);
 
     try {
-      // Create the package
-      const { data: pkg, error: pkgError } = await supabase
-        .from("packages")
-        .insert({
-          tenant_id: currentTenant.id,
-          name: formData.name,
-          price: parseAmountInput(formData.price),
-          original_price: originalPrice,
-          description: formData.description || null,
-          image_urls: formData.images,
-        })
-        .select()
-        .single();
-
-      if (pkgError) throw pkgError;
-
-      // Create package items for services
-      if (selectedServices.length > 0) {
-        const serviceItems = selectedServices.map((s) => ({
-          package_id: pkg.id,
-          service_id: s.serviceId,
-          quantity: s.quantity,
-        }));
-
-        const { error: serviceItemsError } = await supabase.from("package_items").insert(serviceItems);
-        if (serviceItemsError) throw serviceItemsError;
-      }
-
-      // Create package items for products
-      if (selectedProducts.length > 0) {
-        const productItems = selectedProducts.map((p) => ({
-          package_id: pkg.id,
-          service_id: selectedServices[0]?.serviceId || services[0]?.id, // Fallback required by schema
-          product_id: p.productId,
-          quantity: p.quantity,
-        }));
-
-        const { error: productItemsError } = await supabase.from("package_items").insert(productItems);
-        if (productItemsError) throw productItemsError;
-      }
-
-      const { error: mappingError } = await (supabase.from as any)("package_locations").upsert(
-        selectedLocationIds.map((locationId) => ({
-          tenant_id: currentTenant.id,
-          package_id: pkg.id,
-          location_id: locationId,
-          is_enabled: true,
+      const pkg = await createPackage({
+        name: formData.name,
+        price: parseAmountInput(formData.price),
+        originalPrice: originalPrice || undefined,
+        description: formData.description || undefined,
+        imageUrls: formData.images,
+        serviceItems: selectedServices.map((item) => ({
+          serviceId: item.serviceId,
+          quantity: item.quantity,
         })),
-        { onConflict: "package_id,location_id" },
-      );
-      if (mappingError) throw mappingError;
+        productItems: selectedProducts.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+        fallbackServiceId: selectedServices[0]?.serviceId || services[0]?.id,
+        locationIds: selectedLocationIds,
+      });
 
-      toast({ title: "Success", description: "Package created successfully" });
-      resetForm();
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (err) {
-      console.error("Error creating package:", err);
-      toast({ title: "Error", description: "Failed to create package", variant: "destructive" });
+      if (pkg) {
+        resetForm();
+        onOpenChange(false);
+        onSuccess?.();
+      }
     } finally {
       setIsSubmitting(false);
     }

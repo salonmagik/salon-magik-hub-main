@@ -25,6 +25,8 @@ interface CatalogViewProps {
   categories: PublicCategory[];
   locations: PublicLocation[];
   currency: string;
+  strictLocationScope?: boolean;
+  strictScopedLocationIds?: string[];
   selectedLocationIds: string[];
   onLocationFilterChange: (locationIds: string[]) => void;
 }
@@ -42,6 +44,7 @@ type CatalogItem = {
   stockQuantity?: number;
   type: "service" | "package" | "product";
   categoryId?: string | null;
+  branches?: { id: string; name: string; city: string | null; country_code: string }[];
   locationIds?: string[];
   locationNames?: string[];
 };
@@ -53,6 +56,8 @@ export function CatalogView({
   categories,
   locations,
   currency,
+  strictLocationScope = false,
+  strictScopedLocationIds = [],
   selectedLocationIds,
   onLocationFilterChange,
 }: CatalogViewProps) {
@@ -60,11 +65,6 @@ export function CatalogView({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name");
-
-  const locationNameById = useMemo(
-    () => new Map(locations.map((location) => [location.id, location.city || location.name])),
-    [locations],
-  );
 
   // Normalize all items into a common format
   const allItems: CatalogItem[] = useMemo(() => {
@@ -77,12 +77,11 @@ export function CatalogView({
       durationMinutes: s.duration_minutes,
       type: "service" as const,
       categoryId: s.category_id,
+      branches: s.branches ?? [],
       locationIds: s.location_ids ?? [],
       locationNames: Array.from(
         new Set(
-          (s.location_ids ?? [])
-            .map((locationId) => locationNameById.get(locationId))
-            .filter((name): name is string => Boolean(name)),
+          (s.branches ?? []).map((branch) => branch.city || branch.name),
         ),
       ),
     }));
@@ -95,12 +94,11 @@ export function CatalogView({
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
       imageUrls: p.image_urls || [],
       type: "package" as const,
+      branches: p.branches ?? [],
       locationIds: p.location_ids ?? [],
       locationNames: Array.from(
         new Set(
-          (p.location_ids ?? [])
-            .map((locationId) => locationNameById.get(locationId))
-            .filter((name): name is string => Boolean(name)),
+          (p.branches ?? []).map((branch) => branch.city || branch.name),
         ),
       ),
     }));
@@ -113,18 +111,24 @@ export function CatalogView({
       imageUrls: p.image_urls || [],
       stockQuantity: p.stock_quantity,
       type: "product" as const,
+      branches: p.branches ?? [],
       locationIds: p.location_ids ?? [],
       locationNames: Array.from(
         new Set(
-          (p.location_ids ?? [])
-            .map((locationId) => locationNameById.get(locationId))
-            .filter((name): name is string => Boolean(name)),
+          (p.branches ?? []).map((branch) => branch.city || branch.name),
         ),
       ),
     }));
 
     return [...serviceItems, ...packageItems, ...productItems];
-  }, [services, packages, products, locationNameById]);
+  }, [services, packages, products]);
+
+  const getItemLocationIds = (item: CatalogItem): string[] => {
+    if (Array.isArray(item.branches) && item.branches.length > 0) {
+      return item.branches.map((branch) => branch.id);
+    }
+    return item.locationIds ?? [];
+  };
 
   // Filter function
   const filterItems = (items: CatalogItem[]) => {
@@ -145,13 +149,26 @@ export function CatalogView({
       filtered = filtered.filter((item) => item.categoryId === activeCategory);
     }
 
-    if (selectedLocationIds.length > 0) {
-      filtered = filtered.filter((item) =>
-        // Keep legacy/unmapped rows visible so catalog doesn't disappear when location mappings are absent.
-        !item.locationIds ||
-        item.locationIds.length === 0 ||
-        item.locationIds.some((locationId) => selectedLocationIds.includes(locationId)),
-      );
+    if (strictLocationScope) {
+      const allowedLocationIds =
+        selectedLocationIds.length > 0 ? selectedLocationIds : strictScopedLocationIds;
+      // If no scoped ids are available from the separate locations query,
+      // fall back to item-owned branch mappings from the pre-joined payload.
+      if (allowedLocationIds.length === 0) {
+        return filtered.filter((item) => getItemLocationIds(item).length > 0);
+      }
+      filtered = filtered.filter((item) => {
+        const itemLocationIds = getItemLocationIds(item);
+        return itemLocationIds.length > 0 && itemLocationIds.some((locationId) => allowedLocationIds.includes(locationId));
+      });
+    } else if (selectedLocationIds.length > 0) {
+      filtered = filtered.filter((item) => {
+        const itemLocationIds = getItemLocationIds(item);
+        return (
+          itemLocationIds.length === 0 ||
+          itemLocationIds.some((locationId) => selectedLocationIds.includes(locationId))
+        );
+      });
     }
 
     return filtered;

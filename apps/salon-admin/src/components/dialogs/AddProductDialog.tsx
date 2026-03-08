@@ -6,8 +6,8 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Package, Hash, Loader2, Save } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { useProducts } from "@/hooks/useProducts";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
@@ -36,6 +36,7 @@ const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
 
 export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDialogProps) {
   const { currentTenant, activeLocationId } = useAuth();
+  const { createProduct } = useProducts();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,38 +136,21 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
     setIsSubmitting(true);
 
     try {
-      const { data: product, error } = await supabase.from("products").insert({
-        tenant_id: currentTenant.id,
+      const product = await createProduct({
         name: formData.name,
         price: parseAmountInput(formData.price),
-        stock_quantity: parseInt(formData.stockQuantity),
+        stockQuantity: parseInt(formData.stockQuantity),
         status: formData.status as "active" | "inactive" | "archived",
         description: formData.description || null,
-        image_urls: formData.images,
-      }).select("id").single();
+        imageUrls: formData.images,
+        locationIds: selectedLocationIds,
+      });
 
-      if (error) throw error;
-      if (product?.id) {
-        const mappingRows = selectedLocationIds.map((locationId) => ({
-          tenant_id: currentTenant.id,
-          product_id: product.id,
-          location_id: locationId,
-          is_enabled: true,
-        }));
-        const { error: mappingError } = await (supabase.from as any)("product_locations").upsert(
-          mappingRows,
-          { onConflict: "product_id,location_id" },
-        );
-        if (mappingError) throw mappingError;
+      if (product) {
+        resetForm();
+        onOpenChange(false);
+        onSuccess?.();
       }
-
-      toast({ title: "Success", description: "Product created successfully" });
-      resetForm();
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (err) {
-      console.error("Error creating product:", err);
-      toast({ title: "Error", description: "Failed to create product", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
