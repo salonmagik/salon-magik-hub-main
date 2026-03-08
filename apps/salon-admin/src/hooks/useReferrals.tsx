@@ -23,27 +23,6 @@ export interface ReferralDiscount {
   expires_at: string;
 }
 
-interface ReferralCodeRow {
-  id: string;
-  code: string;
-  referrer_tenant_id: string;
-  max_redemptions: number;
-  consumed: boolean;
-  consumed_at: string | null;
-  consumed_by_tenant_id: string | null;
-}
-
-interface ReferralDiscountRow {
-  id: string;
-  tenant_id: string;
-  source: string;
-  referral_code_id: string;
-  percentage: number;
-  available: boolean;
-  used_on_invoice_id: string | null;
-  expires_at: string;
-}
-
 export function useMyReferralCode() {
   const { currentTenant } = useAuth();
 
@@ -74,28 +53,9 @@ export function useMyReferralCodes() {
     queryKey: ["my-referral-codes", currentTenant?.id],
     queryFn: async (): Promise<ReferralCode[]> => {
       if (!currentTenant?.id) return [];
-
-      const { data, error } = await supabase
-        .from("referral_codes" as "tenants")
-        .select("*")
-        .eq("referrer_tenant_id" as "id", currentTenant.id)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching referral codes:", error);
-        return [];
-      }
-      
-      const codes = data as unknown as ReferralCodeRow[];
-      return codes.map((code) => ({
-        id: code.id,
-        code: code.code,
-        referrer_tenant_id: code.referrer_tenant_id,
-        max_redemptions: code.max_redemptions,
-        consumed: code.consumed,
-        consumed_at: code.consumed_at,
-        consumed_by_tenant_id: code.consumed_by_tenant_id,
-      }));
+      // Referral tables are not provisioned in this environment yet.
+      // Keep this query silent to avoid 404 noise in console.
+      return [];
     },
     enabled: !!currentTenant?.id,
     staleTime: 1000 * 60 * 5,
@@ -109,30 +69,9 @@ export function useMyReferralDiscounts() {
     queryKey: ["my-referral-discounts", currentTenant?.id],
     queryFn: async (): Promise<ReferralDiscount[]> => {
       if (!currentTenant?.id) return [];
-
-      const { data, error } = await supabase
-        .from("referral_discounts" as "tenants")
-        .select("*")
-        .eq("tenant_id" as "id", currentTenant.id)
-        .eq("available" as "online_booking_enabled", true)
-        .order("expires_at" as "name", { ascending: true });
-
-      if (error) {
-        console.error("Error fetching referral discounts:", error);
-        return [];
-      }
-      
-      const discounts = data as unknown as ReferralDiscountRow[];
-      return discounts.map((discount) => ({
-        id: discount.id,
-        tenant_id: discount.tenant_id,
-        source: discount.source as "referrer" | "referee",
-        referral_code_id: discount.referral_code_id,
-        percentage: Number(discount.percentage),
-        available: discount.available,
-        used_on_invoice_id: discount.used_on_invoice_id,
-        expires_at: discount.expires_at,
-      }));
+      // Referral tables are not provisioned in this environment yet.
+      // Keep this query silent to avoid 404 noise in console.
+      return [];
     },
     enabled: !!currentTenant?.id,
     staleTime: 1000 * 60 * 5,
@@ -208,35 +147,7 @@ export function useGenerateReferralCode() {
       if (!currentTenant?.id) {
         throw new Error("No tenant found");
       }
-
-      // Generate unique 8-character code
-      const code = Array.from(crypto.getRandomValues(new Uint8Array(4)))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("")
-        .toUpperCase();
-
-      const { data, error } = await supabase
-        .from("referral_codes" as "tenants")
-        .insert({
-          code,
-          referrer_tenant_id: currentTenant.id,
-          max_redemptions: 1,
-        } as never)
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      const row = data as unknown as ReferralCodeRow;
-      return {
-        id: row.id,
-        code: row.code,
-        referrer_tenant_id: row.referrer_tenant_id,
-        max_redemptions: row.max_redemptions,
-        consumed: row.consumed,
-        consumed_at: row.consumed_at,
-        consumed_by_tenant_id: row.consumed_by_tenant_id,
-      };
+      throw new Error("Referral code generation is temporarily disabled.");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-referral-codes"] });

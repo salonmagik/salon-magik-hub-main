@@ -80,13 +80,13 @@ vi.mock("@/hooks/usePlanPricing", () => ({ getCurrencyForCountry: () => "GHS" })
 vi.mock("@/lib/supabase", () => ({ supabase: { from: vi.fn(), rpc: vi.fn() } }));
 
 describe("OnboardingPage", () => {
-  it("shows chain expected locations input on plan step", () => {
+  it("shows chain branch count input on plan step", () => {
     render(<OnboardingPage />);
     fireEvent.click(screen.getByRole("button", { name: /pick owner/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /fill business/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /pick chain/i }));
-    expect(screen.getByLabelText(/expected total locations now/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/how many branches do you have/i)).toBeInTheDocument();
   });
 });

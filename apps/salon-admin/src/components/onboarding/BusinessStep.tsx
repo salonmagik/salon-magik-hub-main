@@ -79,7 +79,7 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="businessName">Salon name *</Label>
+          <Label htmlFor="businessName">Salon business name *</Label>
           <Input
             id="businessName"
             placeholder="e.g., Glamour Hair Studio"

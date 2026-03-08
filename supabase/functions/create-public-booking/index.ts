@@ -140,6 +140,37 @@ serve(async (req) => {
       scheduledEnd = endDate.toISOString();
     }
 
+    if (locationId) {
+      const windowCheckStart = scheduledStart ? new Date(scheduledStart).toISOString() : new Date().toISOString();
+      const windowCheckEnd =
+        scheduledEnd ||
+        new Date(new Date(windowCheckStart).getTime() + Math.max(totalDuration, 1) * 60 * 1000).toISOString();
+
+      const { data: activeWindow, error: windowError } = await (supabase as any)
+        .from("branch_unavailability_windows")
+        .select("id, starts_at, ends_at, is_indefinite")
+        .eq("tenant_id", tenantId)
+        .eq("location_id", locationId)
+        .is("ended_at", null)
+        .lte("starts_at", windowCheckEnd)
+        .or(`ends_at.is.null,ends_at.gte.${windowCheckStart}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (windowError) {
+        console.error("Error checking branch unavailability:", windowError);
+      }
+
+      if (activeWindow) {
+        return new Response(
+          JSON.stringify({
+            error: "This branch is temporarily unavailable for new bookings at the selected time.",
+          }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // Generate reference number
     const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
 

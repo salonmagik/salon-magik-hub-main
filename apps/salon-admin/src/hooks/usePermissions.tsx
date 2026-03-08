@@ -157,7 +157,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
 
 export const MODULE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
-  salons_overview: "Salons Overview",
+  salons_overview: "Business Overview",
   appointments: "All Appointments",
   "appointments:own": "Own Appointments",
   calendar: "Calendar",

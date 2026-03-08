@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.create-backoffice-admin]
 verify_jwt = false
+
+[functions.resolve-booking-country-context]
+verify_jwt = false

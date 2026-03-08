@@ -9,6 +9,12 @@ interface SlotInfo {
   bookedCount: number;
 }
 
+interface UnavailabilityWindow {
+  starts_at: string;
+  ends_at: string | null;
+  ended_at: string | null;
+}
+
 export function useAvailableSlots(
   tenantId: string | undefined,
   location: PublicLocation | undefined,
@@ -46,20 +52,32 @@ export function useAvailableSlots(
       const dayStart = startOfDay(date).toISOString();
       const dayEnd = endOfDay(date).toISOString();
 
-      const { data: appointments, error } = await supabase
-        .from("appointments")
-        .select("scheduled_start, scheduled_end, status")
-        .eq("tenant_id", tenantId)
-        .eq("location_id", location.id)
-        .gte("scheduled_start", dayStart)
-        .lte("scheduled_start", dayEnd)
-        .in("status", ["scheduled", "started", "paused"]);
+      const [appointmentsResult, windowsResult] = await Promise.all([
+        supabase
+          .from("appointments")
+          .select("scheduled_start, scheduled_end, status")
+          .eq("tenant_id", tenantId)
+          .eq("location_id", location.id)
+          .gte("scheduled_start", dayStart)
+          .lte("scheduled_start", dayEnd)
+          .in("status", ["scheduled", "started", "paused"]),
+        (supabase as any)
+          .from("branch_unavailability_windows")
+          .select("starts_at, ends_at, ended_at")
+          .eq("tenant_id", tenantId)
+          .eq("location_id", location.id)
+          .is("ended_at", null)
+          .lte("starts_at", dayEnd)
+          .or(`ends_at.is.null,ends_at.gte.${dayStart}`),
+      ]);
 
-      if (error) {
-        console.error("Error fetching appointments for slots:", error);
+      if (appointmentsResult.error) {
+        console.error("Error fetching appointments for slots:", appointmentsResult.error);
         // Don't throw - return all slots as available if we can't fetch appointments
         // This provides better UX than showing "no times available"
       }
+      const appointments = appointmentsResult.data || [];
+      const windows = (windowsResult.data || []) as UnavailabilityWindow[];
 
       // Calculate effective service duration (use provided or default to slot duration)
       const effectiveDuration = serviceDurationMinutes > 0 ? serviceDurationMinutes : slotDurationMinutes;
@@ -78,8 +96,17 @@ export function useAvailableSlots(
         const bookingEndTime = addMinutes(currentSlot, totalBookingDuration);
         const exceedsClosing = isAfter(bookingEndTime, closingDateTime);
 
+        const slotIsBlocked = windows.some((window) => {
+          const windowStart = new Date(window.starts_at);
+          const windowEnd = window.ends_at ? new Date(window.ends_at) : null;
+          if (!windowEnd) {
+            return windowStart < slotEnd;
+          }
+          return windowStart < slotEnd && windowEnd > slotStart;
+        });
+
         // Count bookings that overlap with this slot
-        const bookedCount = (appointments || []).filter((apt) => {
+        const bookedCount = appointments.filter((apt) => {
           if (!apt.scheduled_start) return false;
           const aptStart = new Date(apt.scheduled_start);
           const aptEnd = apt.scheduled_end ? new Date(apt.scheduled_end) : addMinutes(aptStart, 60);
@@ -91,7 +118,7 @@ export function useAvailableSlots(
 
         slots.push({
           time: slotTime,
-          available: bookedCount < slotCapacity && !exceedsClosing,
+          available: !slotIsBlocked && bookedCount < slotCapacity && !exceedsClosing,
           bookedCount,
         });
 

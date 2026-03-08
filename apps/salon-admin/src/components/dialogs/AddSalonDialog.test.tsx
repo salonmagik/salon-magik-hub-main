@@ -49,7 +49,7 @@ vi.mock("@ui/ui/use-toast", () => ({ toast: vi.fn() }));
 describe("AddSalonDialog", () => {
   it("shows pending unlock message when chain request exceeds allowed locations", () => {
     render(<AddSalonDialog open onOpenChange={vi.fn()} />);
-    expect(screen.getByText(/add a new location \(2 \/ 2 used\)/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add salon/i })).toBeDisabled();
+    expect(screen.getByText(/add a new branch \(2 \/ 2 used\)/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add branch/i })).toBeDisabled();
   });
 });

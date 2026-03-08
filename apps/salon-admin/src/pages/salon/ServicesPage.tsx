@@ -8,6 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Skeleton } from "@ui/skeleton";
 import { Checkbox } from "@ui/checkbox";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -30,6 +38,8 @@ import {
   Archive,
   Trash2,
   Undo2,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -54,14 +64,24 @@ import { useServices } from "@/hooks/useServices";
 import { usePackages } from "@/hooks/usePackages";
 import { useProducts } from "@/hooks/useProducts";
 import { useVouchers } from "@/hooks/useVouchers";
+import { useBinItems } from "@/hooks/useBinItems";
 import { useDeletionRequests } from "@/hooks/useDeletionRequests";
+import {
+  useCatalogIntegrityIssues,
+  type CatalogIntegrityIssue,
+  type CatalogIntegrityItemType,
+} from "@/hooks/useCatalogIntegrityIssues";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 import * as XLSX from "xlsx";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
 type ProductSubTab = "inventory" | "fulfillment";
@@ -80,6 +100,14 @@ interface CatalogItem {
   images?: string[];
   status?: string;
   is_flagged?: boolean;
+}
+
+interface IntegrityFixTarget {
+  itemId: string;
+  itemType: CatalogIntegrityItemType;
+  itemName: string;
+  issueCodes: string[];
+  locationIds: string[];
 }
 
 export default function ServicesPage() {
@@ -104,21 +132,33 @@ export default function ServicesPage() {
   const [requestDeleteDialogOpen, setRequestDeleteDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [binOpen, setBinOpen] = useState(false);
+  const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
+  const [binSelectMode, setBinSelectMode] = useState(false);
+  const [selectedBinItemKeys, setSelectedBinItemKeys] = useState<Set<string>>(new Set());
+  const [fixDialogOpen, setFixDialogOpen] = useState(false);
+  const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
+  const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
+  const [isApplyingFix, setIsApplyingFix] = useState(false);
   
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
   
   // Pending deletion with undo
-  const [pendingDeletions, setPendingDeletions] = useState<Map<string, { timer: NodeJS.Timeout; countdown: number; reason: string }>>(new Map());
   const undoRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const undoToastRef = useRef<Map<string, { dismiss: () => void; update: (props: any) => void }>>(new Map());
 
   const { currentTenant, user } = useAuth();
   const { isOwner, currentRole, hasPermission } = usePermissions();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } =
+    useManageableLocations();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
+  const { issuesByItemKey, refetch: refetchIssues } = useCatalogIntegrityIssues();
+  const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem, refetch: refetchBinItems } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
   const currency = currentTenant?.currency || "USD";
@@ -130,6 +170,12 @@ export default function ServicesPage() {
   const canRequestDelete = hasPermission("catalog:request_delete");
   const canArchive = hasPermission("catalog:archive");
   const canFlag = hasPermission("catalog:flag");
+  const canRestoreBinItems = hasPermission("catalog:edit");
+  const canDeleteBinItems = hasPermission("catalog:delete");
+  const canApplyIntegrityFix = currentRole === "owner" || currentRole === "manager";
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const isBinBusy = binProcessingItemId !== null;
+  const makeBinKey = (item: { id: string; type: ItemType | "voucher" }) => `${item.type}:${item.id}`;
 
   const formatCurrency = (amount: number) => {
     return `${currency} ${Number(amount).toLocaleString(undefined, {
@@ -137,6 +183,17 @@ export default function ServicesPage() {
       maximumFractionDigits: 2,
     })}`;
   };
+
+  const getItemIssues = (itemType: CatalogIntegrityItemType, itemId: string): CatalogIntegrityIssue[] =>
+    issuesByItemKey.get(`${itemType}:${itemId}`) || [];
+
+  const hasBlockingIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
+    getItemIssues(itemType, itemId).some((issue) => issue.severity === "blocking");
+
+  const hasWarningIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
+    getItemIssues(itemType, itemId).some((issue) => issue.severity === "warning");
+
+  const shouldShowItem = (_itemType: CatalogIntegrityItemType, _itemId: string) => true;
 
   const IMPORT_TEMPLATES: Record<CatalogImportType, TemplateColumn[]> = {
     services: [
@@ -272,11 +329,14 @@ export default function ServicesPage() {
   const showDeleteOption = (canDelete || canRequestDelete) && activeTab !== "packages" && activeTab !== "vouchers";
 
   // Refetch all data
-  const refetchAll = () => {
-    refetchServices();
-    refetchPackages();
-    refetchProducts();
-    refetchVouchers();
+  const refetchAll = async () => {
+    await Promise.all([
+      refetchServices(),
+      refetchPackages(),
+      refetchProducts(),
+      refetchVouchers(),
+      refetchIssues(),
+    ]);
   };
 
   // Get selected items info for dialogs
@@ -367,7 +427,6 @@ export default function ServicesPage() {
     if (!user?.id) return;
     
     const itemsToDelete = Array.from(selectedItemsInfo);
-    const itemIds = itemsToDelete.map((i) => i.id);
     
     // Close dialog and clear selection
     setDeleteDialogOpen(false);
@@ -377,45 +436,49 @@ export default function ServicesPage() {
     let countdown = 5;
     const batchId = Date.now().toString();
     
-    const showUndoToast = () => {
-      toast({
+    const undoToast = toast({
         title: `Deleting ${itemsToDelete.length} item(s)...`,
         description: `Click Undo to cancel (${countdown}s)`,
-        duration: 1500,
+        duration: 6000,
         action: (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleUndo(batchId, itemIds)}
+            onClick={() => handleUndo(batchId)}
           >
             <Undo2 className="w-4 h-4 mr-1" />
             Undo
           </Button>
         ),
       });
-    };
-    
-    showUndoToast();
+    undoToastRef.current.set(batchId, { dismiss: undoToast.dismiss, update: undoToast.update });
     
     const interval = setInterval(() => {
       countdown--;
       if (countdown <= 0) {
         clearInterval(interval);
         undoRef.current.delete(batchId);
+        undoToastRef.current.get(batchId)?.dismiss();
+        undoToastRef.current.delete(batchId);
         executeSoftDelete(itemsToDelete);
       } else {
-        showUndoToast();
+        undoToastRef.current.get(batchId)?.update({
+          title: `Deleting ${itemsToDelete.length} item(s)...`,
+          description: `Click Undo to cancel (${countdown}s)`,
+        });
       }
     }, 1000);
     
     undoRef.current.set(batchId, interval);
   };
 
-  const handleUndo = (batchId: string, itemIds: string[]) => {
+  const handleUndo = (batchId: string) => {
     const interval = undoRef.current.get(batchId);
     if (interval) {
       clearInterval(interval);
       undoRef.current.delete(batchId);
+      undoToastRef.current.get(batchId)?.dismiss();
+      undoToastRef.current.delete(batchId);
       toast({ title: "Deletion Cancelled", description: "Items were not deleted" });
     }
   };
@@ -449,7 +512,7 @@ export default function ServicesPage() {
         title: "Sent to Bin", 
         description: `${items.length} item(s) moved to bin. Can be restored within 7 days.` 
       });
-      refetchAll();
+      await Promise.all([refetchAll(), refetchBinItems()]);
     } catch (err) {
       console.error("Error deleting items:", err);
       toast({ title: "Error", description: "Failed to delete items", variant: "destructive" });
@@ -512,6 +575,136 @@ export default function ServicesPage() {
       case "vouchers":
         setVoucherDialogOpen(true);
         break;
+    }
+  };
+
+  const openFixConfigDialog = (item: CatalogItem) => {
+    const itemIssues = getItemIssues(item.type, item.id);
+    if (itemIssues.length === 0) return;
+    const inferredLocationIds = Array.from(
+      new Set(itemIssues.flatMap((issue) => issue.branch_location_ids || [])),
+    );
+    setFixTarget({
+      itemId: item.id,
+      itemType: item.type,
+      itemName: item.name,
+      issueCodes: Array.from(new Set(itemIssues.map((issue) => issue.issue_code))),
+      locationIds: inferredLocationIds,
+    });
+    setFixLocationIds(
+      inferredLocationIds.length > 0
+        ? inferredLocationIds
+        : defaultLocationId
+          ? [defaultLocationId]
+          : [],
+    );
+    setFixDialogOpen(true);
+  };
+
+  const applyIntegrityFix = async () => {
+    if (!currentTenant?.id || !fixTarget) return;
+    if (hasFixMixedCurrencies) {
+      toast({
+        title: "Mixed currency mapping",
+        description: "Select branches that share the same currency.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isChainTier && fixLocationIds.length === 0) {
+      toast({
+        title: "Select branches",
+        description: "Choose at least one branch before applying this fix.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsApplyingFix(true);
+    try {
+      if (isChainTier) {
+        const tableMap = {
+          service: { table: "service_locations", column: "service_id" },
+          product: { table: "product_locations", column: "product_id" },
+          package: { table: "package_locations", column: "package_id" },
+          voucher: { table: "voucher_locations", column: "voucher_id" },
+        } as const;
+        const mappingMeta = tableMap[fixTarget.itemType];
+
+        const { error: deleteError } = await (supabase.from as any)(mappingMeta.table)
+          .delete()
+          .eq("tenant_id", currentTenant.id)
+          .eq(mappingMeta.column, fixTarget.itemId);
+        if (deleteError) throw deleteError;
+
+        const mappingRows = fixLocationIds.map((locationId) => ({
+          tenant_id: currentTenant.id,
+          location_id: locationId,
+          is_enabled: true,
+          [mappingMeta.column]: fixTarget.itemId,
+        }));
+        if (mappingRows.length > 0) {
+          const { error: upsertError } = await (supabase.from as any)(mappingMeta.table).upsert(
+            mappingRows,
+            { onConflict: `${mappingMeta.column},location_id` },
+          );
+          if (upsertError) throw upsertError;
+        }
+      }
+
+      const { data: revalidationIssues, error: validateError } = await (supabase.rpc as any)(
+        "validate_catalog_item_integrity",
+        {
+        p_tenant_id: currentTenant.id,
+        p_item_type: fixTarget.itemType,
+        p_item_id: fixTarget.itemId,
+      });
+      if (validateError) throw validateError;
+
+      const activeIssues = ((revalidationIssues ?? []) as CatalogIntegrityIssue[]).filter(
+        (issue) => !issue.resolved_at,
+      );
+      if (activeIssues.length > 0) {
+        const issueLabel = activeIssues.map((issue) => issue.issue_code).join(", ");
+        toast({
+          title: "Fix still incomplete",
+          description: `Remaining issue(s): ${issueLabel}.`,
+          variant: "destructive",
+        });
+        await refetchAll();
+        return;
+      }
+
+      await (supabase.rpc as any)("log_audit_event", {
+        _tenant_id: currentTenant.id,
+        _action: "catalog.integrity_fix_applied",
+        _target_type: fixTarget.itemType,
+        _target_id: fixTarget.itemId,
+        _summary: `Integrity fix applied to ${fixTarget.itemType}`,
+        _details: {
+          issue_codes: fixTarget.issueCodes,
+          fixed_location_ids: fixLocationIds,
+        },
+        _branch_location_id: fixLocationIds[0] || null,
+      });
+
+      toast({
+        title: "Config fixed",
+        description: `${fixTarget.itemName} has been revalidated.`,
+      });
+      setFixDialogOpen(false);
+      setFixTarget(null);
+      setFixLocationIds([]);
+      await refetchAll();
+    } catch (error) {
+      console.error("Error applying integrity fix:", error);
+      toast({
+        title: "Failed to apply fix",
+        description: "Please review branch mappings and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplyingFix(false);
     }
   };
 
@@ -630,8 +823,15 @@ export default function ServicesPage() {
   useEffect(() => {
     return () => {
       undoRef.current.forEach((interval) => clearInterval(interval));
+      undoToastRef.current.forEach((toastController) => toastController.dismiss());
     };
   }, []);
+
+  const fixCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, fixLocationIds, currency),
+    [currency, fixLocationIds, manageableLocations],
+  );
+  const hasFixMixedCurrencies = fixCurrencies.length > 1;
 
   return (
     <SalonSidebar>
@@ -742,11 +942,13 @@ export default function ServicesPage() {
               <>
                 {/* All Tab */}
                 <TabsContent value="all" className="mt-0">
-                  {filteredItems.length === 0 ? (
+                  {filteredItems.filter((item) => shouldShowItem(item.type, item.id)).length === 0 ? (
                     <EmptyState message="No items yet. Add services, products, or packages to get started." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredItems.map((item) => (
+                      {filteredItems
+                        .filter((item) => shouldShowItem(item.type, item.id))
+                        .map((item) => (
                         <SelectableItemCard 
                           key={item.id} 
                           item={item} 
@@ -757,6 +959,7 @@ export default function ServicesPage() {
                           canEdit={canEdit}
                           onViewDetails={() => setViewDetailItem(item)}
                           onEdit={() => setEditItem(item)}
+                          integrityIssues={getItemIssues(item.type, item.id)}
                         />
                       ))}
                     </div>
@@ -765,15 +968,22 @@ export default function ServicesPage() {
 
                 {/* Services Tab */}
                 <TabsContent value="services" className="mt-0">
-                  {services.length === 0 ? (
+                  {services
+                    .filter(
+                      (s) =>
+                        (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                        shouldShowItem("service", s.id),
+                    ).length === 0 ? (
                     <EmptyState message="No services yet. Add your first service." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {services
                         .filter(
                           (s) =>
-                            s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                            (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                            shouldShowItem("service", s.id)
                         )
                         .map((s) => (
                           <SelectableItemCard
@@ -794,6 +1004,9 @@ export default function ServicesPage() {
                             isSelected={selectedItems.has(s.id)}
                             onSelect={handleSelectItem}
                             canEdit={canEdit}
+                            onViewDetails={() => setViewDetailItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
+                            onEdit={() => setEditItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
+                            integrityIssues={getItemIssues("service", s.id)}
                           />
                         ))}
                     </div>
@@ -802,15 +1015,22 @@ export default function ServicesPage() {
 
                 {/* Packages Tab */}
                 <TabsContent value="packages" className="mt-0">
-                  {packages.length === 0 ? (
+                  {packages
+                    .filter(
+                      (p) =>
+                        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                        shouldShowItem("package", p.id),
+                    ).length === 0 ? (
                     <EmptyState message="No packages yet. Bundle services together." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {packages
                         .filter(
                           (p) =>
-                            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                            (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                            shouldShowItem("package", p.id)
                         )
                         .map((p) => (
                           <SelectableItemCard
@@ -831,6 +1051,9 @@ export default function ServicesPage() {
                             isSelected={selectedItems.has(p.id)}
                             onSelect={handleSelectItem}
                             canEdit={canEdit}
+                            onViewDetails={() => setViewDetailItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
+                            onEdit={() => setEditItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
+                            integrityIssues={getItemIssues("package", p.id)}
                           />
                         ))}
                     </div>
@@ -852,15 +1075,22 @@ export default function ServicesPage() {
                     </TabsList>
 
                     <TabsContent value="inventory" className="mt-0">
-                      {products.length === 0 ? (
+                      {products
+                        .filter(
+                          (p) =>
+                            (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                            shouldShowItem("product", p.id),
+                        ).length === 0 ? (
                         <EmptyState message="No products yet. Add items to sell." />
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {products
                             .filter(
                               (p) =>
-                                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+                                (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                  (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
+                                shouldShowItem("product", p.id)
                             )
                             .map((p) => (
                               <SelectableItemCard
@@ -881,6 +1111,9 @@ export default function ServicesPage() {
                                 isSelected={selectedItems.has(p.id)}
                                 onSelect={handleSelectItem}
                                 canEdit={canEdit}
+                                onViewDetails={() => setViewDetailItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
+                                onEdit={() => setEditItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
+                                integrityIssues={getItemIssues("product", p.id)}
                               />
                             ))}
                         </div>
@@ -906,11 +1139,15 @@ export default function ServicesPage() {
                         </Card>
                       ))}
                     </div>
-                  ) : vouchers.length === 0 ? (
+                  ) : vouchers.filter((v) => shouldShowItem("voucher", v.id)).length === 0 ? (
                     <EmptyState message="No vouchers yet. Create gift cards for customers." />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {vouchers.map((v) => (
+                      {vouchers.filter((v) => shouldShowItem("voucher", v.id)).map((v) => {
+                        const voucherIssues = getItemIssues("voucher", v.id);
+                        const blocking = voucherIssues.some((issue) => issue.severity === "blocking");
+                        const warning = voucherIssues.some((issue) => issue.severity === "warning");
+                        return (
                         <Card key={v.id} className="hover:shadow-md transition-shadow">
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between">
@@ -937,6 +1174,20 @@ export default function ServicesPage() {
                                       Expires {format(new Date(v.expires_at), "MMM d, yyyy")}
                                     </span>
                                   )}
+                                  {(blocking || warning) && (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "text-xs",
+                                        blocking
+                                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                                          : "border-warning/40 bg-warning/10 text-warning",
+                                      )}
+                                    >
+                                      <AlertTriangle className="mr-1 h-3 w-3" />
+                                      {blocking ? "Blocking config issue" : "Config warning"}
+                                    </Badge>
+                                  )}
                                 </div>
                               </div>
                               <div className="text-right">
@@ -946,9 +1197,14 @@ export default function ServicesPage() {
                                 </p>
                               </div>
                             </div>
+                            {voucherIssues.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs text-muted-foreground">{voucherIssues[0].issue_message}</p>
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
-                      ))}
+                      )})}
                     </div>
                   )}
                 </TabsContent>
@@ -1053,6 +1309,359 @@ export default function ServicesPage() {
         onImport={handleImportCatalog}
       />
 
+      {selectedItems.size === 0 && (
+        <button
+          type="button"
+          onClick={() => setBinOpen(true)}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg hover:opacity-95"
+        >
+          <Trash2 className="h-4 w-4" />
+          Bin ({binItems.length})
+        </button>
+      )}
+
+      <Dialog
+        open={binOpen}
+        onOpenChange={(open) => {
+          setBinOpen(open);
+          if (!open) {
+            setBinSelectMode(false);
+            setSelectedBinItemKeys(new Set());
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Bin</DialogTitle>
+            <DialogDescription>
+              Restore deleted services, products, packages, and vouchers within 7 days.
+            </DialogDescription>
+            <div className="text-xs text-muted-foreground">Total: {binItems.length}</div>
+          </DialogHeader>
+
+          <div className={cn("space-y-4", isBinBusy && "pointer-events-none opacity-60")}>
+          {!binLoading && binItems.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isBinBusy}
+                  onClick={() => {
+                    if (binSelectMode) {
+                      setBinSelectMode(false);
+                      setSelectedBinItemKeys(new Set());
+                      return;
+                    }
+                    setBinSelectMode(true);
+                  }}
+                >
+                  {binSelectMode ? "Cancel Select" : "Select"}
+                </Button>
+                {binSelectMode && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isBinBusy}
+                    onClick={() => {
+                      if (selectedBinItemKeys.size === binItems.length) {
+                        setSelectedBinItemKeys(new Set());
+                        return;
+                      }
+                      setSelectedBinItemKeys(new Set(binItems.map((item) => makeBinKey(item))));
+                    }}
+                  >
+                    {selectedBinItemKeys.size === binItems.length ? "Clear All" : "Select All"}
+                  </Button>
+                )}
+              </div>
+
+              {binSelectMode && selectedBinItemKeys.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{selectedBinItemKeys.size} selected</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canRestoreBinItems || isBinBusy}
+                    onClick={async () => {
+                      const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
+                      setBinProcessingItemId("__bulk_restore__");
+                      let restoredCount = 0;
+                      for (const item of selectedItems) {
+                        const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+                        if (expiresAt.getTime() <= Date.now()) continue;
+                        const restored = await restoreItem(item.id, item.type, { silent: true, skipRefetch: true });
+                        if (restored) restoredCount++;
+                      }
+                      await Promise.all([refetchBinItems(), refetchAll()]);
+                      setBinProcessingItemId(null);
+                      setSelectedBinItemKeys(new Set());
+                      setBinSelectMode(false);
+                      toast({
+                        title: "Restore complete",
+                        description: restoredCount > 0 ? `${restoredCount} item(s) restored.` : "No selected items could be restored.",
+                      });
+                    }}
+                  >
+                    {binProcessingItemId === "__bulk_restore__" ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Restoring...
+                      </>
+                    ) : (
+                      "Restore selected"
+                    )}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={!canDeleteBinItems || isBinBusy}
+                    onClick={async () => {
+                      const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
+                      setBinProcessingItemId("__bulk_delete__");
+                      let deletedCount = 0;
+                      for (const item of selectedItems) {
+                        const deleted = await permanentlyDeleteItem(item.id, item.type, { silent: true, skipRefetch: true });
+                        if (deleted) deletedCount++;
+                      }
+                      await Promise.all([refetchBinItems(), refetchAll()]);
+                      setBinProcessingItemId(null);
+                      setSelectedBinItemKeys(new Set());
+                      setBinSelectMode(false);
+                      toast({
+                        title: "Delete complete",
+                        description: deletedCount > 0 ? `${deletedCount} item(s) permanently deleted.` : "No selected items were deleted.",
+                      });
+                    }}
+                  >
+                    {binProcessingItemId === "__bulk_delete__" ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      "Delete selected"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {binLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-36 rounded-xl" />
+              ))}
+            </div>
+          ) : binItems.length === 0 ? (
+            <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+              Bin is empty.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {binItems.map((item) => {
+                const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
+                const remainingMs = expiresAt.getTime() - Date.now();
+                const canStillRestore = remainingMs > 0;
+                const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
+
+                return (
+                  <Card key={`${item.type}-${item.id}`}>
+                    <CardContent className="p-4 space-y-3">
+                      {binSelectMode && (
+                        <div className="flex justify-end">
+                          <Checkbox
+                            checked={selectedBinItemKeys.has(makeBinKey(item))}
+                            onCheckedChange={(checked) => {
+                              setSelectedBinItemKeys((prev) => {
+                                const next = new Set(prev);
+                                const key = makeBinKey(item);
+                                if (checked) next.add(key);
+                                else next.delete(key);
+                                return next;
+                              });
+                            }}
+                          />
+                        </div>
+                      )}
+                      <img
+                        src={item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : "/placeholder.svg"}
+                        alt={item.name}
+                        className="h-28 w-full rounded-md object-cover"
+                      />
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-medium leading-tight">{item.name}</h4>
+                          {item.description ? (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {item.description}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Badge variant="outline" className="uppercase text-[10px]">
+                          {item.type}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {canStillRestore
+                          ? `${remainingDays} day(s) left before permanent deletion`
+                          : "Restore window expired"}
+                      </div>
+                      {item.location_names && item.location_names.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {item.location_names.map((locationName) => (
+                            <Badge key={`${item.id}-${locationName}`} variant="secondary" className="text-[10px]">
+                              {locationName}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                        disabled={
+                          binSelectMode ||
+                          !canRestoreBinItems ||
+                          !canStillRestore ||
+                          binProcessingItemId === item.id ||
+                          binProcessingItemId === "__bulk_restore__" ||
+                          binProcessingItemId === "__bulk_delete__"
+                        }
+                        onClick={async () => {
+                          setBinProcessingItemId(item.id);
+                          await restoreItem(item.id, item.type);
+                          await refetchAll();
+                          setBinProcessingItemId(null);
+                        }}
+                        >
+                          {binProcessingItemId === item.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Working...
+                            </>
+                          ) : (
+                            "Restore"
+                          )}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                        disabled={
+                          binSelectMode ||
+                          !canDeleteBinItems ||
+                          binProcessingItemId === item.id ||
+                          binProcessingItemId === "__bulk_restore__" ||
+                          binProcessingItemId === "__bulk_delete__"
+                        }
+                        onClick={async () => {
+                          setBinProcessingItemId(item.id);
+                          await permanentlyDeleteItem(item.id, item.type);
+                          await refetchAll();
+                          setBinProcessingItemId(null);
+                        }}
+                        >
+                          {binProcessingItemId === item.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Deleting...
+                            </>
+                          ) : (
+                            "Delete now"
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={fixDialogOpen}
+        onOpenChange={(open) => {
+          setFixDialogOpen(open);
+          if (!open) {
+            setFixTarget(null);
+            setFixLocationIds([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Fix config: {fixTarget?.itemName || "Item"}</DialogTitle>
+            <DialogDescription>
+              Resolve flagged mapping/currency issues. Blocking issues stay hidden on storefront until fixed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {fixTarget?.issueCodes?.length ? (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Detected issues</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {fixTarget.issueCodes.map((issueCode) => (
+                    <Badge key={issueCode} variant="outline">
+                      {issueCode}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {isChainTier ? (
+              <LocationScopePicker
+                locations={manageableLocations}
+                selectedLocationIds={fixLocationIds}
+                onChange={setFixLocationIds}
+                disabled={isApplyingFix || locationsLoading || manageableLocations.length === 0}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Non-chain tenants use legacy visibility rules. Save to re-run validation.
+              </p>
+            )}
+
+            {hasFixMixedCurrencies && (
+              <p className="text-sm text-destructive">
+                Selected branches use different currencies. Choose one currency group.
+              </p>
+            )}
+
+            {!canApplyIntegrityFix && (
+              <p className="text-sm text-muted-foreground">
+                Only owner and manager roles can apply integrity fixes.
+              </p>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setFixDialogOpen(false)}
+              disabled={isApplyingFix}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={applyIntegrityFix}
+              disabled={
+                isApplyingFix ||
+                !canApplyIntegrityFix ||
+                (isChainTier && fixLocationIds.length === 0) ||
+                hasFixMixedCurrencies
+              }
+            >
+              {isApplyingFix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Apply fix
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* View/Edit Dialogs */}
       <EditServiceDialog
         open={!!editItem && editItem.type === "service"}
@@ -1142,6 +1751,7 @@ interface SelectableItemCardProps {
   canEdit?: boolean;
   onViewDetails?: () => void;
   onEdit?: () => void;
+  integrityIssues?: CatalogIntegrityIssue[];
 }
 
 function SelectableItemCard({
@@ -1153,6 +1763,7 @@ function SelectableItemCard({
   canEdit = false,
   onViewDetails,
   onEdit,
+  integrityIssues = [],
 }: SelectableItemCardProps) {
   const typeLabels: Record<string, { label: string; color: string }> = {
     service: { label: "SERVICE", color: "text-primary" },
@@ -1161,6 +1772,9 @@ function SelectableItemCard({
   };
 
   const typeInfo = typeLabels[item.type] || typeLabels.service;
+  const blockingIssue = integrityIssues.find((issue) => issue.severity === "blocking");
+  const warningIssue = integrityIssues.find((issue) => issue.severity === "warning");
+  const firstIssue = blockingIssue || warningIssue;
 
   return (
     <Card className={cn(
@@ -1199,11 +1813,41 @@ function SelectableItemCard({
                 {typeInfo.label}
               </p>
               <StatusChip status={item.status} isFlagged={item.is_flagged} />
+              {firstIssue && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        blockingIssue
+                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                          : "border-warning/40 bg-warning/10 text-warning",
+                      )}
+                    >
+                      <AlertTriangle className="mr-1 h-3 w-3" />
+                      {blockingIssue ? "Blocking" : "Warning"}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-sm">
+                    <p className="text-xs">{firstIssue.issue_message}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             <h3 className="font-semibold mt-1 truncate">{item.name}</h3>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
               {item.description || "No description"}
             </p>
+            {firstIssue && firstIssue.branch_location_names.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {firstIssue.branch_location_names.map((branchName) => (
+                  <Badge key={`${item.id}-${branchName}`} variant="secondary" className="text-[10px]">
+                    {branchName}
+                  </Badge>
+                ))}
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {item.duration && (

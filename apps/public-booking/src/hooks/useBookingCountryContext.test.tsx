@@ -37,6 +37,7 @@ describe("useBookingCountryContext", () => {
         selected_country_code: "GH",
         supported_country_codes: ["GH", "GB"],
         requires_country_selection: false,
+        country_context_enabled: true,
       },
       error: null,
     });
@@ -46,9 +47,7 @@ describe("useBookingCountryContext", () => {
       { wrapper },
     );
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    expect(result.current.selectedCountryCode).toBe("GH");
+    await waitFor(() => expect(result.current.selectedCountryCode).toBe("GH"));
     expect(result.current.supportedCountryCodes).toEqual(["GH", "GB"]);
 
     act(() => {
@@ -66,6 +65,7 @@ describe("useBookingCountryContext", () => {
         selected_country_code: null,
         supported_country_codes: ["GH", "GB"],
         requires_country_selection: true,
+        country_context_enabled: true,
       },
       error: null,
     });

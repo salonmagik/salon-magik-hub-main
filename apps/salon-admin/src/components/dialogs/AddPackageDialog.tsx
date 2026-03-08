@@ -8,14 +8,17 @@ import { Checkbox } from "@ui/checkbox";
 import { ScrollArea } from "@ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Gift, Loader2, Save, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useServices } from "@/hooks/useServices";
 import { useProducts } from "@/hooks/useProducts";
+import { usePackages } from "@/hooks/usePackages";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { formatCurrency, getCurrencySymbol } from "@shared/currency";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 
 interface PreSelectedItem {
   id: string;
@@ -45,11 +48,26 @@ interface SelectedProduct {
   quantity: number;
 }
 
+const formatAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) return "";
+  const [intPart, ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, "");
+  const withCommas = (normalizedInt || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decimal.length > 0) return `${withCommas}.${decimal}`;
+  return cleaned.endsWith(".") ? `${withCommas}.` : withCommas;
+};
+
+const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
+
 export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedItems = [] }: AddPackageDialogProps) {
-  const { currentTenant } = useAuth();
-  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
+  const { currentTenant, activeLocationId } = useAuth();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const { services, isLoading: servicesLoading } = useServices();
   const { products, isLoading: productsLoading } = useProducts();
+  const { createPackage } = usePackages();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"services" | "products">("services");
   const [formData, setFormData] = useState({
@@ -57,7 +75,40 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     price: "",
     description: "",
     images: [] as string[],
+    locationIds: [] as string[],
   });
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const normalizeCountry = (value: string | null | undefined) =>
+    (value || "").toLowerCase().replace(/[^a-z]/g, "");
+  const activeLocationCountry = useMemo(() => {
+    if (!activeLocationId) return null;
+    return manageableLocations.find((location) => location.id === activeLocationId)?.country || null;
+  }, [activeLocationId, manageableLocations]);
+  const scopedLocations = useMemo(() => {
+    if (!isChainTier || !activeLocationCountry) return manageableLocations;
+    const activeCountryKey = normalizeCountry(activeLocationCountry);
+    return manageableLocations.filter(
+      (location) => normalizeCountry(location.country) === activeCountryKey,
+    );
+  }, [activeLocationCountry, isChainTier, manageableLocations]);
+  const scopedDefaultLocationId = useMemo(() => {
+    if (defaultLocationId && scopedLocations.some((location) => location.id === defaultLocationId)) {
+      return defaultLocationId;
+    }
+    return scopedLocations[0]?.id || "";
+  }, [defaultLocationId, scopedLocations]);
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = scopedDefaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [formData.locationIds, isChainTier, manageableLocations, scopedDefaultLocationId]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+  const hasMixedCurrencies = locationCurrencies.length > 1;
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([]);
 
@@ -100,12 +151,33 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     }
   }, [open, preSelectedItems]);
 
+  useEffect(() => {
+    if (!open) return;
+    if (isChainTier) {
+      const validSelected = formData.locationIds.filter((locationId) =>
+        scopedLocations.some((location) => location.id === locationId),
+      );
+      if (validSelected.length !== formData.locationIds.length) {
+        setFormData((prev) => ({ ...prev, locationIds: validSelected }));
+        return;
+      }
+      if (validSelected.length === 0 && scopedDefaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+      }
+      return;
+    }
+    if (formData.locationIds.length === 0 && scopedDefaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+    }
+  }, [formData.locationIds, isChainTier, open, scopedDefaultLocationId, scopedLocations]);
+
   const resetForm = () => {
     setFormData({
       name: "",
       price: "",
       description: "",
       images: [],
+      locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
     setSelectedServices([]);
     setSelectedProducts([]);
@@ -164,60 +236,35 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     setIsSubmitting(true);
 
     try {
-      // Create the package
-      const { data: pkg, error: pkgError } = await supabase
-        .from("packages")
-        .insert({
-          tenant_id: currentTenant.id,
-          name: formData.name,
-          price: parseFloat(formData.price),
-          original_price: originalPrice,
-          description: formData.description || null,
-          image_urls: formData.images,
-        })
-        .select()
-        .single();
+      const pkg = await createPackage({
+        name: formData.name,
+        price: parseAmountInput(formData.price),
+        originalPrice: originalPrice || undefined,
+        description: formData.description || undefined,
+        imageUrls: formData.images,
+        serviceItems: selectedServices.map((item) => ({
+          serviceId: item.serviceId,
+          quantity: item.quantity,
+        })),
+        productItems: selectedProducts.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        })),
+        fallbackServiceId: selectedServices[0]?.serviceId || services[0]?.id,
+        locationIds: selectedLocationIds,
+      });
 
-      if (pkgError) throw pkgError;
-
-      // Create package items for services
-      if (selectedServices.length > 0) {
-        const serviceItems = selectedServices.map((s) => ({
-          package_id: pkg.id,
-          service_id: s.serviceId,
-          quantity: s.quantity,
-        }));
-
-        const { error: serviceItemsError } = await supabase.from("package_items").insert(serviceItems);
-        if (serviceItemsError) throw serviceItemsError;
+      if (pkg) {
+        resetForm();
+        onOpenChange(false);
+        onSuccess?.();
       }
-
-      // Create package items for products
-      if (selectedProducts.length > 0) {
-        const productItems = selectedProducts.map((p) => ({
-          package_id: pkg.id,
-          service_id: selectedServices[0]?.serviceId || services[0]?.id, // Fallback required by schema
-          product_id: p.productId,
-          quantity: p.quantity,
-        }));
-
-        const { error: productItemsError } = await supabase.from("package_items").insert(productItems);
-        if (productItemsError) throw productItemsError;
-      }
-
-      toast({ title: "Success", description: "Package created successfully" });
-      resetForm();
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (err) {
-      console.error("Error creating package:", err);
-      toast({ title: "Error", description: "Failed to create package", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const savings = originalPrice - parseFloat(formData.price || "0");
+  const savings = originalPrice - parseAmountInput(formData.price || "0");
   const savingsPercent = originalPrice > 0 ? Math.round((savings / originalPrice) * 100) : 0;
 
   const totalItemsSelected = selectedServices.length + selectedProducts.length;
@@ -227,10 +274,12 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
     return (
       formData.name.trim() !== "" &&
       formData.price !== "" &&
-      parseFloat(formData.price) > 0 &&
+      parseAmountInput(formData.price) > 0 &&
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies &&
       totalItemsSelected > 0
     );
-  }, [formData, totalItemsSelected]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length, totalItemsSelected]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
@@ -261,6 +310,20 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
               required
             />
           </div>
+
+          {isChainTier && (
+            <LocationScopePicker
+              locations={scopedLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || scopedLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
+          )}
 
           {/* Select Items - Tabbed Interface */}
           <div className="space-y-2">
@@ -322,7 +385,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                               <div>
                                 <p className="font-medium text-sm">{service.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(Number(service.price), currentTenant?.currency || "USD")} • {service.duration_minutes} mins
+                                  {formatCurrency(Number(service.price), selectedCurrency)} • {service.duration_minutes} mins
                                 </p>
                               </div>
                             </div>
@@ -384,7 +447,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                               <div>
                                 <p className="font-medium text-sm">{product.name}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(Number(product.price), currentTenant?.currency || "USD")}
+                                  {formatCurrency(Number(product.price), selectedCurrency)}
                                   {product.stock_quantity !== undefined && ` • ${product.stock_quantity} in stock`}
                                 </p>
                               </div>
@@ -426,22 +489,26 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Original Value</Label>
-              <Input value={formatCurrency(originalPrice, currentTenant?.currency || "USD")} disabled className="bg-muted" />
+              <Input value={formatCurrency(originalPrice, selectedCurrency)} disabled className="bg-muted" />
             </div>
             <div className="space-y-2">
               <Label>
-                Package Price ({currencySymbol}) <span className="text-destructive">*</span>
+                Package Price <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  {currencySymbol}
+                </span>
                 <Input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="0.00"
-                  className="pl-9"
+                  className="pl-8"
                   value={formData.price}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, price: formatAmountInput(e.target.value) }))
+                  }
                   required
-                  min="0"
-                  step="0.01"
                 />
               </div>
             </div>
@@ -449,7 +516,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
 
           {savings > 0 && (
             <div className="text-sm text-success bg-success/10 rounded-lg p-3 text-center">
-              Customers save {formatCurrency(savings, currentTenant?.currency || "USD")} ({savingsPercent}% off)
+              Customers save {formatCurrency(savings, selectedCurrency)} ({savingsPercent}% off)
             </div>
           )}
 

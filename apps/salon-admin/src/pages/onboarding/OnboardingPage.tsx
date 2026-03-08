@@ -250,6 +250,7 @@ export default function OnboardingPage() {
           closing_time: loc.closingTime,
           opening_days: loc.openingDays,
           is_default: loc.isDefault,
+          availability: "open",
         }));
 
         const { error: locationsError } = await supabase
@@ -312,6 +313,7 @@ export default function OnboardingPage() {
             closing_time: businessInfo.closingTime,
             opening_days: businessInfo.openingDays,
             is_default: true,
+            availability: "open",
           })
           .select("id")
           .single();
@@ -475,7 +477,7 @@ export default function OnboardingPage() {
               {isChain && (
                 <div className="px-6 pb-4 space-y-3">
                   <div className="space-y-2">
-                    <Label htmlFor="expectedLocations">Expected total locations now</Label>
+                    <Label htmlFor="expectedLocations">How many branches do you have?</Label>
                     <Input
                       id="expectedLocations"
                       type="number"
@@ -486,7 +488,7 @@ export default function OnboardingPage() {
                       }
                     />
                     <p className="text-xs text-muted-foreground">
-                      Chain tiers apply to additional locations beyond the first.
+                      Chain tiers apply to additional branches beyond the first.
                     </p>
                   </div>
 
@@ -497,7 +499,7 @@ export default function OnboardingPage() {
                       </p>
                       {chainQuote.requires_custom ? (
                         <p className="mt-2 text-amber-700">
-                          This tier is marked as custom. You can continue onboarding; activation beyond 10 stores will be pending approval.
+                          This tier is marked as custom. You can continue onboarding; activation beyond 10 branches will be pending approval.
                         </p>
                       ) : (
                         <ul className="mt-2 space-y-1 text-muted-foreground">

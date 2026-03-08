@@ -42,7 +42,18 @@ export type PublicLocation = Pick<
   | "availability"
 >;
 
-export function usePublicSalon(slug: string | undefined, countryCode?: string | null) {
+export type PublicCatalogMode = "legacy" | "chain_country_scoped";
+
+const EMPTY_LOCATIONS: PublicLocation[] = [];
+
+export function usePublicSalon(
+  slug: string | undefined,
+  countryCode?: string | null,
+  mode: PublicCatalogMode = "legacy",
+) {
+  void countryCode;
+  void mode;
+
   const tenantQuery = useQuery({
     queryKey: ["public-tenant", slug],
     queryFn: async (): Promise<PublicTenant | null> => {
@@ -66,19 +77,15 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
   });
 
   const locationsQuery = useQuery({
-    queryKey: ["public-locations", tenantQuery.data?.id, countryCode ?? null],
+    queryKey: ["public-locations", tenantQuery.data?.id],
     queryFn: async (): Promise<PublicLocation[]> => {
       if (!tenantQuery.data?.id) return [];
 
-      let query = supabase
+      const query = supabase
         .from("locations")
         .select("id, name, city, country, address, opening_time, closing_time, opening_days, availability")
         .eq("tenant_id", tenantQuery.data.id)
-        .eq("availability", "open");
-
-      if (countryCode) {
-        query = query.eq("country", countryCode);
-      }
+        .or("availability.is.null,availability.eq.open");
 
       const { data, error } = await query;
 
@@ -94,7 +101,7 @@ export function usePublicSalon(slug: string | undefined, countryCode?: string | 
 
   return {
     salon: tenantQuery.data,
-    locations: locationsQuery.data || [],
+    locations: locationsQuery.data || EMPTY_LOCATIONS,
     isLoading: tenantQuery.isLoading || locationsQuery.isLoading,
     error: tenantQuery.error || locationsQuery.error,
     notFound: !tenantQuery.isLoading && !tenantQuery.data,

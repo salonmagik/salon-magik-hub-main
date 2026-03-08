@@ -16,6 +16,43 @@ type SupabaseClientMap = Partial<
 >;
 
 const CLIENT_CACHE_KEY = "__salonmagik_supabase_clients__";
+const REMEMBER_ME_KEY = "auth:remember_me";
+
+function shouldPersistAuthSession(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(REMEMBER_ME_KEY) !== "false";
+}
+
+function getAuthStorage() {
+  if (typeof window === "undefined") {
+    return {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    };
+  }
+
+  return {
+    getItem(key: string) {
+      const sessionValue = window.sessionStorage.getItem(key);
+      if (sessionValue !== null) return sessionValue;
+      return window.localStorage.getItem(key);
+    },
+    setItem(key: string, value: string) {
+      if (shouldPersistAuthSession()) {
+        window.localStorage.setItem(key, value);
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+      window.sessionStorage.setItem(key, value);
+      window.localStorage.removeItem(key);
+    },
+    removeItem(key: string) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+    },
+  };
+}
 
 function getClientCache(): SupabaseClientMap {
   const globalObj = globalThis as typeof globalThis & {
@@ -45,7 +82,7 @@ export function createSupabaseClient(storageKey: AppStorageKey) {
 
   const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
-      storage: localStorage,
+      storage: getAuthStorage(),
       storageKey: scopedStorageKey,
       persistSession: true,
       autoRefreshToken: true,

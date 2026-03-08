@@ -104,7 +104,7 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
-  { label: "Salons Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
+  { label: "Business Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
   { label: "Staff", icon: UserCog, path: "/salon/overview/staff", module: "staff" },
   { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
@@ -150,6 +150,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
   const [refreshingAccess, setRefreshingAccess] = useState(false);
   const location = useLocation();
@@ -178,7 +179,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
     if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
-    return mainNavItems.filter((item) => {
+    const visibleItems = mainNavItems.filter((item) => {
       if (item.path === "/salon/overview/staff") {
         return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
       }
@@ -192,6 +193,16 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           isModuleAllowedInContext(item.module, activeContextType);
       }
       return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
+    });
+    if (currentTenant?.plan !== "chain") {
+      return visibleItems;
+    }
+    return visibleItems.map((item) => {
+      if (item.path !== "/salon/settings") return item;
+      if (activeContextType === "owner_hub") {
+        return { ...item, label: "Business Settings", path: "/salon/business-settings" };
+      }
+      return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
     });
   }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
 
@@ -347,21 +358,70 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
   const handleContextChange = async (nextValue: string) => {
     if (!nextValue) return;
+
+    const previousContextType = activeContextType;
+    const previousLocationId = activeLocationId;
+
+    const resolveContinuationRoute = async (
+      contextType: "owner_hub" | "location",
+      locationId: string | null,
+    ) => {
+      const { data } = await (supabase.rpc as any)("list_accessible_routes", {
+        p_tenant_id: currentTenant?.id,
+        p_context_type: contextType,
+        p_location_id: locationId,
+      });
+      const routes = (Array.isArray(data) ? data : []).filter(
+        (route: unknown): route is string => typeof route === "string" && route !== "/salon/access-denied",
+      );
+      const currentPath = location.pathname;
+      if (routes.includes(currentPath)) {
+        return currentPath;
+      }
+      // Preserve intent between old/new settings routes when switching branch context.
+      if (currentPath === "/salon/settings" || currentPath === "/salon/branch-settings" || currentPath === "/salon/business-settings") {
+        if (contextType === "owner_hub" && routes.includes("/salon/business-settings")) {
+          return "/salon/business-settings";
+        }
+        if (contextType === "location" && routes.includes("/salon/branch-settings")) {
+          return "/salon/branch-settings";
+        }
+        if (routes.includes("/salon/settings")) {
+          return "/salon/settings";
+        }
+      }
+      return routes[0] || getFirstAllowedRoute(contextType, locationId);
+    };
+
     if (nextValue === "owner_hub") {
       await setActiveContext("owner_hub", null);
-      const route = await getFirstAllowedRoute("owner_hub", null);
+      const route = await resolveContinuationRoute("owner_hub", null);
       navigate(route, { replace: true });
       return;
     }
+
+    const targetContext = availableContexts.find(
+      (context) => context.type === "location" && context.locationId === nextValue,
+    );
     await setActiveContext("location", nextValue);
-    const route = await getFirstAllowedRoute("location", nextValue);
+    if (
+      previousContextType === "location" &&
+      previousLocationId &&
+      previousLocationId !== nextValue
+    ) {
+      toast({
+        title: "Branch switched",
+        description: `Successfully switched to ${targetContext?.label || "selected"} branch`,
+      });
+    }
+    const route = await resolveContinuationRoute("location", nextValue);
     navigate(route, { replace: true });
   };
 
   const isActive = (path: string) => {
     if (path === "/salon" && location.pathname === "/salon") return true;
     // Keep the owner-hub overview root exact so /salon/overview/staff
-    // does not highlight both "Salons Overview" and "Staff".
+    // does not highlight both "Business Overview" and "Staff".
     if (path === "/salon/overview") return location.pathname === "/salon/overview";
     if (path !== "/salon" && location.pathname.startsWith(path)) return true;
     return false;
@@ -490,7 +550,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       {(isExpanded || isMobileOpen) && <GlobalBanner />}
 
       {/* Main Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 space-y-1 relative z-10">
+  <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 space-y-1 relative z-10">
         {permissionsLoading ? (
           // Show skeleton during loading to prevent flash
           <div className="space-y-2">
@@ -515,7 +575,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} />
 
         <button
-          onClick={handleLogout}
+          onClick={() => setConfirmSignOutOpen(true)}
           className={cn(
             "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
             "text-white/80 hover:text-white hover:bg-white/10"
@@ -686,6 +746,31 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 ) : (
                   "Refresh"
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Sign out?</DialogTitle>
+              <DialogDescription>
+                You are about to sign out of your account.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmSignOutOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  setConfirmSignOutOpen(false);
+                  await handleLogout();
+                }}
+              >
+                Sign out
               </Button>
             </DialogFooter>
           </DialogContent>
