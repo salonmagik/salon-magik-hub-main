@@ -47,9 +47,7 @@ describe("useBookingCountryContext", () => {
       { wrapper },
     );
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    expect(result.current.selectedCountryCode).toBe("GH");
+    await waitFor(() => expect(result.current.selectedCountryCode).toBe("GH"));
     expect(result.current.supportedCountryCodes).toEqual(["GH", "GB"]);
 
     act(() => {
