@@ -1,167 +1,112 @@
-import { useState, useMemo } from "react";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
-import { Button } from "@ui/button";
-import { Badge } from "@ui/badge";
-import { Input } from "@ui/input";
-import { Skeleton } from "@ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@ui/select";
-import { DatePicker } from "@ui/date-picker";
-import { ScrollArea } from "@ui/scroll-area";
-import { Progress } from "@ui/progress";
-import {
-  FileText,
-  Search,
-  Filter,
-  AlertTriangle,
-  Clock,
-  User,
-  Activity,
-  ChevronDown,
-  RefreshCw,
-} from "lucide-react";
-import { useAuditLogs, type AuditLogFilters } from "@/hooks/useAuditLogs";
+import { useMemo, useState } from "react";
 import { format } from "date-fns";
+import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  AUDIT_ACTION_FILTER_OPTIONS,
+  getMetadataValue,
+  resolveAuditActionFilter,
+  useAuditLogs,
+  type AuditActionFilterKey,
+  type AuditLogEntry,
+  type AuditLogFilters,
+} from "@/hooks/useAuditLogs";
+import { Badge } from "@ui/badge";
+import { Button } from "@ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
+import { DatePicker } from "@ui/date-picker";
+import { Input } from "@ui/input";
+import { ScrollArea } from "@ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
+import { Skeleton } from "@ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
+import { AlertTriangle, ChevronDown, Clock, FileText, Filter, RefreshCw, Search, User } from "lucide-react";
 
-// Action type labels for display
-const actionLabels: Record<string, string> = {
-  create: "Created record",
-  update: "Updated record",
-  delete: "Deleted record",
-  login: "Signed in",
-  logout: "Signed out",
-  payment: "Payment recorded",
-  refund: "Refund recorded",
-  appointment_created: "Appointment created",
-  appointment_updated: "Appointment updated",
-  appointment_cancelled: "Appointment cancelled",
-  service_created: "Service created",
-  service_updated: "Service updated",
-  customer_created: "Customer added",
-  customer_updated: "Customer updated",
-  staff_invited: "Staff invited",
-  staff_removed: "Staff removed",
-  settings_updated: "Settings updated",
-  tenant_auto_deactivated: "Business deactivated",
-  "auth.login": "Signed in",
-  "auth.logout": "Signed out",
-  "staff.deactivated": "Staff deactivated",
-  "staff.reactivated": "Staff reactivated",
-  "staff.role_updated": "Staff role updated",
-  "booking.staff_assignment_changed": "Booking staff changed",
-  "booking.staff_auto_assigned": "Staff auto-assigned to booking",
-  "booking.staff_selection_denied": "Staff selection was blocked",
-};
+function titleCase(value: string) {
+  return value
+    .replace(/[._/-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\w/g, (char) => char.toUpperCase());
+}
 
-// Entity type labels
-const entityLabels: Record<string, string> = {
-  appointment: "Appointment",
-  service: "Service",
-  product: "Product",
-  package: "Package",
-  customer: "Customer",
-  staff: "Staff",
-  payment: "Payment",
-  refund: "Refund",
-  settings: "Settings",
-  tenant: "Tenant",
-  journal_entry: "Journal Entry",
-};
+function routeToPageLabel(route: string) {
+  const trimmed = route.replace(/^\/salon\/?/, "").trim();
+  if (!trimmed) return "Dashboard";
+  return titleCase(trimmed);
+}
 
-// Criticality badge styling
+function getWhereLabel(log: AuditLogEntry) {
+  const route = getMetadataValue(log.metadata, "route");
+  if (route) return routeToPageLabel(route);
+
+  const module = getMetadataValue(log.metadata, "module");
+  if (module) return titleCase(module);
+
+  if (log.entity_type) return titleCase(log.entity_type);
+  return "System";
+}
+
 function getCriticalityBadge(score: number | null) {
-  if (score === null) return null;
-  
-  if (score >= 80) {
-    return (
-      <Badge variant="destructive" className="gap-1">
-        <AlertTriangle className="w-3 h-3" />
-        High ({score}%)
-      </Badge>
-    );
+  const value = score ?? 0;
+  if (value >= 80) {
+    return <Badge variant="destructive">High</Badge>;
   }
-  if (score >= 40) {
-    return (
-      <Badge variant="secondary" className="bg-warning/20 text-warning-foreground gap-1">
-        <Activity className="w-3 h-3" />
-        Medium ({score}%)
-      </Badge>
-    );
+  if (value >= 40) {
+    return <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">Medium</Badge>;
   }
-  return (
-    <Badge variant="outline" className="text-muted-foreground gap-1">
-      Low ({score}%)
-    </Badge>
-  );
+  return <Badge variant="secondary">Low</Badge>;
+}
+
+function getActionLabel(log: AuditLogEntry) {
+  const matchedOption = AUDIT_ACTION_FILTER_OPTIONS.find((option) => {
+    const actionFilter = resolveAuditActionFilter(option.key);
+    if (!actionFilter) return false;
+    const actionMatch = actionFilter.actions.includes(log.action);
+    const entityMatch =
+      !actionFilter.entityTypes?.length || actionFilter.entityTypes.includes(log.entity_type);
+    return actionMatch && entityMatch;
+  });
+
+  if (matchedOption?.key === "update") {
+    const where = getWhereLabel(log);
+    return where === "System" ? "Update" : `Update ${where}`;
+  }
+
+  if (matchedOption) return matchedOption.label;
+  return titleCase(log.action);
 }
 
 export default function AuditLogPage() {
   const { currentTenant } = useAuth();
-  const [filters, setFilters] = useState<AuditLogFilters>({});
-  const [searchQuery, setSearchQuery] = useState("");
-  
-  const { logs, entityTypes, actionTypes, isLoading, error, hasMore, loadMore, refetch } = useAuditLogs(filters, 50);
-
-  // Filter logs by search query
-  const filteredLogs = useMemo(() => {
-    if (!searchQuery) return logs;
-    const query = searchQuery.toLowerCase();
-    return logs.filter(
-      (log) =>
-        log.action.toLowerCase().includes(query) ||
-        log.entity_type.toLowerCase().includes(query) ||
-        log.entity_id?.toLowerCase().includes(query)
-    );
-  }, [logs, searchQuery]);
-
-  // Stats
-  const stats = useMemo(() => {
-    const highCriticality = logs.filter((l) => (l.criticality_score ?? 0) >= 80).length;
-    const mediumCriticality = logs.filter(
-      (l) => (l.criticality_score ?? 0) >= 40 && (l.criticality_score ?? 0) < 80
-    ).length;
-    const lowCriticality = logs.filter((l) => (l.criticality_score ?? 0) < 40).length;
-    return { highCriticality, mediumCriticality, lowCriticality, total: logs.length };
-  }, [logs]);
   const isChainTenant = currentTenant?.plan === "chain";
 
-  const humanizeAction = (action: string) => {
-    if (actionLabels[action]) return actionLabels[action];
-    return action
-      .replace(/[._]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/\b\w/g, (char) => char.toUpperCase());
-  };
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<AuditLogFilters>({});
+
+  const { logs, branches, isLoading, error, hasMore, loadMore, refetch } = useAuditLogs(filters, 50);
+
+  const actionOptions = useMemo(
+    () => AUDIT_ACTION_FILTER_OPTIONS.filter((option) => (option.chainOnly ? isChainTenant : true)),
+    [isChainTenant]
+  );
+
+  const filteredLogs = useMemo(() => {
+    if (!searchQuery.trim()) return logs;
+    const query = searchQuery.trim().toLowerCase();
+    return logs.filter((log) => (log.actorName || "").toLowerCase().includes(query));
+  }, [logs, searchQuery]);
 
   return (
     <SalonSidebar>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold flex items-center gap-2">
               <FileText className="w-6 h-6" />
               Audit Log
             </h1>
-            <p className="text-muted-foreground">
-              Track all actions and changes across your salon
-            </p>
+            <p className="text-muted-foreground">Track activity across your business.</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
             <RefreshCw className="w-4 h-4" />
@@ -169,52 +114,6 @@ export default function AuditLogPage() {
           </Button>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-destructive" />
-                High Criticality
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-destructive">{stats.highCriticality}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Medium Criticality
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-warning-foreground">{stats.mediumCriticality}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Low Criticality
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-muted-foreground">{stats.lowCriticality}</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filters */}
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-base flex items-center gap-2">
@@ -223,73 +122,95 @@ export default function AuditLogPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search actions..."
+                  placeholder="Search by staff name"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
                 />
               </div>
+
               <Select
-                value={filters.action || "all"}
-                onValueChange={(v) => setFilters((f) => ({ ...f, action: v === "all" ? undefined : v }))}
+                value={filters.actionKey || "all"}
+                onValueChange={(value) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    actionKey: value === "all" ? undefined : (value as AuditActionFilterKey),
+                  }))
+                }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Action Type" />
+                  <SelectValue placeholder="All Actions" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Actions</SelectItem>
-                  {actionTypes.map((action) => (
-                    <SelectItem key={action} value={action}>
-                      {actionLabels[action] || action}
+                  {actionOptions.map((option) => (
+                    <SelectItem key={option.key} value={option.key}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Select
-                value={filters.entityType || "all"}
-                onValueChange={(v) => setFilters((f) => ({ ...f, entityType: v === "all" ? undefined : v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Entity Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Entities</SelectItem>
-                  {entityTypes.map((entity) => (
-                    <SelectItem key={entity} value={entity}>
-                      {entityLabels[entity] || entity}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
               <DatePicker
                 value={filters.startDate}
-                onChange={(date) => setFilters((f) => ({ ...f, startDate: date }))}
-                placeholder="From date"
+                onChange={(date) => setFilters((prev) => ({ ...prev, startDate: date }))}
+                placeholder="Start date"
+                showYearMonthDropdown
               />
+
+              <DatePicker
+                value={filters.endDate}
+                onChange={(date) => setFilters((prev) => ({ ...prev, endDate: date }))}
+                placeholder="End date"
+                showYearMonthDropdown
+              />
+
+              {isChainTenant ? (
+                <Select
+                  value={filters.branchLocationId || "all"}
+                  onValueChange={(value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      branchLocationId: value === "all" ? undefined : value,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Branches</SelectItem>
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id}>
+                        {branch.name}
+                        {branch.city ? ` (${branch.city})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
             </div>
           </CardContent>
         </Card>
 
-        {/* Audit Log Table */}
         <Card>
           <CardHeader>
             <CardTitle>Activity History</CardTitle>
-            <CardDescription>
-              Complete log of all actions performed in your salon
-            </CardDescription>
+            <CardDescription>Recent activity with business-friendly action labels.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div key={i} className="flex items-center gap-4">
-                    <Skeleton className="w-24 h-4" />
-                    <Skeleton className="w-32 h-4" />
-                    <Skeleton className="flex-1 h-4" />
+                    <Skeleton className="w-28 h-4" />
+                    <Skeleton className="w-40 h-4" />
+                    <Skeleton className="w-40 h-4" />
+                    <Skeleton className="w-28 h-4" />
                     <Skeleton className="w-20 h-6 rounded-full" />
                   </div>
                 ))}
@@ -303,42 +224,27 @@ export default function AuditLogPage() {
               <div className="text-center py-12 text-muted-foreground">
                 <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <h3 className="font-medium mb-1">No audit logs found</h3>
-                <p className="text-sm">Actions will appear here as they occur</p>
+                <p className="text-sm">Actions will appear here as they occur.</p>
               </div>
             ) : (
               <>
-                <ScrollArea className="h-[500px]">
+                <ScrollArea className="h-[520px]">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Action Type</TableHead>
-                        <TableHead>Entity</TableHead>
-                        {isChainTenant ? <TableHead className="hidden lg:table-cell">Branch</TableHead> : null}
-                        <TableHead className="hidden md:table-cell">Staff</TableHead>
-                        <TableHead>Time Started</TableHead>
-                        <TableHead className="hidden lg:table-cell">Time Ended</TableHead>
+                        <TableHead>Where</TableHead>
+                        <TableHead>Who</TableHead>
+                        <TableHead>When</TableHead>
                         <TableHead>Criticality</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredLogs.map((log) => (
                         <TableRow key={log.id}>
+                          <TableCell className="font-medium">{getActionLabel(log)}</TableCell>
+                          <TableCell className="text-muted-foreground">{getWhereLabel(log)}</TableCell>
                           <TableCell>
-                            <div className="font-medium">
-                              {humanizeAction(log.action)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {entityLabels[log.entity_type] || log.entity_type}
-                            </Badge>
-                          </TableCell>
-                          {isChainTenant ? (
-                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                              {log.branchName || "—"}
-                            </TableCell>
-                          ) : null}
-                          <TableCell className="hidden md:table-cell">
                             <div className="flex items-center gap-2">
                               <User className="w-3 h-3 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">
@@ -347,37 +253,29 @@ export default function AuditLogPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2 text-sm">
-                              <Clock className="w-3 h-3 text-muted-foreground" />
-                              {log.started_at
-                                ? format(new Date(log.started_at), "MMM d, HH:mm")
-                                : format(new Date(log.created_at), "MMM d, HH:mm")}
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Clock className="w-3 h-3" />
+                              {format(
+                                new Date(log.started_at || log.created_at),
+                                "MMM d, yyyy HH:mm"
+                              )}
                             </div>
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <span className="text-sm text-muted-foreground">
-                              {log.ended_at
-                                ? format(new Date(log.ended_at), "MMM d, HH:mm")
-                                : "—"}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            {getCriticalityBadge(log.criticality_score)}
-                          </TableCell>
+                          <TableCell>{getCriticalityBadge(log.criticality_score)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </ScrollArea>
 
-                {hasMore && (
+                {hasMore ? (
                   <div className="flex justify-center pt-4">
                     <Button variant="outline" onClick={loadMore} className="gap-2">
                       <ChevronDown className="w-4 h-4" />
                       Load More
                     </Button>
                   </div>
-                )}
+                ) : null}
               </>
             )}
           </CardContent>

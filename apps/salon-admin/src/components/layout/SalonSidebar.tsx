@@ -186,6 +186,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
         return false;
       }
+      if (item.path === "/salon/audit-log" && currentTenant?.plan === "chain" && activeContextType !== "owner_hub") {
+        return false;
+      }
       if (!item.module) return true; // No module = always visible
       if (item.module === "appointments") {
         const canAccessOwnAppointments = hasPermission("appointments:own");
