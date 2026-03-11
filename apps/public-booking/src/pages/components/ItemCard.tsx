@@ -98,221 +98,236 @@ export function ItemCard({
   const typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
 
   return (
-    <>
-    <div
-      className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px] cursor-pointer"
-      onClick={() => setDetailsOpen(true)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          setDetailsOpen(true);
-        }
-      }}
-    >
-      {/* Image + Content Row */}
-      <div className="flex gap-3 mb-3">
-        {/* Image Slider */}
-        <div className="w-20 h-20 shrink-0">
-          <ImageSlider images={imageUrls} alt={name} className="w-20 h-20" />
-        </div>
-        
-        {/* Header + Name */}
-        <div className="flex-1 min-w-0">
-          {/* Type + Price */}
-          <div className="flex items-start justify-between mb-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {typeLabel}
-            </span>
-            <div className="text-right">
-              <span className="font-bold text-base">
-                {formatCurrency(price, currency)}
-              </span>
-              {hasDiscount && (
-                <div className="flex items-center gap-1.5 justify-end mt-0.5">
-                  <span className="text-xs text-muted-foreground line-through">
-                    {formatCurrency(originalPrice, currency)}
-                  </span>
-                  <Badge variant="destructive" className="text-xs px-1 py-0">
-                    -{discountPercent}%
-                  </Badge>
-                </div>
-              )}
-            </div>
-          </div>
+		<>
+			<div
+				className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px] cursor-pointer"
+				onClick={() => setDetailsOpen(true)}
+				role="button"
+				tabIndex={0}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						setDetailsOpen(true);
+					}
+				}}
+			>
+				{/* Image + Content Row */}
+				<div className="flex gap-3 mb-3">
+					{/* Image Slider */}
+					<div className="w-20 h-20 shrink-0">
+						<ImageSlider images={imageUrls} alt={name} className="w-20 h-20" />
+					</div>
 
-          {/* Name */}
-          <h3 className="font-semibold text-base line-clamp-1">{name}</h3>
+					{/* Header + Name */}
+					<div className="flex-1 min-w-0">
+						{/* Type + Price */}
+						<div className="flex items-start justify-between mb-1">
+							<span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+								{typeLabel}
+							</span>
+							<div className="text-right">
+								<span className="font-bold text-base">
+									{formatCurrency(price, currency)}
+								</span>
+								{hasDiscount && (
+									<div className="flex items-center gap-1.5 justify-end mt-0.5">
+										<span className="text-xs text-muted-foreground line-through">
+											{formatCurrency(originalPrice, currency)}
+										</span>
+										<Badge variant="destructive" className="text-xs px-1 py-0">
+											-{discountPercent}%
+										</Badge>
+									</div>
+								)}
+							</div>
+						</div>
 
-          {/* Description */}
-          {description && (
-            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{description}</p>
-          )}
+						{/* Name */}
+						<h3 className="font-semibold text-base line-clamp-1">{name}</h3>
 
-          {locationNames.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {locationNames.slice(0, 3).map((locationName) => (
-                <Badge key={locationName} variant="outline" className="text-[10px] gap-1">
-                  <MapPin className="h-2.5 w-2.5" />
-                  {locationName}
-                </Badge>
-              ))}
-              {locationNames.length > 3 && (
-                <Badge variant="outline" className="text-[10px]">
-                  +{locationNames.length - 3} more
-                </Badge>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+						{/* Description */}
+						{description && (
+							<p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+								{description}
+							</p>
+						)}
 
-      {/* Spacer */}
-      <div className="flex-1" />
+						{locationNames.length > 0 && (
+							<div className="mt-2 flex flex-wrap gap-1.5">
+								{locationNames.slice(0, 3).map((locationName) => (
+									<Badge
+										key={locationName}
+										variant="outline"
+										className="text-[10px] gap-1"
+									>
+										<MapPin className="h-2.5 w-2.5" />
+										{locationName}
+									</Badge>
+								))}
+								{locationNames.length > 3 && (
+									<Badge variant="outline" className="text-[10px]">
+										+{locationNames.length - 3} more
+									</Badge>
+								)}
+							</div>
+						)}
+					</div>
+				</div>
 
-      {/* Metadata Badges + Add Button / Quantity Counter */}
-      <div className="flex items-end justify-between mt-3 gap-2">
-        <div className="flex flex-wrap gap-1.5">
-          {type === "service" && durationMinutes && (
-            <Badge variant="secondary" className="text-xs gap-1">
-              <Clock className="h-3 w-3" />
-              {durationMinutes} min
-            </Badge>
-          )}
-          {type === "package" && (
-            <Badge variant="secondary" className="text-xs gap-1">
-              <PackageIcon className="h-3 w-3" />
-              Bundle
-            </Badge>
-          )}
-          {isOutOfStock && (
-            <Badge variant="outline" className="text-xs">Out of Stock</Badge>
-          )}
-        </div>
+				{/* Spacer */}
+				<div className="flex-1" />
 
-        {isInCart ? (
-          <QuantityControl
-            quantity={itemInCart.quantity}
-            onIncrement={handleIncrement}
-            onDecrement={handleDecrement}
-            size="sm"
-          />
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={(event) => {
-              event.stopPropagation();
-              handleAddToCart();
-            }}
-            disabled={isOutOfStock}
-            className="gap-1.5 shrink-0 border-0"
-            style={{ 
-              backgroundColor: isOutOfStock ? undefined : 'var(--brand-color)',
-              color: isOutOfStock ? undefined : 'var(--brand-foreground, white)',
-            }}
-          >
-            <ShoppingBag className="h-4 w-4" />
-            Add
-          </Button>
-        )}
-      </div>
-    </div>
-    <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{name}</DialogTitle>
-          <DialogDescription>
-            {typeLabel} details
-          </DialogDescription>
-        </DialogHeader>
+				{/* Metadata Badges + Add Button / Quantity Counter */}
+				<div className="flex items-end justify-between mt-3 gap-2">
+					<div className="flex flex-wrap gap-1.5">
+						{type === "service" && durationMinutes && (
+							<Badge variant="secondary" className="text-xs gap-1">
+								<Clock className="h-3 w-3" />
+								{durationMinutes} min
+							</Badge>
+						)}
+						{type === "package" && (
+							<Badge variant="secondary" className="text-xs gap-1">
+								<PackageIcon className="h-3 w-3" />
+								Bundle
+							</Badge>
+						)}
+						{isOutOfStock && (
+							<Badge variant="outline" className="text-xs">
+								Out of Stock
+							</Badge>
+						)}
+					</div>
 
-        <div className="space-y-4">
-          <ImageSlider images={imageUrls} alt={name} className="w-full h-56" />
+					{isInCart ? (
+						<QuantityControl
+							quantity={itemInCart.quantity}
+							onIncrement={handleIncrement}
+							onDecrement={handleDecrement}
+							size="sm"
+						/>
+					) : (
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={(event) => {
+								event.stopPropagation();
+								handleAddToCart();
+							}}
+							disabled={isOutOfStock}
+							className="gap-1.5 shrink-0 border-0"
+							style={{
+								backgroundColor: isOutOfStock
+									? undefined
+									: "var(--brand-color)",
+								color: isOutOfStock
+									? undefined
+									: "var(--brand-foreground, white)",
+							}}
+						>
+							<ShoppingBag className="h-4 w-4" />
+							Add
+						</Button>
+					)}
+				</div>
+			</div>
+			<Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+				<DialogContent className="max-w-xl">
+					<DialogHeader>
+						<DialogTitle>{name}</DialogTitle>
+						<DialogDescription>{typeLabel} details</DialogDescription>
+					</DialogHeader>
 
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+					<div className="space-y-4">
+						<ImageSlider
+							images={imageUrls}
+							alt={name}
+							className="w-full h-56"
+							enablePreview
+						/>
+						<div className="flex items-center justify-between">
+							<div className="space-y-1">
+								<div className="text-xl font-bold">
+									{formatCurrency(price, currency)}
+								</div>
+								{hasDiscount && (
+									<div className="flex items-center gap-2">
+										<span className="text-sm text-muted-foreground line-through">
+											{formatCurrency(originalPrice, currency)}
+										</span>
+										<Badge variant="destructive">-{discountPercent}%</Badge>
+									</div>
+								)}
+							</div>
 
-          {locationNames.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {locationNames.map((locationName) => (
-                <Badge key={locationName} variant="outline" className="text-xs gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {locationName}
-                </Badge>
-              ))}
-            </div>
-          )}
+							<div className="flex flex-wrap gap-2 justify-end">
+								{type === "service" && durationMinutes && (
+									<Badge variant="secondary" className="gap-1">
+										<Clock className="h-3 w-3" />
+										{durationMinutes} min
+									</Badge>
+								)}
+								{type === "package" && (
+									<Badge variant="secondary" className="gap-1">
+										<PackageIcon className="h-3 w-3" />
+										Bundle
+									</Badge>
+								)}
+								{isOutOfStock && <Badge variant="outline">Out of Stock</Badge>}
+							</div>
+						</div>
+						{description && (
+							<p className="text-sm text-muted-foreground">{description}</p>
+						)}
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="text-xl font-bold">{formatCurrency(price, currency)}</div>
-              {hasDiscount && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground line-through">
-                    {formatCurrency(originalPrice, currency)}
-                  </span>
-                  <Badge variant="destructive">-{discountPercent}%</Badge>
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2 justify-end">
-              {type === "service" && durationMinutes && (
-                <Badge variant="secondary" className="gap-1">
-                  <Clock className="h-3 w-3" />
-                  {durationMinutes} min
-                </Badge>
-              )}
-              {type === "package" && (
-                <Badge variant="secondary" className="gap-1">
-                  <PackageIcon className="h-3 w-3" />
-                  Bundle
-                </Badge>
-              )}
-              {isOutOfStock && <Badge variant="outline">Out of Stock</Badge>}
-            </div>
-          </div>
+						{locationNames.length > 0 && (
+							<div className="space-y-2">
+								<div className="text-sm font-medium">Available locations</div>
+								<div className="flex flex-wrap gap-2">
+									{locationNames.map((locationName) => (
+										<Badge
+											key={locationName}
+											variant="outline"
+											className="gap-1"
+										>
+											<MapPin className="h-3 w-3" />
+											{locationName}
+										</Badge>
+									))}
+								</div>
+							</div>
+						)}
 
-          {locationNames.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-sm font-medium">Available locations</div>
-              <div className="flex flex-wrap gap-2">
-                {locationNames.map((locationName) => (
-                  <Badge key={locationName} variant="outline" className="gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {locationName}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end">
-            {isInCart ? (
-              <QuantityControl
-                quantity={itemInCart.quantity}
-                onIncrement={handleIncrement}
-                onDecrement={handleDecrement}
-                size="sm"
-              />
-            ) : (
-              <Button
-                onClick={handleAddToCart}
-                disabled={isOutOfStock}
-                className="gap-1.5 border-0"
-                style={{
-                  backgroundColor: isOutOfStock ? undefined : "var(--brand-color)",
-                  color: isOutOfStock ? undefined : "var(--brand-foreground, white)",
-                }}
-              >
-                <ShoppingBag className="h-4 w-4" />
-                Add to cart
-              </Button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-    </>
-  );
+						<div className="flex justify-end">
+							{isInCart ? (
+								<QuantityControl
+									quantity={itemInCart.quantity}
+									onIncrement={handleIncrement}
+									onDecrement={handleDecrement}
+									size="sm"
+								/>
+							) : (
+								<Button
+									onClick={handleAddToCart}
+									disabled={isOutOfStock}
+									className="gap-1.5 border-0"
+									style={{
+										backgroundColor: isOutOfStock
+											? undefined
+											: "var(--brand-color)",
+										color: isOutOfStock
+											? undefined
+											: "var(--brand-foreground, white)",
+									}}
+								>
+									<ShoppingBag className="h-4 w-4" />
+									Add to cart
+								</Button>
+							)}
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</>
+	);
 }

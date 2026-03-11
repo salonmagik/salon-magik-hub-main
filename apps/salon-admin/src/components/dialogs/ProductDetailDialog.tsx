@@ -7,10 +7,10 @@ import {
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
-import { AspectRatio } from "@ui/aspect-ratio";
 import { Package, Edit, Archive, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ImageCarousel } from "@/components/catalog/ImageCarousel";
 
 interface ProductDetailDialogProps {
   open: boolean;
@@ -74,13 +74,7 @@ export function ProductDetailDialog({
         <div className="space-y-4">
           {/* Image */}
           {product.image_urls && product.image_urls.length > 0 && (
-            <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden">
-              <img
-                src={product.image_urls[0]}
-                alt={product.name}
-                className="object-cover w-full h-full"
-              />
-            </AspectRatio>
+            <ImageCarousel images={product.image_urls} alt={product.name} />
           )}
 
           {/* Details */}

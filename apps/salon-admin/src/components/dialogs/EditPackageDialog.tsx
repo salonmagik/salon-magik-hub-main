@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import { useEffect, useMemo, useState } from "react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
@@ -7,9 +7,13 @@ import { Textarea } from "@ui/textarea";
 import { Gift, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
-import { getCurrencySymbol, formatCurrency } from "@shared/currency";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { formatCurrency, getCurrencySymbol } from "@shared/currency";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
+import { moveThumbnailToFront } from "@/lib/imageOrder";
 
 interface PackageData {
   id: string;
@@ -28,44 +32,180 @@ interface EditPackageDialogProps {
   onSuccess?: () => void;
 }
 
+const normalizeCountry = (value: string | null | undefined) =>
+  (value || "").toLowerCase().replace(/[^a-z]/g, "");
+
+const sortIds = (ids: string[]) => [...ids].sort();
+
 export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPackageDialogProps) {
-  const { currentTenant } = useAuth();
-  const currencySymbol = getCurrencySymbol(currentTenant?.currency || "USD");
+  const { currentTenant, activeLocationId } = useAuth();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
+  const [originalLocationIds, setOriginalLocationIds] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     name: "",
     price: "",
     description: "",
     images: [] as string[],
+    locationIds: [] as string[],
   });
 
-  // Initialize form when package changes
-  useEffect(() => {
-    if (pkg && open) {
-      setFormData({
-        name: pkg.name,
-        price: String(pkg.price),
-        description: pkg.description || "",
-        images: pkg.image_urls || [],
-      });
-    }
-  }, [pkg, open]);
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const fallbackCurrency = currentTenant?.currency || "USD";
 
-  // Track if any changes have been made
+  const activeLocationCountry = useMemo(() => {
+    if (!activeLocationId) return null;
+    return manageableLocations.find((location) => location.id === activeLocationId)?.country || null;
+  }, [activeLocationId, manageableLocations]);
+
+  const scopedLocations = useMemo(() => {
+    if (!isChainTier || !activeLocationCountry) return manageableLocations;
+    const activeCountryKey = normalizeCountry(activeLocationCountry);
+    return manageableLocations.filter((location) => normalizeCountry(location.country) === activeCountryKey);
+  }, [activeLocationCountry, isChainTier, manageableLocations]);
+
+  const scopedDefaultLocationId = useMemo(() => {
+    if (defaultLocationId && scopedLocations.some((location) => location.id === defaultLocationId)) {
+      return defaultLocationId;
+    }
+    return scopedLocations[0]?.id || "";
+  }, [defaultLocationId, scopedLocations]);
+
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = scopedDefaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [formData.locationIds, isChainTier, manageableLocations, scopedDefaultLocationId]);
+
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+  const hasMixedCurrencies = locationCurrencies.length > 1;
+
+  useEffect(() => {
+    if (!pkg || !open) return;
+    setFormData({
+      name: pkg.name,
+      price: String(pkg.price),
+      description: pkg.description || "",
+      images: pkg.image_urls || [],
+      locationIds: [],
+    });
+    setThumbnailIndex(0);
+  }, [open, pkg]);
+
+  useEffect(() => {
+    if (!pkg || !open || !isChainTier || !currentTenant?.id) {
+      setOriginalLocationIds([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadMappings = async () => {
+      const { data, error } = await (supabase.from as any)("package_locations")
+        .select("location_id")
+        .eq("tenant_id", currentTenant.id)
+        .eq("package_id", pkg.id)
+        .eq("is_enabled", true);
+
+      if (error) {
+        console.error("Error loading package mappings:", error);
+        return;
+      }
+      if (cancelled) return;
+
+      const mapped = Array.from(new Set(((data ?? []) as Array<{ location_id: string }>).map((row) => row.location_id)));
+      setOriginalLocationIds(mapped);
+      setFormData((prev) => ({ ...prev, locationIds: mapped }));
+    };
+
+    void loadMappings();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTenant?.id, isChainTier, open, pkg]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (isChainTier) {
+      const validSelected = formData.locationIds.filter((locationId) =>
+        scopedLocations.some((location) => location.id === locationId),
+      );
+      if (validSelected.length !== formData.locationIds.length) {
+        setFormData((prev) => ({ ...prev, locationIds: validSelected }));
+        return;
+      }
+      if (validSelected.length === 0 && scopedDefaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+      }
+      return;
+    }
+
+    if (formData.locationIds.length === 0 && scopedDefaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+    }
+  }, [formData.locationIds, isChainTier, open, scopedDefaultLocationId, scopedLocations]);
+
   const hasChanges = useMemo(() => {
     if (!pkg) return false;
-    return (
+
+    const contentChanged =
       formData.name !== pkg.name ||
       formData.price !== String(pkg.price) ||
       formData.description !== (pkg.description || "") ||
-      JSON.stringify(formData.images) !== JSON.stringify(pkg.image_urls || [])
-    );
-  }, [formData, pkg]);
+      JSON.stringify(formData.images) !== JSON.stringify(pkg.image_urls || []);
+
+    if (!isChainTier) return contentChanged;
+    return contentChanged || JSON.stringify(sortIds(selectedLocationIds)) !== JSON.stringify(sortIds(originalLocationIds));
+  }, [formData, isChainTier, originalLocationIds, pkg, selectedLocationIds]);
+
+  const syncLocationMappings = async (packageId: string, locationIds: string[]) => {
+    if (!currentTenant?.id || !isChainTier) return;
+
+    const { error: deleteError } = await (supabase.from as any)("package_locations")
+      .delete()
+      .eq("tenant_id", currentTenant.id)
+      .eq("package_id", packageId);
+    if (deleteError) throw deleteError;
+
+    if (locationIds.length === 0) return;
+
+    const rows = locationIds.map((locationId) => ({
+      tenant_id: currentTenant.id,
+      package_id: packageId,
+      location_id: locationId,
+      is_enabled: true,
+    }));
+
+    const { error: upsertError } = await (supabase.from as any)("package_locations").upsert(rows, {
+      onConflict: "package_id,location_id",
+    });
+    if (upsertError) throw upsertError;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pkg) return;
+
+    if (isChainTier && selectedLocationIds.length === 0) {
+      toast({ title: "Select branches", description: "Choose at least one branch.", variant: "destructive" });
+      return;
+    }
+
+    if (hasMixedCurrencies) {
+      toast({
+        title: "Mixed currency mapping",
+        description: "Selected branches use different currencies. Choose one currency group.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -76,11 +216,13 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
           name: formData.name,
           price: parseFloat(formData.price),
           description: formData.description || null,
-          image_urls: formData.images,
+          image_urls: moveThumbnailToFront(formData.images, thumbnailIndex),
         })
         .eq("id", pkg.id);
 
       if (error) throw error;
+
+      await syncLocationMappings(pkg.id, selectedLocationIds);
 
       toast({ title: "Success", description: "Package updated successfully" });
       onOpenChange(false);
@@ -100,7 +242,7 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Gift className="w-5 h-5 text-primary" />
@@ -112,7 +254,21 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {/* Package Name */}
+          {isChainTier ? (
+            <LocationScopePicker
+              locations={scopedLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || scopedLocations.length === 0 || isSubmitting}
+            />
+          ) : null}
+
+          {hasMixedCurrencies ? (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
+          ) : null}
+
           <div className="space-y-2">
             <Label>
               Package Name <span className="text-destructive">*</span>
@@ -125,9 +281,8 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
             />
           </div>
 
-          {/* Pricing Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2 sm:col-span-1">
               <Label>Original Value</Label>
               <Input
                 value={pkg.original_price ? formatCurrency(pkg.original_price, currentTenant?.currency || "USD") : "N/A"}
@@ -135,30 +290,36 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
                 className="bg-muted"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-1">
               <Label>
-                Package Price ({currencySymbol}) <span className="text-destructive">*</span>
+                Package Price <span className="text-destructive">*</span>
               </Label>
-              <Input
-                type="number"
-                placeholder="0.00"
-                value={formData.price}
-                onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
-                required
-                min="0"
-                step="0.01"
-              />
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
+                <Input
+                  type="number"
+                  className="pl-8"
+                  placeholder="0.00"
+                  value={formData.price}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                  required
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+            <div className="space-y-2 sm:col-span-1">
+              <Label>Currency</Label>
+              <Input value={selectedCurrency} disabled />
             </div>
           </div>
 
-          {/* Savings Display */}
-          {pkg.original_price && savings > 0 && (
+          {pkg.original_price && savings > 0 ? (
             <div className="text-sm text-success">
               Customers save {savingsPercent}% ({formatCurrency(savings, currentTenant?.currency || "USD")})
             </div>
-          )}
+          ) : null}
 
-          {/* Description */}
           <div className="space-y-2">
             <Label>Description</Label>
             <Textarea
@@ -169,12 +330,13 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
             />
           </div>
 
-          {/* Images */}
           <div className="space-y-2">
             <Label>Images (Optional)</Label>
             <ImageUploadZone
               images={formData.images}
               onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              thumbnailIndex={thumbnailIndex}
+              onThumbnailIndexChange={setThumbnailIndex}
               maxImages={2}
               disabled={isSubmitting}
             />
@@ -190,8 +352,12 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || !hasChanges}>
-              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            <Button
+              type="submit"
+              className="gap-2 w-full sm:w-auto"
+              disabled={isSubmitting || !hasChanges || hasMixedCurrencies}
+            >
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Update Package
             </Button>
           </DialogFooter>

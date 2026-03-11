@@ -14,6 +14,7 @@ import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrencySymbol } from "@shared/currency";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
+import { moveThumbnailToFront } from "@/lib/imageOrder";
 
 interface AddProductDialogProps {
   open: boolean;
@@ -40,6 +41,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const [formData, setFormData] = useState({
     name: "",
     price: "",
@@ -112,6 +114,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
       images: [],
       locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
+    setThumbnailIndex(0);
   };
 
   // Check if form is valid
@@ -142,7 +145,7 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
         stockQuantity: parseInt(formData.stockQuantity),
         status: formData.status as "active" | "inactive" | "archived",
         description: formData.description || null,
-        imageUrls: formData.images,
+        imageUrls: moveThumbnailToFront(formData.images, thumbnailIndex),
         locationIds: selectedLocationIds,
       });
 
@@ -266,6 +269,8 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             <ImageUploadZone
               images={formData.images}
               onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              thumbnailIndex={thumbnailIndex}
+              onThumbnailIndexChange={setThumbnailIndex}
               maxImages={2}
               disabled={isSubmitting}
             />

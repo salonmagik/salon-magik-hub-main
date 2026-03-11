@@ -7,10 +7,10 @@ import {
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
-import { AspectRatio } from "@ui/aspect-ratio";
 import { Edit, Archive, Trash2, Percent } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ImageCarousel } from "@/components/catalog/ImageCarousel";
 
 interface PackageDetailDialogProps {
   open: boolean;
@@ -79,13 +79,7 @@ export function PackageDetailDialog({
         <div className="space-y-4">
           {/* Image */}
           {pkg.image_urls && pkg.image_urls.length > 0 && (
-            <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden">
-              <img
-                src={pkg.image_urls[0]}
-                alt={pkg.name}
-                className="object-cover w-full h-full"
-              />
-            </AspectRatio>
+            <ImageCarousel images={pkg.image_urls} alt={pkg.name} />
           )}
 
           {/* Pricing */}

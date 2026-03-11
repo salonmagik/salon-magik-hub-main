@@ -16,6 +16,7 @@ import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { AddCategoryDialog } from "./AddCategoryDialog";
 import { getCurrencySymbol } from "@shared/currency";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
+import { moveThumbnailToFront } from "@/lib/imageOrder";
 
 interface AddServiceDialogProps {
   open: boolean;
@@ -59,6 +60,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const { createService, createCategory, categories } = useServices();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const [addCategoryOpen, setAddCategoryOpen] = useState(false);
   const fallbackCurrency = currentTenant?.currency || "USD";
   const [formData, setFormData] = useState({
@@ -137,6 +139,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       images: [],
       locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
+    setThumbnailIndex(0);
   };
 
   // Check if form is valid
@@ -164,7 +167,7 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         description: formData.description || undefined,
         categoryId: formData.category || undefined,
         depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
-        imageUrls: formData.images,
+        imageUrls: moveThumbnailToFront(formData.images, thumbnailIndex),
         locationIds: selectedLocationIds,
       });
 
@@ -355,6 +358,8 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             <ImageUploadZone
               images={formData.images}
               onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              thumbnailIndex={thumbnailIndex}
+              onThumbnailIndexChange={setThumbnailIndex}
               maxImages={2}
               disabled={isSubmitting}
             />
