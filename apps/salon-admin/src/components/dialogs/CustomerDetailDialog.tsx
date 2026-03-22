@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from "@ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
@@ -176,10 +178,26 @@ export function CustomerDetailDialog({
     );
   });
 
-  if (!customer) return null;
-
-  const customerAppointments = appointments.filter((a) => a.customer_id === customer.id);
+  const customerId = customer?.id;
+  const customerAppointments = customerId
+    ? appointments.filter((a) => a.customer_id === customerId)
+    : [];
   const currency = currentTenant?.currency || "USD";
+  const { data: engagementSummary } = useQuery({
+    queryKey: ["customer-engagement-summary", currentTenant?.id, customerId],
+    queryFn: async () => {
+      if (!currentTenant?.id || !customerId) return null;
+      const { data, error } = await (supabase.rpc as any)("get_customer_engagement_summary", {
+        p_tenant_id: currentTenant.id,
+        p_customer_id: customerId,
+      });
+      if (error) throw error;
+      return Array.isArray(data) ? (data[0] ?? null) : data;
+    },
+    enabled: Boolean(currentTenant?.id && customerId && open),
+  });
+
+  if (!customer) return null;
 
   const getInitials = (name: string) => {
     const parts = name.split(" ");
@@ -193,6 +211,9 @@ export function CustomerDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
+          <DialogDescription className="sr-only">
+            Customer profile, engagement summary, appointments, notes, and transaction history.
+          </DialogDescription>
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
               {getInitials(customer.full_name)}
@@ -296,6 +317,22 @@ export function CustomerDetailDialog({
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <h4 className="font-medium text-sm text-muted-foreground">Customer Summary</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <p>Most ordered service: <span className="font-medium">{engagementSummary?.most_ordered_service || "—"}</span></p>
+                  <p>Most ordered product: <span className="font-medium">{engagementSummary?.most_ordered_product || "—"}</span></p>
+                  <p>Refunds count: <span className="font-medium">{engagementSummary?.refunds_count ?? 0}</span></p>
+                  <p>Last transaction date: <span className="font-medium">{engagementSummary?.last_transaction_at ? format(new Date(engagementSummary.last_transaction_at), "MMM d, yyyy") : "—"}</span></p>
+                  <p>Services completed: <span className="font-medium">{engagementSummary?.services_completed ?? 0}</span></p>
+                  <p>Products fulfilled: <span className="font-medium">{engagementSummary?.products_fulfilled ?? 0}</span></p>
+                  <p>Services cancelled: <span className="font-medium">{engagementSummary?.services_cancelled ?? 0}</span></p>
+                  <p>Services rescheduled: <span className="font-medium">{engagementSummary?.services_rescheduled ?? 0}</span></p>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="appointments" className="mt-4">

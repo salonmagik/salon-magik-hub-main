@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getSenderName } from "../_shared/email-template.ts";
+import { buildFromAddress } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -10,7 +10,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type AppointmentAction = "scheduled" | "completed" | "cancelled" | "rescheduled" | "reminder";
+type AppointmentAction =
+  | "scheduled"
+  | "completed"
+  | "cancelled"
+  | "rescheduled"
+  | "reminder"
+  | "branch_unavailable";
 
 interface NotificationRequest {
   appointmentId: string;
@@ -179,6 +185,25 @@ const defaultTemplates: Record<AppointmentAction, { subject: string; body: strin
       <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you need to reschedule or cancel, please contact us as soon as possible.</p>
     `,
   },
+  branch_unavailable: {
+    subject: "Action Needed: Your {{salon_name}} Appointment",
+    body: `
+      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Please Reschedule Your Appointment</h2>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
+      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">One of our branches is temporarily unavailable, so your appointment needs to be rescheduled.</p>
+
+      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
+        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Original Date:</strong> {{appointment_date}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Original Time:</strong> {{appointment_time}}</p>
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
+        {{#if reason}}
+        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>How to reschedule:</strong> {{reason}}</p>
+        {{/if}}
+      </div>
+
+      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We are sorry for the inconvenience and appreciate your understanding.</p>
+    `,
+  },
 };
 
 // Map action to template type
@@ -188,6 +213,7 @@ const actionToTemplateType: Record<AppointmentAction, string> = {
   cancelled: "appointment_cancelled",
   rescheduled: "appointment_rescheduled",
   reminder: "appointment_reminder",
+  branch_unavailable: "appointment_rescheduled",
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -209,7 +235,7 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Missing required fields: appointmentId and action");
     }
 
-    if (!["scheduled", "completed", "cancelled", "rescheduled", "reminder"].includes(action)) {
+    if (!["scheduled", "completed", "cancelled", "rescheduled", "reminder", "branch_unavailable"].includes(action)) {
       throw new Error("Invalid action type");
     }
 
@@ -320,7 +346,11 @@ const handler = async (req: Request): Promise<Response> => {
       tenant?.logo_url || undefined
     );
 
-    const fromAddress = `${getSenderName({ mode: "salon", salonName: tenant?.name || "Salon Magik" }).replace(/[<>"\n\r]/g, "").trim()} <${fromEmail}>`;
+    const fromAddress = buildFromAddress({
+      mode: "salon",
+      salonName: tenant?.name || "Salon Magik",
+      fromEmail,
+    });
     
     console.log("Sending email with from address:", fromAddress);
     

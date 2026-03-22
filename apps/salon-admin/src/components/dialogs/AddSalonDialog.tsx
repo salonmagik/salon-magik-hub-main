@@ -18,7 +18,8 @@ import { useLocations } from "@/hooks/useLocations";
 import { usePlans } from "@/hooks/usePlans";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
-import { COUNTRIES } from "@shared/countries";
+import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 import {
   Select,
   SelectContent,
@@ -30,7 +31,7 @@ import {
 interface AddSalonDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess?: () => void;
+  onSuccess?: () => Promise<void> | void;
 }
 
 interface LocationGate {
@@ -48,10 +49,21 @@ interface EntitlementExpansionResult {
   subtotal?: number;
 }
 
+interface ChainUnlockRequest {
+  id: string;
+  requested_locations: number;
+  allowed_locations: number;
+  status: "pending" | "approved" | "rejected";
+}
+
+const SELF_SERVE_CHAIN_LOCATION_LIMIT = 10;
+
 export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
   const { currentTenant } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
   const { data: plans } = usePlans();
+  const { data: marketCountries } = useMarketCountries();
+  const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -61,6 +73,8 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [showUnlockRequestPrompt, setShowUnlockRequestPrompt] = useState(false);
+  const [isSubmittingUnlockRequest, setIsSubmittingUnlockRequest] = useState(false);
 
   const isChainPlan = String(currentTenant?.plan || "").toLowerCase() === "chain";
 
@@ -85,31 +99,89 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     staleTime: 1000 * 15,
   });
 
+  const { data: chainUnlockRequest, refetch: refetchChainUnlockRequest } = useQuery({
+    queryKey: ["tenant-chain-unlock-request", currentTenant?.id],
+    queryFn: async (): Promise<ChainUnlockRequest | null> => {
+      if (!currentTenant?.id) return null;
+      const { data, error } = await (supabase
+        .from("tenant_chain_unlock_requests" as any)
+        .select("id, requested_locations, allowed_locations, status")
+        .eq("tenant_id", currentTenant.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle() as any);
+      if (error) throw error;
+      return data || null;
+    },
+    enabled: Boolean(currentTenant?.id && isChainPlan),
+  });
+
   const currentPlan = plans?.find((p) => p.slug === String(currentTenant?.plan || "").toLowerCase());
   const fallbackMax = currentPlan?.limits?.max_locations || 1;
   const fallbackUsed = locations.length;
 
   const allowedLocations = locationGate?.allowed ?? fallbackMax;
   const currentLocationCount = locationGate?.used ?? fallbackUsed;
-  const canAddLocation = locationGate?.can_add ?? currentLocationCount < allowedLocations;
+  const hasPendingChainUnlock =
+    isChainPlan &&
+    chainUnlockRequest?.status === "pending" &&
+    chainUnlockRequest.requested_locations > chainUnlockRequest.allowed_locations;
+  const isOverEntitlement = currentLocationCount > allowedLocations;
+  const nextRequestedLocationCount = currentLocationCount + 1;
+  const canAddLocation =
+    !hasPendingChainUnlock && (locationGate?.can_add ?? currentLocationCount < allowedLocations);
+  const crossesSelfServeLimit = isChainPlan && nextRequestedLocationCount > SELF_SERVE_CHAIN_LOCATION_LIMIT;
   const canAutoExpand =
     isChainPlan &&
     !canAddLocation &&
+    !hasPendingChainUnlock &&
+    !crossesSelfServeLimit &&
     locationGate?.requires_custom === false &&
     Boolean(currentTenant?.id);
+  const canSubmitUnlockRequest =
+    isChainPlan &&
+    !hasPendingChainUnlock &&
+    !canAddLocation &&
+    Boolean(locationGate?.requires_custom || crossesSelfServeLimit) &&
+    Boolean(currentTenant?.id && currentPlan?.id);
 
   const upgradeMessage = useMemo(() => {
     if (isChainPlan) {
-      if (locationGate?.requires_custom) {
+      if (isOverEntitlement) {
+        return `Your account currently has ${currentLocationCount} configured branches, which is above your active entitlement of ${allowedLocations}. New branches are blocked until entitlement is updated.`;
+      }
+      if (hasPendingChainUnlock && chainUnlockRequest) {
+        return `Your request to unlock up to ${chainUnlockRequest.requested_locations} branches is pending approval.`;
+      }
+      if (locationGate?.requires_custom || crossesSelfServeLimit) {
         return "The next tier is marked as custom. Contact sales/support to expand this chain plan.";
       }
-      return "You need more location slots for this chain plan.";
+      return "You need more branch slots for this chain plan.";
     }
-    return "Upgrade to the Chain plan to add more locations and unlock multi-salon management features.";
-  }, [isChainPlan, locationGate?.requires_custom]);
+    return "Upgrade to the Chain plan to add more branches and unlock multi-branch management features.";
+  }, [
+    allowedLocations,
+    chainUnlockRequest,
+    currentLocationCount,
+    hasPendingChainUnlock,
+    isChainPlan,
+    crossesSelfServeLimit,
+    isOverEntitlement,
+    locationGate?.requires_custom,
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (
+      isChainPlan &&
+      !hasPendingChainUnlock &&
+      !canAddLocation &&
+      (locationGate?.requires_custom || crossesSelfServeLimit)
+    ) {
+      setShowUnlockRequestPrompt(true);
+      return;
+    }
 
     if (!canAddLocation && !canAutoExpand) {
       setShowUpgradePrompt(true);
@@ -139,26 +211,52 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         country: formData.country,
         address: formData.address,
         is_default: false,
+        availability: "open",
       });
 
       if (error) throw error;
 
+      if (isChainPlan) {
+        const nextActiveLocations = currentLocationCount + 1;
+        await (supabase.rpc as any)("create_tenant_addon_quote_snapshot", {
+          p_tenant_id: currentTenant.id,
+          p_country_code: formData.country || currentTenant.country,
+          p_currency: expansionResult?.currency || currentTenant.currency,
+          p_included_locations: 1,
+          p_active_locations: nextActiveLocations,
+          p_extra_locations: Math.max(0, nextActiveLocations - 1),
+          p_unit_price_per_extra_location: expansionResult?.unit_price ?? null,
+          p_monthly_addon_total: expansionResult?.subtotal ?? null,
+          p_snapshot: {
+            source: "add_branch_dialog",
+            location_name: formData.name,
+            location_city: formData.city,
+            location_country: formData.country,
+            allowed_before: allowedLocations,
+            used_before: currentLocationCount,
+            used_after: nextActiveLocations,
+            expansion_result: expansionResult,
+          },
+          p_mark_accepted: true,
+        });
+      }
+
       if (expansionResult?.billing_effective_at) {
         toast({
-          title: "Salon added",
-          description: `Location added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
+          title: "Branch added",
+          description: `Branch added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
         });
       } else {
-        toast({ title: "Success", description: "New salon location added" });
+        toast({ title: "Success", description: "New branch added" });
       }
       await refetchLocations();
-      onSuccess?.();
+      await onSuccess?.();
       onOpenChange(false);
       setFormData({ name: "", city: "", country: currentTenant?.country || "", address: "" });
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to add location",
+        description: error.message || "Failed to add branch",
         variant: "destructive",
       });
     } finally {
@@ -170,10 +268,44 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     toast({
       title: isChainPlan ? "Expansion required" : "Upgrade Required",
       description: isChainPlan
-        ? "Contact support to unlock this custom location tier."
+        ? hasPendingChainUnlock
+          ? "Your request is pending approval. We'll notify you once extra branches are activated."
+          : "Contact support to unlock this custom branch tier."
         : "Please visit Settings > Subscription to upgrade your plan.",
     });
     onOpenChange(false);
+  };
+
+  const handleSubmitUnlockRequest = async () => {
+    if (!currentTenant?.id || !isChainPlan || !currentPlan?.id) return;
+
+    setIsSubmittingUnlockRequest(true);
+    try {
+      const requestedLocations = Math.max(11, nextRequestedLocationCount);
+      const { error } = await (supabase.rpc as any)("submit_chain_unlock_request", {
+        p_tenant_id: currentTenant.id,
+        p_plan_id: currentPlan.id,
+        p_requested_locations: requestedLocations,
+        p_reason: `Requested from Add Branch dialog for ${requestedLocations} branches.`,
+      });
+      if (error) throw error;
+
+      await refetchChainUnlockRequest();
+      setShowUnlockRequestPrompt(false);
+      onOpenChange(false);
+      toast({
+        title: "Request submitted",
+        description: `Your request for ${requestedLocations} branches has been submitted. Support will contact you for activation.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Request failed",
+        description: error.message || "Unable to submit unlock request right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingUnlockRequest(false);
+    }
   };
 
   if (showUpgradePrompt) {
@@ -192,7 +324,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               Upgrade Required
             </DialogTitle>
             <DialogDescription>
-              You've reached the maximum number of locations for your current plan.
+              You've reached the maximum number of branches for your current plan.
             </DialogDescription>
           </DialogHeader>
 
@@ -201,7 +333,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               <AlertDescription>
                 <div className="space-y-2">
                   <p className="font-medium">
-                    Current: {currentLocationCount} / {allowedLocations} locations
+                    Current: {currentLocationCount} / {allowedLocations} branches
                   </p>
                   <p className="text-sm text-muted-foreground">{upgradeMessage}</p>
                 </div>
@@ -220,8 +352,63 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               Cancel
             </Button>
             <Button onClick={handleUpgrade} className="gap-2">
-              {isChainPlan ? "Contact support" : "Upgrade to Chain"}
+              {isChainPlan ? (hasPendingChainUnlock ? "Pending approval" : "Contact support") : "Upgrade to Chain"}
               <ArrowRight className="w-4 h-4" />
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (showUnlockRequestPrompt) {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setShowUnlockRequestPrompt(false);
+          onOpenChange(isOpen);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-warning-foreground" />
+              Request chain unlock
+            </DialogTitle>
+            <DialogDescription>
+              This branch would push your chain into the custom 11+ tier.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Alert>
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p className="font-medium">
+                    Current: {currentLocationCount} / {allowedLocations} branches
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Submit a request to activate up to {Math.max(11, nextRequestedLocationCount)} branches.
+                    Support will contact you with custom pricing and approval details.
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUnlockRequestPrompt(false);
+                onOpenChange(false);
+              }}
+              disabled={isSubmittingUnlockRequest}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSubmitUnlockRequest} disabled={isSubmittingUnlockRequest}>
+              {isSubmittingUnlockRequest && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Submit request
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -235,16 +422,16 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Building2 className="w-5 h-5" />
-            Add New Salon
+            Add New Branch
           </DialogTitle>
           <DialogDescription>
-            Add a new location ({currentLocationCount} / {allowedLocations} used)
+            Add a new branch ({currentLocationCount} / {allowedLocations} used)
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Salon Name *</Label>
+            <Label htmlFor="name">Branch Name *</Label>
             <Input
               id="name"
               placeholder="e.g., Downtown Branch"
@@ -275,7 +462,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {COUNTRIES.map((c) => (
+                  {selectableCountries.map((c) => (
                     <SelectItem key={c.code} value={c.code}>
                       {c.flag} {c.name}
                     </SelectItem>
@@ -303,14 +490,14 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               type="submit"
               disabled={
                 isSubmitting ||
-                (!canAddLocation && !canAutoExpand) ||
+                (!canAddLocation && !canAutoExpand && !canSubmitUnlockRequest) ||
                 !formData.name ||
                 !formData.city ||
                 !formData.country
               }
             >
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Add Salon
+              Add Branch
             </Button>
           </DialogFooter>
         </form>

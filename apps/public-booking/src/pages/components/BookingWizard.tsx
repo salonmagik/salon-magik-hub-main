@@ -5,11 +5,19 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Separator } from "@ui/separator";
-import { useBookingCart, useDepositCalculation, type PublicTenant, type PublicLocation, type GiftRecipient } from "@/hooks";
+import {
+  useBookingCart,
+  useDepositCalculation,
+  useBookingEligibleStaff,
+  type PublicTenant,
+  type PublicLocation,
+  type GiftRecipient,
+} from "@/hooks";
 import { CartStep } from "./CartStep";
 import { SchedulingStep } from "./SchedulingStep";
 import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
@@ -26,11 +34,18 @@ interface BookingWizardProps {
   onOpenChange: (open: boolean) => void;
   salon: PublicTenant;
   locations: PublicLocation[];
+  selectedCountryCode?: string | null;
 }
 
 type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "payment" | "confirmation";
 
-export function BookingWizard({ open, onOpenChange, salon, locations }: BookingWizardProps) {
+export function BookingWizard({
+  open,
+  onOpenChange,
+  salon,
+  locations,
+  selectedCountryCode,
+}: BookingWizardProps) {
   const { items, getTotal, getTotalDuration, clearCart, getGiftItems, getItemCount } = useBookingCart();
   const [step, setStep] = useState<WizardStep>("cart");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,6 +55,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | undefined>(undefined);
   const [leaveUnscheduled, setLeaveUnscheduled] = useState(false);
 
   // Customer state
@@ -116,6 +132,27 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
   const totalDuration = getTotalDuration();
   const giftItems = getGiftItems();
   const hasSchedulableItems = items.some((item) => item.type !== "product");
+  const selectedServiceIds = items
+    .filter((item) => item.type === "service")
+    .map((item) => item.itemId);
+
+  const { data: eligibleStaff = [], isLoading: eligibleStaffLoading } = useBookingEligibleStaff({
+    tenantId: salon.id,
+    locationId: selectedLocation?.id,
+    serviceIds: selectedServiceIds,
+    enabled:
+      Boolean(selectedLocation?.id) &&
+      Boolean(salon.allow_staff_selection || salon.require_staff_selection) &&
+      !leaveUnscheduled &&
+      hasSchedulableItems,
+  });
+
+  useEffect(() => {
+    if (!selectedStaffId) return;
+    if (!eligibleStaff.some((staff) => staff.userId === selectedStaffId)) {
+      setSelectedStaffId(undefined);
+    }
+  }, [eligibleStaff, selectedStaffId]);
 
   // Calculate deposit
   const depositCalc = useDepositCalculation(
@@ -134,10 +171,10 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     afterPurse === 0
       ? 0
       : paymentOption === "pay_now"
-      ? afterPurse
-      : paymentOption === "pay_deposit"
-      ? depositAmount
-      : 0;
+        ? afterPurse
+        : paymentOption === "pay_deposit"
+          ? depositAmount
+          : 0;
 
   const amountDueAtSalon = afterPurse - amountDueNow;
 
@@ -161,12 +198,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
     }
 
     steps.push({ key: "review", label: "Review", icon: <CreditCard className="h-4 w-4" /> });
-    
+
     // Add payment step if payment is required
     if (amountDueNow > 0) {
       steps.push({ key: "payment", label: "Payment", icon: <Wallet className="h-4 w-4" /> });
     }
-    
+
     steps.push({ key: "confirmation", label: "Done", icon: <CheckCircle className="h-4 w-4" /> });
 
     return steps;
@@ -202,6 +239,14 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         toast({
           title: "Missing selection",
           description: "Please select a date, time, and location, or choose to leave unscheduled",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!leaveUnscheduled && hasSchedulableItems && salon.require_staff_selection && !selectedStaffId) {
+        toast({
+          title: "Staff selection required",
+          description: "Please select a staff member before continuing.",
           variant: "destructive",
         });
         return;
@@ -432,6 +477,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
             voucherDiscount: voucherDiscount,
             purseAmount: purseAmount,
             depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+            selectedStaffId: selectedStaffId || null,
           },
         });
 
@@ -459,11 +505,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           return;
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Payment error:", err);
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
       toast({
         title: "Payment failed",
-        description: err.message || "Something went wrong. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -492,6 +539,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
           voucherDiscount: voucherDiscount,
           purseAmount: purseAmount,
           depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+          selectedStaffId: selectedStaffId || null,
         },
       });
 
@@ -500,11 +548,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setBookingReference(data.reference || "CONFIRMED");
       setStep("confirmation");
       clearCart();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Booking error:", err);
+      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
       toast({
         title: "Booking failed",
-        description: err.message || "Something went wrong. Please try again.",
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -517,6 +566,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
       setStep("cart");
       setSelectedDate(undefined);
       setSelectedTime(undefined);
+      setSelectedStaffId(undefined);
       setLeaveUnscheduled(false);
       setBookerInfo({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
       setGiftRecipients({});
@@ -542,11 +592,14 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent 
+      <DialogContent
         className="max-w-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 gap-0"
         style={{ "--brand-color": brandColor } as React.CSSProperties}
       >
         <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
+          <DialogDescription className="sr-only">
+            Complete your booking by reviewing your cart, schedule, and payment details.
+          </DialogDescription>
           <DialogTitle>Complete Checkout</DialogTitle>
         </DialogHeader>
 
@@ -556,22 +609,20 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
             {steps.map((s, i) => (
               <div key={s.key} className="flex items-center gap-2 shrink-0">
                 <div
-                  className={`flex items-center gap-1.5 ${
-                    step === s.key
+                  className={`flex items-center gap-1.5 ${step === s.key
                       ? "text-primary"
                       : currentStepIndex > i
-                      ? "text-muted-foreground"
-                      : "text-muted-foreground/50"
-                  }`}
+                        ? "text-muted-foreground"
+                        : "text-muted-foreground/50"
+                    }`}
                 >
                   <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
-                      step === s.key
+                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${step === s.key
                         ? "text-white border-transparent"
                         : currentStepIndex > i
-                        ? "border-muted-foreground bg-muted"
-                        : "border-muted"
-                    }`}
+                          ? "border-muted-foreground bg-muted"
+                          : "border-muted"
+                      }`}
                     style={step === s.key ? { backgroundColor: "var(--brand-color)" } : undefined}
                   >
                     {s.icon}
@@ -590,8 +641,8 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="px-6 py-4">
             {step === "cart" && (
-              <CartStep 
-                currency={salon.currency} 
+              <CartStep
+                currency={salon.currency}
                 onBrowse={handleClose}
               />
             )}
@@ -609,6 +660,12 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 leaveUnscheduled={leaveUnscheduled}
                 onLeaveUnscheduledChange={setLeaveUnscheduled}
                 totalDuration={totalDuration}
+                allowStaffSelection={Boolean(salon.allow_staff_selection)}
+                requireStaffSelection={Boolean(salon.require_staff_selection)}
+                eligibleStaff={eligibleStaff}
+                selectedStaffId={selectedStaffId}
+                onStaffChange={setSelectedStaffId}
+                staffLoading={eligibleStaffLoading}
               />
             )}
 
@@ -646,6 +703,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                 onVoucherApplied={setAppliedVoucher}
                 purseAmount={purseAmount}
                 onPurseApplied={setPurseAmount}
+                selectedCountryCode={selectedCountryCode}
                 subtotal={subtotal}
                 voucherDiscount={voucherDiscount}
                 afterVoucher={afterVoucher}
@@ -660,7 +718,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
               <PaymentStep
                 amountDue={amountDueNow}
                 currency={salon.currency}
-                country={salon.country || "US"}
+                country={selectedCountryCode || salon.country || "US"}
                 onGatewaySelect={setSelectedGateway}
                 onSubmit={handlePaymentSubmit}
                 isSubmitting={isSubmitting}
@@ -711,7 +769,7 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   onClick={handleProceedToPayment}
                   disabled={isSubmitting}
                   className="border-0"
-                  style={{ 
+                  style={{
                     backgroundColor: "var(--brand-color)",
                     color: "var(--brand-foreground, white)",
                   }}
@@ -719,15 +777,15 @@ export function BookingWizard({ open, onOpenChange, salon, locations }: BookingW
                   {isSubmitting
                     ? "Submitting..."
                     : amountDueNow > 0
-                    ? "Continue to Payment"
-                    : "Confirm Booking"}
+                      ? "Continue to Payment"
+                      : "Confirm Booking"}
                 </Button>
               ) : (
                 <Button
                   onClick={handleNext}
                   disabled={step === "cart" && items.length === 0}
                   className="border-0"
-                  style={{ 
+                  style={{
                     backgroundColor: "var(--brand-color)",
                     color: "var(--brand-foreground, white)",
                   }}

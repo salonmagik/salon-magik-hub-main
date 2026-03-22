@@ -19,6 +19,9 @@ export type PublicTenant = Pick<
   | "booking_status_message"
   | "slot_capacity_default"
   | "pay_at_salon_enabled"
+  | "allow_staff_selection"
+  | "require_staff_selection"
+  | "auto_assign_staff"
 > & {
   brand_color?: string | null;
   contact_phone?: string | null;
@@ -39,16 +42,26 @@ export type PublicLocation = Pick<
   | "availability"
 >;
 
-export function usePublicSalon(slug: string | undefined) {
+export type PublicCatalogMode = "legacy" | "chain_country_scoped";
+
+const EMPTY_LOCATIONS: PublicLocation[] = [];
+
+export function usePublicSalon(
+  slug: string | undefined,
+  countryCode?: string | null,
+  mode: PublicCatalogMode = "legacy",
+) {
+  void countryCode;
+  void mode;
+
   const tenantQuery = useQuery({
     queryKey: ["public-tenant", slug],
     queryFn: async (): Promise<PublicTenant | null> => {
       if (!slug) return null;
 
       // Use the secure view that only exposes safe columns
-      // The view isn't in generated types, so we need to cast
       const { data, error } = await supabase
-        .from("public_booking_tenants" as any)
+        .from("public_booking_tenants")
         .select("*")
         .eq("slug", slug)
         .maybeSingle();
@@ -68,11 +81,13 @@ export function usePublicSalon(slug: string | undefined) {
     queryFn: async (): Promise<PublicLocation[]> => {
       if (!tenantQuery.data?.id) return [];
 
-      const { data, error } = await supabase
+      const query = supabase
         .from("locations")
         .select("id, name, city, country, address, opening_time, closing_time, opening_days, availability")
         .eq("tenant_id", tenantQuery.data.id)
-        .eq("availability", "open");
+        .or("availability.is.null,availability.eq.open");
+
+      const { data, error } = await query;
 
       if (error) {
         console.error("Error fetching locations:", error);
@@ -86,7 +101,7 @@ export function usePublicSalon(slug: string | undefined) {
 
   return {
     salon: tenantQuery.data,
-    locations: locationsQuery.data || [],
+    locations: locationsQuery.data || EMPTY_LOCATIONS,
     isLoading: tenantQuery.isLoading || locationsQuery.isLoading,
     error: tenantQuery.error || locationsQuery.error,
     notFound: !tenantQuery.isLoading && !tenantQuery.data,

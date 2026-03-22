@@ -6,7 +6,7 @@ import {
   heading,
   createButton,
   smallText,
-  getSenderName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -119,7 +119,7 @@ const handler = async (req: Request): Promise<Response> => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: `${getSenderName({ mode: "product" })} <${fromEmail}>`,
+        from: buildFromAddress({ mode: "product", fromEmail }),
         to: [email],
         subject: emailTemplate.subject,
         html: htmlBody,

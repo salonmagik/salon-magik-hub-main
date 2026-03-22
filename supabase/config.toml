@@ -27,6 +27,9 @@ verify_jwt = false
 [functions.submit-waitlist]
 verify_jwt = false
 
+[functions.submit-market-interest]
+verify_jwt = false
+
 [functions.create-public-booking]
 verify_jwt = false
 
@@ -45,3 +48,15 @@ verify_jwt = false
 [db.seed]
 enabled = true
 sql_paths = ['./seeds/*.sql']
+
+[functions.bulk-import-catalog]
+verify_jwt = false
+
+[functions.send-reactivation-campaign]
+verify_jwt = false
+
+[functions.create-backoffice-admin]
+verify_jwt = false
+
+[functions.resolve-booking-country-context]
+verify_jwt = false

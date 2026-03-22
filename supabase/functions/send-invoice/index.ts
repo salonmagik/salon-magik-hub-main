@@ -6,7 +6,7 @@ import {
   heading,
   createButton,
   smallText,
-  getSenderName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
 
 const corsHeaders = {
@@ -139,7 +139,11 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: `${getSenderName({ mode: "salon", salonName: tenant?.name || "Salon" }).replace(/[<>"\n\r]/g, "").trim()} <${fromEmail}>`,
+        from: buildFromAddress({
+          mode: "salon",
+          salonName: tenant?.name || "Salon",
+          fromEmail,
+        }),
         to: customer.email,
         subject: `Invoice ${invoice.invoice_number} from ${tenant?.name || "Salon"}`,
         html: emailHtml,

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { buildFromAddress } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -195,7 +196,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send confirmation email
     try {
-      const sanitizedFromName = "Salon Magik".replace(/[<>"\\n\\r]/g, "");
       await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -203,7 +203,7 @@ const handler = async (req: Request): Promise<Response> => {
           Authorization: `Bearer ${RESEND_API_KEY}`,
         },
         body: JSON.stringify({
-          from: `${sanitizedFromName} <${fromEmail}>`,
+          from: buildFromAddress({ mode: "product", fromEmail }),
           to: [tokenData.email],
           subject: passwordChangedTemplate.subject,
           html: passwordChangedTemplate.body_html,

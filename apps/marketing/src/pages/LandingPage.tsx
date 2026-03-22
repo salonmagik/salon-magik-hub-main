@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useWaitlistMode } from "@/hooks/useFeatureFlags";
+import { useGeoInterestMode, useWaitlistMode } from "@/hooks/useFeatureFlags";
 import {
   LandingNav,
   LandingHero,
+  CountryLaunchStrip,
   BusinessTypes,
   FeaturesSection,
   BenefitsSection,
@@ -13,7 +14,10 @@ import {
 
 export default function LandingPage() {
   const { isWaitlistMode, isLoading } = useWaitlistMode();
+  const { isEnabled: isGeoInterestEnabled } = useGeoInterestMode();
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [geoInterestOpen, setGeoInterestOpen] = useState(false);
+  const [geoInterestSource, setGeoInterestSource] = useState<"hero_cta" | "footer_cta" | "launch_section">("hero_cta");
 
   return (
     <div className="min-h-screen bg-background">
@@ -27,6 +31,13 @@ export default function LandingPage() {
         isLoading={isLoading}
         onWaitlistClick={() => setWaitlistOpen(true)}
       />
+      <CountryLaunchStrip
+        isEnabled={isGeoInterestEnabled}
+        onOpenInterest={() => {
+          setGeoInterestSource("launch_section");
+          setGeoInterestOpen(true);
+        }}
+      />
       <BusinessTypes onWaitlistClick={() => setWaitlistOpen(true)} isWaitlistMode={isWaitlistMode} />
       <FeaturesSection />
       <BenefitsSection />
@@ -36,7 +47,13 @@ export default function LandingPage() {
       />
       <LandingFooter />
       
-      <WaitlistDialog open={waitlistOpen} onOpenChange={setWaitlistOpen} />
+      <WaitlistDialog open={waitlistOpen} onOpenChange={setWaitlistOpen} mode="waitlist" source="footer_cta" />
+      <WaitlistDialog
+        open={geoInterestOpen}
+        onOpenChange={setGeoInterestOpen}
+        mode="interest"
+        source={geoInterestSource}
+      />
     </div>
   );
 }

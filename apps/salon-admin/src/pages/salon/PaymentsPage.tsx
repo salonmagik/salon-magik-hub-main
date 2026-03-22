@@ -115,18 +115,21 @@ export default function PaymentsPage() {
   const getDateRange = () => {
     const now = new Date();
     switch (dateFilter) {
-      case "today":
+      case "today": {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         return { start: today, end: now };
-      case "week":
+      }
+      case "week": {
         const weekStart = new Date();
         weekStart.setDate(weekStart.getDate() - 7);
         return { start: weekStart, end: now };
-      case "month":
+      }
+      case "month": {
         const monthStart = new Date();
         monthStart.setMonth(monthStart.getMonth() - 1);
         return { start: monthStart, end: now };
+      }
       default:
         return null;
     }

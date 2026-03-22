@@ -14,6 +14,7 @@ type BackofficeUser = Tables<"backoffice_users"> & {
 	totp_required?: boolean | null;
 	temp_password_required?: boolean | null;
 	password_changed_at?: string | null;
+  is_sales_agent?: boolean | null;
 };
 type Profile = Tables<"profiles">;
 
@@ -27,6 +28,8 @@ interface BackofficeAuthState {
 	isTotpVerified: boolean;
 	requiresTotpSetup: boolean;
 	requiresPasswordChange: boolean;
+	effectivePermissions: string[];
+	effectivePages: string[];
 }
 
 interface BackofficeAuthContextType extends BackofficeAuthState {
@@ -35,6 +38,8 @@ interface BackofficeAuthContextType extends BackofficeAuthState {
 	setupTotp: (secret: string) => Promise<boolean>;
 	refreshBackofficeUser: () => Promise<void>;
 	markPasswordChanged: () => void;
+	hasBackofficePermission: (permissionKey: string) => boolean;
+	hasBackofficePageAccess: (pageKey: string) => boolean;
 }
 
 const BackofficeAuthContext = createContext<
@@ -52,12 +57,21 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 		isTotpVerified: false,
 		requiresTotpSetup: false,
 		requiresPasswordChange: false,
+		effectivePermissions: [],
+		effectivePages: [],
 	});
 
 	const clearBackofficeSessionArtifacts = () => {
 		sessionStorage.removeItem("backoffice_totp_verified");
 		localStorage.removeItem("sb-salonmagik-backoffice");
 		localStorage.removeItem("sb-salonmagik-backoffice-auth-token");
+		for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+			const key = localStorage.key(i);
+			if (!key) continue;
+			if (key.startsWith("sb-salonmagik-backoffice-")) {
+				localStorage.removeItem(key);
+			}
+		}
 	};
 
 	const clearAuthState = useCallback(() => {
@@ -71,6 +85,8 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 			isTotpVerified: false,
 			requiresTotpSetup: false,
 			requiresPasswordChange: false,
+			effectivePermissions: [],
+			effectivePages: [],
 		});
 		clearBackofficeSessionArtifacts();
 	}, []);
@@ -144,6 +160,72 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 		return data;
 	};
 
+	const touchBackofficeSession = useCallback(
+		async (session: Session, userId: string) => {
+			const nowIso = new Date().toISOString();
+			const sessionToken = session.access_token;
+			if (!sessionToken) return;
+
+			await supabase.from("backoffice_sessions").upsert(
+				{
+					user_id: userId,
+					session_token: sessionToken,
+					last_activity_at: nowIso,
+					ended_at: null,
+					end_reason: null,
+				},
+				{ onConflict: "session_token" },
+			);
+
+			await supabase
+				.from("backoffice_sessions")
+				.update({
+					ended_at: nowIso,
+					end_reason: "replaced",
+				})
+				.eq("user_id", userId)
+				.neq("session_token", sessionToken)
+				.is("ended_at", null);
+		},
+		[],
+	);
+
+	const fetchEffectivePermissions = async (
+		backofficeUserId: string,
+		role?: string,
+	): Promise<string[]> => {
+		void backofficeUserId;
+		if (role === "super_admin") {
+			return ["*"];
+		}
+		const { data, error } = await (supabase.rpc as any)(
+			"backoffice_get_effective_permissions",
+		);
+		if (error) {
+			console.error("Error fetching role template permissions:", error);
+			return [];
+		}
+		return Array.from(new Set(((data as string[] | null) ?? []).filter(Boolean)));
+	};
+
+	const fetchEffectivePages = async (
+		backofficeUserId: string,
+		role?: string,
+	): Promise<string[]> => {
+		void backofficeUserId;
+		if (role === "super_admin") {
+			return ["*"];
+		}
+		const { data, error } = await (supabase.rpc as any)(
+			"backoffice_get_effective_pages",
+		);
+		if (error) {
+			console.error("Error fetching role assignment pages:", error);
+			return [];
+		}
+		return Array.from(new Set(((data as string[] | null) ?? []).filter(Boolean)));
+	};
+
 	const hydrateFromSession = useCallback(
 		async (session: Session | null) => {
 			if (!session?.user) {
@@ -156,6 +238,12 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 				session.user.id,
 				session.user.email || "",
 			);
+			const effectivePermissions = backofficeUser
+				? await fetchEffectivePermissions(backofficeUser.id, backofficeUser.role)
+				: [];
+			const effectivePages = backofficeUser
+				? await fetchEffectivePages(backofficeUser.id, backofficeUser.role)
+				: [];
 			const totpVerifiedInSession =
 				sessionStorage.getItem("backoffice_totp_verified") === "true";
 
@@ -171,9 +259,15 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 					: true,
 				requiresTotpSetup: !!backofficeUser && !!backofficeUser.totp_required,
 				requiresPasswordChange: !!backofficeUser?.temp_password_required,
+				effectivePermissions,
+				effectivePages,
 			});
+
+			if (backofficeUser) {
+				void touchBackofficeSession(session, session.user.id);
+			}
 		},
-		[clearAuthState],
+		[clearAuthState, touchBackofficeSession],
 	);
 
 	const initializeAuth = useCallback(async () => {
@@ -241,8 +335,26 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 	const signOut = async () => {
 		setState((prev) => ({ ...prev, isLoading: true }));
 		sessionStorage.removeItem("backoffice_totp_verified");
+		if (state.user && state.session?.access_token) {
+			await supabase
+				.from("backoffice_sessions")
+				.update({ ended_at: new Date().toISOString(), end_reason: "logout" })
+				.eq("user_id", state.user.id)
+				.eq("session_token", state.session.access_token)
+				.is("ended_at", null);
+		}
 		await supabase.auth.signOut();
 	};
+
+	useEffect(() => {
+		if (!state.session || !state.user || !state.backofficeUser) return;
+
+		const interval = window.setInterval(() => {
+			void touchBackofficeSession(state.session as Session, state.user!.id);
+		}, 60_000);
+
+		return () => window.clearInterval(interval);
+	}, [state.session, state.user, state.backofficeUser, touchBackofficeSession]);
 
 	const verifyTotp = async (token: string): Promise<boolean> => {
 		if (!state.backofficeUser?.totp_secret) return false;
@@ -337,12 +449,20 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 			state.user.id,
 			state.user.email || "",
 		);
+		const effectivePermissions = backofficeUser
+			? await fetchEffectivePermissions(backofficeUser.id, backofficeUser.role)
+			: [];
+		const effectivePages = backofficeUser
+			? await fetchEffectivePages(backofficeUser.id, backofficeUser.role)
+			: [];
 		setState((prev) => ({
 			...prev,
 			backofficeUser,
 			isAuthenticated: !!backofficeUser,
 			requiresTotpSetup: !!backofficeUser && !!backofficeUser.totp_required,
 			requiresPasswordChange: !!backofficeUser?.temp_password_required,
+			effectivePermissions,
+			effectivePages,
 		}));
 	};
 
@@ -369,6 +489,14 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 				setupTotp,
 				refreshBackofficeUser,
 				markPasswordChanged,
+				hasBackofficePermission: (permissionKey: string) => {
+					if (state.backofficeUser?.role === "super_admin") return true;
+					return state.effectivePermissions.includes(permissionKey);
+				},
+				hasBackofficePageAccess: (pageKey: string) => {
+					if (state.backofficeUser?.role === "super_admin") return true;
+					return state.effectivePages.includes(pageKey);
+				},
 			}}
 		>
 			{children}

@@ -7,14 +7,8 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthButton } from "@/components/auth/AuthButton";
-
-// Password strength validation (same as SignupPage)
-import { isValidPassword } from "@shared/form-utils";
-
-const validatePasswordStrength = (password: string): string | null => {
-  const result = isValidPassword(password);
-  return result.valid ? null : result.error || "Invalid password";
-};
+import { validatePasswordStrength } from "@shared/validation";
+import { ValidationChecklist } from "@ui/validation-checklist";
 
 type PageState = "loading" | "invalid" | "form" | "success";
 
@@ -32,6 +26,10 @@ export default function ResetPasswordPage() {
     confirmPassword: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const passwordValidation = validatePasswordStrength(formData.password);
+  const isConfirmMatch =
+    formData.password.length > 0 && formData.password === formData.confirmPassword;
+  const canSubmit = passwordValidation.isValid && isConfirmMatch && !isLoading;
 
   // Verify token on mount
   useEffect(() => {
@@ -68,9 +66,8 @@ export default function ResetPasswordPage() {
     if (!formData.password) {
       newErrors.password = "Password is required";
     } else {
-      const strengthError = validatePasswordStrength(formData.password);
-      if (strengthError) {
-        newErrors.password = strengthError;
+      if (!passwordValidation.isValid) {
+        newErrors.password = "Password does not meet all requirements";
       }
     }
 
@@ -86,10 +83,22 @@ export default function ResetPasswordPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: "" }));
-    }
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value };
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        [name]: "",
+        ...(name === "password" || name === "confirmPassword"
+          ? {
+              confirmPassword:
+                next.confirmPassword && next.password !== next.confirmPassword
+                  ? "Passwords do not match"
+                  : "",
+            }
+          : {}),
+      }));
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -226,20 +235,9 @@ export default function ResetPasswordPage() {
             disabled={isLoading}
           />
 
-          {/* Password requirements */}
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p>Password must:</p>
-            <ul className="list-disc list-inside space-y-0.5 ml-2">
-              <li>Be at least 8 characters long</li>
-              <li>Contain at least one lowercase letter</li>
-              <li>Contain at least one uppercase letter</li>
-              <li>Contain at least one number</li>
-              <li>Contain at least one special character (!@#$%^&*...)</li>
-              <li>Not be a simple pattern</li>
-            </ul>
-          </div>
+          <ValidationChecklist items={passwordValidation.rules} />
 
-          <AuthButton type="submit" isLoading={isLoading}>
+          <AuthButton type="submit" isLoading={isLoading} disabled={!canSubmit}>
             Reset password
           </AuthButton>
         </form>

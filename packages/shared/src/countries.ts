@@ -260,3 +260,25 @@ export const COUNTRIES = [
   ...PRIORITY_COUNTRIES,
   ...ALL_COUNTRIES.filter((c) => !PRIORITY_COUNTRIES.some((p) => p.code === c.code)),
 ];
+
+const LIVE_COUNTRY_CODES = ["GH", "NG"] as const;
+
+export const PRODUCT_LIVE_COUNTRIES = COUNTRIES.filter((country) =>
+  LIVE_COUNTRY_CODES.includes(country.code as (typeof LIVE_COUNTRY_CODES)[number])
+);
+
+export const EXPANSION_COUNTRIES = COUNTRIES.filter(
+  (country) => !LIVE_COUNTRY_CODES.includes(country.code as (typeof LIVE_COUNTRY_CODES)[number])
+);
+
+export function isLiveCountry(code: string): boolean {
+  return LIVE_COUNTRY_CODES.includes(code.toUpperCase() as (typeof LIVE_COUNTRY_CODES)[number]);
+}
+
+export function getLiveCountries(): Country[] {
+  return PRODUCT_LIVE_COUNTRIES;
+}
+
+export function getExpansionCountries(): Country[] {
+  return EXPANSION_COUNTRIES;
+}

@@ -33,7 +33,7 @@
          ?.filter(r => r.role === "owner")
          .map(r => r.user_id) || [];
  
-       let profilesMap = new Map<string, string>();
+      const profilesMap = new Map<string, string>();
        if (ownerUserIds.length > 0) {
          const { data: profiles } = await supabase
            .from("profiles")

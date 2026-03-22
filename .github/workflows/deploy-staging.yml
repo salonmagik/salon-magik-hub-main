@@ -1,0 +1,113 @@
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows: [Deploy Dev]
+    types: [completed]
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download promotion manifest from dev deploy
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: deploy-dev.yml
+          run_id: ${{ github.event.workflow_run.id }}
+          name: promotion-manifest
+          path: artifacts
+
+      - name: Validate promotion manifest from dev
+        run: |
+          test -f artifacts/promotion-manifest.json
+          MANIFEST_SHA=$(jq -r '.commit_sha' artifacts/promotion-manifest.json)
+          MANIFEST_CI_RUN_ID=$(jq -r '.ci_run_id' artifacts/promotion-manifest.json)
+          MANIFEST_ARTIFACT_NAME=$(jq -r '.artifact_name' artifacts/promotion-manifest.json)
+          MANIFEST_SOURCE=$(jq -r '.source' artifacts/promotion-manifest.json)
+          MANIFEST_READY_FOR=$(jq -r '.ready_for' artifacts/promotion-manifest.json)
+          test "$MANIFEST_SHA" = "${{ github.event.workflow_run.head_sha }}"
+          test -n "$MANIFEST_CI_RUN_ID"
+          test "$MANIFEST_CI_RUN_ID" != "null"
+          test -n "$MANIFEST_ARTIFACT_NAME"
+          test "$MANIFEST_ARTIFACT_NAME" != "null"
+          test "$MANIFEST_SOURCE" = "dev"
+          test "$MANIFEST_READY_FOR" = "staging"
+          echo "CI_RUN_ID=$MANIFEST_CI_RUN_ID" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=$MANIFEST_ARTIFACT_NAME" >> "$GITHUB_ENV"
+
+      - name: Download immutable build artifact from CI
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: ci.yml
+          run_id: ${{ env.CI_RUN_ID }}
+          name: ${{ env.ARTIFACT_NAME }}
+          path: artifacts
+
+      - name: Verify immutable build artifact
+        run: |
+          test -f artifacts/${{ env.ARTIFACT_NAME }}.tar.gz
+          mkdir -p promoted-build
+          tar -xzf artifacts/${{ env.ARTIFACT_NAME }}.tar.gz -C promoted-build
+
+      - name: Apply DB migrations (staging)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
+          supabase db push --include-all --yes
+
+      - name: Deploy edge functions (staging)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
+
+      - name: Integration smoke checks
+        run: pnpm test
+
+      - name: Write staging promotion manifest
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/promotion-manifest-staging.json <<JSON
+          {
+            "commit_sha": "${{ github.event.workflow_run.head_sha }}",
+            "ci_run_id": "${{ env.CI_RUN_ID }}",
+            "artifact_name": "${{ env.ARTIFACT_NAME }}",
+            "source": "staging",
+            "ready_for": "prod",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+
+      - name: Upload staging promotion manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-manifest-staging
+          path: artifacts/promotion-manifest-staging.json

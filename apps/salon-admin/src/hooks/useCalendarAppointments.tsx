@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 import type { Tables } from "@supabase-client";
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from "date-fns";
 
@@ -23,6 +24,7 @@ interface UseCalendarAppointmentsOptions {
 
 export function useCalendarAppointments(options: UseCalendarAppointmentsOptions) {
   const { currentTenant } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [appointments, setAppointments] = useState<CalendarAppointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -82,6 +84,8 @@ export function useCalendarAppointments(options: UseCalendarAppointmentsOptions)
 
       if (options.locationId) {
         query = query.eq("location_id", options.locationId);
+      } else if (hasScope) {
+        query = query.in("location_id", scopedLocationIds);
       }
 
       const { data, error: fetchError } = await query;
@@ -95,7 +99,7 @@ export function useCalendarAppointments(options: UseCalendarAppointmentsOptions)
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, getDateRange, options.locationId]);
+  }, [currentTenant?.id, getDateRange, hasScope, options.locationId, scopedLocationIds]);
 
   useEffect(() => {
     fetchAppointments();

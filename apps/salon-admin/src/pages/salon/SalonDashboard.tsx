@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
@@ -22,10 +23,12 @@ import {
 } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Skeleton } from "@ui/skeleton";
 import { Badge } from "@ui/badge";
 import { Progress } from "@ui/progress";
 import { formatDistanceToNow } from "date-fns";
+import { supabase } from "@/lib/supabase";
 
 const statusStyles: Record<string, { bg: string; text: string }> = {
   scheduled: { bg: "bg-muted", text: "text-muted-foreground" },
@@ -44,7 +47,8 @@ const activityIcons: Record<string, typeof Calendar> = {
 
 export default function SalonDashboard() {
   const navigate = useNavigate();
-  const { currentTenant, profile } = useAuth();
+  const { currentTenant, profile, currentRole } = useAuth();
+  const { hasPermission } = usePermissions();
   const {
     stats,
     upcomingAppointments,
@@ -55,6 +59,27 @@ export default function SalonDashboard() {
     recentActivity,
     isLoading,
   } = useDashboardStats();
+  const { data: chainUnlockRequest } = useQuery({
+    queryKey: ["dashboard-chain-unlock-request", currentTenant?.id],
+    queryFn: async () => {
+      if (!currentTenant?.id || String(currentTenant.plan || "").toLowerCase() !== "chain") return null;
+      const { data, error } = await (supabase
+        .from("tenant_chain_unlock_requests" as any)
+        .select("requested_locations, allowed_locations, status")
+        .eq("tenant_id", currentTenant.id)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle() as any);
+      if (error) throw error;
+      return data || null;
+    },
+    enabled: Boolean(currentTenant?.id),
+  });
+
+  const canViewCustomers = hasPermission("customers");
+  const canViewPayments = hasPermission("payments");
+  const canViewReports = hasPermission("reports");
 
   const statCards = [
     {
@@ -64,27 +89,35 @@ export default function SalonDashboard() {
       icon: Calendar,
       trend: "neutral",
     },
-    {
-      title: "Outstanding Fees",
-      value: `${currentTenant?.currency || "USD"} ${stats.outstandingFees.toFixed(2)}`,
-      change: "From customers",
-      icon: Coins,
-      trend: stats.outstandingFees > 0 ? "down" : "neutral",
-    },
-    {
-      title: "Purse Balance",
-      value: `${currentTenant?.currency || "USD"} ${stats.purseUsage.toFixed(2)}`,
-      change: "Customer wallets",
-      icon: Wallet,
-      trend: "neutral",
-    },
-    {
-      title: "Refunds Pending",
-      value: stats.refundsPendingApproval.toString(),
-      change: "Awaiting approval",
-      icon: RefreshCcw,
-      trend: stats.refundsPendingApproval > 0 ? "down" : "neutral",
-    },
+    ...(canViewCustomers && canViewPayments
+      ? [
+          {
+            title: "Outstanding Fees",
+            value: `${currentTenant?.currency || "USD"} ${stats.outstandingFees.toFixed(2)}`,
+            change: "From customers",
+            icon: Coins,
+            trend: stats.outstandingFees > 0 ? ("down" as const) : ("neutral" as const),
+          },
+        ]
+      : []),
+    ...(canViewPayments
+      ? [
+          {
+            title: "Purse Balance",
+            value: `${currentTenant?.currency || "USD"} ${stats.purseUsage.toFixed(2)}`,
+            change: "Customer wallets",
+            icon: Wallet,
+            trend: "neutral" as const,
+          },
+          {
+            title: "Refunds Pending",
+            value: stats.refundsPendingApproval.toString(),
+            change: "Awaiting approval",
+            icon: RefreshCcw,
+            trend: stats.refundsPendingApproval > 0 ? ("down" as const) : ("neutral" as const),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -100,7 +133,7 @@ export default function SalonDashboard() {
         </div>
 
         {/* Onboarding Checklist Card - Only show if not complete */}
-        {!isChecklistComplete && (
+        {!isChecklistComplete && (currentRole === "owner" || currentRole === "manager") && (
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
@@ -131,6 +164,24 @@ export default function SalonDashboard() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {chainUnlockRequest && (
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-medium text-amber-900">Chain expansion pending approval</h3>
+                  <p className="text-sm text-amber-800">
+                    You requested {chainUnlockRequest.requested_locations} stores. {chainUnlockRequest.allowed_locations} are currently active.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => navigate("/salon/overview")}>
+                  View salons
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -174,48 +225,50 @@ export default function SalonDashboard() {
         </div>
 
         {/* Insights Preview */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg font-medium flex items-center gap-2">
-              <Lightbulb className="w-5 h-5 text-primary" />
-              Insights
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-            ) : insights.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {insights.map((insight) => (
-                  <div
-                    key={insight.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-surface border"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      {insight.icon === "calendar" ? (
-                        <Calendar className="w-5 h-5 text-primary" />
-                      ) : (
-                        <Star className="w-5 h-5 text-primary" />
-                      )}
+        {canViewReports && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-medium flex items-center gap-2">
+                <Lightbulb className="w-5 h-5 text-primary" />
+                Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : insights.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {insights.map((insight) => (
+                    <div
+                      key={insight.id}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-surface border"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        {insight.icon === "calendar" ? (
+                          <Calendar className="w-5 h-5 text-primary" />
+                        ) : (
+                          <Star className="w-5 h-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">{insight.title}</p>
+                        <p className="font-medium">{insight.value}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">{insight.title}</p>
-                      <p className="font-medium">{insight.value}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <Lightbulb className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p>Keep going! Insights will appear once you have more appointment history.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Lightbulb className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p>Keep going! Insights will appear once you have more appointment history.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Communication Credits Warning */}
         {stats.lowCommunicationCredits && (

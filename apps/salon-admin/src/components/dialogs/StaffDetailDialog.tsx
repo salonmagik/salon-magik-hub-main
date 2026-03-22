@@ -3,8 +3,8 @@ import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@ui/avatar";
 import { Separator } from "@ui/separator";
-import { Mail, Phone, Calendar, Shield, Activity } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Mail, Phone, Calendar, Shield, Activity, Building2 } from "lucide-react";
+import { format } from "date-fns";
 import type { StaffMember } from "@/hooks/useStaff";
 
 interface StaffDetailDialogProps {
@@ -86,7 +86,7 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">—</p>
+                <p className="font-medium">{staff.email || "—"}</p>
               </div>
             </div>
 
@@ -127,13 +127,37 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               </div>
             </div>
 
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <Building2 className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Assigned Salons</p>
+                {staff.role === "owner" ? (
+                  <p className="font-medium">ALL</p>
+                ) : staff.assignedLocationNames.length === 0 ? (
+                  <p className="font-medium">Unassigned</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {staff.assignedLocationNames.map((locationName) => (
+                      <Badge key={locationName} variant="outline">
+                        {locationName}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                 <Calendar className="w-4 h-4 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Joined</p>
-                <p className="font-medium">—</p>
+                <p className="font-medium">
+                  {staff.joinedAt ? format(new Date(staff.joinedAt), "MMM d, yyyy") : "—"}
+                </p>
               </div>
             </div>
           </div>

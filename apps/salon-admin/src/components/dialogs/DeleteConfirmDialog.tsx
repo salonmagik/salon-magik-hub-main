@@ -55,13 +55,13 @@ export function DeleteConfirmDialog({
             <AlertTriangle className="h-5 w-5 text-destructive" />
             <AlertDialogTitle className="text-destructive">
               {itemCount > 1
-                ? `Permanently Delete ${itemCount} Items?`
-                : `Permanently Delete "${itemName}"?`}
+                ? `Delete ${itemCount} Items?`
+                : `Delete "${itemName}"?`}
             </AlertDialogTitle>
           </div>
           <AlertDialogDescription>
             {description ||
-              "This action cannot be undone. The item(s) will be permanently removed from your catalog and all historical data."}
+              "The item(s) will be removed from your catalog and your booking site. You can still restore deleted item(s) from Bin."}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -90,7 +90,7 @@ export function DeleteConfirmDialog({
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Delete Permanently
+            Delete
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

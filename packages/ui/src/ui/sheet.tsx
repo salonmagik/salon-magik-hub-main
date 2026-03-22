@@ -51,11 +51,12 @@ interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {}
 
+const isSheetSide = (value: unknown): value is "top" | "bottom" | "left" | "right" =>
+  value === "top" || value === "bottom" || value === "left" || value === "right";
+
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
   ({ side = "right", className, children, ...props }, ref) => {
-    const safeSide: "top" | "bottom" | "left" | "right" = ["top", "bottom", "left", "right"].includes(side as string)
-      ? (side as any)
-      : "right";
+    const safeSide: "top" | "bottom" | "left" | "right" = isSheetSide(side) ? side : "right";
     return (
       <SheetPortal>
         <SheetOverlay />

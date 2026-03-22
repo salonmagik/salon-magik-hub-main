@@ -20,6 +20,12 @@ interface DayAvailability {
   hasSlots: boolean;
 }
 
+interface UnavailabilityWindow {
+  starts_at: string;
+  ends_at: string | null;
+  ended_at: string | null;
+}
+
 export function useAvailableDays(
   tenantId: string | undefined,
   location: PublicLocation | undefined,
@@ -40,20 +46,32 @@ export function useAvailableDays(
       // Get all days in the month
       const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-      // Fetch all appointments for the month
-      const { data: appointments, error } = await supabase
+      const [appointmentsResult, windowsResult] = await Promise.all([
+        supabase
         .from("appointments")
         .select("scheduled_start, scheduled_end, status")
         .eq("tenant_id", tenantId)
         .eq("location_id", location.id)
         .gte("scheduled_start", monthStart.toISOString())
         .lte("scheduled_start", monthEnd.toISOString())
-        .in("status", ["scheduled", "started", "paused"]);
+          .in("status", ["scheduled", "started", "paused"]),
+        (supabase as any)
+          .from("branch_unavailability_windows")
+          .select("starts_at, ends_at, ended_at")
+          .eq("tenant_id", tenantId)
+          .eq("location_id", location.id)
+          .is("ended_at", null)
+          .lte("starts_at", monthEnd.toISOString())
+          .or(`ends_at.is.null,ends_at.gte.${monthStart.toISOString()}`),
+      ]);
 
-      if (error) {
-        console.error("Error fetching appointments:", error);
-        throw error;
+      if (appointmentsResult.error) {
+        console.error("Error fetching appointments:", appointmentsResult.error);
+        throw appointmentsResult.error;
       }
+
+      const appointments = appointmentsResult.data || [];
+      const windows = (windowsResult.data || []) as UnavailabilityWindow[];
 
       // Calculate availability for each day
       const availability: DayAvailability[] = daysInMonth.map((date) => {
@@ -83,9 +101,8 @@ export function useAvailableDays(
 
         const dayStart = startOfDay(date).toISOString();
         const dayEnd = endOfDay(date).toISOString();
-
         // Filter appointments for this specific day
-        const dayAppointments = (appointments || []).filter((apt) => {
+        const dayAppointments = appointments.filter((apt) => {
           if (!apt.scheduled_start) return false;
           const aptDate = new Date(apt.scheduled_start);
           return aptDate >= startOfDay(date) && aptDate <= endOfDay(date);
@@ -104,6 +121,12 @@ export function useAvailableDays(
           const slotEnd = addMinutes(currentSlot, slotDurationMinutes);
           const bookingEndTime = addMinutes(currentSlot, totalBookingDuration);
           const exceedsClosing = isAfter(bookingEndTime, closingDateTime);
+          const slotIsBlocked = windows.some((window) => {
+            const windowStart = new Date(window.starts_at);
+            const windowEnd = window.ends_at ? new Date(window.ends_at) : null;
+            if (!windowEnd) return windowStart < slotEnd;
+            return windowStart < slotEnd && windowEnd > slotStart;
+          });
 
           // Count bookings that overlap with this slot
           const bookedCount = dayAppointments.filter((apt) => {
@@ -114,7 +137,7 @@ export function useAvailableDays(
             return isBefore(aptStart, slotEnd) && isAfter(aptEndWithBuffer, slotStart);
           }).length;
 
-          if (bookedCount < slotCapacity && !exceedsClosing) {
+          if (!slotIsBlocked && bookedCount < slotCapacity && !exceedsClosing) {
             hasAvailableSlot = true;
           }
 

@@ -350,6 +350,7 @@ export type Database = {
           actor_user_id: string | null
           after_json: Json | null
           before_json: Json | null
+          branch_location_id: string | null
           created_at: string
           criticality_score: number | null
           ended_at: string | null
@@ -365,6 +366,7 @@ export type Database = {
           actor_user_id?: string | null
           after_json?: Json | null
           before_json?: Json | null
+          branch_location_id?: string | null
           created_at?: string
           criticality_score?: number | null
           ended_at?: string | null
@@ -380,6 +382,7 @@ export type Database = {
           actor_user_id?: string | null
           after_json?: Json | null
           before_json?: Json | null
+          branch_location_id?: string | null
           created_at?: string
           criticality_score?: number | null
           ended_at?: string | null

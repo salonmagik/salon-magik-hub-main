@@ -25,7 +25,10 @@ dist-ssr
 
 # Vite/cache
 **/.vite
+**/.turbo
 supabase/.temp
+supabase/supabase/.temp
+supabase/**/.temp
 .env
 
 # Agents
@@ -39,3 +42,5 @@ ralph.sh
 
 # supabase
 .branches
+# Local destructive reset scripts
+supabase/scripts/reset*.sql

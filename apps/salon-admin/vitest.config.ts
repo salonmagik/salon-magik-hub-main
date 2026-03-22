@@ -11,6 +11,13 @@ export default defineConfig({
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "@ui": path.resolve(__dirname, "../../packages/ui/src/ui"),
+      "@ui/ui": path.resolve(__dirname, "../../packages/ui/src/ui"),
+      "@ui/ui/use-toast": path.resolve(__dirname, "../../packages/ui/src/ui/use-toast"),
+      "@shared": path.resolve(__dirname, "../../packages/shared/src"),
+      "@supabase-client": path.resolve(__dirname, "../../packages/supabase-client/src"),
+    },
   },
 });

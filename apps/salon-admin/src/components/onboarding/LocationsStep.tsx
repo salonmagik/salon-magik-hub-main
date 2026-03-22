@@ -6,6 +6,7 @@ import { Switch } from "@ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { MapPin, Plus, Trash2, Star } from "lucide-react";
 import { cn } from "@shared/utils";
+import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 export interface LocationInfo {
   id: string;
@@ -35,17 +36,14 @@ interface LocationsStepProps {
   defaultOpeningTime: string;
   defaultClosingTime: string;
   defaultOpeningDays: string[];
+  maxLocations?: number;
   onChange: (config: LocationsConfig) => void;
 }
 
-const COUNTRIES = [
-  { code: "NG", name: "Nigeria", timezone: "Africa/Lagos" },
-  { code: "GH", name: "Ghana", timezone: "Africa/Accra" },
-  { code: "US", name: "United States", timezone: "America/New_York" },
-  { code: "GB", name: "United Kingdom", timezone: "Europe/London" },
-  { code: "KE", name: "Kenya", timezone: "Africa/Nairobi" },
-  { code: "ZA", name: "South Africa", timezone: "Africa/Johannesburg" },
-];
+const MARKET_TIMEZONES: Record<string, string> = {
+  GH: "Africa/Accra",
+  NG: "Africa/Lagos",
+};
 
 const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
   const hour = i.toString().padStart(2, "0");
@@ -70,9 +68,15 @@ export function LocationsStep({
   defaultOpeningTime,
   defaultClosingTime,
   defaultOpeningDays,
+  maxLocations,
   onChange,
 }: LocationsStepProps) {
+  const { data: marketCountries = [] } = useMarketCountries();
+  const resolvedMaxLocations = Math.max(1, maxLocations ?? Number.MAX_SAFE_INTEGER);
+  const canAddMoreLocations = config.locations.length < resolvedMaxLocations;
+
   const addLocation = () => {
+    if (!canAddMoreLocations) return;
     const newLocation: LocationInfo = {
       id: crypto.randomUUID(),
       name: config.sameName ? businessName : "",
@@ -154,9 +158,9 @@ export function LocationsStep({
         <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
           <MapPin className="w-6 h-6 text-primary" />
         </div>
-        <CardTitle>Your locations</CardTitle>
+        <CardTitle>Your branches</CardTitle>
         <CardDescription>
-          Add all your salon locations. You can add more later.
+          Add all your salon branches. You can add more later.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -164,7 +168,7 @@ export function LocationsStep({
         <div className="space-y-3 p-4 bg-muted rounded-lg">
           <div className="flex items-center justify-between">
             <Label htmlFor="sameCountry" className="cursor-pointer">
-              All locations in the same country
+              All branches in the same country
             </Label>
             <Switch
               id="sameCountry"
@@ -174,7 +178,7 @@ export function LocationsStep({
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="sameName" className="cursor-pointer">
-              All locations share the business name
+              All branches share the business name
             </Label>
             <Switch
               id="sameName"
@@ -184,7 +188,7 @@ export function LocationsStep({
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="sameHours" className="cursor-pointer">
-              All locations have the same hours
+              All branches have the same hours
             </Label>
             <Switch
               id="sameHours"
@@ -206,7 +210,7 @@ export function LocationsStep({
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Location {index + 1}</span>
+                  <span className="text-sm font-medium">Branch {index + 1}</span>
                   {location.isDefault && (
                     <span className="text-xs text-primary flex items-center gap-1">
                       <Star className="w-3 h-3 fill-primary" /> Default
@@ -263,10 +267,10 @@ export function LocationsStep({
                   <Select
                     value={location.country}
                     onValueChange={(v) => {
-                      const country = COUNTRIES.find((c) => c.code === v);
+                      const timezone = MARKET_TIMEZONES[v] ?? location.timezone;
                       updateLocation(location.id, {
                         country: v,
-                        timezone: country?.timezone || "",
+                        timezone,
                       });
                     }}
                   >
@@ -274,7 +278,7 @@ export function LocationsStep({
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
-                      {COUNTRIES.map((c) => (
+                      {marketCountries.map((c) => (
                         <SelectItem key={c.code} value={c.code}>
                           {c.name}
                         </SelectItem>
@@ -365,10 +369,14 @@ export function LocationsStep({
           variant="outline"
           className="w-full"
           onClick={addLocation}
+          disabled={!canAddMoreLocations}
         >
           <Plus className="w-4 h-4 mr-2" />
-          Add location
+          {canAddMoreLocations ? "Add location" : "Location limit reached"}
         </Button>
+        <p className="text-xs text-muted-foreground text-center">
+          Configured {config.locations.length} of {resolvedMaxLocations} locations.
+        </p>
       </CardContent>
     </>
   );

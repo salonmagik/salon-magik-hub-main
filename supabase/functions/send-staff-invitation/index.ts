@@ -6,7 +6,7 @@ import {
   paragraph,
   smallText,
   createButton,
-  getSenderName,
+  buildFromAddress,
 } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -376,8 +376,6 @@ const handler = async (req: Request): Promise<Response> => {
       tenant.logo_url || undefined
     );
 
-    const sanitizedSalonName = getSenderName({ mode: "salon", salonName: tenant.name }).replace(/[<>"\\n\\r]/g, "").trim();
-
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -386,7 +384,7 @@ const handler = async (req: Request): Promise<Response> => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: `${sanitizedSalonName} <${fromEmail}>`,
+        from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail }),
         to: [recipientEmail],
         subject: subject,
         html: htmlBody,

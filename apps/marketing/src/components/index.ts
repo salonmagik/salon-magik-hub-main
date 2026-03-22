@@ -1,5 +1,6 @@
 export { LandingNav } from "./LandingNav";
 export { LandingHero } from "./LandingHero";
+export { CountryLaunchStrip } from "./CountryLaunchStrip";
 export { BusinessTypes } from "./BusinessTypes";
 export { FeaturesSection } from "./FeaturesSection";
 export { BenefitsSection } from "./BenefitsSection";

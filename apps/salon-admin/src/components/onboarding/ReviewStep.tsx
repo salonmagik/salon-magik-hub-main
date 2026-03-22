@@ -21,6 +21,7 @@ interface ReviewStepProps {
     expectedBillingDate: string | null;
     requiresCustom?: boolean;
   } | null;
+  trialDays?: number;
 }
 
 const PLAN_NAMES: Record<SubscriptionPlan, string> = {
@@ -54,6 +55,7 @@ export function ReviewStep({
   business,
   locations,
   chainSummary,
+  trialDays = 14,
 }: ReviewStepProps) {
   const formatDays = (days: string[]) => {
     const dayMap: Record<string, string> = {
@@ -143,7 +145,7 @@ export function ReviewStep({
           </div>
           <div className="text-sm">
             <span className="font-medium">{PLAN_NAMES[plan]}</span>
-            <span className="text-muted-foreground"> – 14-day free trial</span>
+            <span className="text-muted-foreground"> – {trialDays}-day free trial</span>
           </div>
         </div>
 
@@ -166,8 +168,8 @@ export function ReviewStep({
               Expected billing date: {chainSummary.expectedBillingDate || "Next billing cycle"}
             </p>
             {chainSummary.requiresCustom && (
-              <p className="text-xs text-destructive">
-                Current tier is marked custom and cannot be self-served yet.
+              <p className="text-xs text-amber-700">
+                This setup includes custom-tier stores. Onboarding continues, but stores above 10 remain pending approval.
               </p>
             )}
           </div>
@@ -210,17 +212,17 @@ export function ReviewStep({
           )}
         </div>
 
-        {/* Multi-location (Chain only) */}
+        {/* Multi-branch (Chain only) */}
         {locations && locations.locations.length > 0 && (
           <div className="border rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <MapPin className="w-4 h-4 text-primary" />
-              Locations ({locations.locations.length})
+              Branches ({locations.locations.length})
             </div>
             <div className="space-y-2">
               {locations.locations.map((loc, idx) => (
                 <div key={loc.id} className="text-sm flex items-center gap-2">
-                  <span className="font-medium">{loc.name || `Location ${idx + 1}`}</span>
+                  <span className="font-medium">{loc.name || `Branch ${idx + 1}`}</span>
                   <span className="text-muted-foreground">– {loc.city}</span>
                   {loc.isDefault && (
                     <span className="text-xs text-primary">(Default)</span>

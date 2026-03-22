@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,13 +11,31 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
 import { Gift, Loader2, Save, RefreshCw } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import { useVouchers } from "@/hooks/useVouchers";
+import { useManageableLocations } from "@/hooks/useManageableLocations";
+import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { getCurrenciesForLocations } from "@/lib/locationCurrency";
+import { getCurrencySymbol } from "@shared/currency";
 
 interface AddVoucherDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }
+
+const formatAmountInput = (value: string) => {
+  const cleaned = value.replace(/[^0-9.]/g, "");
+  if (!cleaned) return "";
+  const [intPart, ...decimalParts] = cleaned.split(".");
+  const decimal = decimalParts.join("");
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, "");
+  const withCommas = (normalizedInt || "0").replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (decimal.length > 0) return `${withCommas}.${decimal}`;
+  return cleaned.endsWith(".") ? `${withCommas}.` : withCommas;
+};
+
+const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
 
 function generateVoucherCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -29,19 +47,76 @@ function generateVoucherCode(): string {
 }
 
 export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDialogProps) {
+  const { currentTenant, activeLocationId } = useAuth();
   const { createVoucher } = useVouchers();
+  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
+  const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     code: generateVoucherCode(),
     amount: "",
     expiresAt: "",
+    locationIds: [] as string[],
   });
+  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
+  const normalizeCountry = (value: string | null | undefined) =>
+    (value || "").toLowerCase().replace(/[^a-z]/g, "");
+  const activeLocationCountry = useMemo(() => {
+    if (!activeLocationId) return null;
+    return manageableLocations.find((location) => location.id === activeLocationId)?.country || null;
+  }, [activeLocationId, manageableLocations]);
+  const scopedLocations = useMemo(() => {
+    if (!isChainTier || !activeLocationCountry) return manageableLocations;
+    const activeCountryKey = normalizeCountry(activeLocationCountry);
+    return manageableLocations.filter(
+      (location) => normalizeCountry(location.country) === activeCountryKey,
+    );
+  }, [activeLocationCountry, isChainTier, manageableLocations]);
+  const scopedDefaultLocationId = useMemo(() => {
+    if (defaultLocationId && scopedLocations.some((location) => location.id === defaultLocationId)) {
+      return defaultLocationId;
+    }
+    return scopedLocations[0]?.id || "";
+  }, [defaultLocationId, scopedLocations]);
+  const selectedLocationIds = useMemo(() => {
+    if (isChainTier) return formData.locationIds;
+    const fallbackLocationId = scopedDefaultLocationId || manageableLocations[0]?.id || "";
+    return fallbackLocationId ? [fallbackLocationId] : [];
+  }, [formData.locationIds, isChainTier, manageableLocations, scopedDefaultLocationId]);
+  const locationCurrencies = useMemo(
+    () => getCurrenciesForLocations(manageableLocations, selectedLocationIds, fallbackCurrency),
+    [fallbackCurrency, manageableLocations, selectedLocationIds],
+  );
+  const selectedCurrency = locationCurrencies[0] || fallbackCurrency;
+  const hasMixedCurrencies = locationCurrencies.length > 1;
+  const currencySymbol = getCurrencySymbol(selectedCurrency);
+
+  useEffect(() => {
+    if (!open) return;
+    if (isChainTier) {
+      const validSelected = formData.locationIds.filter((locationId) =>
+        scopedLocations.some((location) => location.id === locationId),
+      );
+      if (validSelected.length !== formData.locationIds.length) {
+        setFormData((prev) => ({ ...prev, locationIds: validSelected }));
+        return;
+      }
+      if (validSelected.length === 0 && scopedDefaultLocationId) {
+        setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+      }
+      return;
+    }
+    if (formData.locationIds.length === 0 && scopedDefaultLocationId) {
+      setFormData((prev) => ({ ...prev, locationIds: [scopedDefaultLocationId] }));
+    }
+  }, [formData.locationIds, isChainTier, open, scopedDefaultLocationId, scopedLocations]);
 
   const resetForm = () => {
     setFormData({
       code: generateVoucherCode(),
       amount: "",
       expiresAt: "",
+      locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
   };
 
@@ -54,9 +129,11 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
     return (
       formData.code.trim() !== "" &&
       formData.amount !== "" &&
-      parseFloat(formData.amount) > 0
+      parseAmountInput(formData.amount) > 0 &&
+      selectedLocationIds.length > 0 &&
+      !hasMixedCurrencies
     );
-  }, [formData]);
+  }, [formData, hasMixedCurrencies, selectedLocationIds.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +142,9 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
     try {
       const result = await createVoucher({
         code: formData.code,
-        amount: parseFloat(formData.amount),
+        amount: parseAmountInput(formData.amount),
         expiresAt: formData.expiresAt || undefined,
+        locationIds: selectedLocationIds,
       });
 
       if (result) {
@@ -120,19 +198,40 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
           </div>
 
           {/* Amount */}
+          {isChainTier && (
+            <LocationScopePicker
+              locations={scopedLocations}
+              selectedLocationIds={formData.locationIds}
+              onChange={(locationIds) => setFormData((prev) => ({ ...prev, locationIds }))}
+              disabled={locationsLoading || scopedLocations.length === 0}
+            />
+          )}
+          {hasMixedCurrencies && (
+            <p className="text-sm text-destructive">
+              Selected branches use different currencies. Select branches sharing the same currency.
+            </p>
+          )}
+
           <div className="space-y-2">
             <Label>
               Amount <span className="text-destructive">*</span>
             </Label>
-            <Input
-              type="number"
-              placeholder="0.00"
-              value={formData.amount}
-              onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-              required
-              min="1"
-              step="0.01"
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                {currencySymbol}
+              </span>
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                className="pl-8"
+                value={formData.amount}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, amount: formatAmountInput(e.target.value) }))
+                }
+                required
+              />
+            </div>
           </div>
 
           {/* Expiry Date */}

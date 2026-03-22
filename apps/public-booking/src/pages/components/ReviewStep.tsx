@@ -18,6 +18,7 @@ interface ReviewStepProps {
   selectedDate?: Date;
   selectedTime?: string;
   selectedLocation?: PublicLocation;
+  selectedCountryCode?: string | null;
   leaveUnscheduled: boolean;
   
   // Customer info
@@ -58,6 +59,7 @@ export function ReviewStep({
   selectedDate,
   selectedTime,
   selectedLocation,
+  selectedCountryCode,
   leaveUnscheduled,
   bookerInfo,
   items,
@@ -207,6 +209,8 @@ export function ReviewStep({
         tenantId={salon.id}
         currency={salon.currency}
         subtotal={subtotal}
+        selectedLocationId={selectedLocation?.id}
+        selectedCountryCode={selectedCountryCode}
         onVoucherApplied={onVoucherApplied}
         appliedVoucher={appliedVoucher}
       />

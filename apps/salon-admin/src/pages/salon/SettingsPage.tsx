@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
@@ -17,6 +17,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 import { TimePicker } from "@ui/time-picker";
 import {
   Building2,
@@ -44,6 +58,7 @@ import {
   Wallet,
   Banknote,
   ArrowDownUp,
+  CalendarX2,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,6 +66,7 @@ import { useLocations } from "@/hooks/useLocations";
 import { useNotificationSettings } from "@/hooks/useNotificationSettings";
 import { useMyReferralCodes, useMyReferralDiscounts, useGenerateReferralCode } from "@/hooks/useReferrals";
 import { supabase } from "@/lib/supabase";
+import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { toast } from "@ui/ui/use-toast";
 import { differenceInDays, format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
@@ -59,7 +75,20 @@ import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinatio
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 
-const settingsTabs = [
+
+type SettingsScope = "auto" | "legacy" | "business" | "branch";
+
+interface BranchUnavailabilityWindow {
+  id: string;
+  location_id: string;
+  starts_at: string;
+  ends_at: string | null;
+  is_indefinite: boolean;
+  reason: string | null;
+  ended_at: string | null;
+}
+
+const BASE_SETTINGS_TABS = [
   { id: "profile", label: "Salon Profile", icon: Building2 },
   { id: "hours", label: "Business Hours", icon: Clock },
   { id: "booking", label: "Booking Settings", icon: User },
@@ -67,10 +96,9 @@ const settingsTabs = [
   { id: "wallet", label: "Wallet", icon: Wallet },
   { id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
   { id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
-  { id: "promotions", label: "Promotions", icon: Gift },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
-];
+] as const;
 
 const weekDays = [
   { key: "monday", label: "Monday" },
@@ -82,44 +110,57 @@ const weekDays = [
   { key: "sunday", label: "Sunday" },
 ];
 
-function buildPublicBookingUrl(slug?: string | null): string | null {
-  if (!slug) return null;
-
-  const publicBookingDomain = (
-    import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined
-  )
-    ?.replace(/^https?:\/\//i, "")
-    .replace(/^\*\./, "")
-    .replace(/\/+$/, "");
-
-  if (publicBookingDomain) {
-    return `https://${slug}.${publicBookingDomain}`;
-  }
-
-  const manageBookingsUrl = import.meta.env
-    .VITE_MANAGE_BOOKINGS_URL as string | undefined;
-  if (manageBookingsUrl) {
-    return `${manageBookingsUrl.replace(/\/+$/, "")}/b/${slug}`;
-  }
-
-  return `${window.location.origin}/b/${slug}`;
+interface SettingsPageProps {
+  scope?: SettingsScope;
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [isSaving, setIsSaving] = useState(false);
+  const { currentTenant, profile, user, activeContextType, activeLocationId } = useAuth();
+  const { locations, defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
+  const {
+    settings: dbNotificationSettings,
+    isLoading: notificationsLoading,
+    isSaving: notificationsSaving,
+    saveSettings: saveNotificationSettings
+  } = useNotificationSettings();
+
+  const isChain = currentTenant?.plan === "chain";
+  const resolvedScope: Exclude<SettingsScope, "auto"> =
+    scope === "auto"
+      ? isChain
+        ? activeContextType === "owner_hub"
+          ? "business"
+          : "branch"
+        : "legacy"
+      : scope;
+
+  const settingsTabs = useMemo(() => {
+    if (resolvedScope === "branch") {
+      return [
+        { id: "profile", label: "Branch Profile", icon: Building2 },
+        { id: "hours", label: "Branch Hours", icon: Clock },
+      ];
+    }
+    if (resolvedScope === "business") {
+      return [
+        { id: "profile", label: "Business Profile", icon: Building2 },
+        { id: "branches", label: "Manage Branches", icon: CalendarX2 },
+        { id: "booking", label: "Booking Settings", icon: User },
+        { id: "payments", label: "Payments", icon: CreditCard },
+        { id: "notifications", label: "Notifications", icon: Bell },
+        { id: "subscription", label: "Subscription", icon: Zap },
+      ];
+    }
+    return BASE_SETTINGS_TABS;
+  }, [resolvedScope]);
+
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
     return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
   });
-  const [isSaving, setIsSaving] = useState(false);
-  const { currentTenant, profile } = useAuth();
-  const { defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
-  const { 
-    settings: dbNotificationSettings, 
-    isLoading: notificationsLoading, 
-    isSaving: notificationsSaving, 
-    saveSettings: saveNotificationSettings 
-  } = useNotificationSettings();
+
   const { wallet } = useSalonWallet(currentTenant?.id);
 
   // Sync tab with URL params
@@ -128,7 +169,15 @@ export default function SettingsPage() {
     if (tabFromUrl && settingsTabs.some((t) => t.id === tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
-  }, [searchParams]);
+  }, [searchParams, activeTab, settingsTabs]);
+
+  useEffect(() => {
+    if (!settingsTabs.some((tab) => tab.id === activeTab)) {
+      const nextTab = settingsTabs[0]?.id ?? "profile";
+      setActiveTab(nextTab);
+      setSearchParams({ tab: nextTab });
+    }
+  }, [activeTab, setSearchParams, settingsTabs]);
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
@@ -170,9 +219,14 @@ export default function SettingsPage() {
     bookingStatusMessage: "",
     slotCapacityDefault: 1,
     brandColor: "#2563EB",
+    allowStaffSelection: true,
+    requireStaffSelection: false,
+    autoAssignStaff: true,
   });
 
   const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
+  const activeLocation =
+    locations.find((location) => location.id === activeLocationId) ?? defaultLocation ?? null;
 
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -181,16 +235,53 @@ export default function SettingsPage() {
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [profileBaseline, setProfileBaseline] = useState({
+    salonName: "",
+    city: "",
+    address: "",
+    currency: "USD",
+    ownerName: "",
+    phone: "",
+  });
+  const [hoursBaseline, setHoursBaseline] = useState({
+    openingDays: [] as string[],
+    openingTime: "09:00",
+    closingTime: "18:00",
+  });
+  const [bookingBaseline, setBookingBaseline] = useState({
+    onlineBookingEnabled: false,
+    autoConfirmBookings: false,
+    defaultBufferMinutes: 0,
+    cancellationGraceHours: 24,
+    defaultDepositPercentage: 0,
+    bookingStatusMessage: "",
+    slotCapacityDefault: 1,
+    brandColor: "#2563EB",
+    allowStaffSelection: true,
+    requireStaffSelection: false,
+    autoAssignStaff: true,
+  });
+  const [branchWindows, setBranchWindows] = useState<BranchUnavailabilityWindow[]>([]);
+  const [branchWindowsLoading, setBranchWindowsLoading] = useState(false);
+  const [branchWindowDialogOpen, setBranchWindowDialogOpen] = useState(false);
+  const [branchWindowSaving, setBranchWindowSaving] = useState(false);
+  const [branchWindowTargetLocationId, setBranchWindowTargetLocationId] = useState<string | null>(null);
+  const [branchWindowStartsAt, setBranchWindowStartsAt] = useState("");
+  const [branchWindowEndsAt, setBranchWindowEndsAt] = useState("");
+  const [branchWindowIndefinite, setBranchWindowIndefinite] = useState(false);
+  const [branchWindowReason, setBranchWindowReason] = useState("");
   // Load data from tenant and location
   useEffect(() => {
     if (currentTenant) {
+      const tenantName = currentTenant.name || "";
+      const tenantCurrency = currentTenant.currency || "USD";
       setProfileData((prev) => ({
         ...prev,
-        salonName: currentTenant.name || "",
+        salonName: resolvedScope === "branch" ? prev.salonName : tenantName,
         country: currentTenant.country || "",
-        currency: currentTenant.currency || "USD",
+        currency: tenantCurrency,
       }));
-      setBookingSettings({
+      const nextBooking = {
         onlineBookingEnabled: currentTenant.online_booking_enabled || false,
         autoConfirmBookings: currentTenant.auto_confirm_bookings || false,
         defaultBufferMinutes: currentTenant.default_buffer_minutes || 0,
@@ -199,30 +290,138 @@ export default function SettingsPage() {
         bookingStatusMessage: currentTenant.booking_status_message || "",
         slotCapacityDefault: currentTenant.slot_capacity_default || 1,
         brandColor: (currentTenant as any).brand_color || "#2563EB",
-      });
+        allowStaffSelection: (currentTenant as any).allow_staff_selection ?? true,
+        requireStaffSelection: (currentTenant as any).require_staff_selection ?? false,
+        autoAssignStaff: (currentTenant as any).auto_assign_staff ?? true,
+      };
+      setBookingSettings(nextBooking);
+      setBookingBaseline(nextBooking);
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
+      setProfileBaseline((prev) => ({
+        ...prev,
+        salonName: resolvedScope === "branch" ? prev.salonName : tenantName,
+        currency: tenantCurrency,
+      }));
     }
     if (profile) {
+      const ownerName = profile.full_name || "";
+      const ownerPhone = profile.phone || "";
       setProfileData((prev) => ({
         ...prev,
-        ownerName: profile.full_name || "",
-        phone: profile.phone || "",
+        ownerName,
+        email: user?.email || "",
+        phone: ownerPhone,
       }));
+      setProfileBaseline((prev) => ({ ...prev, ownerName, phone: ownerPhone }));
     }
-    if (defaultLocation) {
+    if (activeLocation) {
+      const openingDays = activeLocation.opening_days || [];
+      const openingTime = activeLocation.opening_time?.substring(0, 5) || "09:00";
+      const closingTime = activeLocation.closing_time?.substring(0, 5) || "18:00";
       setProfileData((prev) => ({
         ...prev,
-        city: defaultLocation.city || "",
-        address: defaultLocation.address || "",
+        salonName: resolvedScope === "branch" ? activeLocation.name || prev.salonName : prev.salonName,
+        city: activeLocation.city || "",
+        address: activeLocation.address || "",
       }));
       setHoursData({
-        openingDays: defaultLocation.opening_days || [],
-        openingTime: defaultLocation.opening_time?.substring(0, 5) || "09:00",
-        closingTime: defaultLocation.closing_time?.substring(0, 5) || "18:00",
+        openingDays,
+        openingTime,
+        closingTime,
       });
+      setHoursBaseline({ openingDays, openingTime, closingTime });
+      setProfileBaseline((prev) => ({
+        ...prev,
+        salonName: resolvedScope === "branch" ? activeLocation.name || prev.salonName : prev.salonName,
+        city: activeLocation.city || "",
+        address: activeLocation.address || "",
+      }));
     }
-  }, [currentTenant, profile, defaultLocation]);
+  }, [currentTenant, profile, user?.email, activeLocation, resolvedScope]);
+
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await (supabase.rpc as any)("list_tenant_staff_members", {
+        p_tenant_id: currentTenant.id,
+        p_context_type: "owner_hub",
+        p_location_id: null,
+      });
+      if (cancelled || error || !Array.isArray(data)) return;
+
+      const ownerRow =
+        data.find((row: any) => row?.role === "owner" && row?.is_active !== false) ??
+        data.find((row: any) => row?.role === "owner");
+      if (!ownerRow) return;
+
+      const ownerName = (ownerRow.full_name || "").trim();
+      const ownerEmail = (ownerRow.email || "").trim();
+      const ownerPhone = (ownerRow.phone || "").trim();
+      setProfileData((prev) => ({
+        ...prev,
+        ownerName: ownerName || prev.ownerName,
+        email: ownerEmail || prev.email,
+        phone: ownerPhone || prev.phone,
+      }));
+      setProfileBaseline((prev) => ({
+        ...prev,
+        ownerName: ownerName || prev.ownerName,
+        phone: ownerPhone || prev.phone,
+      }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTenant?.id]);
+
+  const toLocalDateTimeInput = (value: Date) => {
+    const year = value.getFullYear();
+    const month = `${value.getMonth() + 1}`.padStart(2, "0");
+    const day = `${value.getDate()}`.padStart(2, "0");
+    const hours = `${value.getHours()}`.padStart(2, "0");
+    const minutes = `${value.getMinutes()}`.padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const formatWindowText = (window: BranchUnavailabilityWindow) => {
+    const startsAt = new Date(window.starts_at);
+    const startLabel = startsAt.toLocaleString();
+    if (window.is_indefinite || !window.ends_at) {
+      return `Unavailable from ${startLabel} until manually resumed`;
+    }
+    return `Unavailable from ${startLabel} to ${new Date(window.ends_at).toLocaleString()}`;
+  };
+
+  const fetchBranchWindows = async () => {
+    if (!currentTenant?.id || resolvedScope !== "business") return;
+    setBranchWindowsLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from("branch_unavailability_windows")
+        .select("id, location_id, starts_at, ends_at, is_indefinite, reason, ended_at")
+        .eq("tenant_id", currentTenant.id)
+        .is("ended_at", null)
+        .order("starts_at", { ascending: true });
+      if (error) throw error;
+      setBranchWindows((data || []) as BranchUnavailabilityWindow[]);
+    } catch (error) {
+      console.error("Error loading branch windows:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load branch availability windows.",
+        variant: "destructive",
+      });
+    } finally {
+      setBranchWindowsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (resolvedScope !== "business") return;
+    void fetchBranchWindows();
+  }, [resolvedScope, currentTenant?.id]);
 
   // Sync notification settings from database
   useEffect(() => {
@@ -247,7 +446,10 @@ export default function SettingsPage() {
     });
   };
 
-  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug);
+  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug, {
+    configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
+    hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+  });
 
   const handleCopyUrl = () => {
     if (bookingUrl) {
@@ -262,7 +464,7 @@ export default function SettingsPage() {
 
   const handleLogoUpload = async (file: File) => {
     if (!currentTenant?.id) return;
-    
+
     // Validate file type and size
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
@@ -388,33 +590,56 @@ export default function SettingsPage() {
 
     setIsSaving(true);
     try {
-      // Update tenant
-      const { error: tenantError } = await supabase
-        .from("tenants")
-        .update({
-          name: profileData.salonName,
-          currency: profileData.currency,
-        })
-        .eq("id", currentTenant.id);
+      if (resolvedScope !== "branch") {
+        const { error: tenantError } = await supabase
+          .from("tenants")
+          .update({
+            name: profileData.salonName,
+            currency: profileData.currency,
+          })
+          .eq("id", currentTenant.id);
+        if (tenantError) throw tenantError;
+      }
 
-      if (tenantError) throw tenantError;
-
-      // Update location if exists
-      if (defaultLocation?.id) {
+      if (activeLocation?.id) {
+        const locationUpdates =
+          resolvedScope === "business"
+            ? {
+              city: profileData.city,
+              address: profileData.address,
+            }
+            : {
+              name: profileData.salonName,
+              city: profileData.city,
+              address: profileData.address,
+            };
         const { error: locationError } = await supabase
           .from("locations")
-          .update({
-            city: profileData.city,
-            address: profileData.address,
-          })
-          .eq("id", defaultLocation.id);
-
+          .update(locationUpdates)
+          .eq("id", activeLocation.id);
         if (locationError) throw locationError;
       }
 
-      // Refresh tenant data in context for immediate UI update
-      await refreshTenants();
-      
+      if (profile?.user_id && resolvedScope !== "branch") {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            full_name: profileData.ownerName.trim() || null,
+            phone: profileData.phone.trim() || null,
+          })
+          .eq("user_id", profile.user_id);
+        if (profileError) throw profileError;
+      }
+
+      await Promise.all([refreshTenants(), refetchLocations()]);
+      setProfileBaseline({
+        salonName: profileData.salonName,
+        city: profileData.city,
+        address: profileData.address,
+        currency: profileData.currency,
+        ownerName: profileData.ownerName,
+        phone: profileData.phone,
+      });
       toast({ title: "Saved", description: "Profile settings updated" });
     } catch (err) {
       console.error("Error saving profile:", err);
@@ -425,7 +650,7 @@ export default function SettingsPage() {
   };
 
   const handleHoursSave = async () => {
-    if (!defaultLocation?.id) return;
+    if (!activeLocation?.id) return;
 
     setIsSaving(true);
     try {
@@ -436,17 +661,151 @@ export default function SettingsPage() {
           opening_time: hoursData.openingTime,
           closing_time: hoursData.closingTime,
         })
-        .eq("id", defaultLocation.id);
+        .eq("id", activeLocation.id);
 
       if (error) throw error;
 
       toast({ title: "Saved", description: "Business hours updated" });
+      setHoursBaseline({
+        openingDays: [...hoursData.openingDays],
+        openingTime: hoursData.openingTime,
+        closingTime: hoursData.closingTime,
+      });
       refetchLocations();
     } catch (err) {
       console.error("Error saving hours:", err);
       toast({ title: "Error", description: "Failed to save hours", variant: "destructive" });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const notifyImpactedBookings = async (locationId: string, startsAtIso: string, endsAtIso: string | null, reason: string) => {
+    if (!currentTenant?.id) return;
+    const windowEndIso =
+      endsAtIso || new Date(new Date(startsAtIso).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const targetLocation = locations.find((location) => location.id === locationId);
+    const branchLabel = targetLocation?.name?.trim() || "This branch";
+    const bookingUrl = currentTenant?.slug ? buildPublicBookingUrl(currentTenant.slug) : "";
+    const contactPhone = (currentTenant as any)?.contact_phone || "";
+    const contactLine = contactPhone ? ` You can also call ${contactPhone}.` : "";
+    const bookingLine = bookingUrl ? ` Please rebook here: ${bookingUrl}.` : " Please rebook from the booking site.";
+    const reasonText =
+      reason?.trim() ||
+      `${branchLabel} is temporarily unavailable during the selected period.${bookingLine}${contactLine}`;
+    try {
+      const { data: impactedAppointments, error } = await supabase
+        .from("appointments")
+        .select("id, scheduled_start")
+        .eq("tenant_id", currentTenant.id)
+        .eq("location_id", locationId)
+        .gte("scheduled_start", startsAtIso)
+        .lte("scheduled_start", windowEndIso)
+        .in("status", ["scheduled", "rescheduled", "started", "paused"]);
+      if (error) throw error;
+      for (const appointment of impactedAppointments || []) {
+        await supabase.from("notifications").insert({
+          tenant_id: currentTenant.id,
+          type: "appointment",
+          title: "Branch availability changed",
+          description:
+            "This branch is unavailable for a period. Please reschedule impacted bookings.",
+          entity_type: "appointment",
+          entity_id: appointment.id,
+          urgent: true,
+        });
+        await supabase.functions.invoke("send-appointment-notification", {
+          body: {
+            appointmentId: appointment.id,
+            action: "branch_unavailable",
+            reason: reasonText,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Error notifying impacted bookings:", error);
+    }
+  };
+
+  const handleOpenBranchWindowDialog = (locationId: string) => {
+    const now = new Date();
+    const plusTwoHours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    setBranchWindowTargetLocationId(locationId);
+    setBranchWindowStartsAt(toLocalDateTimeInput(now));
+    setBranchWindowEndsAt(toLocalDateTimeInput(plusTwoHours));
+    setBranchWindowIndefinite(false);
+    setBranchWindowReason("");
+    setBranchWindowDialogOpen(true);
+  };
+
+  const handleCreateBranchWindow = async () => {
+    if (!currentTenant?.id || !branchWindowTargetLocationId || !branchWindowStartsAt) return;
+    const startsAt = new Date(branchWindowStartsAt);
+    if (Number.isNaN(startsAt.getTime())) {
+      toast({ title: "Invalid start time", description: "Please choose a valid start date/time.", variant: "destructive" });
+      return;
+    }
+    const endsAt = branchWindowIndefinite ? null : new Date(branchWindowEndsAt);
+    if (!branchWindowIndefinite && (!branchWindowEndsAt || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt)) {
+      toast({
+        title: "Invalid end time",
+        description: "End date/time must be after the start.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setBranchWindowSaving(true);
+    try {
+      const payload = {
+        tenant_id: currentTenant.id,
+        location_id: branchWindowTargetLocationId,
+        starts_at: startsAt.toISOString(),
+        ends_at: branchWindowIndefinite ? null : endsAt.toISOString(),
+        is_indefinite: branchWindowIndefinite,
+        reason: branchWindowReason.trim() || null,
+        created_by: user?.id || null,
+      };
+      const { error } = await (supabase as any).from("branch_unavailability_windows").insert(payload);
+      if (error) throw error;
+
+      await notifyImpactedBookings(
+        branchWindowTargetLocationId,
+        startsAt.toISOString(),
+        branchWindowIndefinite ? null : endsAt.toISOString(),
+        branchWindowReason.trim() || "Branch unavailable period",
+      );
+      await fetchBranchWindows();
+      setBranchWindowDialogOpen(false);
+      toast({ title: "Branch unavailable", description: "Unavailability window has been saved." });
+    } catch (error) {
+      console.error("Error creating branch window:", error);
+      toast({ title: "Error", description: "Failed to save branch unavailability.", variant: "destructive" });
+    } finally {
+      setBranchWindowSaving(false);
+    }
+  };
+
+  const handleEndBranchWindow = async (window: BranchUnavailabilityWindow) => {
+    if (!currentTenant?.id) return;
+    setBranchWindowSaving(true);
+    try {
+      const { error } = await (supabase as any)
+        .from("branch_unavailability_windows")
+        .update({
+          ended_at: new Date().toISOString(),
+          ended_by: user?.id || null,
+        })
+        .eq("id", window.id)
+        .eq("tenant_id", currentTenant.id);
+      if (error) throw error;
+      await fetchBranchWindows();
+      toast({ title: "Branch resumed", description: "Branch is now available for bookings again." });
+    } catch (error) {
+      console.error("Error ending branch window:", error);
+      toast({ title: "Error", description: "Failed to resume branch availability.", variant: "destructive" });
+    } finally {
+      setBranchWindowSaving(false);
     }
   };
 
@@ -466,14 +825,18 @@ export default function SettingsPage() {
           booking_status_message: bookingSettings.bookingStatusMessage || null,
           slot_capacity_default: bookingSettings.slotCapacityDefault,
           brand_color: bookingSettings.brandColor,
+          allow_staff_selection: bookingSettings.allowStaffSelection,
+          require_staff_selection: bookingSettings.requireStaffSelection,
+          auto_assign_staff: bookingSettings.autoAssignStaff,
         })
         .eq("id", currentTenant.id);
 
       if (error) throw error;
 
-      // Refresh tenant data in context for immediate UI update
-      await refreshTenants();
-      
+      // Refresh tenant + location state so renamed salon/location labels propagate to switchers immediately.
+      await Promise.all([refreshTenants(), refetchLocations()]);
+      setBookingBaseline({ ...bookingSettings });
+
       toast({ title: "Saved", description: "Booking settings updated" });
     } catch (err) {
       console.error("Error saving booking settings:", err);
@@ -490,7 +853,7 @@ export default function SettingsPage() {
     setIsGeneratingSlug(true);
     try {
       // Convert name to URL-friendly slug
-      let baseSlug = currentTenant.name
+      const baseSlug = currentTenant.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
@@ -543,87 +906,121 @@ export default function SettingsPage() {
     }));
   };
 
+  const profileDirty = useMemo(() => {
+    if (resolvedScope === "branch") {
+      return (
+        profileData.salonName !== profileBaseline.salonName ||
+        profileData.city !== profileBaseline.city ||
+        profileData.address !== profileBaseline.address
+      );
+    }
+    return (
+      profileData.salonName !== profileBaseline.salonName ||
+      profileData.city !== profileBaseline.city ||
+      profileData.address !== profileBaseline.address ||
+      profileData.currency !== profileBaseline.currency ||
+      profileData.ownerName !== profileBaseline.ownerName ||
+      profileData.phone !== profileBaseline.phone
+    );
+  }, [profileData, profileBaseline, resolvedScope]);
+
+  const hoursDirty = useMemo(() => {
+    const baselineDays = [...hoursBaseline.openingDays].sort().join(",");
+    const currentDays = [...hoursData.openingDays].sort().join(",");
+    return (
+      currentDays !== baselineDays ||
+      hoursData.openingTime !== hoursBaseline.openingTime ||
+      hoursData.closingTime !== hoursBaseline.closingTime
+    );
+  }, [hoursData, hoursBaseline]);
+
+  const bookingDirty = useMemo(() => {
+    return JSON.stringify(bookingSettings) !== JSON.stringify(bookingBaseline);
+  }, [bookingSettings, bookingBaseline]);
+
   const renderProfileTab = () => (
     <Card>
       <CardContent className="p-6 space-y-6">
-        {/* Logo Upload */}
-        <div className="flex items-center gap-6">
-          <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center border-2 border-dashed border-border overflow-hidden">
-            {logoUrl ? (
-              <img src={logoUrl} alt="Salon logo" className="w-full h-full object-cover" />
-            ) : (
-              <Building2 className="w-8 h-8 text-muted-foreground" />
-            )}
-          </div>
-          <div>
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleLogoUpload(file);
-              }}
-            />
-            <Button 
-              variant="outline" 
-              onClick={() => logoInputRef.current?.click()}
-              disabled={isUploadingLogo}
-            >
-              {isUploadingLogo ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        {resolvedScope !== "branch" && (
+          <div className="flex items-center gap-6">
+            <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center border-2 border-dashed border-border overflow-hidden">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Salon logo" className="w-full h-full object-cover" />
               ) : (
-                <Upload className="w-4 h-4 mr-2" />
+                <Building2 className="w-8 h-8 text-muted-foreground" />
               )}
-              {logoUrl ? "Change Logo" : "Upload Logo"}
-            </Button>
-            <p className="text-xs text-muted-foreground mt-1">
-              JPG, PNG or WebP up to 2MB
-            </p>
+            </div>
+            <div>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleLogoUpload(file);
+                }}
+              />
+              <Button
+                variant="outline"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={isUploadingLogo}
+              >
+                {isUploadingLogo ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-2" />
+                )}
+                {logoUrl ? "Change Logo" : "Upload Logo"}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-1">
+                JPG, PNG or WebP up to 2MB
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Salon & Owner Name */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={cn("grid grid-cols-1 gap-4", resolvedScope !== "branch" && "sm:grid-cols-2")}>
           <div className="space-y-2">
-            <Label>Salon Name</Label>
+            <Label>{resolvedScope === "branch" ? "Branch Name" : "Salon Business Name"}</Label>
             <Input
               value={profileData.salonName}
               onChange={(e) => setProfileData((prev) => ({ ...prev, salonName: e.target.value }))}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Owner Name</Label>
-            <Input
-              value={profileData.ownerName}
-              onChange={(e) => setProfileData((prev) => ({ ...prev, ownerName: e.target.value }))}
-              disabled
-            />
-          </div>
-        </div>
-
-        {/* Email & Phone */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Email</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input className="pl-9" value={profileData.email} disabled />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Phone</Label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          {resolvedScope !== "branch" && (
+            <div className="space-y-2">
+              <Label>Owner Name</Label>
               <Input
-                className="pl-9"
-                value={profileData.phone}
-                onChange={(e) => setProfileData((prev) => ({ ...prev, phone: e.target.value }))}
+                value={profileData.ownerName}
+                onChange={(e) => setProfileData((prev) => ({ ...prev, ownerName: e.target.value }))}
               />
             </div>
-          </div>
+          )}
         </div>
+
+        {resolvedScope !== "branch" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input className="pl-9" value={profileData.email} disabled />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={profileData.phone}
+                  onChange={(e) => setProfileData((prev) => ({ ...prev, phone: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Address */}
         <div className="space-y-2">
@@ -654,29 +1051,35 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Currency */}
-        <div className="space-y-2">
-          <Label>Default currency</Label>
-          <Select
-            value={profileData.currency}
-            onValueChange={(v) => setProfileData((prev) => ({ ...prev, currency: v }))}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="GHS">Ghanaian Cedi (GHS)</SelectItem>
-              <SelectItem value="NGN">Nigerian Naira (NGN)</SelectItem>
-              <SelectItem value="USD">US Dollar (USD)</SelectItem>
-              <SelectItem value="EUR">Euro (EUR)</SelectItem>
-              <SelectItem value="GBP">British Pound (GBP)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {resolvedScope === "branch" ? (
+          <div className="space-y-2">
+            <Label>Default currency</Label>
+            <Input value={profileData.currency} disabled />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label>Default currency</Label>
+            <Select
+              value={profileData.currency}
+              onValueChange={(v) => setProfileData((prev) => ({ ...prev, currency: v }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="GHS">Ghanaian Cedi (GHS)</SelectItem>
+                <SelectItem value="NGN">Nigerian Naira (NGN)</SelectItem>
+                <SelectItem value="USD">US Dollar (USD)</SelectItem>
+                <SelectItem value="EUR">Euro (EUR)</SelectItem>
+                <SelectItem value="GBP">British Pound (GBP)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Save Button */}
         <div className="flex justify-end pt-4 border-t">
-          <Button onClick={handleProfileSave} disabled={isSaving}>
+          <Button onClick={handleProfileSave} disabled={isSaving || !profileDirty}>
             {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Save changes
           </Button>
@@ -745,7 +1148,7 @@ export default function SettingsPage() {
 
             {/* Save Button */}
             <div className="flex justify-end pt-4 border-t">
-              <Button onClick={handleHoursSave} disabled={isSaving}>
+              <Button onClick={handleHoursSave} disabled={isSaving || !hoursDirty}>
                 {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
                 Save hours
               </Button>
@@ -761,7 +1164,7 @@ export default function SettingsPage() {
     checked: boolean
   ) => {
     setNotificationSettings((prev) => ({ ...prev, [field]: checked }));
-    
+
     const fieldMap: Record<string, string> = {
       emailAppointmentReminders: "email_appointment_reminders",
       smsAppointmentReminders: "sms_appointment_reminders",
@@ -769,11 +1172,11 @@ export default function SettingsPage() {
       emailCancellations: "email_cancellations",
       emailDailyDigest: "email_daily_digest",
     };
-    
+
     const success = await saveNotificationSettings({
       [fieldMap[field]]: checked,
     });
-    
+
     if (!success) {
       // Revert on failure
       setNotificationSettings((prev) => ({ ...prev, [field]: !checked }));
@@ -872,6 +1275,155 @@ export default function SettingsPage() {
     </Card>
   );
 
+  const renderBranchesTab = () => {
+    const activeWindowsByLocation = new Map<string, BranchUnavailabilityWindow[]>();
+    for (const window of branchWindows) {
+      const windows = activeWindowsByLocation.get(window.location_id) || [];
+      windows.push(window);
+      activeWindowsByLocation.set(window.location_id, windows);
+    }
+
+    return (
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle>Manage Branches</CardTitle>
+            <CardDescription>
+              Pause bookings for a branch during breaks, closures, or downtime.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {branchWindowsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : (
+              <Accordion type="single" collapsible className="w-full">
+                {locations.map((location) => {
+                  const locationWindows = activeWindowsByLocation.get(location.id) || [];
+                  const isUnavailable = locationWindows.length > 0;
+                  const latestWindow = locationWindows[0];
+                  return (
+                    <AccordionItem key={location.id} value={location.id}>
+                      <AccordionTrigger>
+                        <div className="flex w-full items-center justify-between pr-4">
+                          <div className="text-left">
+                            <p className="font-medium">{location.name}</p>
+                            <p className="text-xs text-muted-foreground">{location.city || "No city"}</p>
+                          </div>
+                          <Badge variant={isUnavailable ? "destructive" : "secondary"}>
+                            {isUnavailable ? "Unavailable" : "Active"}
+                          </Badge>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-3 rounded-lg border p-3">
+                          {latestWindow ? (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">Current unavailability</p>
+                              <p className="text-sm text-muted-foreground">{formatWindowText(latestWindow)}</p>
+                              {latestWindow.reason ? (
+                                <p className="text-xs text-muted-foreground">Reason: {latestWindow.reason}</p>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              This branch is currently accepting bookings.
+                            </p>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => handleOpenBranchWindowDialog(location.id)}
+                              disabled={branchWindowSaving}
+                            >
+                              Set unavailable period
+                            </Button>
+                            {latestWindow ? (
+                              <Button
+                                variant="destructive"
+                                onClick={() => handleEndBranchWindow(latestWindow)}
+                                disabled={branchWindowSaving}
+                              >
+                                Resume bookings
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            )}
+          </CardContent>
+        </Card>
+
+        <Dialog open={branchWindowDialogOpen} onOpenChange={setBranchWindowDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Set branch unavailability</DialogTitle>
+              <DialogDescription>
+                Confirm the period when this branch should stop accepting new bookings.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Start date & time</Label>
+                <Input
+                  type="datetime-local"
+                  value={branchWindowStartsAt}
+                  onChange={(event) => setBranchWindowStartsAt(event.target.value)}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">Indefinitely unavailable</p>
+                  <p className="text-xs text-muted-foreground">
+                    Keep this branch unavailable until you manually resume it.
+                  </p>
+                </div>
+                <Switch
+                  checked={branchWindowIndefinite}
+                  onCheckedChange={setBranchWindowIndefinite}
+                />
+              </div>
+              {!branchWindowIndefinite ? (
+                <div className="space-y-2">
+                  <Label>End date & time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={branchWindowEndsAt}
+                    onChange={(event) => setBranchWindowEndsAt(event.target.value)}
+                  />
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <Label>Reason (optional)</Label>
+                <Textarea
+                  rows={2}
+                  value={branchWindowReason}
+                  onChange={(event) => setBranchWindowReason(event.target.value)}
+                  placeholder="e.g. Renovation, public holiday, staff retreat"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBranchWindowDialogOpen(false)} disabled={branchWindowSaving}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateBranchWindow} disabled={branchWindowSaving}>
+                {branchWindowSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Confirm unavailability
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  };
+
   const renderBookingTab = () => (
     <Card>
       <CardHeader>
@@ -941,7 +1493,7 @@ export default function SettingsPage() {
                     .eq("id", currentTenant.id);
                   if (error) throw error;
                   await refreshTenants();
-                  toast({ 
+                  toast({
                     title: checked ? "Online booking enabled" : "Online booking disabled",
                     description: checked ? "Customers can now book online" : "Online booking is now off"
                   });
@@ -967,6 +1519,61 @@ export default function SettingsPage() {
               checked={bookingSettings.autoConfirmBookings}
               onCheckedChange={(checked) =>
                 setBookingSettings((prev) => ({ ...prev, autoConfirmBookings: checked }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Allow Staff Selection</p>
+              <p className="text-sm text-muted-foreground">
+                Let customers choose a preferred staff member during booking.
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.allowStaffSelection}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  allowStaffSelection: checked,
+                  requireStaffSelection: checked ? prev.requireStaffSelection : false,
+                }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Require Staff Selection</p>
+              <p className="text-sm text-muted-foreground">
+                Force customers to select a staff member before checkout.
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.requireStaffSelection}
+              disabled={!bookingSettings.allowStaffSelection}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({
+                  ...prev,
+                  requireStaffSelection: checked,
+                  autoAssignStaff: checked ? false : prev.autoAssignStaff,
+                }))
+              }
+            />
+          </div>
+
+          <div className="flex items-center justify-between py-2">
+            <div>
+              <p className="font-medium">Auto-Assign Staff</p>
+              <p className="text-sm text-muted-foreground">
+                Automatically assign an eligible staff member when customer does not select one.
+              </p>
+            </div>
+            <Switch
+              checked={bookingSettings.autoAssignStaff}
+              disabled={bookingSettings.requireStaffSelection}
+              onCheckedChange={(checked) =>
+                setBookingSettings((prev) => ({ ...prev, autoAssignStaff: checked }))
               }
             />
           </div>
@@ -1162,7 +1769,7 @@ export default function SettingsPage() {
 
         {/* Save Button */}
         <div className="flex justify-end pt-4 border-t">
-          <Button onClick={handleBookingSave} disabled={isSaving}>
+          <Button onClick={handleBookingSave} disabled={isSaving || !bookingDirty}>
             {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Save settings
           </Button>
@@ -1347,8 +1954,8 @@ export default function SettingsPage() {
               <p className="font-semibold capitalize">{currentTenant?.plan || "Solo"} Plan</p>
               <Badge className={cn(
                 currentTenant?.subscription_status === "active" ? "bg-success text-success-foreground" :
-                currentTenant?.subscription_status === "trialing" ? "bg-primary text-primary-foreground" :
-                "bg-destructive text-destructive-foreground"
+                  currentTenant?.subscription_status === "trialing" ? "bg-primary text-primary-foreground" :
+                    "bg-destructive text-destructive-foreground"
               )}>
                 {currentTenant?.subscription_status?.replace("_", " ") || "Unknown"}
               </Badge>
@@ -1412,8 +2019,11 @@ export default function SettingsPage() {
   const generateCodeMutation = useGenerateReferralCode();
 
   const renderPromotionsTab = () => {
-    const bookingUrl = buildPublicBookingUrl(currentTenant?.slug);
-    
+    const bookingUrl = buildPublicBookingUrl(currentTenant?.slug, {
+      configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
+      hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+    });
+
     return (
       <div className="space-y-6">
         {/* Referral Program */}
@@ -1628,9 +2238,19 @@ export default function SettingsPage() {
       <div className="space-y-6">
         {/* Page Header */}
         <div>
-          <h1 className="text-2xl font-semibold">Settings</h1>
+          <h1 className="text-2xl font-semibold">
+            {resolvedScope === "business"
+              ? "Business Settings"
+              : resolvedScope === "branch"
+                ? "Branch Settings"
+                : "Settings"}
+          </h1>
           <p className="text-muted-foreground">
-            Manage your salon's configuration and preferences
+            {resolvedScope === "business"
+              ? "Manage business-level configuration and owner details"
+              : resolvedScope === "branch"
+                ? "Manage this branch profile and operating hours"
+                : "Manage your salon's configuration and preferences"}
           </p>
         </div>
 
@@ -1699,6 +2319,7 @@ export default function SettingsPage() {
           <div className="flex-1">
             {activeTab === "profile" && renderProfileTab()}
             {activeTab === "hours" && renderHoursTab()}
+            {activeTab === "branches" && renderBranchesTab()}
             {activeTab === "booking" && renderBookingTab()}
             {activeTab === "payments" && renderPaymentsTab()}
             {activeTab === "wallet" && renderWalletTab()}

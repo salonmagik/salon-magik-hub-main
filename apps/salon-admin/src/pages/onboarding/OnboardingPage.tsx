@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +30,19 @@ export default function OnboardingPage() {
   const { toast } = useToast();
   const { user, refreshTenants } = useAuth();
   const { data: plans } = usePlans();
+  const { data: trialSetting } = useQuery({
+    queryKey: ["default-trial-days"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "default_trial_days")
+        .maybeSingle();
+      if (error) throw error;
+      const rawDays = Number((data?.value as any)?.days);
+      return Number.isFinite(rawDays) ? Math.max(0, rawDays) : null;
+    },
+  });
   const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
   const [expectedChainLocations, setExpectedChainLocations] = useState(1);
@@ -92,7 +106,9 @@ export default function OnboardingPage() {
     currency,
     configuredChainLocations,
   );
-  const onboardingTrialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const onboardingTrialDays =
+    trialSetting ?? plans?.find((plan) => plan.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
+  const onboardingTrialEndsAt = new Date(Date.now() + onboardingTrialDays * 24 * 60 * 60 * 1000).toISOString();
 
   const getStepFlow = (): OnboardingStep[] => {
     const flow: OnboardingStep[] = ["role"];
@@ -123,15 +139,13 @@ export default function OnboardingPage() {
         if (!selectedPlan) return false;
         if (selectedPlan !== "chain") return true;
         if (expectedChainLocations < 1) return false;
-        if (!chainQuote) return false;
-        return chainQuote?.requires_custom !== true;
+        return Boolean(chainQuote);
       case "locations":
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
       case "review":
         if (!isChain) return true;
-        if (!configuredChainQuote) return false;
-        return configuredChainQuote.requires_custom !== true;
+        return Boolean(configuredChainQuote);
       default:
         return false;
     }
@@ -180,6 +194,7 @@ export default function OnboardingPage() {
 
     try {
       const tenantId = crypto.randomUUID();
+      let creatorDefaultLocationId: string | null = null;
 
       // 1. Create the tenant
       const { error: tenantError } = await supabase.from("tenants").insert({
@@ -217,7 +232,14 @@ export default function OnboardingPage() {
 
       // 4. Create locations
       if (isChain && locationsConfig.locations.length > 0) {
-        const locationInserts = locationsConfig.locations.map((loc) => ({
+        const expectedLocations = Math.max(1, expectedChainLocations);
+        const configuredLocations = Math.max(
+          1,
+          Math.min(locationsConfig.locations.length, expectedLocations),
+        );
+        const requiresCustomUnlock = configuredLocations > 10 || configuredChainQuote?.requires_custom === true;
+        const activatedLocations = requiresCustomUnlock ? Math.min(10, configuredLocations) : configuredLocations;
+        const locationInserts = locationsConfig.locations.slice(0, activatedLocations).map((loc) => ({
           tenant_id: tenantId,
           name: loc.name || businessInfo.name,
           city: loc.city,
@@ -228,39 +250,85 @@ export default function OnboardingPage() {
           closing_time: loc.closingTime,
           opening_days: loc.openingDays,
           is_default: loc.isDefault,
+          availability: "open",
         }));
 
-        const { error: locationsError } = await supabase.from("locations").insert(locationInserts);
+        const { error: locationsError } = await supabase
+          .from("locations")
+          .insert(locationInserts)
+          .select("id");
         if (locationsError) throw locationsError;
+        const { data: defaultLocationRow, error: defaultLocationError } = await supabase
+          .from("locations")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (defaultLocationError) throw defaultLocationError;
+        creatorDefaultLocationId = defaultLocationRow?.id || null;
 
-        const configuredLocations = Math.max(1, locationsConfig.locations.length);
         if (!chainPlan?.id) {
           throw new Error("Chain plan is not configured yet. Contact support.");
         }
         const { error: entitlementError } = await (supabase.rpc as any)("set_tenant_chain_entitlement", {
           p_tenant_id: tenantId,
           p_plan_id: chainPlan.id,
-          p_allowed_locations: configuredLocations,
-          p_source: "onboarding",
-          p_reason: "Initial chain location entitlement from onboarding.",
+          p_allowed_locations: activatedLocations,
+          p_source: requiresCustomUnlock ? "onboarding_pending_unlock" : "onboarding",
+          p_reason: requiresCustomUnlock
+            ? `Pending custom unlock approval for ${configuredLocations} requested locations.`
+            : "Initial chain location entitlement from onboarding.",
         });
         if (entitlementError) throw entitlementError;
+
+        if (requiresCustomUnlock) {
+          const { error: requestError } = await (supabase.from("tenant_chain_unlock_requests") as any).upsert(
+            {
+              tenant_id: tenantId,
+              plan_id: chainPlan.id,
+              requested_locations: configuredLocations,
+              allowed_locations: activatedLocations,
+              status: "pending",
+              reason: "Requested during onboarding for chain 11+ locations.",
+              requested_by: user.id,
+            },
+            { onConflict: "tenant_id" },
+          );
+          if (requestError) throw requestError;
+        }
       } else {
         // Single location for Solo/Studio
-        const { error: locationError } = await supabase.from("locations").insert({
-          tenant_id: tenantId,
-          name: "Main Location",
-          city: businessInfo.city,
-          address: businessInfo.address || null,
-          country: businessInfo.country,
-          timezone: businessInfo.timezone,
-          opening_time: businessInfo.openingTime,
-          closing_time: businessInfo.closingTime,
-          opening_days: businessInfo.openingDays,
-          is_default: true,
-        });
+        const { data: insertedLocation, error: locationError } = await supabase
+          .from("locations")
+          .insert({
+            tenant_id: tenantId,
+            name: "Main Location",
+            city: businessInfo.city,
+            address: businessInfo.address || null,
+            country: businessInfo.country,
+            timezone: businessInfo.timezone,
+            opening_time: businessInfo.openingTime,
+            closing_time: businessInfo.closingTime,
+            opening_days: businessInfo.openingDays,
+            is_default: true,
+            availability: "open",
+          })
+          .select("id")
+          .single();
 
         if (locationError) throw locationError;
+        creatorDefaultLocationId = insertedLocation?.id || null;
+      }
+
+      if (selectedRole !== "owner" && creatorDefaultLocationId) {
+        const { error: assignmentError } = await supabase.from("staff_locations").insert({
+          user_id: user.id,
+          tenant_id: tenantId,
+          location_id: creatorDefaultLocationId,
+        });
+        if (assignmentError) throw assignmentError;
       }
 
       // 5. Create communication credits
@@ -305,10 +373,18 @@ export default function OnboardingPage() {
 
       setStep("complete");
       
-      toast({
-        title: "Welcome to Salon Magik!",
-        description: "Your salon has been set up successfully.",
-      });
+      if (isChain && configuredChainLocations > 10) {
+        toast({
+          title: "Onboarding complete",
+          description:
+            "Your first 10 locations are active. Additional locations are pending custom pricing approval.",
+        });
+      } else {
+        toast({
+          title: "Welcome to Salon Magik!",
+          description: "Your salon has been set up successfully.",
+        });
+      }
 
       setTimeout(() => {
         navigate("/salon");
@@ -401,7 +477,7 @@ export default function OnboardingPage() {
               {isChain && (
                 <div className="px-6 pb-4 space-y-3">
                   <div className="space-y-2">
-                    <Label htmlFor="expectedLocations">Expected total locations now</Label>
+                    <Label htmlFor="expectedLocations">How many branches do you have?</Label>
                     <Input
                       id="expectedLocations"
                       type="number"
@@ -412,7 +488,7 @@ export default function OnboardingPage() {
                       }
                     />
                     <p className="text-xs text-muted-foreground">
-                      Chain tiers apply to additional locations beyond the first.
+                      Chain tiers apply to additional branches beyond the first.
                     </p>
                   </div>
 
@@ -422,8 +498,8 @@ export default function OnboardingPage() {
                         Estimated monthly total: {currency} {chainQuote.total_price.toLocaleString()}
                       </p>
                       {chainQuote.requires_custom ? (
-                        <p className="mt-2 text-destructive">
-                          This tier is currently marked as custom. Contact support/sales to continue.
+                        <p className="mt-2 text-amber-700">
+                          This tier is marked as custom. You can continue onboarding; activation beyond 10 branches will be pending approval.
                         </p>
                       ) : (
                         <ul className="mt-2 space-y-1 text-muted-foreground">
@@ -451,6 +527,7 @@ export default function OnboardingPage() {
               defaultOpeningTime={businessInfo.openingTime}
               defaultClosingTime={businessInfo.closingTime}
               defaultOpeningDays={businessInfo.openingDays}
+              maxLocations={Math.max(1, expectedChainLocations)}
               onChange={setLocationsConfig}
             />
           )}
@@ -474,6 +551,7 @@ export default function OnboardingPage() {
                     }
                   : null
               }
+              trialDays={onboardingTrialDays}
             />
           )}
 

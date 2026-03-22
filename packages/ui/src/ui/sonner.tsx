@@ -10,6 +10,8 @@ const Toaster = ({ ...props }: ToasterProps): JSX.Element => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      closeButton
+      duration={5000}
       toastOptions={{
         classNames: {
           toast:

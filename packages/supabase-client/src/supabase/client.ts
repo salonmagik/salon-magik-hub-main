@@ -12,10 +12,47 @@ type AppStorageKey =
   | "sb-salonmagik-backoffice";
 
 type SupabaseClientMap = Partial<
-  Record<AppStorageKey, ReturnType<typeof createClient<Database>>>
+  Record<string, ReturnType<typeof createClient<Database>>>
 >;
 
 const CLIENT_CACHE_KEY = "__salonmagik_supabase_clients__";
+const REMEMBER_ME_KEY = "auth:remember_me";
+
+function shouldPersistAuthSession(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(REMEMBER_ME_KEY) !== "false";
+}
+
+function getAuthStorage() {
+  if (typeof window === "undefined") {
+    return {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    };
+  }
+
+  return {
+    getItem(key: string) {
+      const sessionValue = window.sessionStorage.getItem(key);
+      if (sessionValue !== null) return sessionValue;
+      return window.localStorage.getItem(key);
+    },
+    setItem(key: string, value: string) {
+      if (shouldPersistAuthSession()) {
+        window.localStorage.setItem(key, value);
+        window.sessionStorage.removeItem(key);
+        return;
+      }
+      window.sessionStorage.setItem(key, value);
+      window.localStorage.removeItem(key);
+    },
+    removeItem(key: string) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+    },
+  };
+}
 
 function getClientCache(): SupabaseClientMap {
   const globalObj = globalThis as typeof globalThis & {
@@ -28,21 +65,31 @@ function getClientCache(): SupabaseClientMap {
 }
 
 export function createSupabaseClient(storageKey: AppStorageKey) {
+  const projectRefFromUrl = (() => {
+    try {
+      return new URL(SUPABASE_URL).hostname.split(".")[0];
+    } catch {
+      return "";
+    }
+  })();
+  const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID || projectRefFromUrl;
+  const scopedStorageKey = projectRef ? `${storageKey}-${projectRef}` : storageKey;
+
   const cache = getClientCache();
-  if (cache[storageKey]) {
-    return cache[storageKey]!;
+  if (cache[scopedStorageKey]) {
+    return cache[scopedStorageKey]!;
   }
 
   const client = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
-      storage: localStorage,
-      storageKey,
+      storage: getAuthStorage(),
+      storageKey: scopedStorageKey,
       persistSession: true,
       autoRefreshToken: true,
     },
   });
 
-  cache[storageKey] = client;
+  cache[scopedStorageKey] = client;
   return client;
 }
 

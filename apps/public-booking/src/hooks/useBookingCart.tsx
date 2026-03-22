@@ -40,33 +40,51 @@ interface BookingCartContextType {
 
 const BookingCartContext = createContext<BookingCartContextType | undefined>(undefined);
 
-export function BookingCartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
+export function BookingCartProvider({
+  children,
+  scopeKey,
+}: {
+  children: ReactNode;
+  scopeKey?: string;
+}) {
+  const [itemsByScope, setItemsByScope] = useState<Record<string, CartItem[]>>({});
+  const activeScope = scopeKey || "default";
+  const items = itemsByScope[activeScope] || [];
+
+  const setItemsForActiveScope = useCallback(
+    (updater: (current: CartItem[]) => CartItem[]) => {
+      setItemsByScope((prev) => ({
+        ...prev,
+        [activeScope]: updater(prev[activeScope] || []),
+      }));
+    },
+    [activeScope],
+  );
 
   const addItem = useCallback((item: Omit<CartItem, "id">) => {
     const newItem: CartItem = {
       ...item,
       id: crypto.randomUUID(),
     };
-    setItems((prev) => [...prev, newItem]);
-  }, []);
+    setItemsForActiveScope((prev) => [...prev, newItem]);
+  }, [setItemsForActiveScope]);
 
   const removeItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+    setItemsForActiveScope((prev) => prev.filter((item) => item.id !== id));
+  }, [setItemsForActiveScope]);
 
   const updateItem = useCallback((id: string, updates: Partial<CartItem>) => {
-    setItems((prev) =>
+    setItemsForActiveScope((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
-  }, []);
+  }, [setItemsForActiveScope]);
 
   const clearCart = useCallback(() => {
-    setItems([]);
-  }, []);
+    setItemsForActiveScope(() => []);
+  }, [setItemsForActiveScope]);
 
   const updateQuantity = useCallback((itemId: string, delta: number) => {
-    setItems((prev) => {
+    setItemsForActiveScope((prev) => {
       const item = prev.find((i) => i.itemId === itemId);
       if (!item) return prev;
       
@@ -78,7 +96,7 @@ export function BookingCartProvider({ children }: { children: ReactNode }) {
         i.itemId === itemId ? { ...i, quantity: newQuantity } : i
       );
     });
-  }, []);
+  }, [setItemsForActiveScope]);
 
   const getItemInCart = useCallback(
     (itemId: string, type: CartItem["type"]): CartItem | undefined => {

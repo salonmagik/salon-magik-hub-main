@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, MapPin } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@ui/tabs";
 import { Input } from "@ui/input";
 import {
@@ -10,14 +10,25 @@ import {
   SelectValue,
 } from "@ui/select";
 import { ItemCard } from "./ItemCard";
-import type { PublicService, PublicPackage, PublicProduct, PublicCategory } from "@/hooks";
+import type {
+  PublicService,
+  PublicPackage,
+  PublicProduct,
+  PublicCategory,
+  PublicLocation,
+} from "@/hooks";
 
 interface CatalogViewProps {
   services: PublicService[];
   packages: PublicPackage[];
   products: PublicProduct[];
   categories: PublicCategory[];
+  locations: PublicLocation[];
   currency: string;
+  strictLocationScope?: boolean;
+  strictScopedLocationIds?: string[];
+  selectedLocationIds: string[];
+  onLocationFilterChange: (locationIds: string[]) => void;
 }
 
 type SortOption = "name" | "price-asc" | "price-desc";
@@ -33,6 +44,9 @@ type CatalogItem = {
   stockQuantity?: number;
   type: "service" | "package" | "product";
   categoryId?: string | null;
+  branches?: { id: string; name: string; city: string | null; country_code: string }[];
+  locationIds?: string[];
+  locationNames?: string[];
 };
 
 export function CatalogView({
@@ -40,7 +54,12 @@ export function CatalogView({
   packages,
   products,
   categories,
+  locations,
   currency,
+  strictLocationScope = false,
+  strictScopedLocationIds = [],
+  selectedLocationIds,
+  onLocationFilterChange,
 }: CatalogViewProps) {
   const [activeTab, setActiveTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -58,6 +77,13 @@ export function CatalogView({
       durationMinutes: s.duration_minutes,
       type: "service" as const,
       categoryId: s.category_id,
+      branches: s.branches ?? [],
+      locationIds: s.location_ids ?? [],
+      locationNames: Array.from(
+        new Set(
+          (s.branches ?? []).map((branch) => branch.city || branch.name),
+        ),
+      ),
     }));
 
     const packageItems: CatalogItem[] = packages.map((p) => ({
@@ -68,6 +94,13 @@ export function CatalogView({
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
       imageUrls: p.image_urls || [],
       type: "package" as const,
+      branches: p.branches ?? [],
+      locationIds: p.location_ids ?? [],
+      locationNames: Array.from(
+        new Set(
+          (p.branches ?? []).map((branch) => branch.city || branch.name),
+        ),
+      ),
     }));
 
     const productItems: CatalogItem[] = products.map((p) => ({
@@ -78,10 +111,24 @@ export function CatalogView({
       imageUrls: p.image_urls || [],
       stockQuantity: p.stock_quantity,
       type: "product" as const,
+      branches: p.branches ?? [],
+      locationIds: p.location_ids ?? [],
+      locationNames: Array.from(
+        new Set(
+          (p.branches ?? []).map((branch) => branch.city || branch.name),
+        ),
+      ),
     }));
 
     return [...serviceItems, ...packageItems, ...productItems];
   }, [services, packages, products]);
+
+  const getItemLocationIds = (item: CatalogItem): string[] => {
+    if (Array.isArray(item.branches) && item.branches.length > 0) {
+      return item.branches.map((branch) => branch.id);
+    }
+    return item.locationIds ?? [];
+  };
 
   // Filter function
   const filterItems = (items: CatalogItem[]) => {
@@ -100,6 +147,28 @@ export function CatalogView({
     // Filter by category (only applies to services)
     if (activeCategory && activeTab === "services") {
       filtered = filtered.filter((item) => item.categoryId === activeCategory);
+    }
+
+    if (strictLocationScope) {
+      const allowedLocationIds =
+        selectedLocationIds.length > 0 ? selectedLocationIds : strictScopedLocationIds;
+      // If no scoped ids are available from the separate locations query,
+      // fall back to item-owned branch mappings from the pre-joined payload.
+      if (allowedLocationIds.length === 0) {
+        return filtered.filter((item) => getItemLocationIds(item).length > 0);
+      }
+      filtered = filtered.filter((item) => {
+        const itemLocationIds = getItemLocationIds(item);
+        return itemLocationIds.length > 0 && itemLocationIds.some((locationId) => allowedLocationIds.includes(locationId));
+      });
+    } else if (selectedLocationIds.length > 0) {
+      filtered = filtered.filter((item) => {
+        const itemLocationIds = getItemLocationIds(item);
+        return (
+          itemLocationIds.length === 0 ||
+          itemLocationIds.some((locationId) => selectedLocationIds.includes(locationId))
+        );
+      });
     }
 
     return filtered;
@@ -163,6 +232,7 @@ export function CatalogView({
             imageUrls={item.imageUrls}
             durationMinutes={item.durationMinutes}
             stockQuantity={item.stockQuantity}
+            locationNames={item.locationNames}
           />
         ))}
       </div>
@@ -195,6 +265,47 @@ export function CatalogView({
           </SelectContent>
         </Select>
       </div>
+
+      {locations.length > 1 && (
+        <div className="rounded-lg border p-3 space-y-2">
+          <div className="text-sm font-medium flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            Filter by city
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onLocationFilterChange([])}
+              className={`px-3 py-1.5 rounded-full text-xs border ${
+                selectedLocationIds.length === 0 ? "bg-primary text-primary-foreground" : "bg-background"
+              }`}
+            >
+              All locations
+            </button>
+            {locations.map((location) => {
+              const checked = selectedLocationIds.includes(location.id);
+              return (
+                <button
+                  type="button"
+                  key={location.id}
+                  onClick={() => {
+                    if (checked) {
+                      onLocationFilterChange(selectedLocationIds.filter((id) => id !== location.id));
+                      return;
+                    }
+                    onLocationFilterChange([...selectedLocationIds, location.id]);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs border ${
+                    checked ? "bg-primary text-primary-foreground" : "bg-background"
+                  }`}
+                >
+                  {location.city || location.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveCategory(null); }}>
         <TabsList className="w-full justify-start overflow-x-auto">

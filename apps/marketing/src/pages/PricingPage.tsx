@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { usePlans, usePlanFeatures, usePlanLimits } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
@@ -22,6 +22,7 @@ const SUPPORTED_CURRENCIES = [
   { code: "NGN", label: "NGN (₦)" },
   { code: "GHS", label: "GHS (₵)" },
 ];
+const PRICING_CURRENCY_STORAGE_KEY = "pricing_currency_preference";
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
@@ -34,6 +35,7 @@ export default function PricingPage() {
   const { data: pricing, isLoading: pricingLoading } = usePlanPricing(currency);
 
   const isLoading = plansLoading || pricingLoading;
+  const trialDays = plans?.find((plan) => plan.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
 
   const getEquivalentMonthly = (planId: string) => {
 		const planPricing = pricing?.find((p) => p.plan_id === planId);
@@ -72,7 +74,7 @@ export default function PricingPage() {
   const faqs = [
     {
       q: "Is there a free trial?",
-      a: "Yes! All plans include a 14-day free trial. No credit card required to start.",
+      a: `Yes! All plans include a ${trialDays}-day free trial. No credit card required to start.`,
     },
     {
       q: "Can I change plans later?",
@@ -91,6 +93,49 @@ export default function PricingPage() {
       a: "Yes. If you're not satisfied within the first 30 days, contact support for a full refund.",
     },
   ];
+
+  useEffect(() => {
+    const saved = localStorage.getItem(PRICING_CURRENCY_STORAGE_KEY);
+    if (saved && SUPPORTED_CURRENCIES.some((item) => item.code === saved)) {
+      setCurrency(saved);
+      return;
+    }
+
+    let isMounted = true;
+    (async () => {
+      try {
+        const response = await fetch("https://ipapi.co/json/", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error("Geo lookup failed");
+        const geo = await response.json();
+        const code = String(geo?.country_code || geo?.country || "").toUpperCase();
+        const detected = code === "NG" ? "NGN" : code === "GH" ? "GHS" : "USD";
+
+        if (isMounted) {
+          setCurrency(detected);
+          localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, detected);
+        }
+      } catch {
+        if (isMounted) {
+          setCurrency("USD");
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const formatAmount = (value: number | null | undefined) => {
+    if (value == null || Number.isNaN(Number(value))) return "0.00";
+    return Number(value).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
 
   return (
 		<div className="min-h-screen bg-background">
@@ -131,7 +176,7 @@ export default function PricingPage() {
 						Simple, transparent pricing
 					</h1>
 					<p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-						Choose the plan that fits your salon. All plans include a 14-day
+						Choose the plan that fits your salon. All plans include a {trialDays}-day
 						free trial.
 					</p>
 
@@ -159,7 +204,13 @@ export default function PricingPage() {
 							)}
 						</div>
 
-						<Select value={currency} onValueChange={setCurrency}>
+						<Select
+              value={currency}
+              onValueChange={(value) => {
+                setCurrency(value);
+                localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, value);
+              }}
+            >
 							<SelectTrigger className="w-32">
 								<SelectValue />
 							</SelectTrigger>
@@ -220,7 +271,7 @@ export default function PricingPage() {
 											<div className="flex items-baseline gap-1">
 												<span className="text-3xl font-bold">
 													{symbol}
-													{price?.toLocaleString()}
+													{formatAmount(price)}
 												</span>
 												<span className="text-muted-foreground">/month</span>
 											</div>
@@ -228,11 +279,11 @@ export default function PricingPage() {
 												<div className="text-sm text-muted-foreground mt-1 space-y-0.5">
 													<p>
 														{symbol}
-														{annualTotal?.toLocaleString()} billed annually
+														{formatAmount(annualTotal)} billed annually
 													</p>
 													<p>
 														Equivalent monthly: {symbol}
-														{equivalentMonthly?.toLocaleString()}
+														{formatAmount(equivalentMonthly)}
 													</p>
 												</div>
 											)}

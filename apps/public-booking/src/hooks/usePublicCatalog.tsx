@@ -2,6 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@/lib/supabase";
 
+export interface PublicBranch {
+  id: string;
+  name: string;
+  city: string | null;
+  country_code: string;
+}
+
 export type PublicService = Pick<
   Tables<"services">,
   | "id"
@@ -14,128 +21,89 @@ export type PublicService = Pick<
   | "deposit_required"
   | "deposit_amount"
   | "deposit_percentage"
->;
+> & {
+  branches?: PublicBranch[];
+  location_ids?: string[];
+};
 
 export type PublicPackage = Pick<
   Tables<"packages">,
   "id" | "name" | "description" | "price" | "original_price" | "image_urls"
->;
+> & {
+  branches?: PublicBranch[];
+  location_ids?: string[];
+};
 
 export type PublicProduct = Pick<
   Tables<"products">,
   "id" | "name" | "description" | "price" | "image_urls" | "stock_quantity"
->;
+> & {
+  branches?: PublicBranch[];
+  location_ids?: string[];
+};
 
 export type PublicCategory = Pick<
   Tables<"service_categories">,
   "id" | "name" | "description" | "sort_order"
 >;
 
-export function usePublicCatalog(tenantId: string | undefined) {
-  const servicesQuery = useQuery({
-    queryKey: ["public-services", tenantId],
-    queryFn: async (): Promise<PublicService[]> => {
-      if (!tenantId) return [];
+export type PublicCatalogMode = "legacy" | "chain_country_scoped";
 
-      const { data, error } = await supabase
-        .from("services")
-        .select(
-          `id, name, description, price, duration_minutes, image_urls, category_id,
-           deposit_required, deposit_amount, deposit_percentage`
-        )
-        .eq("tenant_id", tenantId)
-        .eq("status", "active")
-        .is("deleted_at", null);
+interface PublicCatalogPayload {
+  services?: PublicService[];
+  packages?: PublicPackage[];
+  products?: PublicProduct[];
+  categories?: PublicCategory[];
+}
+
+export function usePublicCatalog(
+  tenantId: string | undefined,
+  countryCode?: string | null,
+  locationIds: string[] = [],
+  mode: PublicCatalogMode = "legacy",
+) {
+  const isChainCountryScoped = mode === "chain_country_scoped";
+
+  const catalogQuery = useQuery({
+    queryKey: ["public-catalog-payload", tenantId, countryCode ?? null, locationIds, mode],
+    queryFn: async (): Promise<PublicCatalogPayload> => {
+      if (!tenantId) {
+        return {
+          services: [],
+          packages: [],
+          products: [],
+          categories: [],
+        };
+      }
+
+      const { data, error } = await (supabase.rpc as any)("get_public_catalog_payload", {
+        p_tenant_id: tenantId,
+        p_mode: mode,
+        p_country_code: isChainCountryScoped ? countryCode || null : null,
+        p_location_ids: isChainCountryScoped ? locationIds : null,
+      });
 
       if (error) {
-        console.error("Error fetching services:", error);
+        console.error("Error fetching public catalog payload:", error);
         throw error;
       }
 
-      return data || [];
-    },
-    enabled: !!tenantId,
-  });
-
-  const packagesQuery = useQuery({
-    queryKey: ["public-packages", tenantId],
-    queryFn: async (): Promise<PublicPackage[]> => {
-      if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from("packages")
-        .select("id, name, description, price, original_price, image_urls")
-        .eq("tenant_id", tenantId)
-        .eq("status", "active")
-        .is("deleted_at", null);
-
-      if (error) {
-        console.error("Error fetching packages:", error);
-        throw error;
-      }
-
-      return data || [];
-    },
-    enabled: !!tenantId,
-  });
-
-  const productsQuery = useQuery({
-    queryKey: ["public-products", tenantId],
-    queryFn: async (): Promise<PublicProduct[]> => {
-      if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, description, price, image_urls, stock_quantity")
-        .eq("tenant_id", tenantId)
-        .eq("status", "active")
-        .is("deleted_at", null);
-
-      if (error) {
-        console.error("Error fetching products:", error);
-        throw error;
-      }
-
-      return data || [];
-    },
-    enabled: !!tenantId,
-  });
-
-  const categoriesQuery = useQuery({
-    queryKey: ["public-categories", tenantId],
-    queryFn: async (): Promise<PublicCategory[]> => {
-      if (!tenantId) return [];
-
-      const { data, error } = await supabase
-        .from("service_categories")
-        .select("id, name, description, sort_order")
-        .eq("tenant_id", tenantId)
-        .order("sort_order");
-
-      if (error) {
-        console.error("Error fetching categories:", error);
-        throw error;
-      }
-
-      return data || [];
+      return (data as PublicCatalogPayload) || {
+        services: [],
+        packages: [],
+        products: [],
+        categories: [],
+      };
     },
     enabled: !!tenantId,
   });
 
   return {
-    services: servicesQuery.data || [],
-    packages: packagesQuery.data || [],
-    products: productsQuery.data || [],
-    categories: categoriesQuery.data || [],
-    isLoading:
-      servicesQuery.isLoading ||
-      packagesQuery.isLoading ||
-      productsQuery.isLoading ||
-      categoriesQuery.isLoading,
-    error:
-      servicesQuery.error ||
-      packagesQuery.error ||
-      productsQuery.error ||
-      categoriesQuery.error,
+    services: catalogQuery.data?.services || [],
+    packages: catalogQuery.data?.packages || [],
+    products: catalogQuery.data?.products || [],
+    categories: catalogQuery.data?.categories || [],
+    isLoading: catalogQuery.isLoading,
+    error: catalogQuery.error,
   };
 }

@@ -80,10 +80,11 @@ export default function CalendarPage() {
     switch (view) {
       case "day":
         return format(currentDate, "EEEE, MMMM d, yyyy");
-      case "week":
+      case "week": {
         const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
         const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
         return `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`;
+      }
       case "month":
         return format(currentDate, "MMMM yyyy");
     }

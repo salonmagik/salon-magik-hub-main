@@ -51,7 +51,7 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   CheckCircle2,
-  DollarSign,
+  Coins,
   Pencil,
   Plus,
   Trash2,
@@ -1432,7 +1432,7 @@ export default function PlansPage() {
                 Add Plans
               </Button>
               <Button variant="outline" onClick={openCreatePricingDialog}>
-                <DollarSign className="mr-2 h-4 w-4" />
+                <Coins className="mr-2 h-4 w-4" />
                 Add Pricing
               </Button>
             </div>
@@ -1566,7 +1566,7 @@ export default function PlansPage() {
                               onClick={() => openEditPricingDialog(plan)}
                               disabled={!activePricing || activePricing.size === 0}
                             >
-                              <DollarSign className="mr-2 h-3.5 w-3.5" />
+                              <Coins className="mr-2 h-3.5 w-3.5" />
                               Edit Pricing
                             </Button>
                             <Button

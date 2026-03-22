@@ -18,6 +18,7 @@ export const EMAIL_STYLES = {
 export const SALON_MAGIK_LOGO_URL = "https://salonmagik.com/favicon.png";
 
 export type BrandingMode = "product" | "salon";
+const DEFAULT_PRODUCT_SENDER = "Salon Magik";
 
 interface EmailWrapperOptions {
   /**
@@ -44,9 +45,36 @@ export function getSenderName(options: {
 }): string {
   const mode = options.mode ?? "product";
   if (mode === "salon" && options.salonName) {
-    return `${options.salonName} via Salon Magik`;
+    return `${options.salonName} via ${DEFAULT_PRODUCT_SENDER}`;
   }
-  return "Salon Magik";
+  return DEFAULT_PRODUCT_SENDER;
+}
+
+/**
+ * Sanitizes email display names for From headers while preserving real characters.
+ * We only strip control chars and header-breaking characters.
+ */
+export function sanitizeEmailDisplayName(input: string): string {
+  return input
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Standardized From header builder for all outbound email functions.
+ */
+export function buildFromAddress(options: {
+  fromEmail: string;
+  mode?: BrandingMode;
+  salonName?: string;
+}): string {
+  const sender = sanitizeEmailDisplayName(
+    getSenderName({ mode: options.mode, salonName: options.salonName }),
+  ) || DEFAULT_PRODUCT_SENDER;
+
+  return `${sender} <${options.fromEmail}>`;
 }
 
 /**

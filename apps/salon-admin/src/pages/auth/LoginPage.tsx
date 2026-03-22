@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@ui/use-toast";
@@ -14,6 +14,17 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 
 type LoginMode = "email" | "phone";
 type PhoneStep = "phone" | "otp";
+const REMEMBER_ME_KEY = "auth:remember_me";
+
+function readRememberMePreference(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(REMEMBER_ME_KEY) !== "false";
+}
+
+function persistRememberMePreference(value: boolean) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(REMEMBER_ME_KEY, value ? "true" : "false");
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -31,6 +42,10 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("phone");
   const [otp, setOtp] = useState("");
+
+  useEffect(() => {
+    setRememberMe(readRememberMePreference());
+  }, []);
 
   const validateEmailForm = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -81,6 +96,7 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
+      persistRememberMePreference(rememberMe);
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -118,6 +134,7 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
+      persistRememberMePreference(rememberMe);
       // Phone is already in E.164 format from PhoneInput
       const { error } = await supabase.auth.signInWithOtp({
         phone,
@@ -155,6 +172,7 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
+      persistRememberMePreference(rememberMe);
       // Phone is already in E.164 format from PhoneInput
       const { error } = await supabase.auth.verifyOtp({
         phone,
@@ -189,6 +207,7 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
+      persistRememberMePreference(rememberMe);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: window.location.origin },

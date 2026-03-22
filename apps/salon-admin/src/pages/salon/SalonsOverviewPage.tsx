@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
@@ -26,7 +26,6 @@ import {
   TrendingDown,
   Users,
   Calendar,
-  DollarSign,
   MapPin,
   Clock,
   ArrowUpRight,
@@ -35,34 +34,56 @@ import {
   Star,
   AlertCircle,
   Plus,
+  Coins,
 } from "lucide-react";
-import { useSalonsOverview, type LocationPerformance } from "@/hooks/useSalonsOverview";
+import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { formatCurrency } from "@shared/currency";
 import { Link } from "react-router-dom";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 
 type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
-  const { currentTenant } = useAuth();
+  const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
+  const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
+  const {
+    currentTenant,
+    currentRole,
+    activeContextType,
+    activeLocationId,
+    availableContexts,
+    refreshTenants,
+  } = useAuth();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
+  const activeLocationLabel =
+    availableContexts.find((context) => context.type === "location" && context.locationId === activeLocationId)
+      ?.label || "Selected branch";
 
   // Calculate aggregate stats
   const aggregateStats = useMemo(() => {
     if (!locations.length) return null;
-    
+
     const totalRevenue = locations.reduce((sum, loc) => sum + loc.revenue, 0);
     const totalBookings = locations.reduce((sum, loc) => sum + loc.bookingCount, 0);
     const totalStaffOnline = locations.reduce((sum, loc) => sum + loc.staffOnline, 0);
     const totalOutstanding = locations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
     const avgSatisfaction = locations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / locations.length;
-    
+
     const bestPerforming = [...locations].sort((a, b) => b.revenue - a.revenue)[0];
     const worstPerforming = [...locations].sort((a, b) => a.revenue - b.revenue)[0];
-    
+
     return {
       totalRevenue,
       totalBookings,
@@ -76,6 +97,20 @@ export default function SalonsOverviewPage() {
   }, [locations]);
 
   const currency = currentTenant?.currency || "USD";
+  const canViewRevenueAnalytics =
+    currentRole === "owner" || (!permissionsLoading && hasPermission("reports"));
+  const canShowPerformanceInsights = (aggregateStats?.totalBookings || 0) >= 6;
+  const bestRevenue = aggregateStats?.bestPerforming?.revenue ?? 0;
+  const worstRevenue = aggregateStats?.worstPerforming?.revenue ?? 0;
+  const bestPerformingLocations = canShowPerformanceInsights
+    ? locations.filter((location) => location.revenue === bestRevenue)
+    : [];
+  const needsAttentionLocations = canShowPerformanceInsights
+    ? locations.filter((location) => location.revenue === worstRevenue)
+    : [];
+  const insightLocations = insightDialogType === "best" ? bestPerformingLocations : needsAttentionLocations;
+  const selectedInsightLocation =
+    insightLocations.find((location) => location.id === insightLocationId) || insightLocations[0] || null;
 
   if (!currentTenant) {
     return (
@@ -95,10 +130,12 @@ export default function SalonsOverviewPage() {
           <div>
             <h1 className="text-2xl font-semibold flex items-center gap-2">
               <Building2 className="w-6 h-6" />
-              Salons Overview
+              Business Overview
             </h1>
             <p className="text-muted-foreground">
-              Multi-location performance dashboard for your salon chain
+              {activeContextType === "owner_hub"
+                ? "Track how your branches are performing across bookings, revenue, and staffing."
+                : `Branch-scoped overview for ${activeLocationLabel}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -114,7 +151,7 @@ export default function SalonsOverviewPage() {
             </Select>
             <Button onClick={() => setAddSalonOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Salon</span>
+              <span className="hidden sm:inline">Add Branch</span>
             </Button>
           </div>
         </div>
@@ -138,7 +175,7 @@ export default function SalonsOverviewPage() {
               <AlertCircle className="w-12 h-12 mx-auto mb-4 text-destructive" />
               <h3 className="font-medium mb-2">Failed to load data</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                There was an error loading your salon data
+                There was an error loading your branch data
               </p>
               <Button variant="outline" onClick={() => refetch()}>
                 Try Again
@@ -149,31 +186,33 @@ export default function SalonsOverviewPage() {
           <>
             {/* Summary Stats */}
             {aggregateStats && (
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                       <Building2 className="w-3 h-3" />
-                      Locations
+                      Branches
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{aggregateStats.locationCount}</div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />
-                      Total Revenue
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {formatCurrency(aggregateStats.totalRevenue, currency)}
-                    </div>
-                  </CardContent>
-                </Card>
+                {canViewRevenueAnalytics && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                        <Coins className="w-3 h-3" />
+                        Total Revenue
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">
+                        {formatCurrency(aggregateStats.totalRevenue, currency)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -215,7 +254,7 @@ export default function SalonsOverviewPage() {
             )}
 
             {/* Best & Worst Performers */}
-            {aggregateStats && aggregateStats.locationCount > 1 && (
+            {canViewRevenueAnalytics && aggregateStats && aggregateStats.locationCount > 1 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="border-success/30 bg-success/5">
                   <CardHeader className="pb-2">
@@ -225,18 +264,33 @@ export default function SalonsOverviewPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-lg">{aggregateStats.bestPerforming.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} revenue
-                        </p>
-                      </div>
-                      <Badge variant="secondary" className="bg-success/10 text-success">
-                        <Star className="w-3 h-3 mr-1" />
-                        Top
-                      </Badge>
-                    </div>
+                    {canShowPerformanceInsights ? (
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => {
+                          setInsightDialogType("best");
+                          setInsightLocationId(bestPerformingLocations[0]?.id || null);
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-lg">{aggregateStats.bestPerforming.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} revenue
+                            </p>
+                          </div>
+                          <Badge variant="secondary" className="bg-success/10 text-success">
+                            <Star className="w-3 h-3 mr-1" />
+                            Top
+                          </Badge>
+                        </div>
+                      </button>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Not enough data yet. At least 6 transactions are required.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
                 <Card className="border-warning/30 bg-warning/5">
@@ -247,49 +301,66 @@ export default function SalonsOverviewPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-lg">{aggregateStats.worstPerforming.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} revenue
-                        </p>
-                      </div>
-                      <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
-                        <Activity className="w-3 h-3 mr-1" />
-                        Review
-                      </Badge>
-                    </div>
+                    {canShowPerformanceInsights ? (
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => {
+                          setInsightDialogType("attention");
+                          setInsightLocationId(needsAttentionLocations[0]?.id || null);
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold text-lg">{aggregateStats.worstPerforming.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} revenue
+                            </p>
+                          </div>
+                          <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
+                            <Activity className="w-3 h-3 mr-1" />
+                            Review
+                          </Badge>
+                        </div>
+                      </button>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Not enough data yet. At least 6 transactions are required.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
             )}
 
-            {/* Location Breakdown Table */}
+            {/* Branch Breakdown Table */}
             <Card>
               <CardHeader>
-                <CardTitle>Location Performance</CardTitle>
+                <CardTitle>Branch Performance</CardTitle>
                 <CardDescription>
-                  Detailed metrics for each salon location
+                  Detailed metrics for each branch
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {locations.length === 0 ? (
                   <div className="text-center py-12">
                     <Building2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                    <h3 className="font-medium mb-1">No locations found</h3>
+                    <h3 className="font-medium mb-1">No branches found</h3>
                     <p className="text-sm text-muted-foreground">
-                      Add locations to see performance data
+                      Add branches to see performance data
                     </p>
                   </div>
                 ) : (
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Location</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
-                        <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>
-                        <TableHead className="text-right hidden lg:table-cell">Outstanding</TableHead>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Branches</TableHead>
+                          {canViewRevenueAnalytics && (
+                            <TableHead className="text-right">Revenue</TableHead>
+                          )}
+                          <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
+                          <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>
+                          <TableHead className="text-right hidden lg:table-cell">Outstanding</TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -305,9 +376,11 @@ export default function SalonsOverviewPage() {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(location.revenue, currency)}
-                          </TableCell>
+                          {canViewRevenueAnalytics && (
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(location.revenue, currency)}
+                            </TableCell>
+                          )}
                           <TableCell className="text-right hidden sm:table-cell">
                             {location.bookingCount}
                           </TableCell>
@@ -338,11 +411,70 @@ export default function SalonsOverviewPage() {
           </>
         )}
 
-        {/* Add Salon Dialog */}
-        <AddSalonDialog 
-          open={addSalonOpen} 
-          onOpenChange={setAddSalonOpen} 
-          onSuccess={() => refetch()}
+        {/* Performance Insights Dialog */}
+        <Dialog
+          open={canViewRevenueAnalytics && Boolean(insightDialogType)}
+          onOpenChange={(open) => !open && setInsightDialogType(null)}
+        >
+          <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>
+                {insightDialogType === "best" ? "Best Performing Branches" : "Branches Needing Attention"}
+              </DialogTitle>
+              <DialogDescription>
+                Review branch-level transaction performance for this period.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {insightLocations.length > 1 && (
+                <div className="flex flex-wrap gap-2">
+                  {insightLocations.map((location) => (
+                    <Button
+                      key={location.id}
+                      size="sm"
+                      variant={selectedInsightLocation?.id === location.id ? "default" : "outline"}
+                      onClick={() => setInsightLocationId(location.id)}
+                    >
+                      {location.name}
+                    </Button>
+                  ))}
+                </div>
+              )}
+
+              {selectedInsightLocation ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Branch</TableHead>
+                      <TableHead className="text-right">Revenue</TableHead>
+                      <TableHead className="text-right">Bookings</TableHead>
+                      <TableHead className="text-right">Outstanding</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>{selectedInsightLocation.name}</TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(selectedInsightLocation.revenue, currency)}
+                      </TableCell>
+                      <TableCell className="text-right">{selectedInsightLocation.bookingCount}</TableCell>
+                      <TableCell className="text-right">{selectedInsightLocation.outstandingAppointments}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-sm text-muted-foreground">No data available.</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AddSalonDialog
+          open={addSalonOpen}
+          onOpenChange={setAddSalonOpen}
+          onSuccess={async () => {
+            await Promise.all([refetch(), refreshTenants()]);
+          }}
         />
       </div>
     </SalonSidebar>
