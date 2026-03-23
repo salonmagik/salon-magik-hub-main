@@ -13,6 +13,9 @@ interface WebhookEvent {
     paymentIntentId?: string;
     appointmentId?: string;
     tenantId?: string;
+    customerId?: string;
+    invoiceId?: string;
+    credits?: number;
     amount?: number;
     status?: string;
     reference?: string;
@@ -130,7 +133,7 @@ Deno.serve(async (req) => {
     // Get raw body for signature verification
     const rawBody = await req.text();
     let body: Record<string, unknown>;
-    
+
     try {
       body = JSON.parse(rawBody);
     } catch {
@@ -140,7 +143,7 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
+
     let event: WebhookEvent;
 
     if (stripeSignature) {
@@ -184,6 +187,9 @@ Deno.serve(async (req) => {
           paymentIntentId: metadata?.payment_intent_id,
           appointmentId: metadata?.appointment_id,
           tenantId: metadata?.tenant_id,
+          customerId: metadata?.customer_id,
+          invoiceId: metadata?.invoice_id,
+          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
           amount: object.amount_received ? object.amount_received / 100 : undefined,
           status: object.status,
           reference: object.id,
@@ -218,6 +224,9 @@ Deno.serve(async (req) => {
             appointment_id?: string;
             payment_intent_id?: string;
             tenant_id?: string;
+            customer_id?: string;
+            invoice_id?: string;
+            credits?: string;
           };
         };
       };
@@ -232,6 +241,9 @@ Deno.serve(async (req) => {
           paymentIntentId: metadata?.payment_intent_id,
           appointmentId: metadata?.appointment_id,
           tenantId: metadata?.tenant_id,
+          customerId: metadata?.customer_id,
+          invoiceId: metadata?.invoice_id,
+          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
           amount: data.amount ? data.amount / 100 : undefined,
           status: data.status,
           reference: data.reference,
@@ -253,9 +265,28 @@ Deno.serve(async (req) => {
       event.type === "payment_intent.succeeded" ||
       event.type === "charge.success"
     ) {
-      const { appointmentId, amount, reference, tenantId } = event.data;
+      const { appointmentId, paymentIntentId, amount, reference, tenantId } = event.data;
 
-      // Validate appointment ID
+      // Fetch payment intent to get intent_type
+      let intentType = "appointment_payment"; // Default for backward compatibility
+      let paymentIntent = null;
+
+      if (paymentIntentId && isValidUUID(paymentIntentId)) {
+        const { data } = await supabase
+          .from("payment_intents")
+          .select("intent_type")
+          .eq("id", paymentIntentId)
+          .single();
+
+        if (data?.intent_type) {
+          intentType = data.intent_type;
+          paymentIntent = data;
+        }
+      }
+
+      console.log("Processing payment with intent_type:", intentType);
+
+      // Validate appointment ID if present
       if (appointmentId && !isValidUUID(appointmentId)) {
         console.error("Invalid appointment_id format:", appointmentId);
         return new Response(
@@ -264,123 +295,126 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (appointmentId && amount) {
-        // Update appointment payment status
-        const { error: appointmentError } = await supabase
-          .from("appointments")
-          .update({
-            payment_status: "paid",
-            amount_paid: amount,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", appointmentId);
+      // Handle different payment intent types
+      switch (intentType) {
+        case "appointment_payment": {
+          if (appointmentId && amount) {
+            // Update appointment payment status
+            const { error: appointmentError } = await supabase
+              .from("appointments")
+              .update({
+                payment_status: "paid",
+                amount_paid: amount,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", appointmentId);
 
-        if (appointmentError) {
-          console.error("Error updating appointment:", appointmentError);
-        }
+            if (appointmentError) {
+              console.error("Error updating appointment:", appointmentError);
+            }
 
-        // Get appointment details for transaction
-        const { data: appointment } = await supabase
-          .from("appointments")
-          .select("tenant_id, customer_id, total_amount, location_id")
-          .eq("id", appointmentId)
-          .single();
+            // Get appointment details for transaction
+            const { data: appointment } = await supabase
+              .from("appointments")
+              .select("tenant_id, customer_id, total_amount, location_id")
+              .eq("id", appointmentId)
+              .single();
 
-        if (appointment) {
-          // Record transaction
-          const transactionData: Record<string, unknown> = {
-            tenant_id: appointment.tenant_id,
-            customer_id: appointment.customer_id,
-            appointment_id: appointmentId,
-            type: "payment",
-            amount: amount,
-            payment_method: "card",
-            gateway: event.gateway,
-            gateway_reference: reference,
-            status: "completed",
-          };
+            if (appointment) {
+              // Record transaction
+              const transactionData: Record<string, unknown> = {
+                tenant_id: appointment.tenant_id,
+                customer_id: appointment.customer_id,
+                appointment_id: appointmentId,
+                type: "payment",
+                amount: amount,
+                payment_method: "card",
+                gateway: event.gateway,
+                gateway_reference: reference,
+                status: "completed",
+              };
 
-          // Add Paystack reference if applicable
-          if (event.gateway === "paystack" && reference) {
-            transactionData.paystack_reference = reference;
-          }
-
-          await supabase.from("transactions").insert(transactionData);
-
-          // Get customer details
-          const { data: customer } = await supabase
-            .from("customers")
-            .select("full_name, email")
-            .eq("id", appointment.customer_id)
-            .single();
-
-          // Get tenant details
-          const { data: tenant } = await supabase
-            .from("tenants")
-            .select("name, contact_email, currency")
-            .eq("id", appointment.tenant_id)
-            .single();
-
-          // Create urgent in-app notification for salon (new booking)
-          await supabase.from("notifications").insert({
-            tenant_id: appointment.tenant_id,
-            type: "new_booking",
-            title: "New Paid Booking",
-            description: `${customer?.full_name || "A customer"} completed payment of ${tenant?.currency || ""} ${amount} for their booking`,
-            entity_type: "appointment",
-            entity_id: appointmentId,
-            urgent: true,
-          });
-
-          // Send confirmation email to customer
-          try {
-            await fetch(
-              `${supabaseUrl}/functions/v1/send-appointment-notification`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${supabaseServiceKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  appointmentId: appointmentId,
-                  action: "scheduled",
-                }),
+              // Add Paystack reference if applicable
+              if (event.gateway === "paystack" && reference) {
+                transactionData.paystack_reference = reference;
               }
-            );
-          } catch (emailError) {
-            console.error("Error sending customer notification:", emailError);
-          }
 
-          // Send email to salon owners
-          if (resendApiKey && tenant) {
-            const { data: owners } = await supabase
-              .from("user_roles")
-              .select("user_id")
-              .eq("tenant_id", appointment.tenant_id)
-              .eq("role", "owner");
+              await supabase.from("transactions").insert(transactionData);
 
-            if (owners && owners.length > 0) {
-              for (const owner of owners) {
-                const { data: profile } = await supabase
-                  .from("profiles")
-                  .select("email")
-                  .eq("user_id", owner.user_id)
-                  .single();
+              // Get customer details
+              const { data: customer } = await supabase
+                .from("customers")
+                .select("full_name, email")
+                .eq("id", appointment.customer_id)
+                .single();
 
-                if (profile?.email) {
-                  try {
-                    await fetch("https://api.resend.com/emails", {
-                      method: "POST",
-                      headers: {
-                        Authorization: `Bearer ${resendApiKey}`,
-                        "Content-Type": "application/json",
-                      },
-                      body: JSON.stringify({
-                        from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail }),
-                        to: profile.email,
-                        subject: `New Paid Booking at ${tenant.name}`,
-                        html: `
+              // Get tenant details
+              const { data: tenant } = await supabase
+                .from("tenants")
+                .select("name, contact_email, currency")
+                .eq("id", appointment.tenant_id)
+                .single();
+
+              // Create urgent in-app notification for salon (new booking)
+              await supabase.from("notifications").insert({
+                tenant_id: appointment.tenant_id,
+                type: "new_booking",
+                title: "New Paid Booking",
+                description: `${customer?.full_name || "A customer"} completed payment of ${tenant?.currency || ""} ${amount} for their booking`,
+                entity_type: "appointment",
+                entity_id: appointmentId,
+                urgent: true,
+              });
+
+              // Send confirmation email to customer
+              try {
+                await fetch(
+                  `${supabaseUrl}/functions/v1/send-appointment-notification`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${supabaseServiceKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      appointmentId: appointmentId,
+                      action: "scheduled",
+                    }),
+                  }
+                );
+              } catch (emailError) {
+                console.error("Error sending customer notification:", emailError);
+              }
+
+              // Send email to salon owners
+              if (resendApiKey && tenant) {
+                const { data: owners } = await supabase
+                  .from("user_roles")
+                  .select("user_id")
+                  .eq("tenant_id", appointment.tenant_id)
+                  .eq("role", "owner");
+
+                if (owners && owners.length > 0) {
+                  for (const owner of owners) {
+                    const { data: profile } = await supabase
+                      .from("profiles")
+                      .select("email")
+                      .eq("user_id", owner.user_id)
+                      .single();
+
+                    if (profile?.email) {
+                      try {
+                        await fetch("https://api.resend.com/emails", {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${resendApiKey}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail }),
+                            to: profile.email,
+                            subject: `New Paid Booking at ${tenant.name}`,
+                            html: `
                           <h2>New Paid Booking</h2>
                           <p>A customer has just completed payment for a booking.</p>
                           <ul>
@@ -390,71 +424,323 @@ Deno.serve(async (req) => {
                           </ul>
                           <p>Please review the booking in your dashboard.</p>
                         `,
-                      }),
-                    });
-                  } catch (ownerEmailError) {
-                    console.error("Error sending owner notification:", ownerEmailError);
+                          }),
+                        });
+                      } catch (ownerEmailError) {
+                        console.error("Error sending owner notification:", ownerEmailError);
+                      }
+                    }
                   }
                 }
               }
+
+              // Generate invoice
+              try {
+                // Generate invoice number
+                const { data: invoiceCount } = await supabase
+                  .from("invoices")
+                  .select("id", { count: "exact", head: true })
+                  .eq("tenant_id", appointment.tenant_id);
+
+                const count = (invoiceCount as unknown as number) || 0;
+                const prefix = tenant?.name?.substring(0, 3).toUpperCase() || "INV";
+                const invoiceNumber = `${prefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(count + 1).padStart(4, "0")}`;
+
+                const { data: invoice } = await supabase
+                  .from("invoices")
+                  .insert({
+                    tenant_id: appointment.tenant_id,
+                    customer_id: appointment.customer_id,
+                    appointment_id: appointmentId,
+                    invoice_number: invoiceNumber,
+                    currency: tenant?.currency || "USD",
+                    subtotal: amount,
+                    total: amount,
+                    status: "paid",
+                    paid_at: new Date().toISOString(),
+                  })
+                  .select("id")
+                  .single();
+
+                // Send invoice email
+                if (invoice?.id) {
+                  await fetch(`${supabaseUrl}/functions/v1/send-invoice`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${supabaseServiceKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ invoiceId: invoice.id }),
+                  });
+                }
+              } catch (invoiceError) {
+                console.error("Error generating invoice:", invoiceError);
+              }
+
+              // Credit salon purse for the appointment payment
+              try {
+                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                  p_tenant_id: appointment.tenant_id,
+                  p_entry_type: "salon_purse_credit_booking",
+                  p_reference_type: "appointment",
+                  p_reference_id: appointmentId,
+                  p_amount: amount,
+                  p_currency: tenant?.currency || "NGN",
+                  p_idempotency_key: `booking_${reference}`,
+                  p_gateway_reference: reference,
+                });
+
+                if (creditError) {
+                  console.error("Error crediting salon purse:", creditError);
+                } else {
+                  console.log(`Salon purse credited: ${amount} ${tenant?.currency || "NGN"} for appointment ${appointmentId}`);
+                }
+              } catch (purseError) {
+                console.error("Exception crediting salon purse:", purseError);
+              }
             }
+            break;
           }
+        }
 
-          // Generate invoice
-          try {
-            // Generate invoice number
-            const { data: invoiceCount } = await supabase
-              .from("invoices")
-              .select("id", { count: "exact", head: true })
-              .eq("tenant_id", appointment.tenant_id);
+        case "customer_purse_topup": {
+          // Handle customer purse topup
+          const { customerId, tenantId } = event.data;
 
-            const count = (invoiceCount as unknown as number) || 0;
-            const prefix = tenant?.name?.substring(0, 3).toUpperCase() || "INV";
-            const invoiceNumber = `${prefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(count + 1).padStart(4, "0")}`;
-
-            const { data: invoice } = await supabase
-              .from("invoices")
-              .insert({
-                tenant_id: appointment.tenant_id,
-                customer_id: appointment.customer_id,
-                appointment_id: appointmentId,
-                invoice_number: invoiceNumber,
-                currency: tenant?.currency || "USD",
-                subtotal: amount,
-                total: amount,
-                status: "paid",
-                paid_at: new Date().toISOString(),
-              })
-              .select("id")
+          if (customerId && tenantId && amount) {
+            // Get tenant details for currency
+            const { data: tenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", tenantId)
               .single();
 
-            // Send invoice email
-            if (invoice?.id) {
-              await fetch(`${supabaseUrl}/functions/v1/send-invoice`, {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${supabaseServiceKey}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ invoiceId: invoice.id }),
+            try {
+              const { error: creditError } = await supabase.rpc("credit_customer_purse", {
+                p_tenant_id: tenantId,
+                p_customer_id: customerId,
+                p_amount: amount,
+                p_currency: tenant?.currency || "NGN",
+                p_idempotency_key: `topup_${reference}`,
+                p_gateway_reference: reference,
               });
+
+              if (creditError) {
+                console.error("Error crediting customer purse:", creditError);
+              } else {
+                console.log(`Customer purse credited: ${amount} ${tenant?.currency || "NGN"} for customer ${customerId}`);
+              }
+            } catch (purseError) {
+              console.error("Exception crediting customer purse:", purseError);
             }
-          } catch (invoiceError) {
-            console.error("Error generating invoice:", invoiceError);
+          } else {
+            console.error("Missing required fields for customer_purse_topup:", { customerId, tenantId, amount });
           }
+          break;
         }
 
-        // Update payment intent status
-        if (event.data.paymentIntentId && isValidUUID(event.data.paymentIntentId)) {
-          await supabase
-            .from("payment_intents")
-            .update({
-              status: "completed",
-              gateway_reference: reference,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", event.data.paymentIntentId);
+        case "salon_purse_topup": {
+          // Handle salon purse topup
+          const { tenantId: salonTenantId } = event.data;
+
+          if (salonTenantId && amount && paymentIntentId) {
+            // Get tenant details for currency
+            const { data: salonTenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", salonTenantId)
+              .single();
+
+            try {
+              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                p_tenant_id: salonTenantId,
+                p_entry_type: "salon_purse_topup",
+                p_reference_type: "topup",
+                p_reference_id: paymentIntentId,
+                p_amount: amount,
+                p_currency: salonTenant?.currency || "NGN",
+                p_idempotency_key: `salon_topup_${reference}`,
+                p_gateway_reference: reference,
+              });
+
+              if (creditError) {
+                console.error("Error crediting salon purse:", creditError);
+              } else {
+                console.log(`Salon purse credited: ${amount} ${salonTenant?.currency || "NGN"} for tenant ${salonTenantId}`);
+              }
+            } catch (purseError) {
+              console.error("Exception crediting salon purse:", purseError);
+            }
+          } else {
+            console.error("Missing required fields for salon_purse_topup:", { salonTenantId, amount, paymentIntentId });
+          }
+          break;
         }
+
+        case "invoice_payment": {
+          // Handle invoice payment
+          const { invoiceId } = event.data;
+
+          if (invoiceId && isValidUUID(invoiceId) && amount && tenantId) {
+            // Get tenant details for currency
+            const { data: invoiceTenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", tenantId)
+              .single();
+
+            try {
+              // Update invoice status to 'paid' and set paid_at timestamp
+              const { error: invoiceUpdateError } = await supabase
+                .from("invoices")
+                .update({
+                  status: "paid",
+                  paid_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq("id", invoiceId);
+
+              if (invoiceUpdateError) {
+                console.error("Error updating invoice:", invoiceUpdateError);
+              } else {
+                console.log(`Invoice ${invoiceId} marked as paid`);
+              }
+
+              // Credit salon purse for the invoice payment
+              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                p_tenant_id: tenantId,
+                p_entry_type: "salon_purse_credit_invoice",
+                p_reference_type: "invoice",
+                p_reference_id: invoiceId,
+                p_amount: amount,
+                p_currency: invoiceTenant?.currency || "NGN",
+                p_idempotency_key: `invoice_${reference}`,
+                p_gateway_reference: reference,
+              });
+
+              if (creditError) {
+                console.error("Error crediting salon purse for invoice:", creditError);
+              } else {
+                console.log(`Salon purse credited: ${amount} ${invoiceTenant?.currency || "NGN"} for invoice ${invoiceId}`);
+              }
+            } catch (invoiceError) {
+              console.error("Exception processing invoice payment:", invoiceError);
+            }
+          } else {
+            console.error("Missing required fields for invoice_payment:", { invoiceId, amount, tenantId });
+          }
+          break;
+        }
+
+        case "messaging_credit_purchase": {
+          // Handle messaging credit purchase
+          const { credits } = event.data;
+          const messagingTenantId = event.data.tenantId;
+          const messagingAmount = amount;
+          const messagingPaymentIntentId = paymentIntentId;
+
+          if (credits && messagingTenantId && messagingAmount && messagingPaymentIntentId && isValidUUID(messagingPaymentIntentId)) {
+            // Get tenant details for currency
+            const { data: messagingTenant } = await supabase
+              .from("tenants")
+              .select("currency")
+              .eq("id", messagingTenantId)
+              .single();
+
+            try {
+              // First, check if communication_credits record exists
+              const { data: existingCredits } = await supabase
+                .from("communication_credits")
+                .select("id, balance")
+                .eq("tenant_id", messagingTenantId)
+                .single();
+
+              if (existingCredits) {
+                // Update existing record by incrementing balance
+                const { error: updateError } = await supabase
+                  .from("communication_credits")
+                  .update({
+                    balance: existingCredits.balance + credits,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("tenant_id", messagingTenantId);
+
+                if (updateError) {
+                  console.error("Error updating communication_credits balance:", updateError);
+                }
+              } else {
+                // Create new record with initial balance
+                const { error: insertError } = await supabase
+                  .from("communication_credits")
+                  .insert({
+                    tenant_id: messagingTenantId,
+                    balance: credits,
+                    updated_at: new Date().toISOString(),
+                  });
+
+                if (insertError) {
+                  console.error("Error inserting communication_credits:", insertError);
+                }
+              }
+
+              // Insert messaging_credit_purchases record for audit trail
+              const { error: purchaseInsertError } = await supabase
+                .from("messaging_credit_purchases")
+                .insert({
+                  tenant_id: messagingTenantId,
+                  credits: credits,
+                  currency: messagingTenant?.currency || "NGN",
+                  amount: messagingAmount,
+                  paid_via: "paystack",
+                  payment_intent_id: messagingPaymentIntentId,
+                  gateway_reference: reference,
+                });
+
+              if (purchaseInsertError) {
+                console.error("Error inserting messaging_credit_purchases:", purchaseInsertError);
+              } else {
+                console.log(`Messaging credits added: ${credits} credits for tenant ${messagingTenantId}`);
+              }
+            } catch (creditPurchaseError) {
+              console.error("Exception processing messaging credit purchase:", creditPurchaseError);
+            }
+          } else {
+            console.error("Missing required fields for messaging_credit_purchase:", {
+              credits,
+              messagingTenantId,
+              messagingAmount,
+              messagingPaymentIntentId
+            });
+          }
+          break;
+        }
+
+        default:
+          console.log(`Unhandled intent_type: ${intentType}`);
+          break;
+      }
+
+      // Update payment intent status
+      if (event.data.paymentIntentId && isValidUUID(event.data.paymentIntentId)) {
+        await supabase
+          .from("payment_intents")
+          .update({
+            status: "completed",
+            gateway_reference: reference,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", event.data.paymentIntentId);
+      }
+
+      if (tenantId && reference) {
+        await supabase.rpc("finalize_sales_conversion_from_webhook", {
+          p_payment_ref: reference,
+          p_tenant_id: tenantId,
+          p_status: "paid",
+          p_amount: amount ?? null,
+          p_currency: "USD",
+          p_paid_at: new Date().toISOString(),
+        });
       }
 
       if (tenantId && reference) {

@@ -45,6 +45,10 @@ verify_jwt = false
 [functions.complete-password-change]
 verify_jwt = false
 
+[db.seed]
+enabled = true
+sql_paths = ['./seeds/*.sql']
+
 [functions.bulk-import-catalog]
 verify_jwt = false
 
