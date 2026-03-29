@@ -737,3 +737,66 @@
 - Template dropdown shows only approved templates (status='approved') filtered in query
 - Error handling: toast notifications from useManualMessages hook provide user-friendly messages from edge function errors
 
+---
+## 2026-03-29 18:30:00 - US-012: Create Message History Component
+
+### Implemented
+- Created comprehensive React component at apps/salon-admin/src/components/messaging/MessageHistory.tsx (369 lines)
+- Component displays message history for a specific customer in timeline/list format with newest messages first
+- Fetches manual_messages with joins to customers and whatsapp_templates via useManualMessages hook
+- Implements collapsible message cards with preview and expanded views using Collapsible component from shadcn/ui
+- Message preview shows channel icon, subject/message preview (first 100 chars), timestamp, status badge, credits used
+- Expanded view shows full message content, template variables (if any), error message (if failed), sent_at timestamp, additional metadata
+- Status badges color-coded: Sent (green bg-green-500), Failed (red destructive), Pending (yellow bg-yellow-500)
+- Channel icons color-coded with background: Email (blue), SMS (green), WhatsApp (emerald)
+- Filter section toggleable via 'Filters' button with visual indicator badge when filters are active
+- Channel filter via Select dropdown with options: All Channels, Email, SMS, WhatsApp
+- Date range filters via DatePicker components: From Date and To Date with proper validation (From <= To, To <= today)
+- Clear Filters button shown when any filter is active (channel !== 'all' OR date filters set)
+- Filtering implemented via useMemo for performance optimization
+- Empty state with MessageSquare icon and contextual messages (changes if filters are active)
+- Loading skeleton shows 3 animated pulse cards while fetching messages
+- Uses Card, Badge, Button, Skeleton, Select, DatePicker, Collapsible components from shadcn/ui
+- Icons from lucide-react: Mail, Phone, MessageSquare, ChevronDown, ChevronUp, Filter, X
+- Date formatting via date-fns format function with human-readable timestamps
+
+### Files Changed
+- apps/salon-admin/src/components/messaging/MessageHistory.tsx (new file, 369 lines)
+- ralph/prd.json (updated US-012 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Collapsible component from Radix UI provides smooth expand/collapse transitions for message details
+- useMemo optimization prevents unnecessary filtering recalculations on unrelated state changes
+- DatePicker validation: maxDate for "From" prevents selecting dates after "To", minDate for "To" prevents selecting dates before "From"
+- Empty state messages should be contextual: different message when filters are active vs no messages at all
+- Status badge variants: Can use built-in variants (default/destructive/secondary) or custom className for colors
+- Channel icons in rounded colored backgrounds improve visual scanning: bg-blue-100 text-blue-600 pattern
+- Message preview truncation: Show first 100 chars with "..." for long messages, full content in expanded view
+- Template variables display: Use 2-column grid layout for clean presentation of key-value pairs
+- Filter UI pattern: Toggleable filter section saves vertical space, visual indicator (badge) shows active filters
+- Date range validation: Set dateTo to end of day (23:59:59.999) to include messages sent throughout the entire day
+- Metadata display: Use bullet separators (•) for compact inline display of channel, timestamp, credits
+- The useManualMessages hook handles all data fetching, filtering by customerId, and sorting
+- Error messages from failed sends are displayed in expanded view with destructive styling
+- Credits used displayed per message in metadata (0 for system messages, 1 for email, 2 for SMS/WhatsApp)
+- Lint passes with 0 errors/warnings in new component file
+- Pre-existing lint error in AuditLogPage.tsx (control character in regex) unrelated to this story
+
+### Notes for future iterations
+- US-013 will integrate this component into CustomerDetail page and add Send Message button
+- Browser verification will be performed in US-013 when component is integrated into customer detail page
+- Component is reusable: can be used in multiple pages where customer message history is needed
+- Consider adding pagination if a customer has hundreds of messages (currently loads all messages)
+- Consider adding real-time subscriptions to auto-refresh when new messages arrive
+- Consider adding message search/text filter for finding specific message content
+- Consider adding export functionality (CSV/PDF) for message history reports
+- Consider adding delivery status tracking (delivered/read receipts) for WhatsApp messages via Termii webhooks
+- Template variables are stored as JSONB object in database, displayed as key-value pairs in UI
+- The expanded view shows sent_at timestamp separately from created_at for audit trail
+- Failed messages show error_message field which contains user-friendly error text from edge function
+- Channel filter uses ChannelFilter type union for type safety ('all' | 'email' | 'sms' | 'whatsapp')
+- Filter state managed locally in component (not lifted to URL params) - could enhance with URL params for shareable filtered views
+- Collapsible component state managed via expandedMessageId (only one message can be expanded at a time)
+- Could enhance to allow multiple expanded messages simultaneously if needed
+
