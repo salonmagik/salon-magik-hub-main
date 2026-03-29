@@ -848,3 +848,71 @@
 - Future enhancement: Add unread message badge on Messages tab if customer has unread messages
 - Future enhancement: Add real-time message status updates (delivered, read) via Supabase subscriptions
 
+
+---
+## 2026-03-29 18:30:00 - US-014: Create WhatsApp Template Manager Component
+
+### Implemented
+- Created comprehensive WhatsAppTemplateManager component at apps/salon-admin/src/components/messaging/WhatsAppTemplateManager.tsx (582 lines)
+- Implemented full CRUD interface for WhatsApp templates with table view and modal dialogs
+- Table displays all templates with columns: Name, Status, Variables, Provider, Created, Actions
+- Status badges color-coded: Approved (green), Rejected (red), Pending (yellow)
+- Create Template dialog with comprehensive form: template name, provider selector (Termii/Meta), content textarea, dynamic variables list
+- Template content uses placeholder syntax {{1}}, {{2}}, etc. with real-time validation
+- Variables displayed as badges showing position mapping ({{1}}: customer_name, {{2}}: appointment_time)
+- Edit dialog for pending/rejected templates (approved templates are read-only for data integrity)
+- Delete confirmation via AlertDialog, only enabled for pending/rejected templates
+- Check Status action button with loading state to refresh template approval status from Termii API
+- Empty state with FileText icon and call-to-action button
+- Loading state with centered spinner during data fetch
+- Form validation: ensures placeholder count matches variable array length before submission
+- Template preview section shows live content as user types
+- Variables can be added via Enter key or Plus button, removed via × button
+- Provider field disabled in edit mode (cannot change after creation)
+- All dialogs have proper cancel/save buttons with loading states
+- Integrated with useWhatsAppTemplates hook for all operations (create, update, delete, checkStatus, refetch)
+- Toast notifications for all success and error scenarios
+
+### Files Changed
+- apps/salon-admin/src/components/messaging/WhatsAppTemplateManager.tsx (new file, 582 lines)
+- ralph/prd.json (updated US-014 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- WhatsApp templates follow a strict approval workflow: pending → approved (or rejected) → can be used for messaging
+- Only pending and rejected templates can be edited or deleted to maintain data integrity for approved templates
+- Template placeholders use numeric syntax {{1}}, {{2}} which maps to variable array indices for Termii API compatibility
+- Variable order matters: variables[0] → {{1}}, variables[1] → {{2}}, etc. Users must add variables in correct order
+- Form validation prevents mismatched placeholder/variable counts to avoid API errors at send time
+- The useWhatsAppTemplates hook (from US-015) provides all necessary operations: createTemplate, updateTemplate, deleteTemplate, checkStatus
+- Check Status action allows users to manually refresh approval status from Termii (useful after submitting template for approval externally)
+- Empty state is critical for first-time users - includes clear CTA button to create first template
+- Table component from shadcn/ui (packages/ui) provides clean, accessible table layout
+- Dialog max-height with overflow scrolling ensures forms remain usable on small screens
+- AlertDialog for delete confirmation follows best practice for destructive actions
+- Badge component effectively displays both status and variable mappings with color coding
+- Template preview helps users verify content before submission (shows raw content with placeholders)
+- Provider cannot be changed after creation because templates are registered with specific provider APIs
+- Loading states on buttons (Loader2 spinner) provide feedback during async operations
+- Toast notifications use descriptive messages to guide users through success/error scenarios
+- Component follows codebase patterns: useState/useEffect, shadcn/ui components, @ui/* imports, useAuth for tenant context
+
+### Notes for future iterations
+- US-016 will create MessagingSettings page that embeds this WhatsAppTemplateManager component in Section 2
+- Browser verification should be performed in QA phase to test user interactions end-to-end
+- Future enhancement: Add template testing feature (send test WhatsApp message with sample variables)
+- Future enhancement: Add template approval workflow UI (submit to Termii, track approval status automatically)
+- Future enhancement: Add template usage statistics (how many messages sent with each template)
+- Future enhancement: Add template categories or tags for better organization (appointment, promotion, etc.)
+- Future enhancement: Add template duplication feature (clone existing template as starting point)
+- Future enhancement: Add rich text preview or WhatsApp-style message preview
+- Future enhancement: Add variable validation rules (e.g., customer_name should be text, appointment_time should be datetime)
+- Future enhancement: Add bulk template import from CSV or JSON
+- Template approval currently manual via PATCH /approve/:id in manage-whatsapp-templates edge function
+- Consider adding webhook handler to auto-update template status when Termii approves/rejects
+- Consider adding template versioning if templates need to be updated after approval
+- Consider adding template localization for multi-language support
+- Lint passes with 0 new errors or warnings (only pre-existing error in AuditLogPage.tsx unrelated to this component)
+- LSP errors for @supabase-client type declarations are pre-existing (expected, not blocking)
+- Component is production-ready for integration into MessagingSettings page
+
