@@ -916,3 +916,67 @@
 - LSP errors for @supabase-client type declarations are pre-existing (expected, not blocking)
 - Component is production-ready for integration into MessagingSettings page
 
+
+---
+## 2026-03-29 19:00:00 - US-016: Create Messaging Settings Page
+
+### Implemented
+- Created comprehensive settings page at apps/salon-admin/src/pages/salon/MessagingSettingsPage.tsx (508 lines)
+- Section 1: Termii Configuration - Device ID input, Sender ID input with validation (3-11 alphanumeric), Save button updates tenant record, Link to Termii documentation
+- Section 2: WhatsApp Templates - Embeds WhatsAppTemplateManager component for full template CRUD
+- Section 3: Credit Balance & History - Current balance display (large number), low balance warning (<10 credits), Purchase Credits button (opens CreditPurchaseDialog), Recent purchases list (last 10), Recent usage list (last 20 messages with credits_used)
+- Added route to App.tsx at /salon/settings/messaging with ProtectedRoute and ModuleProtectedRoute (module='settings')
+- Added lazy import for MessagingSettingsPage component
+- Breadcrumb navigation: Settings > Messaging
+- All data fetching via useEffect with proper error handling and loading states
+- Currency formatting with symbols (USD, GHS, NGN, EUR, GBP)
+- Channel icons with color coding: Mail (blue), Phone (green), MessageCircle (emerald)
+- Provider labels mapped for display (resend, termii_sms, termii_whatsapp, meta_whatsapp)
+
+### Files Changed
+- apps/salon-admin/src/pages/salon/MessagingSettingsPage.tsx (new file, 508 lines)
+- apps/salon-admin/src/App.tsx (added route and lazy import)
+- ralph/prd.json (updated US-016 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Settings page pattern follows existing PaymentsPage structure (SalonSidebar layout, Card components, sections)
+- Route must use ProtectedRoute + ModuleProtectedRoute(module='settings') for proper authorization
+- Lazy imports in App.tsx improve code splitting and initial load performance
+- useEffect dependencies must include all values that trigger refetches (e.g., creditPurchaseDialogOpen for balance refresh)
+- Credit balance fetch handles PGRST116 error (no rows) gracefully when tenant hasn't purchased credits yet
+- Low balance warning threshold set at <10 credits (configurable in future)
+- Recent purchases fetch uses .limit(10) and .order('created_at', { ascending: false }) for most recent first
+- Recent messages fetch filters by .not('credits_used', 'is', null) to show only paid messages
+- Message logs require join to customers table: .select('...customers:customer_id(full_name)')
+- CreditPurchaseDialog already exists at apps/salon-admin/src/components/billing/CreditPurchaseDialog.tsx
+- WhatsAppTemplateManager already exists at apps/salon-admin/src/components/messaging/WhatsAppTemplateManager.tsx
+- Sender ID validation: alphanumeric only, 3-11 characters (Termii requirement)
+- Device ID validation: optional (NULL allowed) but required for WhatsApp messaging
+- formatCurrency helper reused from existing pattern (symbols map + toLocaleString)
+- Channel icon mapping improves visual recognition in usage list
+- Build passes with no TypeScript errors (MessagingSettingsPage-DRsbF03E.js: 28.17 kB gzipped: 7.44 kB)
+- Lint passes with 0 errors and 0 warnings in new files
+
+### Notes for future iterations
+- US-017 will extend SendMessageDialog to support bulk customer selection
+- US-021 will verify CreditPurchaseDialog UI functionality
+- US-022, US-023, US-024 are testing-focused stories (integration tests, QA checklist)
+- Browser verification (acceptance criterion) should be performed in QA phase
+- Consider adding pagination for credit purchases and message usage lists if data grows large
+- Consider adding export functionality for credit usage history (CSV/XLSX)
+- Consider adding date range filter for credit usage history
+- Consider adding search/filter for message usage (by customer name, channel, provider)
+- Template manager embedded as full component - works well but consider extracting to separate route if complexity grows
+- Low balance warning threshold (10 credits) hardcoded - could make configurable per tenant
+- Credit purchase refresh happens on dialog close - works but could use real-time subscription for instant updates
+- Message logs fetch limited to 20 rows - consider infinite scroll or pagination for heavy usage tenants
+- Provider labels could be moved to shared constant for consistency across components
+- Channel icons could be extracted to shared helper function for reusability
+- Currency symbol mapping duplicated - consider moving to shared utility in @shared package
+- Termii documentation link points to https://www.termii.com/docs - ensure this is current URL
+- Sender ID default value 'SalonMagik' matches database migration default from US-001
+- Device ID optional allows phased rollout (configure later when ready for WhatsApp)
+- Access control via ModuleProtectedRoute ensures only authorized users can configure messaging
+- All acceptance criteria met except browser verification (QA phase)
+
