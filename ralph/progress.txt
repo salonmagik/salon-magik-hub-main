@@ -1,0 +1,23 @@
+---
+## 2026-03-29 15:06:22 - US-001: Add Termii Configuration Fields
+
+### Implemented
+- Created database migration to add Termii configuration fields to tenants table
+- Added termii_device_id TEXT column (nullable) for storing Termii device ID per tenant
+- Added termii_sender_id TEXT column with default value 'SalonMagik' for SMS sender ID
+- Added UPDATE statement to ensure existing tenants get the default sender ID
+- Added column comments to document purpose and constraints
+
+### Files Changed
+- supabase/migrations/20260329150252_add_termii_messaging_support.sql
+
+### Learnings
+- Project does not have a `typecheck` command at app or root level (only `lint`)
+- Pre-existing lint error in apps/salon-admin/src/pages/salon/AuditLogPage.tsx (control character in regex) unrelated to this story
+- Migration follows SQL best practices: IF NOT EXISTS for safety, DEFAULT values, UPDATE for existing rows, and COMMENT ON COLUMN for documentation
+- This is the foundation for the Termii integration - subsequent stories will add message_logs provider tracking, WhatsApp templates, and edge functions
+
+### Notes for future iterations
+- When acceptance criteria mention "Typecheck passes", interpret as "no TypeScript compilation errors introduced by changes"
+- SQL migrations don't directly affect TypeScript compilation
+- Pre-existing lint/typecheck errors should be documented but not block story completion if changes are unrelated
