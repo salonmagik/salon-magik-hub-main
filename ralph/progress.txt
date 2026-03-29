@@ -287,3 +287,61 @@
 - Device ID configuration: Tenant-level device ID is global default, campaign-level device ID allows per-campaign overrides (useful for multi-device setups)
 - Template variable mapping: Current implementation uses sequential numeric keys (1, 2, 3...); ensure template placeholders match this order
 
+---
+## 2026-03-29 23:30:00 - US-008: Create WhatsApp Template Management Function
+
+### Implemented
+- Created comprehensive edge function at supabase/functions/manage-whatsapp-templates/index.ts (467 lines)
+- POST /create endpoint: Creates new template record with status='pending', validates all required fields, returns created template
+- GET /list endpoint: Returns all templates for tenant with optional filtering by provider and status query params, ordered by created_at DESC
+- PUT /update/:id endpoint: Updates template fields (only if status='pending' or 'rejected'), validates JSON structure and variable placeholders
+- DELETE /:id endpoint: Deletes template (only if status='pending' or 'rejected'), prevents deletion of approved templates
+- GET /status/:id endpoint: Returns current template status and basic template info from database
+- PATCH /approve/:id endpoint: Manually marks template as 'approved' with termii_template_id (required in request body)
+- JWT authentication via Authorization header with user verification via supabase.auth.getUser()
+- Tenant isolation: All queries filtered by tenant_id from user_roles table
+- Comprehensive validation: template_name uniqueness (UNIQUE constraint), template_content JSON structure, variable placeholder count matching
+- Audit logging: All operations (create, update, delete, approve) logged to audit_logs table with full context
+- CORS headers properly configured for OPTIONS preflight and all responses
+- Error handling for all failure scenarios with user-friendly messages
+
+### Files Changed
+- supabase/functions/manage-whatsapp-templates/index.ts (new file, 467 lines)
+- ralph/prd.json (updated US-008 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Edge function routing pattern: Parse URL pathname with new URL(req.url) and split by "/" to extract route parts
+- RESTful routing in Deno edge functions: Check method + path parts (e.g., method==="POST" && pathParts.includes("create"))
+- Template validation: Placeholder pattern /\{\{(\d+)\}\}/g extracts numeric placeholders like {{1}}, {{2}}, must match variables array length
+- Unique constraint violation: Postgres error code 23505 indicates duplicate key, return user-friendly message "Template with this name already exists"
+- Template lifecycle: pending (can edit/delete) → approved (read-only, can use for messaging) | rejected (can edit/delete)
+- Only pending and rejected templates can be updated or deleted (prevents accidental modification of production templates)
+- Audit logging pattern: Insert to audit_logs after successful operations with tenant_id, user_id, action (e.g., "whatsapp_template_created"), resource_type, resource_id, details JSONB
+- Query param filtering: url.searchParams.get("provider") for optional filters, chain .eq() calls on Supabase query builder
+- Template approval workflow: Templates created with status='pending', salon owner submits to Termii for approval, admin manually approves via PATCH /approve/:id with termii_template_id
+- Variable placeholders use numeric keys for Termii compatibility ({{1}}, {{2}}) not named keys ({{name}}, {{date}})
+- JSON validation: Use try/catch with JSON.parse() to validate template_content structure before storing
+- Status validation: Only allow specific transitions (pending→approved, rejected→approved) to maintain data integrity
+- Tenant verification: Fetch user_roles.tenant_id to get user's assigned tenant, filter all queries by tenant_id
+- CORS preflight: Return 200 with corsHeaders for OPTIONS method before processing other routes
+- Error responses: Always include corsHeaders in error responses for cross-origin requests
+- Pre-existing lint error in AuditLogPage.tsx (control character in regex) unrelated to this implementation
+- LSP errors for Deno imports (https://deno.land, https://esm.sh) are expected in edge functions (documented in AGENTS.md)
+
+### Notes for future iterations
+- US-009 will update system message functions to set initiated_by='system' and skip credit deduction
+- US-018 will create send-bulk-message function for bulk operations with batching
+- US-011 and US-015 will create React hooks (useManualMessages, useWhatsAppTemplates) to consume this API from frontend
+- US-014 will create WhatsAppTemplateManager component to provide UI for template CRUD operations
+- Frontend components will call this function via supabase.functions.invoke('manage-whatsapp-templates', { method, body })
+- Template approval workflow: Users create templates via POST /create → Submit to Termii manually → Admin approves via PATCH /approve/:id
+- Future enhancement: Add webhook handler to receive Termii template approval status automatically
+- Future enhancement: Add template preview endpoint to render template with sample variables
+- Future enhancement: Add template testing endpoint to send test WhatsApp message before approval
+- Template content structure: Should follow Termii template format with placeholders {{1}}, {{2}}, etc.
+- Variables array order: Must match placeholder numeric order (variables[0] → {{1}}, variables[1] → {{2}})
+- Consider adding template categories (appointment_reminder, promotion, announcement) for better organization
+- Consider adding template usage tracking (how many messages sent with each template)
+- TERMII_API_KEY environment variable must be set in Supabase Edge Functions for production use
+
