@@ -130,8 +130,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. Created supabase/functions/send-manual-message/index.ts with full implementation. Accepts messageId (UUID) in request body. Verifies user JWT and tenant permissions via user_roles table. Fetches manual_messages with joins to customer, tenant, and whatsapp_templates. Checks communication_credits balance before sending (returns 400 if insufficient). Email channel: Uses Resend API, costs 1 credit, provider 'resend'. SMS channel: Uses sendTermiiSMS() from termii-client.ts, costs 2 credits, provider 'termii_sms', uses tenant.termii_sender_id or defaults to 'SalonMagik'. WhatsApp channel: Uses sendTermiiWhatsAppTemplate() from termii-client.ts, costs 2 credits, provider 'termii_whatsapp', validates template status='approved', uses tenant.termii_device_id, converts template_variables to numeric keys. Credits deducted from communication_credits ONLY on successful send. Inserts row into message_logs with all required fields: provider, termii_message_id, termii_device_id, initiated_by='salon', credits_used, status, error_message. Updates manual_messages: status to 'sent' or 'failed', sets sent_at on success, stores error_message on failure, records credits_used. Returns success response with { success: true, message_id, credits_used, provider }. CORS headers properly configured. Auth required via JWT (validates Bearer token). Comprehensive error handling for all scenarios: insufficient credits, missing customer contact info, template not approved, Termii device ID not configured, Termii API errors. Lint: Pre-existing error in AuditLogPage.tsx unrelated to this function. Edge function follows Deno patterns (LSP errors expected for Deno modules)."
     },
     {
       "id": "US-007B",

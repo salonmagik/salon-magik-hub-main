@@ -185,3 +185,56 @@
 - The channel parameter ('generic' vs 'dnd') allows routing to DND-registered numbers in Nigeria
 - Template variable data uses numeric keys ("1", "2") to match template placeholders {{1}}, {{2}}
 - Lint passes (0 errors, only pre-existing warnings in other apps)
+
+---
+## 2026-03-29 22:00:00 - US-006: Create Send Manual Message Edge Function
+
+### Implemented
+- Created comprehensive edge function at supabase/functions/send-manual-message/index.ts (346 lines)
+- JWT authentication with user session validation via Supabase Auth
+- Tenant permission verification via user_roles table
+- Fetches manual_messages with joins to customers, tenants, and whatsapp_templates tables
+- Credit balance checking before message sending (returns 400 if insufficient credits)
+- Email channel implementation via Resend API (1 credit cost, provider 'resend')
+- SMS channel implementation via Termii API using sendTermiiSMS() helper (2 credits cost, provider 'termii_sms')
+- WhatsApp channel implementation via Termii API using sendTermiiWhatsAppTemplate() helper (2 credits cost, provider 'termii_whatsapp')
+- WhatsApp template validation (status must be 'approved')
+- WhatsApp template variable mapping from object keys to numeric keys (1, 2, 3...)
+- Credit deduction from communication_credits table ONLY on successful send
+- Comprehensive message_logs insertion with provider, termii_message_id, termii_device_id, initiated_by='salon', credits_used
+- Manual_messages status updates: 'sent' on success, 'failed' on error, with sent_at timestamp and error_message
+- CORS headers properly configured for OPTIONS preflight and all responses
+- Error handling for all failure scenarios with user-friendly messages
+
+### Files Changed
+- supabase/functions/send-manual-message/index.ts (new file, 346 lines)
+- ralph/prd.json (updated US-006 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Edge function pattern: Use service role key for database operations, anon key for auth verification
+- Credit balance checking must happen BEFORE sending to prevent failed messages from consuming credits
+- Termii WhatsApp requires approved templates - must validate template.status='approved' before sending
+- Termii WhatsApp template variables use numeric keys ("1", "2") not named keys, so template_variables must be converted
+- Template variable conversion: Object.keys(variables).forEach((key, index) => data[String(index + 1)] = variables[key])
+- SMS sender ID comes from tenant.termii_sender_id with fallback to 'SalonMagik'
+- WhatsApp device ID comes from tenant.termii_device_id and must be configured before sending
+- message_logs and manual_messages must be updated atomically - message_logs for audit, manual_messages for status tracking
+- initiated_by='salon' distinguishes manual messages from system messages (which don't consume credits)
+- Credits deducted via simple UPDATE query: SET balance = balance - credits_required
+- Error messages must be user-friendly: "Insufficient credits. Required: X, Available: Y. Please purchase more credits."
+- Template approval validation prevents sending unapproved WhatsApp templates that would fail at Termii API
+- Pre-existing lint error in apps/salon-admin/src/pages/salon/AuditLogPage.tsx (control character in regex) unrelated to this function
+- Edge functions use Deno imports (https://deno.land, https://esm.sh) which cause LSP errors in Node.js environments - this is expected
+
+### Notes for future iterations
+- US-007B will update send-reactivation-campaign to use similar pattern for Termii WhatsApp routing
+- US-018 will create send-bulk-message function using similar structure with batching for multiple customers
+- US-009 will update system message functions to set initiated_by='system' and credits_used=0
+- Frontend components (US-010, US-011, US-012) will call this function via supabase.functions.invoke('send-manual-message', { body: { messageId } })
+- RESEND_API_KEY and TERMII_API_KEY environment variables must be set in Supabase Edge Functions for production
+- Future enhancement: Add retry logic for transient failures (429 rate limits, 502/503 server errors)
+- Future enhancement: Add delivery status webhook handler for Termii to update message_logs.status after delivery confirmation
+- Consider adding a message_logs.raw_response JSONB column to store full API responses for debugging
+- Customer phone numbers must be in international format (e.g., 2347880234567) - validatePhoneNumber() helper handles this
+
