@@ -148,3 +148,40 @@
 - If provider=NULL: Default to 'meta' for backward compatibility
 - Template validation should ensure termii_template_id references an approved template when provider='termii'
 - Device ID resolution: Use campaign.termii_device_id if specified, otherwise fall back to tenant.termii_device_id
+
+---
+## 2026-03-29 20:30:00 - US-005: Create Termii Client Helper Module
+
+### Implemented
+- Created comprehensive Termii API client module at supabase/functions/_shared/termii-client.ts
+- Implemented sendTermiiSMS() function for single SMS messages via POST to https://api.ng.termii.com/api/sms/send
+- Implemented sendTermiiWhatsAppTemplate() function for WhatsApp messages using approved templates via POST to https://api.ng.termii.com/api/send/template
+- Implemented sendTermiiBulkSMS() function for bulk SMS (up to 100 recipients) via POST to https://api.ng.termii.com/api/sms/send/bulk
+- Added comprehensive error handling for all HTTP status codes: 400 (Bad Request), 401 (Authentication), 403 (Forbidden), 422 (Validation), 429 (Rate Limit), 500/502/503 (Server Errors)
+- Created helper functions: validatePhoneNumber() (validates and formats phone numbers to international format without +), validateSMSContent() (enforces 160 char limit for plain, 70 char limit for unicode), detectMessageType() (auto-detects unicode vs plain text)
+- Exported TypeScript interfaces: TermiiSMSRequest, TermiiWhatsAppTemplateRequest, TermiiBulkSMSRequest, TermiiResponse, TermiiBulkSMSResponse
+- Added comprehensive JSDoc comments with usage examples for each function
+- All functions return message_id from Termii API for tracking delivery status
+
+### Files Changed
+- supabase/functions/_shared/termii-client.ts (new file, 544 lines)
+
+### Learnings
+- Termii API requires phone numbers in international format WITHOUT the + prefix (e.g., 2347880234567, not +2347880234567)
+- SMS character limits differ by type: 160 characters for plain ASCII text, 70 characters for unicode (emojis, special characters)
+- Termii bulk SMS endpoint supports maximum 100 recipients per request - larger batches must be split
+- WhatsApp messages via Termii MUST use pre-approved templates (template_id required) - free-form messages not allowed
+- Termii API returns 200 OK even for some errors (e.g., insufficient balance) - must check response.error or response.code fields
+- Media support available for both SMS (media_url/media_caption) and WhatsApp (media object with url/caption)
+- The validatePhoneNumber() helper prevents common formatting issues by normalizing phone numbers
+- The detectMessageType() helper auto-detects unicode characters to prevent message truncation issues
+- Error messages include helpful context for common issues (device not found, template not approved, rate limits)
+
+### Notes for future iterations
+- Edge functions (US-006, US-007B, US-018) will import these functions to send messages
+- TERMII_API_KEY environment variable must be set in Supabase Edge Functions for production use
+- For bulk operations >100 recipients, calling code should batch requests (US-018 implements this)
+- Message delivery tracking via message_id enables future delivery status webhooks
+- The channel parameter ('generic' vs 'dnd') allows routing to DND-registered numbers in Nigeria
+- Template variable data uses numeric keys ("1", "2") to match template placeholders {{1}}, {{2}}
+- Lint passes (0 errors, only pre-existing warnings in other apps)
