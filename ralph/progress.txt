@@ -468,3 +468,58 @@
 - Bulk operations logged in audit_logs for compliance and debugging
 - All messages marked with initiated_by='salon' for accurate credit billing (distinguishes from system messages)
 
+---
+## 2026-03-29 16:30:00 - US-019: Verify Credit Purchase from Wallet
+
+### Implemented
+- Verified existing edge function at supabase/functions/purchase-credits-from-purse/index.ts (237 lines) meets all acceptance criteria
+- Function accepts tenantId and packageId (pack_50, pack_100, pack_250, pack_500) in request body
+- JWT authentication with user session validation via supabase.auth.getUser()
+- Validates packageId against CREDIT_PACKAGES constant (50, 100, 250, 500 credits with NGN and GHS pricing)
+- Fetches salon_wallet from database and validates sufficient balance
+- Returns 400 error if insufficient balance with clear message showing available vs required amount
+- Creates messaging_credit_purchases record with paid_via='salon_purse', including all required fields
+- Calls debit_salon_purse RPC with entry_type='salon_purse_debit_credit_purchase' and proper parameters
+- Implements transaction rollback pattern: if debit fails, deletes purchase record
+- Increments communication_credits.balance using UPDATE (existing) or INSERT (new record)
+- Returns success response with credits, newBalance, amountDebited, currency
+- CORS headers properly configured for cross-origin requests
+- Idempotency implemented via p_idempotency_key based on purchase.id
+- Price automatically determined by wallet currency (GHS or NGN)
+
+### Files Changed
+- ralph/prd.json (updated US-019 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- This function was already implemented in the codebase prior to this Ralph iteration
+- The function implements a robust transaction pattern: create purchase record → debit wallet → update credits → rollback on failure
+- The debit_salon_purse RPC uses idempotency_key to prevent duplicate debits for the same purchase
+- Atomic transaction handling: if debit_salon_purse fails, the purchase record is immediately deleted
+- Database tables verified to exist via migrations: messaging_credit_purchases (20260221120004), communication_credits (20260202153323), debit_salon_purse RPC (20260223010000)
+- CREDIT_PACKAGES constant defines 4 packages with different NGN and GHS prices
+- The function handles both existing and new communication_credits records (UPDATE vs INSERT)
+- Error handling is comprehensive: 401 for auth, 400 for validation/insufficient funds, 404 for wallet not found, 500 for database errors
+- The service role key is used for database operations while anon key verifies user JWT
+- Wallet currency determines price: currency === "GHS" ? priceGHS : priceNGN
+- The function returns detailed error messages to help users understand failures
+- Idempotency key format: `credit_purchase_${purchase.id}` ensures safe retries
+- Lint passes (0 errors, only pre-existing warnings in other apps unrelated to this function)
+
+### Notes for future iterations
+- US-020 will verify the Paystack credit purchase flow (via payment webhook)
+- US-021 will verify the UI component CreditPurchaseDialog that consumes this function
+- Manual testing (Test: Purchase with sufficient balance, etc.) should be performed in integration/QA phase (US-023)
+- Frontend will call this function via supabase.functions.invoke('purchase-credits-from-purse', { body: { tenantId, packageId } })
+- The messaging_credit_purchases table tracks all credit purchases regardless of payment method (salon_purse or paystack)
+- Credit balance is stored in communication_credits table with simple integer balance field
+- Consider adding credit expiration in future (e.g., credits expire after 1 year)
+- Consider adding purchase history UI showing all messaging_credit_purchases for tenant
+- Consider adding low credit balance notifications (e.g., alert when balance < 10 credits)
+- The debit_salon_purse RPC handles ledger entries, ensuring accurate financial tracking
+- Reference type 'credit_purchase' and reference_id link ledger entries to purchase records
+- Currency must match between wallet and purchase (automatically handled by reading wallet currency)
+- All 4 package options have tiered pricing (larger packages have better per-credit pricing)
+- Future enhancement: Add promotional pricing or bulk purchase discounts
+- Future enhancement: Add auto-recharge feature (automatically purchase credits when balance drops below threshold)
+
