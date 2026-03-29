@@ -238,3 +238,52 @@
 - Consider adding a message_logs.raw_response JSONB column to store full API responses for debugging
 - Customer phone numbers must be in international format (e.g., 2347880234567) - validatePhoneNumber() helper handles this
 
+---
+## 2026-03-29 23:00:00 - US-007B: Update Reactivation Campaign for Termii WhatsApp
+
+### Implemented
+- Updated send-reactivation-campaign/index.ts to support Termii WhatsApp provider routing as alternative to Meta WhatsApp
+- Extended campaign fetch to include whatsapp_provider, termii_template_id, termii_device_id fields from customer_reactivation_campaigns table
+- Added tenant configuration fetch to get termii_device_id and termii_sender_id as fallback values
+- Implemented WhatsApp provider routing logic with backward compatibility (NULL defaults to 'meta')
+- Termii WhatsApp path: Uses sendTermiiWhatsAppTemplate() from termii-client.ts with template validation
+- Termii WhatsApp path: Converts template variables from payload to numeric keys format (1, 2, 3...) for Termii API
+- Termii WhatsApp path: Resolves device ID with campaign-specific override or tenant-level fallback
+- Meta WhatsApp path: Preserved existing Meta WhatsApp Business API implementation (no changes)
+- Updated message_logs insertion to include provider field with correct values: 'termii_whatsapp', 'meta_whatsapp', 'termii_sms', 'resend'
+- Updated message_logs insertion to include initiated_by='salon' field (distinguishes campaign messages from system messages)
+- Credits deduction: 2 credits per WhatsApp message regardless of provider (Meta or Termii)
+- Error handling: Termii-specific errors (device not found, template not configured) propagate with user-friendly messages
+
+### Files Changed
+- supabase/functions/send-reactivation-campaign/index.ts (updated: added import, extended queries, added WhatsApp routing, updated message_logs)
+- ralph/prd.json (updated US-007B passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Termii WhatsApp requires pre-approved templates identified by termii_template_id (validated at runtime)
+- Template variables must be converted from named keys (customer_name, appointment_time) to numeric keys ("1", "2") for Termii API
+- Device ID resolution: Campaign-specific device ID takes precedence, tenant-level device ID as fallback
+- Backward compatibility critical: whatsapp_provider=NULL must default to 'meta' to avoid breaking existing campaigns
+- Provider routing happens at channel level: email → resend, sms → termii_sms, whatsapp → (meta_whatsapp | termii_whatsapp based on provider)
+- The initiated_by='salon' field is essential for credit billing logic (system messages skip credit deduction in US-009)
+- message_logs.provider field enables tracking and debugging across multiple messaging providers
+- Campaign execution loops through recipients sequentially, handling individual failures gracefully
+- Termii errors are descriptive: "Termii template ID not configured for this campaign", "Termii device ID not configured"
+- The sendTermiiWhatsAppTemplate() function from termii-client.ts handles phone validation, API communication, and error handling
+- Template variables from preview_payload_json are filtered (exclude 'message' and 'subject' keys) then mapped to numeric keys
+- Lint passes (0 errors, only pre-existing warnings in other apps unrelated to this implementation)
+- LSP errors for Deno imports (https://deno.land, https://esm.sh) are expected in edge functions and documented in AGENTS.md
+
+### Notes for future iterations
+- US-008 will create manage-whatsapp-templates edge function for template CRUD operations via API
+- US-009 will update system message functions (appointment notifications, invoices, etc.) to set initiated_by='system' and skip credit deduction
+- US-018 will create send-bulk-message function with batching for large recipient lists (SMS batches up to 100, WhatsApp/email batches of 10)
+- Frontend components (US-010+) will allow users to select WhatsApp provider when creating campaigns
+- Template approval workflow: Users create templates via manage-whatsapp-templates, Termii admin approves, users can then select approved templates for campaigns
+- Consider adding campaign.whatsapp_media_url field in future for sending media (images, videos) with WhatsApp messages
+- Consider adding retry logic for transient Termii failures (429 rate limits, 502/503 server errors)
+- message_logs.termii_message_id enables future delivery status tracking via Termii webhooks
+- Device ID configuration: Tenant-level device ID is global default, campaign-level device ID allows per-campaign overrides (useful for multi-device setups)
+- Template variable mapping: Current implementation uses sequential numeric keys (1, 2, 3...); ensure template placeholders match this order
+

@@ -151,8 +151,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. Updated send-reactivation-campaign/index.ts to support Termii WhatsApp provider routing. Campaign fetch now includes whatsapp_provider, termii_template_id, termii_device_id fields. Added tenant fetch to get termii_device_id and termii_sender_id fallbacks. Implemented WhatsApp provider routing: if whatsapp_provider='termii', uses sendTermiiWhatsAppTemplate() from termii-client.ts; if whatsapp_provider='meta' or NULL, uses existing Meta WhatsApp API (backward compatible). Termii implementation: validates TERMII_API_KEY, termii_template_id, and device_id (with fallback to tenant.termii_device_id); converts template variables from payload to numeric keys (1, 2, 3...); sends single message per customer via loop. Credits: Deducts 2 credits per successful WhatsApp send regardless of provider. message_logs: Correctly logs provider as 'termii_whatsapp' for Termii, 'meta_whatsapp' for Meta, 'termii_sms' for SMS, 'resend' for email. Also logs initiated_by='salon' for all campaign messages (distinguishes from system messages). Error handling: Termii errors propagate through sendTermiiWhatsAppTemplate() with user-friendly messages (device not found, template not configured, API failures). Lint passes (0 errors, only pre-existing warnings in other apps). LSP errors for Deno imports are expected and documented."
     },
     {
       "id": "US-008",

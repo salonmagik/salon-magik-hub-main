@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { buildFromAddress } from "../_shared/email-template.ts";
+import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,7 +106,7 @@ serve(async (req) => {
 
     const { data: campaign, error: campaignError } = await adminClient
       .from("customer_reactivation_campaigns")
-      .select("id, tenant_id, channel, name, template_json")
+      .select("id, tenant_id, channel, name, template_json, whatsapp_provider, termii_template_id, termii_device_id")
       .eq("id", campaignId)
       .single();
 
@@ -131,6 +132,13 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Fetch tenant configuration for Termii settings
+    const { data: tenant } = await adminClient
+      .from("tenants")
+      .select("termii_device_id, termii_sender_id")
+      .eq("id", campaign.tenant_id)
+      .single();
 
     const { data: recipients, error: recipientsError } = await adminClient
       .from("customer_reactivation_recipients")
@@ -214,10 +222,42 @@ serve(async (req) => {
           if (!customer.phone) throw new Error("Customer has no phone number");
           if (!termiiApiKey) throw new Error("TERMII_API_KEY not configured");
           await sendSms(termiiApiKey, termiiSenderId, customer.phone, message);
-        } else {
+        } else if (channel === "whatsapp") {
           if (!customer.phone) throw new Error("Customer has no phone number");
-          if (!whatsappToken || !whatsappPhoneId) throw new Error("WhatsApp credentials are not configured");
-          await sendWhatsApp(whatsappToken, whatsappPhoneId, customer.phone, message);
+          
+          // Determine WhatsApp provider (default to 'meta' for backward compatibility)
+          const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
+          
+          if (whatsappProvider === "termii") {
+            // Use Termii WhatsApp with template
+            if (!termiiApiKey) throw new Error("TERMII_API_KEY not configured");
+            
+            const termiiTemplateId = (campaign as any).termii_template_id;
+            if (!termiiTemplateId) throw new Error("Termii template ID not configured for this campaign");
+            
+            // Resolve device ID: Use campaign-specific device ID if set, otherwise fall back to tenant device ID
+            const deviceId = (campaign as any).termii_device_id || tenant?.termii_device_id;
+            if (!deviceId) throw new Error("Termii device ID not configured. Set device ID in tenant settings or campaign.");
+            
+            // Convert template variables from payload to numeric keys format (1, 2, 3...)
+            const templateVariables: Record<string, string> = {};
+            const variableKeys = Object.keys(payload).filter(key => key !== "message" && key !== "subject");
+            variableKeys.forEach((key, index) => {
+              templateVariables[String(index + 1)] = String(payload[key] || "");
+            });
+            
+            // Send via Termii WhatsApp
+            await sendTermiiWhatsAppTemplate({
+              device_id: deviceId,
+              phone_number: customer.phone,
+              template_id: termiiTemplateId,
+              data: templateVariables,
+            });
+          } else {
+            // Use Meta WhatsApp (existing implementation)
+            if (!whatsappToken || !whatsappPhoneId) throw new Error("WhatsApp credentials are not configured");
+            await sendWhatsApp(whatsappToken, whatsappPhoneId, customer.phone, message);
+          }
         }
 
         sentCount += 1;
@@ -225,6 +265,19 @@ serve(async (req) => {
           .from("customer_reactivation_recipients")
           .update({ send_status: "sent", sent_at: new Date().toISOString(), error_message: null })
           .eq("id", recipient.id);
+
+        // Determine provider value for message_logs
+        let provider: string;
+        if (channel === "email") {
+          provider = "resend";
+        } else if (channel === "sms") {
+          provider = "termii_sms";
+        } else if (channel === "whatsapp") {
+          const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
+          provider = whatsappProvider === "termii" ? "termii_whatsapp" : "meta_whatsapp";
+        } else {
+          provider = "resend"; // Fallback
+        }
 
         await adminClient.from("message_logs").insert({
           tenant_id: campaign.tenant_id,
@@ -234,6 +287,8 @@ serve(async (req) => {
           status: "sent",
           template_type: "customer_reactivation",
           subject: channel === "email" ? subject : null,
+          provider,
+          initiated_by: "salon",
           credits_used: CREDIT_COST[channel],
           sent_at: new Date().toISOString(),
         });
