@@ -33,8 +33,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. Migration file created at supabase/migrations/20260329160000_extend_message_logs_for_provider_tracking.sql. Added provider, termii_message_id, termii_device_id, and initiated_by columns with appropriate CHECK constraints. Updated channel CHECK constraint to include 'whatsapp'. Added indexes for query performance. All columns are nullable for backward compatibility. Lint passes (no errors, only pre-existing warnings)."
     },
     {
       "id": "US-003",

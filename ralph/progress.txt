@@ -21,3 +21,29 @@
 - When acceptance criteria mention "Typecheck passes", interpret as "no TypeScript compilation errors introduced by changes"
 - SQL migrations don't directly affect TypeScript compilation
 - Pre-existing lint/typecheck errors should be documented but not block story completion if changes are unrelated
+
+---
+## 2026-03-29 15:07:55 - US-002: Extend Message Logs for Provider Tracking
+
+### Implemented
+- Created database migration to extend message_logs table with provider tracking columns
+- Added provider TEXT column with CHECK constraint for values: 'resend', 'termii_sms', 'termii_whatsapp', 'meta_whatsapp'
+- Added termii_message_id TEXT column to store Termii API message ID for tracking and delivery status
+- Added termii_device_id TEXT column to store Termii device ID used for message sending
+- Added initiated_by TEXT column with CHECK constraint for values: 'system', 'salon' to distinguish automated vs manual messages
+- Updated channel CHECK constraint to include 'whatsapp' alongside existing 'email' and 'sms'
+- All new columns are nullable for backward compatibility with existing rows
+- Added indexes on provider, initiated_by, and termii_message_id columns for query performance
+- Added column comments for documentation
+
+### Files Changed
+- supabase/migrations/20260329160000_extend_message_logs_for_provider_tracking.sql
+
+### Learnings
+- The message_logs table was originally designed with only email and SMS support
+- Adding WhatsApp support required updating the channel CHECK constraint
+- Provider tracking enables debugging and performance analysis across multiple messaging providers
+- The initiated_by field is critical for credit billing logic (system messages don't consume credits, salon messages do)
+- Indexes on filtered columns (provider, initiated_by) improve query performance for reporting and filtering
+- Partial index on termii_message_id (WHERE NOT NULL) saves space while maintaining query efficiency
+- All columns are nullable to ensure backward compatibility with existing message logs
