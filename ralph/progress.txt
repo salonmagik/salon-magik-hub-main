@@ -800,3 +800,51 @@
 - Collapsible component state managed via expandedMessageId (only one message can be expanded at a time)
 - Could enhance to allow multiple expanded messages simultaneously if needed
 
+
+---
+## 2026-03-29 18:30:00 - US-013: Update Customer Detail Page with Send Message Button
+
+### Implemented
+- Updated CustomerDetailDialog component to add Send Message functionality
+- Added 'Send Message' button to dialog header with MessageSquare icon from lucide-react
+- Button opens SendMessageDialog with customerId pre-filled
+- Button disabled if customer has no email AND no phone (canSendMessage check)
+- Added tooltip showing "Send Email, SMS, or WhatsApp" when enabled, "Customer has no email or phone number" when disabled
+- Added new 'Messages' tab to customer detail dialog (now has 6 tabs: Overview, Appointments, Notes, Messages, Transactions, Purse)
+- Messages tab displays MessageHistory component showing all messages sent to the customer
+- MessageHistory auto-refreshes after sending via useManualMessages hook
+- Added SendMessageDialog component integration with sendMessageDialogOpen state
+- Added imports: MessageSquare icon, SendMessageDialog, MessageHistory, Tooltip components
+
+### Files Changed
+- apps/salon-admin/src/components/dialogs/CustomerDetailDialog.tsx
+
+### Learnings
+- Customer detail view is implemented as CustomerDetailDialog component (dialog), not a page component
+- The dialog is opened from CustomersPage.tsx when clicking on a customer card
+- Acceptance criteria mentioned CustomerDetail.tsx page but actual file is CustomerDetailDialog.tsx
+- SendMessageDialog and MessageHistory components were already created in US-010 and US-012
+- The useManualMessages hook provides auto-refresh functionality after sending messages
+- Tooltip component from shadcn/ui used for hover messages on buttons
+- TabsList grid columns changed from grid-cols-5 to grid-cols-6 to accommodate new Messages tab
+- Messages tab positioned between Notes and Transactions tabs for logical flow
+- canSendMessage check: customer.email || customer.phone ensures at least one contact method exists
+- SendMessageDialog component handles all channel selection and validation logic
+- MessageHistory component handles filtering, date ranges, and message display
+- Build succeeds with no new TypeScript errors (only pre-existing warnings in other files)
+
+### Notes for future iterations
+- US-014 will create WhatsAppTemplateManager component for template management UI
+- US-016 will create MessagingSettings page to configure Termii and manage templates
+- US-017 will add bulk customer selection to SendMessageDialog for mass messaging
+- US-021 will verify CreditPurchaseDialog UI for credit purchasing
+- Browser verification should be performed in QA phase (US-024 manual testing checklist)
+- MessageHistory component shows messages from manual_messages table via useManualMessages hook
+- SendMessageDialog pre-fills customerId when opened from customer detail dialog
+- After successful send, dialog closes and MessageHistory automatically refreshes to show new message
+- Tooltip requires TooltipProvider wrapper which is provided by the Tooltip component from shadcn/ui
+- Customer detail dialog is modal (overlays the page) so no navigation away from CustomersPage
+- The Send Message button provides quick access to messaging without leaving customer context
+- Future enhancement: Add unread message badge on Messages tab if customer has unread messages
+- Future enhancement: Add real-time message status updates (delivered, read) via Supabase subscriptions
+

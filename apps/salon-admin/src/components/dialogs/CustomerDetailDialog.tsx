@@ -33,6 +33,7 @@ import {
   Search,
   Filter,
   X,
+  MessageSquare,
 } from "lucide-react";
 import { useCustomerPurse, type Transaction } from "@/hooks/useCustomerPurse";
 import { useAppointments } from "@/hooks/useAppointments";
@@ -40,6 +41,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import type { Tables } from "@supabase-client";
+import { SendMessageDialog } from "@/components/messaging/SendMessageDialog";
+import { MessageHistory } from "@/components/messaging/MessageHistory";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@ui/tooltip";
 
 type Customer = Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
@@ -77,6 +81,7 @@ export function CustomerDetailDialog({
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [appointmentNotes, setAppointmentNotes] = useState<AppointmentNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
+  const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
   
   // Transaction filters
   const [txSearchQuery, setTxSearchQuery] = useState("");
@@ -207,6 +212,12 @@ export function CustomerDetailDialog({
     return name.slice(0, 2).toUpperCase();
   };
 
+  // Check if customer can receive messages
+  const canSendMessage = customer.email || customer.phone;
+  const sendMessageTooltip = !canSendMessage
+    ? "Customer has no email or phone number"
+    : "Send Email, SMS, or WhatsApp";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -214,38 +225,62 @@ export function CustomerDetailDialog({
           <DialogDescription className="sr-only">
             Customer profile, engagement summary, appointments, notes, and transaction history.
           </DialogDescription>
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
-              {getInitials(customer.full_name)}
-            </div>
-            <div>
-              <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge
-                  variant="secondary"
-                  className={
-                    customer.status === "active"
-                      ? "bg-success/10 text-success"
-                      : customer.status === "vip"
-                      ? "bg-purple-100 text-purple-700"
-                      : "bg-muted text-muted-foreground"
-                  }
-                >
-                  {customer.status}
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {customer.visit_count} visits
-                </span>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
+                {getInitials(customer.full_name)}
+              </div>
+              <div>
+                <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge
+                    variant="secondary"
+                    className={
+                      customer.status === "active"
+                        ? "bg-success/10 text-success"
+                        : customer.status === "vip"
+                        ? "bg-purple-100 text-purple-700"
+                        : "bg-muted text-muted-foreground"
+                    }
+                  >
+                    {customer.status}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {customer.visit_count} visits
+                  </span>
+                </div>
               </div>
             </div>
+            
+            {/* Send Message Button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSendMessageDialogOpen(true)}
+                    disabled={!canSendMessage}
+                    className="flex-shrink-0"
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Send Message
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{sendMessageTooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
+            <TabsTrigger value="messages">Messages</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
             <TabsTrigger value="purse">Purse</TabsTrigger>
           </TabsList>
@@ -439,6 +474,10 @@ export function CustomerDetailDialog({
                 </div>
               </ScrollArea>
             )}
+          </TabsContent>
+
+          <TabsContent value="messages" className="mt-4">
+            <MessageHistory customerId={customer.id} />
           </TabsContent>
 
           <TabsContent value="transactions" className="mt-4">
@@ -654,6 +693,13 @@ export function CustomerDetailDialog({
           </TabsContent>
         </Tabs>
       </DialogContent>
+      
+      {/* Send Message Dialog */}
+      <SendMessageDialog
+        open={sendMessageDialogOpen}
+        onOpenChange={setSendMessageDialogOpen}
+        customerId={customer.id}
+      />
     </Dialog>
   );
 }
