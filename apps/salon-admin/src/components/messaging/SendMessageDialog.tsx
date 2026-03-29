@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,12 +19,17 @@ import {
 } from "@ui/select";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import { Alert, AlertDescription } from "@ui/alert";
-import { MessageSquare, Mail, Phone, Loader2, AlertCircle, CreditCard } from "lucide-react";
+import { Checkbox } from "@ui/checkbox";
+import { Switch } from "@ui/switch";
+import { Progress } from "@ui/progress";
+import { MessageSquare, Mail, Phone, Loader2, AlertCircle, CreditCard, Users, Search, CheckSquare, XSquare } from "lucide-react";
 import { useManualMessages } from "@/hooks/useManualMessages";
 import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates";
 import { useMessagingCredits } from "@/hooks/useMessagingCredits";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
 
 type Customer = Tables<"customers">;
@@ -47,7 +52,7 @@ export function SendMessageDialog({
   onOpenChange,
   customerId: providedCustomerId,
 }: SendMessageDialogProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, user } = useAuth();
   const { customers, isLoading: customersLoading } = useCustomers();
   const { sendMessage, isLoading: sendingMessage } = useManualMessages({
     tenantId: currentTenant?.id || "",
@@ -56,8 +61,12 @@ export function SendMessageDialog({
     tenantId: currentTenant?.id || "",
     status: "approved",
   });
-  const { credits, isLoading: creditsLoading } = useMessagingCredits();
+  const { credits, isLoading: creditsLoading, refetch: refetchCredits } = useMessagingCredits();
 
+  // Mode selection
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  
+  // Single customer mode
   const [channel, setChannel] = useState<"email" | "sms" | "whatsapp">("email");
   const [customerId, setCustomerId] = useState<string>(providedCustomerId || "");
   const [subject, setSubject] = useState("");
@@ -65,19 +74,62 @@ export function SendMessageDialog({
   const [templateId, setTemplateId] = useState<string>("");
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
 
+  // Bulk mode
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sendingBulk, setSendingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ sent: 0, total: 0 });
+  const [failedMessages, setFailedMessages] = useState<Array<{ customerId: string; customerName: string; error: string }>>([]);
+
   const selectedCustomer = customers.find((c) => c.id === customerId);
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const approvedTemplates = templates.filter((t) => t.status === "approved");
   const creditBalance = credits?.balance || 0;
-  const creditCost = CREDIT_COST[channel];
+  
+  // Calculate credit cost based on mode
+  const creditCost = isBulkMode 
+    ? CREDIT_COST[channel] * selectedCustomerIds.length 
+    : CREDIT_COST[channel];
   const hasInsufficientCredits = creditBalance < creditCost;
+
+  // Filter customers based on search query
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery.trim()) return customers;
+    const query = searchQuery.toLowerCase();
+    return customers.filter((c) => 
+      c.full_name?.toLowerCase().includes(query) ||
+      c.email?.toLowerCase().includes(query) ||
+      c.phone?.toLowerCase().includes(query)
+    );
+  }, [customers, searchQuery]);
 
   // Initialize customerId if provided via props
   useEffect(() => {
     if (providedCustomerId) {
       setCustomerId(providedCustomerId);
+      setIsBulkMode(false); // Force single mode if customerId provided
     }
   }, [providedCustomerId]);
+
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!open) {
+      // Reset after a short delay to avoid visual glitches
+      setTimeout(() => {
+        if (!providedCustomerId) {
+          setCustomerId("");
+        }
+        setSubject("");
+        setMessage("");
+        setTemplateId("");
+        setTemplateVariables({});
+        setSelectedCustomerIds([]);
+        setSearchQuery("");
+        setFailedMessages([]);
+        setBulkProgress({ sent: 0, total: 0 });
+      }, 300);
+    }
+  }, [open, providedCustomerId]);
 
   // Reset template variables when template changes
   useEffect(() => {
@@ -92,8 +144,109 @@ export function SendMessageDialog({
     }
   }, [selectedTemplate]);
 
+  const handleToggleCustomer = (custId: string) => {
+    setSelectedCustomerIds((prev) =>
+      prev.includes(custId)
+        ? prev.filter((id) => id !== custId)
+        : [...prev, custId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    const eligibleCustomers = getEligibleCustomersForChannel(filteredCustomers, channel);
+    setSelectedCustomerIds(eligibleCustomers.map((c) => c.id));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedCustomerIds([]);
+  };
+
+  const getEligibleCustomersForChannel = (customerList: Customer[], channelType: "email" | "sms" | "whatsapp") => {
+    return customerList.filter((c) => {
+      if (channelType === "email") return !!c.email;
+      if (channelType === "sms") return !!c.phone;
+      if (channelType === "whatsapp") return !!c.phone;
+      return false;
+    });
+  };
+
+  const handleBulkSend = async () => {
+    if (selectedCustomerIds.length === 0) return;
+
+    setSendingBulk(true);
+    setBulkProgress({ sent: 0, total: selectedCustomerIds.length });
+    setFailedMessages([]);
+
+    try {
+      // Call the send-bulk-message edge function
+      const { data, error } = await supabase.functions.invoke('send-bulk-message', {
+        body: {
+          customerIds: selectedCustomerIds,
+          channel,
+          message: channel === "whatsapp" ? "" : message,
+          subject: channel === "email" ? subject : undefined,
+          templateId: channel === "whatsapp" ? templateId : undefined,
+          templateVariables: channel === "whatsapp" ? templateVariables : undefined,
+        },
+      });
+
+      if (error) throw error;
+
+      // Update progress and failed messages
+      setBulkProgress({ sent: data.sent, total: selectedCustomerIds.length });
+      setFailedMessages(data.failedMessages || []);
+
+      // Show summary toast
+      if (data.failed === 0) {
+        toast({
+          title: "Messages Sent Successfully",
+          description: `Successfully sent to ${data.sent} customers. ${data.creditsUsed} credits used.`,
+        });
+        
+        // Close dialog on complete success
+        onOpenChange(false);
+      } else {
+        toast({
+          title: "Bulk Send Completed",
+          description: `Successfully sent to ${data.sent} customers, ${data.failed} failed. ${data.creditsUsed} credits used.`,
+          variant: "default",
+        });
+      }
+
+      // Refetch credit balance
+      refetchCredits();
+
+    } catch (err) {
+      console.error("Error sending bulk message:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to send bulk message";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setSendingBulk(false);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    if (failedMessages.length === 0) return;
+
+    const failedCustomerIds = failedMessages.map((f) => f.customerId);
+    setSelectedCustomerIds(failedCustomerIds);
+    setFailedMessages([]);
+    
+    // Trigger bulk send with failed customers
+    await handleBulkSend();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isBulkMode) {
+      await handleBulkSend();
+      return;
+    }
 
     if (!customerId) {
       return;
@@ -118,6 +271,9 @@ export function SendMessageDialog({
       setTemplateId("");
       setTemplateVariables({});
       onOpenChange(false);
+      
+      // Refetch credit balance
+      refetchCredits();
     }
   };
 
@@ -129,8 +285,32 @@ export function SendMessageDialog({
   };
 
   const isFormValid = () => {
-    if (!customerId) return false;
     if (hasInsufficientCredits) return false;
+
+    if (isBulkMode) {
+      if (selectedCustomerIds.length === 0) return false;
+
+      if (channel === "email" || channel === "sms") {
+        return message.trim().length > 0;
+      }
+
+      if (channel === "whatsapp") {
+        if (!templateId) return false;
+        if (approvedTemplates.length === 0) return false;
+        // Check all template variables are filled
+        if (selectedTemplate?.variables) {
+          return selectedTemplate.variables.every(
+            (varName: string) => templateVariables[varName]?.trim().length > 0
+          );
+        }
+        return true;
+      }
+
+      return false;
+    }
+
+    // Single mode validation
+    if (!customerId) return false;
 
     if (channel === "email") {
       if (!selectedCustomer?.email) return false;
@@ -182,22 +362,49 @@ export function SendMessageDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
-            <MessageSquare className="w-5 h-5 text-primary" />
+            {isBulkMode ? (
+              <Users className="w-5 h-5 text-primary" />
+            ) : (
+              <MessageSquare className="w-5 h-5 text-primary" />
+            )}
           </div>
-          <div>
+          <div className="flex-1">
             <DialogTitle className="text-xl">Send Message</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Send an email, SMS, or WhatsApp message to a customer
+              {isBulkMode 
+                ? "Send message to multiple customers" 
+                : "Send an email, SMS, or WhatsApp message to a customer"}
             </p>
           </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {/* Customer Selection */}
+          {/* Mode Toggle - Only show if no customerId provided */}
           {!providedCustomerId && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="bulk-mode" className="cursor-pointer">
+                  {isBulkMode ? "Multiple Customers" : "Single Customer"}
+                </Label>
+              </div>
+              <Switch
+                id="bulk-mode"
+                checked={isBulkMode}
+                onCheckedChange={(checked) => {
+                  setIsBulkMode(checked);
+                  setCustomerId("");
+                  setSelectedCustomerIds([]);
+                  setSearchQuery("");
+                }}
+              />
+            </div>
+          )}
+
+          {/* Customer Selection - Single Mode */}
+          {!providedCustomerId && !isBulkMode && (
             <div className="space-y-2">
               <Label>
                 Customer <span className="text-destructive">*</span>
@@ -221,6 +428,116 @@ export function SendMessageDialog({
                   )}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Customer Selection - Bulk Mode */}
+          {!providedCustomerId && isBulkMode && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Select Customers <span className="text-destructive">*</span></Label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    disabled={filteredCustomers.length === 0}
+                  >
+                    <CheckSquare className="mr-1 h-3 w-3" />
+                    Select All
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeselectAll}
+                    disabled={selectedCustomerIds.length === 0}
+                  >
+                    <XSquare className="mr-1 h-3 w-3" />
+                    Deselect All
+                  </Button>
+                </div>
+              </div>
+
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+
+              {/* Customer List */}
+              <div className="border rounded-lg max-h-64 overflow-y-auto">
+                {customersLoading ? (
+                  <div className="p-4 text-sm text-muted-foreground text-center">
+                    Loading customers...
+                  </div>
+                ) : filteredCustomers.length === 0 ? (
+                  <div className="p-4 text-sm text-muted-foreground text-center">
+                    No customers found
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {filteredCustomers.map((customer) => {
+                      const isEligible = getEligibleCustomersForChannel([customer], channel).length > 0;
+                      const isSelected = selectedCustomerIds.includes(customer.id);
+                      
+                      return (
+                        <div
+                          key={customer.id}
+                          className={`flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors ${
+                            !isEligible ? "opacity-50" : ""
+                          }`}
+                        >
+                          <Checkbox
+                            id={`customer-${customer.id}`}
+                            checked={isSelected}
+                            onCheckedChange={() => handleToggleCustomer(customer.id)}
+                            disabled={!isEligible}
+                          />
+                          <Label
+                            htmlFor={`customer-${customer.id}`}
+                            className="flex-1 cursor-pointer"
+                          >
+                            <div className="font-medium">{customer.full_name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {customer.email && (
+                                <span className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3" />
+                                  {customer.email}
+                                </span>
+                              )}
+                              {customer.phone && (
+                                <span className="flex items-center gap-1 mt-1">
+                                  <Phone className="h-3 w-3" />
+                                  {customer.phone}
+                                </span>
+                              )}
+                              {!isEligible && (
+                                <span className="text-destructive text-xs mt-1 block">
+                                  Missing {channel === "email" ? "email" : "phone"}
+                                </span>
+                              )}
+                            </div>
+                          </Label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Count */}
+              {selectedCustomerIds.length > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  <strong>{selectedCustomerIds.length}</strong> customer{selectedCustomerIds.length !== 1 ? "s" : ""} selected
+                </div>
+              )}
             </div>
           )}
 
@@ -373,7 +690,11 @@ export function SendMessageDialog({
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">This will cost:</span>
-              <span className="font-semibold">{creditCost} credits</span>
+              <span className="font-semibold">
+                {isBulkMode && selectedCustomerIds.length > 0 
+                  ? `${creditCost} credits (${CREDIT_COST[channel]} per customer × ${selectedCustomerIds.length})`
+                  : `${creditCost} credits`}
+              </span>
             </div>
             {hasInsufficientCredits && (
               <Alert variant="destructive">
@@ -392,20 +713,67 @@ export function SendMessageDialog({
             )}
           </div>
 
+          {/* Bulk Progress */}
+          {sendingBulk && bulkProgress.total > 0 && (
+            <div className="rounded-lg border p-4 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">Sending messages...</span>
+                <span className="text-muted-foreground">
+                  {bulkProgress.sent} of {bulkProgress.total} sent
+                </span>
+              </div>
+              <Progress value={(bulkProgress.sent / bulkProgress.total) * 100} />
+            </div>
+          )}
+
+          {/* Failed Messages */}
+          {failedMessages.length > 0 && !sendingBulk && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-destructive font-medium">
+                <AlertCircle className="h-4 w-4" />
+                Failed to send to {failedMessages.length} customer{failedMessages.length !== 1 ? "s" : ""}
+              </div>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {failedMessages.map((failed, idx) => (
+                  <div key={idx} className="text-sm text-muted-foreground">
+                    <span className="font-medium">{failed.customerName}</span>: {failed.error}
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRetryFailed}
+                disabled={sendingBulk}
+              >
+                Retry Failed Messages
+              </Button>
+            </div>
+          )}
+
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              disabled={sendingBulk}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={!isFormValid() || sendingMessage}>
-              {sendingMessage ? (
+            <Button 
+              type="submit" 
+              disabled={!isFormValid() || sendingMessage || sendingBulk}
+            >
+              {(sendingMessage || sendingBulk) ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Sending...
                 </>
               ) : (
                 <>
-                  <MessageSquare className="mr-2 h-4 w-4" />
-                  Send Message
+                  {isBulkMode ? <Users className="mr-2 h-4 w-4" /> : <MessageSquare className="mr-2 h-4 w-4" />}
+                  {isBulkMode ? `Send to ${selectedCustomerIds.length} customers` : "Send Message"}
                 </>
               )}
             </Button>
