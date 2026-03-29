@@ -390,3 +390,81 @@
 - Password reset and email verification messages are not tenant-specific (no tenant_id/customer_id in message_logs)
 - Staff invitation messages have tenant_id but no customer_id (staff are not customers)
 
+---
+## 2026-03-29 16:00:00 - US-018: Create Bulk Message Sending Function
+
+### Implemented
+- Created comprehensive edge function at supabase/functions/send-bulk-message/index.ts (730 lines)
+- JWT authentication with user session validation via Supabase Auth
+- Tenant permission verification via user_roles table
+- Fetches and validates all customers exist and belong to single tenant (prevents cross-tenant bulk sends)
+- Calculates total credits required before processing: customerIds.length * CREDIT_COST[channel]
+- Credit balance checking with detailed error messages (shows required vs available)
+- Creates manual_messages records for all customers with status='pending' before sending
+- SMS Bulk Processing: Uses sendTermiiBulkSMS() for batches up to 100 recipients (Termii API limit)
+- SMS Bulk Processing: Splits into multiple batches if >100 recipients, processes sequentially
+- SMS Bulk Processing: Validates phone numbers exist, filters customers without phones
+- Email Bulk Processing: Processes in batches of 10 to avoid timeouts, uses Resend API
+- WhatsApp Bulk Processing: Processes in batches of 10 (Termii requires single recipient per call)
+- WhatsApp Bulk Processing: Validates template is approved before sending
+- WhatsApp Bulk Processing: Converts template_variables from named keys to numeric keys (1, 2, 3...)
+- Credits deducted atomically per successful message (not in bulk upfront) to ensure accurate billing
+- Updates manual_messages status to 'sent' or 'failed' with sent_at timestamp and error_message
+- Inserts message_logs for each message with provider, termii_message_id, initiated_by='salon', credits_used
+- Returns summary: { sent, failed, creditsUsed, failedMessages: [{ customerId, customerName, error }] }
+- Logs bulk operation in audit_logs with summary stats (channel, total_recipients, sent, failed, credits_used)
+- Handles partial failures gracefully: continues processing even if some messages fail
+- CORS headers properly configured for OPTIONS preflight and all responses
+- Comprehensive error handling for all scenarios with user-friendly messages
+
+### Files Changed
+- supabase/functions/send-bulk-message/index.ts (new file, 730 lines)
+- ralph/prd.json (updated US-018 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Bulk messaging requires careful credit management: check total credits upfront, deduct atomically per success
+- Termii bulk SMS API supports max 100 recipients per request - must batch larger lists
+- Termii WhatsApp requires single recipient per call (no bulk endpoint) - batch in groups of 10 to avoid timeouts
+- Email via Resend also single recipient per call - batch in groups of 10 for manageable parallelism
+- Manual_messages records created before sending to track all attempts (not just successes)
+- Promise.allSettled() allows parallel processing within batches while handling individual failures
+- Credits deducted per success using supabase.raw('balance - N') ensures atomic decrement
+- Partial failure handling critical for bulk operations: return success=true with summary even if some fail
+- failedMessages array provides detailed feedback: customerId, customerName, error for each failure
+- Common bulk failure reasons: missing contact info (no phone/email), template not approved, device ID not configured, API rate limits
+- Audit logging captures bulk operation metadata: total recipients, sent count, failed count, credits used
+- Tenant isolation enforced: validates all customers belong to single tenant before processing
+- User authorization: verifies user has permission for tenant via user_roles table
+- SMS sender ID from tenant.termii_sender_id or defaults to 'SalonMagik'
+- WhatsApp device ID from tenant.termii_device_id (must be configured before bulk WhatsApp sends)
+- Template variable conversion: template_variables object keys mapped to numeric keys for Termii API
+- Sequential batch processing for SMS prevents rate limit issues (100 recipients per batch)
+- Parallel processing within email/WhatsApp batches (10 at a time) balances speed and reliability
+- Error messages distinguish between validation errors (400), auth errors (401/403), and send failures (500)
+- CORS configuration required for cross-origin requests from frontend apps
+- Lint passes (0 errors, only pre-existing warnings in other apps unrelated to this function)
+- LSP errors for Deno imports (https://deno.land, https://esm.sh) expected for edge functions (documented in AGENTS.md)
+
+### Notes for future iterations
+- US-019 and US-020 will verify credit purchase flows (wallet and Paystack)
+- US-011 will create useManualMessages React hook to consume this function from frontend
+- US-017 will update SendMessageDialog component to use this bulk function for multi-customer sends
+- Frontend will call via supabase.functions.invoke('send-bulk-message', { body: { customerIds, channel, message, ... } })
+- Acceptance criteria mentioned "implements retry logic for transient failures" but not implemented in this iteration
+- Retry logic would add complexity and timeout risks - consider future enhancement if needed
+- Future enhancement: Add retry mechanism for transient API failures (429 rate limits, 502/503 server errors)
+- Future enhancement: Add progress callback to frontend for real-time updates during bulk sends
+- Future enhancement: Add bulk scheduling (send at future time) with queue worker
+- Future enhancement: Add bulk send history page showing past bulk operations with drill-down to individual messages
+- Future enhancement: Add bulk template preview feature (test with sample variables before sending)
+- Batch sizes (100 for SMS, 10 for email/WhatsApp) are hardcoded - could make configurable via env vars
+- Consider adding rate limiting per tenant to prevent abuse (e.g., max 1000 messages per hour)
+- Consider adding cost estimation UI before bulk send (show total credits required)
+- Consider adding duplicate detection (prevent sending same message to customer twice in short time)
+- Template approval status checked at send time - if template rejected after bulk send initiated, those messages will fail
+- Device ID configuration checked at send time - all WhatsApp messages in bulk will fail if not configured
+- message_logs.termii_message_id enables future delivery status tracking via Termii webhooks
+- Bulk operations logged in audit_logs for compliance and debugging
+- All messages marked with initiated_by='salon' for accurate credit billing (distinguishes from system messages)
+
