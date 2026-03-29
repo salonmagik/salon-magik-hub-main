@@ -67,8 +67,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. Migration file created at supabase/migrations/20260329180000_create_manual_messages_table.sql. Created manual_messages table with all required columns (id, tenant_id, customer_id, channel, subject, message, template_id, template_variables, status, sent_by_user_id, sent_at, error_message, credits_used, created_at, updated_at). Added indexes on tenant_id, customer_id, status, channel, sent_by_user_id, and created_at for query performance. Implemented comprehensive RLS policies for SELECT/INSERT/UPDATE/DELETE (staff can manage messages for their tenant). Added foreign key constraints with proper CASCADE behavior (tenant_id, customer_id CASCADE on DELETE; template_id SET NULL on DELETE; sent_by_user_id SET NULL on DELETE). Added CHECK constraints for channel (email/sms/whatsapp) and status (pending/sent/failed). Added trigger function to auto-update updated_at timestamp. Added detailed column comments for documentation. Lint passes (0 errors, only pre-existing warnings in other apps)."
     },
     {
       "id": "US-007A",

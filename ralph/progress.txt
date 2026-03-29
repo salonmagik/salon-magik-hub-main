@@ -82,3 +82,38 @@
 - The manage-whatsapp-templates edge function (US-008) will provide CRUD operations for this table
 - Consider adding a rejected_reason TEXT column in future if providers return rejection details
 - Lint passes with only pre-existing warnings in other apps (no errors introduced)
+
+---
+## 2026-03-29 15:12:07 - US-004: Create Manual Messages Table
+
+### Implemented
+- Created database migration to add manual_messages table for tracking manual messages sent by salon staff to customers
+- Added all required columns: id (UUID), tenant_id (FK to tenants), customer_id (FK to customers), channel, subject, message, template_id (FK to whatsapp_templates), template_variables (JSONB), status, sent_by_user_id (FK to auth.users), sent_at, error_message, credits_used, created_at, updated_at
+- Added indexes on tenant_id, customer_id, status, channel, sent_by_user_id, and created_at DESC for query performance
+- Implemented comprehensive RLS policies for SELECT/INSERT/UPDATE/DELETE operations (staff can manage messages for their tenant)
+- Added foreign key constraints with proper CASCADE behavior: tenant_id and customer_id CASCADE on DELETE, template_id and sent_by_user_id SET NULL on DELETE
+- Added CHECK constraint for channel column: 'email', 'sms', 'whatsapp'
+- Added CHECK constraint for status column: 'pending', 'sent', 'failed'
+- Created trigger function to auto-update updated_at timestamp on row updates
+- Added detailed column comments for documentation
+
+### Files Changed
+- supabase/migrations/20260329180000_create_manual_messages_table.sql
+
+### Learnings
+- The manual_messages table is distinct from message_logs: manual_messages tracks staff-initiated messages before sending, message_logs tracks all message delivery events (system + manual)
+- The template_id field is only used for WhatsApp channel (email and SMS use free-form message content)
+- template_variables stored as JSONB allows flexible key-value pairs for WhatsApp template variable substitution
+- The sent_by_user_id references auth.users(id) since staff users are stored in Supabase Auth
+- Credits are calculated based on channel: 1 credit for email, 2 credits for SMS/WhatsApp
+- RLS policies leverage get_user_tenant_ids() function to ensure staff can only access messages for their assigned tenants
+- Multiple indexes on filtering/sorting columns (status, channel, created_at) optimize common query patterns like "show all pending messages" or "show recent messages for customer"
+- Foreign key SET NULL on sent_by_user_id allows audit trail to remain even if staff user is deleted
+- Lint passes (0 errors, only pre-existing warnings in other apps unrelated to this migration)
+
+### Notes for future iterations
+- The send-manual-message edge function (US-006) will consume this table to process outbound messages
+- Status transitions: pending → sent (on success) or pending → failed (on error)
+- The useManualMessages React hook (US-011) will provide CRUD operations for UI components
+- Message history component (US-012) will JOIN manual_messages with message_logs for complete delivery tracking
+- Consider adding a retry_count column in future if implementing automatic retry logic for failed messages
