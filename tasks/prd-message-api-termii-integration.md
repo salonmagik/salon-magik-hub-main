@@ -131,17 +131,55 @@ This feature enhances the salon management platform's messaging infrastructure b
 
 **Acceptance Criteria:**
 - [ ] File created at `supabase/functions/_shared/termii-client.ts`
-- [ ] `sendTermiiSMS()` function accepts apiKey, to, from, message, channel
-- [ ] `sendTermiiWhatsApp()` function accepts apiKey, phoneNumber, deviceId, templateId, data, optional media
-- [ ] Functions throw descriptive errors on API failures
-- [ ] Response includes Termii message_id for tracking
-- [ ] TypeScript interfaces exported: `TermiiSMSRequest`, `TermiiWhatsAppRequest`
+- [ ] `sendTermiiSMS()` function implements:
+  - HTTP Method: POST
+  - Endpoint: `https://api.ng.termii.com/api/sms/send`
+  - Request body: `{ api_key, to, from, sms, type, channel }`
+  - `to`: Phone number in international format (e.g., "2347880234567") or array for bulk (max 100)
+  - `from`: Alphanumeric sender ID (3-11 chars) from tenant.termii_sender_id
+  - `sms`: Message text content
+  - `type`: "plain" (default) or "unicode" (for special characters)
+  - `channel`: "generic" (promotional, DND-restricted, time-restricted 8PM-8AM in Nigeria) or "dnd" (transactional, bypasses DND)
+  - Returns: `{ code: "ok", message_id, balance, message, user }`
+- [ ] `sendTermiiWhatsAppTemplate()` function implements:
+  - HTTP Method: POST
+  - Endpoint: `https://api.ng.termii.com/api/send/template` (no media) or `https://api.ng.termii.com/api/send/template/media` (with media)
+  - Request body: `{ api_key, phone_number, device_id, template_id, data, media? }`
+  - `phone_number`: Single recipient in international format (e.g., "2347880234567")
+  - `device_id`: Tenant's Termii WhatsApp device ID (from tenant.termii_device_id)
+  - `template_id`: Pre-approved template ID from Termii
+  - `data`: Object with variable replacements (e.g., `{ "1": "John", "2": "3PM" }` for `{{1}}` and `{{2}}`)
+  - `media` (optional): `{ caption: "Image" | "Document" | "Video" | "Location", url: "https://..." }` - URL must be publicly accessible and downloadable
+  - Returns: `{ code: "ok", message_id, balance, message, user }`
+  - Note: Authentication templates (OTP) cannot use media, only `data: { otp: "123456" }`
+- [ ] `sendTermiiBulkSMS()` function implements:
+  - HTTP Method: POST
+  - Endpoint: `https://api.ng.termii.com/api/sms/send/bulk`
+  - Request body: `{ api_key, to: ["234...", "234..."], from, sms, type, channel }`
+  - `to`: Array of phone numbers (max 100 per request)
+  - Same parameters as single SMS otherwise
+- [ ] Functions throw descriptive errors on API failures:
+  - 400: "Invalid Sender ID" or "Insufficient balance" or "Device not found"
+  - 401: "Unauthorized - check API key"
+  - 403: "Service not active on account"
+  - 429: "Rate limit exceeded"
+  - 500: "Termii service temporarily unavailable"
+- [ ] Response includes Termii `message_id` and `message_id_str` for tracking
+- [ ] TypeScript interfaces exported: `TermiiSMSRequest`, `TermiiWhatsAppTemplateRequest`, `TermiiBulkSMSRequest`, `TermiiResponse`
 - [ ] Unit tests verify error handling and request formatting
 
 **Technical Notes:**
-- SMS endpoint: `https://api.ng.termii.com/api/sms/send`
-- WhatsApp endpoint: `https://api.ng.termii.com/api/send/template`
-- WhatsApp with media: `https://api.ng.termii.com/api/send/template/media`
+- **SMS Endpoint:** `POST https://api.ng.termii.com/api/sms/send`
+- **WhatsApp Template (No Media):** `POST https://api.ng.termii.com/api/send/template`
+- **WhatsApp Template (With Media):** `POST https://api.ng.termii.com/api/send/template/media`
+- **Bulk SMS:** `POST https://api.ng.termii.com/api/sms/send/bulk`
+- **Channel Routing:**
+  - `generic`: Promotional messages, subject to DND and time restrictions (8PM-8AM Nigeria)
+  - `dnd`: Transactional messages, bypasses DND restrictions, requires whitelisted Sender ID
+- **Character Limits:** 160 chars per SMS (plain), 70 chars per SMS (unicode with special chars like ; / ^ { } \ [ ~ ] | € ' ")
+- **Phone Format:** Must be international format without + (e.g., 2347880234567 for Nigeria)
+- **WhatsApp Scope:** Only template-based messages (salon → customer), no conversational/reply support
+- **WhatsApp Media Formats:** Image (JPG, PNG), Audio (MP3, OGG, AMR), Document (PDF), Video (MP4 with audio)
 
 ---
 
@@ -157,16 +195,53 @@ This feature enhances the salon management platform's messaging infrastructure b
 - [ ] Fetches message from `manual_messages` table with joins to customer and tenant
 - [ ] Checks credit balance before sending
 - [ ] Returns 400 error if insufficient credits
-- [ ] Sends email via Resend if channel='email'
-- [ ] Sends SMS via Termii if channel='sms'
-- [ ] Sends WhatsApp via Termii if channel='whatsapp'
-- [ ] Deducts credits from `communication_credits`
-- [ ] Inserts row into `message_logs` with provider and termii_message_id
+- [ ] **Email channel (channel='email'):**
+  - Uses Resend API
+  - Credits: 1 per email
+  - Provider: 'resend'
+- [ ] **SMS channel (channel='sms'):**
+  - Uses `sendTermiiSMS()` with:
+    - `channel`: "dnd" (for critical messages) or "generic" (for promotional)
+    - `type`: "plain" (default) or "unicode" (if special chars detected)
+    - `from`: tenant.termii_sender_id
+    - `to`: customer.phone_number in international format
+  - Credits: 2 per SMS
+  - Provider: 'termii_sms'
+  - Handles error "Invalid Sender ID" → prompts to configure sender in settings
+  - Handles error "Insufficient balance" → refers to Termii account balance, not credits
+- [ ] **WhatsApp channel (channel='whatsapp'):**
+  - Requires `template_id` and `template_variables` in manual_messages (no free-form messages)
+  - Uses `sendTermiiWhatsAppTemplate()` with:
+    - `device_id`: tenant.termii_device_id
+    - `template_id`: from manual_messages.template_id
+    - `data`: manual_messages.template_variables (e.g., `{"1": "John", "2": "3PM"}`)
+    - `media`: optional, from manual_messages.media_attachment if present
+  - Credits: 2 per WhatsApp message
+  - Provider: 'termii_whatsapp'
+  - Validates device_id exists, returns 400 "Device ID not configured" if missing
+  - Validates template_id exists, returns 400 "WhatsApp requires approved template" if missing
+  - Handles error "Device not found" → prompts to verify device ID in settings
+  - Handles error "Template not approved" → shows template status
+- [ ] Deducts credits from `communication_credits` ONLY on successful send
+- [ ] Inserts row into `message_logs` with:
+  - `provider`: 'resend' | 'termii_sms' | 'termii_whatsapp'
+  - `termii_message_id`: from Termii response
+  - `termii_device_id`: if WhatsApp
+  - `initiated_by`: 'salon'
+  - `credits_used`: 1 (email) or 2 (SMS/WhatsApp)
+  - `status`: 'sent' or 'failed'
 - [ ] Updates `manual_messages` status to 'sent' and sets sent_at
 - [ ] On failure, updates status to 'failed' with error_message
-- [ ] Returns success response with credits_used
+- [ ] Returns success response with `{ success: true, message_id, credits_used, provider }`
 - [ ] CORS headers properly configured
 - [ ] Auth required via JWT
+
+**Error Handling:**
+- Insufficient credits (ours): `{ error: "Insufficient credits", required: X, available: Y }`
+- Invalid Sender ID: `{ error: "Invalid Sender ID. Configure in Messaging Settings." }`
+- Device not found: `{ error: "WhatsApp device not found. Verify Device ID in settings." }`
+- Template not approved: `{ error: "WhatsApp template pending approval. Check template status." }`
+- WhatsApp template required: `{ error: "WhatsApp requires approved template. Create and approve template first." }`
 
 ---
 
@@ -180,12 +255,33 @@ This feature enhances the salon management platform's messaging infrastructure b
 - [ ] `customer_reactivation_campaigns` table has `termii_template_id` TEXT column
 - [ ] `customer_reactivation_campaigns` table has `termii_device_id` TEXT column
 - [ ] `send-reactivation-campaign/index.ts` checks whatsapp_provider field
-- [ ] If provider='termii', uses `sendTermiiWhatsApp()` with template
-- [ ] If provider='meta', uses existing Meta API
-- [ ] Template variables populated from campaign.template_json
-- [ ] Credits deducted properly (2 credits for WhatsApp)
-- [ ] `message_logs` includes correct provider value
+- [ ] **If provider='termii':**
+  - Uses `sendTermiiWhatsAppTemplate()` from termii-client.ts
+  - Endpoint: `POST https://api.ng.termii.com/api/send/template`
+  - Sends to single customer per call (loop through campaign recipients)
+  - Request: `{ api_key, phone_number: customer.phone_number, device_id: campaign.termii_device_id, template_id: campaign.termii_template_id, data: campaign.template_json }`
+  - Template variables from campaign.template_json (e.g., `{"1": "{{customer_name}}", "2": "{{last_visit_date}}"}`), replace placeholders before sending
+  - Deducts 2 credits per successful send
+  - Provider logged as 'termii_whatsapp'
+- [ ] **If provider='meta':**
+  - Uses existing Meta WhatsApp Business API
+  - No changes to existing logic
+  - Provider logged as 'meta_whatsapp'
+- [ ] **If provider=NULL:**
+  - Defaults to 'meta' for backward compatibility
+- [ ] Credits deducted properly (2 credits for WhatsApp regardless of provider)
+- [ ] `message_logs` includes correct provider value ('termii_whatsapp' or 'meta_whatsapp')
+- [ ] Handles Termii errors gracefully:
+  - "Device not found" → logs error, marks campaign message as failed
+  - "Template not approved" → logs error, marks campaign message as failed
+  - "Insufficient balance" (Termii account) → logs error, pauses campaign
 - [ ] Existing campaigns default to 'meta' for backward compatibility
+
+**Technical Notes:**
+- Termii WhatsApp templates must be pre-approved via Termii dashboard or API
+- Template approval typically takes 24-48 hours
+- OTP templates (authentication) only accept `data: { otp: "123456" }`, no other variables
+- Media attachments supported via `media: { caption, url }` parameter
 
 ---
 
@@ -196,16 +292,51 @@ This feature enhances the salon management platform's messaging infrastructure b
 
 **Acceptance Criteria:**
 - [ ] Function created at `supabase/functions/manage-whatsapp-templates/index.ts`
-- [ ] Supports POST /create: Creates new template record with status='pending'
-- [ ] Supports GET /list: Returns all templates for tenant
-- [ ] Supports PUT /update/:id: Updates template (only if status='pending' or 'rejected')
-- [ ] Supports DELETE /:id: Soft deletes template
-- [ ] Supports GET /status/:id: Fetches template approval status from Termii API (if applicable)
-- [ ] Validates template_name uniqueness per tenant
+- [ ] **POST /create:**
+  - Creates new template record in `whatsapp_templates` with status='pending'
+  - Request body: `{ template_name, template_content, variables, provider: 'termii' | 'meta' }`
+  - template_content: Text with variable placeholders `{{1}}`, `{{2}}`, etc.
+  - variables: Array of variable names (e.g., `["customer_name", "date", "time"]`)
+  - Does NOT submit to Termii API (salon owner submits manually via Termii dashboard)
+  - Returns: `{ success: true, template_id: <uuid> }`
+- [ ] **GET /list:**
+  - Returns all templates for tenant from `whatsapp_templates`
+  - Query params: `?provider=termii` or `?status=approved` for filtering
+  - Response: `{ templates: [{ id, template_name, status, provider, created_at, ... }] }`
+- [ ] **PUT /update/:id:**
+  - Updates template (only if status='pending' or 'rejected')
+  - Request body: `{ template_name?, template_content?, variables? }`
+  - Returns 400 if template status='approved' with message "Cannot edit approved template"
+- [ ] **DELETE /:id:**
+  - Soft deletes template (sets deleted_at timestamp)
+  - Only allows delete if status='pending' or 'rejected'
+  - Returns 400 if template status='approved' and in use
+- [ ] **GET /status/:id:**
+  - Returns current template status from database
+  - **Note:** Termii does NOT provide an API endpoint to check template status
+  - Salon owner must manually update status after Termii approval notification
+  - Response: `{ template_id, status, updated_at }`
+- [ ] **PATCH /approve/:id:**
+  - Manually marks template as 'approved' after salon owner receives Termii confirmation
+  - Request body: `{ termii_template_id: <termii_id> }` (from Termii dashboard)
+  - Updates status='approved' and stores termii_template_id
+  - Only callable by salon owner/admin
+- [ ] Validates template_name uniqueness per tenant (UNIQUE constraint)
 - [ ] Validates template_content structure (must be valid JSONB)
+- [ ] Validates variable placeholders match variables array count
 - [ ] Requires authentication via JWT
 - [ ] Returns 403 if user not authorized for tenant
 - [ ] Logs all operations in audit_logs table
+
+**Technical Notes:**
+- Termii template management is done via Termii dashboard, NOT via API
+- Salon owners must:
+  1. Create template in salon-magik (status='pending')
+  2. Log into Termii dashboard and submit same template for approval
+  3. Wait 24-48 hours for Termii approval
+  4. Manually mark template as 'approved' in salon-magik with Termii template_id
+- Template variable format: `{{1}}`, `{{2}}`, `{{3}}` (numeric placeholders)
+- OTP templates have special rules: only `otp` variable allowed
 
 ---
 
@@ -240,8 +371,9 @@ This feature enhances the salon management platform's messaging infrastructure b
 - [ ] Customer selection: Searchable dropdown (if customerId not provided)
 - [ ] Subject field shown only for email channel
 - [ ] Message textarea for email and SMS
-- [ ] WhatsApp template selector for WhatsApp channel
+- [ ] WhatsApp template selector for WhatsApp channel (required, no free-form WhatsApp messages)
 - [ ] Template variable inputs shown dynamically based on selected template
+- [ ] WhatsApp channel disabled if no approved templates exist with message "Create WhatsApp templates first"
 - [ ] Credit cost preview displayed: "This will cost X credits"
 - [ ] Shows current credit balance
 - [ ] Disables send button if insufficient credits
@@ -413,12 +545,32 @@ This feature enhances the salon management platform's messaging infrastructure b
 - [ ] Checks credit balance before processing
 - [ ] Returns 400 if insufficient credits
 - [ ] Creates manual_messages record for each customer with status='pending'
-- [ ] Processes messages in batches of 10 (to avoid timeouts)
-- [ ] For each message, calls appropriate send function (email/SMS/WhatsApp)
-- [ ] Updates status to 'sent' or 'failed' individually
-- [ ] Deducts credits only for successfully sent messages
-- [ ] Returns summary: `{ sent: number, failed: number, creditsUsed: number, failedMessages: { customerId, error }[] }`
-- [ ] Logs bulk operation in audit_logs
+- [ ] **SMS Bulk Processing (channel='sms'):**
+  - Uses `sendTermiiBulkSMS()` for batches up to 100 recipients
+  - Endpoint: `POST https://api.ng.termii.com/api/sms/send/bulk`
+  - Request: `{ api_key, to: ["234...", "234..."], from: tenant.termii_sender_id, sms: message, type: "plain", channel: "generic" | "dnd" }`
+  - Splits customerIds into batches of 100 if > 100 recipients
+  - Processes batches sequentially to avoid rate limits
+  - Deducts 2 credits per successful recipient
+- [ ] **Email/WhatsApp Bulk Processing:**
+  - Processes messages in batches of 10 (to avoid timeouts)
+  - For each message, calls appropriate send function (Resend for email, Termii WhatsApp for WhatsApp)
+  - Email: 1 credit each via Resend
+  - WhatsApp: 2 credits each via `sendTermiiWhatsAppTemplate()` (single recipient per call, loop through batch)
+- [ ] Updates status to 'sent' or 'failed' individually per message
+- [ ] Deducts credits only for successfully sent messages (atomic per message)
+- [ ] Returns summary: `{ sent: number, failed: number, creditsUsed: number, failedMessages: [{ customerId, customerName, error }] }`
+- [ ] Logs bulk operation in audit_logs with summary stats
+- [ ] Handles partial failures gracefully (some sent, some failed)
+- [ ] Implements retry logic for transient failures (e.g., network timeout)
+
+**Technical Notes:**
+- **Termii Bulk SMS Endpoint:** `POST https://api.ng.termii.com/api/sms/send/bulk`
+- Max 100 phone numbers per bulk SMS request
+- Bulk SMS is cost-effective: same credit cost as individual sends but single API call
+- WhatsApp does NOT have a bulk endpoint; must send individually
+- Email via Resend can be batched if Resend supports (check API docs)
+- Credit deduction is atomic per message to prevent double-charging on retries
 
 ---
 
@@ -571,17 +723,37 @@ This feature enhances the salon management platform's messaging infrastructure b
 
 **FR-1:** System shall support sending messages via Email (Resend), SMS (Termii), and WhatsApp (Termii template-based)
 
+**FR-1.1:** SMS messages shall use Termii's `generic` channel for promotional messages (subject to DND and 8PM-8AM time restrictions in Nigeria)
+
+**FR-1.2:** SMS messages shall use Termii's `dnd` channel for transactional messages (bypasses DND restrictions, requires whitelisted Sender ID)
+
+**FR-1.3:** WhatsApp messages shall ONLY use pre-approved templates via Termii template API (`POST /api/send/template`) - no free-form messaging
+
+**FR-1.4:** WhatsApp template messages may include media attachments (image, document, video, location) via `POST /api/send/template/media`
+
 **FR-2:** System shall allow sending one-to-one manual messages to individual customers
 
 **FR-3:** System shall allow sending bulk messages to multiple selected customers
+  
+**FR-3.1:** Bulk SMS shall use Termii bulk endpoint (`POST /api/sms/send/bulk`) for up to 100 recipients per batch
 
-**FR-4:** System shall support WhatsApp template creation with dynamic variables
+**FR-3.2:** Bulk WhatsApp messages shall be sent individually (no bulk endpoint available)
+
+**FR-4:** System shall support WhatsApp template creation with dynamic variables using numeric placeholders (`{{1}}`, `{{2}}`, etc.)
 
 **FR-5:** System shall track WhatsApp template approval status (pending/approved/rejected)
 
+**FR-5.1:** Template approval is managed via Termii dashboard (no approval API available)
+
+**FR-5.2:** Salon owners must manually mark templates as approved after receiving Termii confirmation
+
 **FR-6:** System shall store all sent messages in message_logs with delivery status
 
-**FR-7:** System shall differentiate between system-initiated (free) and salon-initiated (paid) messages
+**FR-6.1:** Message logs shall include `provider` field: 'resend', 'termii_sms', 'termii_whatsapp', 'meta_whatsapp'
+
+**FR-6.2:** Message logs shall include `termii_message_id` for tracking Termii message delivery
+
+**FR-7:** System shall differentiate between system-initiated (free) and salon-initiated (paid) messages via `initiated_by` field
 
 ### Credit Management
 
@@ -604,6 +776,12 @@ This feature enhances the salon management platform's messaging infrastructure b
 **FR-15:** System shall store Termii device_id per tenant for WhatsApp
 
 **FR-16:** System shall store Termii sender_id per tenant for SMS (alphanumeric, 3-11 characters)
+
+**FR-16.1:** Sender IDs must be registered and approved via Termii before use
+
+**FR-16.2:** Sender ID registration uses `POST https://api.ng.termii.com/api/sender-id/request` endpoint
+
+**FR-16.3:** System shall validate Sender ID format: alphanumeric, 3-11 characters, no spaces or special characters
 
 **FR-17:** System shall allow configuration via Messaging Settings page
 
@@ -629,7 +807,7 @@ The following are explicitly **out of scope** for this PRD:
 
 **NG-2:** Recurring/automated messages (e.g., birthday messages, appointment reminders)
 
-**NG-3:** Two-way messaging / customer inbox for replies
+**NG-3:** Two-way messaging / customer inbox for replies / conversational WhatsApp (customers cannot reply to salon messages within this feature)
 
 **NG-4:** Advanced customer segmentation (e.g., filter by spending, last visit date)
 
@@ -660,11 +838,79 @@ The following are explicitly **out of scope** for this PRD:
 - **SMS Provider:** Termii (Nigeria)
 - **WhatsApp Providers:** Termii (salon messages), Meta (system messages)
 
+### Termii API Specifications
+
+#### Base URL
+```
+https://api.ng.termii.com
+```
+
+#### Channel Routing Strategy
+
+| Channel | Use Case | DND Restrictions | Time Restrictions | Credit Cost | Sender ID Required |
+|---------|----------|------------------|-------------------|-------------|-------------------|
+| `generic` | Promotional, marketing | Blocked for DND numbers | 8PM-8AM (Nigeria MTN) | 2 credits | Yes (alphanumeric 3-11 chars) |
+| `dnd` | Transactional, OTP, critical | Bypasses DND | None | 2 credits | Yes (must be whitelisted) |
+| `whatsapp` (template) | Approved templates only | None | None | 2 credits | Device ID required |
+
+#### Phone Number Format
+- **Format:** International without + symbol
+- **Examples:**
+  - Nigeria: `2347880234567` (234 country code + 10-digit number)
+  - Ghana: `233201234567` (233 country code + 9-digit number)
+- **Validation:** Must start with country code, 10-15 digits total
+
+#### SMS Character Limits
+- **Plain text (`type: "plain"`):** 160 characters per SMS unit
+- **Unicode (`type: "unicode"`):** 70 characters per SMS unit
+- **Unicode triggers:** Special characters like `;  / ^ { } \ [ ~ ] | € ' "`
+- **Multi-part:** Long messages automatically split and charged per segment
+
+#### WhatsApp Template Requirements
+- **Variable format:** `{{1}}`, `{{2}}`, `{{3}}` (numeric placeholders only, 1-indexed)
+- **Data object format:** `{ "1": "John", "2": "3PM", "3": "March 30" }`
+- **OTP templates:** Special case, only `{ "otp": "123456" }` allowed
+- **Approval time:** 24-48 hours via Termii dashboard
+- **No template editing:** Once approved, cannot be modified (must create new template)
+
+#### WhatsApp Media Support
+- **Endpoint:** `POST /api/send/template/media`
+- **Media object:** `{ caption: "Image" | "Document" | "Video" | "Location", url: "https://..." }`
+- **URL requirements:** Must be publicly accessible, direct download link (not Google Drive share links)
+- **Supported formats:**
+  - Image: JPG, JPEG, PNG
+  - Audio: MP3, OGG, AMR
+  - Document: PDF
+  - Video: MP4 (must have audio track)
+- **OTP restriction:** Authentication templates cannot use media
+
+#### Bulk SMS Limits
+- **Max recipients per request:** 100 phone numbers
+- **Format:** `to: ["2347880234567", "2348012345678", ...]`
+- **Batching strategy:** Split arrays >100 into multiple requests
+- **Rate limiting:** Process batches sequentially with 1-second delay
+
+#### Error Code Mapping
+
+| HTTP Status | Termii Error Message | Salon-Magik User Message | Recommended Action |
+|-------------|---------------------|--------------------------|-------------------|
+| 400 | "Invalid Sender ID" | "SMS Sender ID not configured or invalid" | Configure in Messaging Settings |
+| 400 | "Insufficient balance" | "Termii account balance low. Contact support." | Admin tops up Termii account |
+| 400 | "Device not found" | "WhatsApp device not registered" | Verify Device ID in settings |
+| 400 | "Your device has reached the daily limit" | "Daily WhatsApp message limit reached" | Wait until next day or contact support |
+| 401 | "Unauthorized" | "Message service authentication failed" | Check API key in environment |
+| 403 | "Your account is not active" | "Messaging service unavailable. Contact support." | Admin resolves with Termii |
+| 403 | "You are not set up on this route" | "Messaging not available for this country" | Contact support to enable route |
+| 403 | "No active subscription on your device" | "WhatsApp device subscription expired" | Renew subscription in Termii dashboard |
+| 422 | Template-related errors | "WhatsApp requires approved template. Create template first." | Select approved WhatsApp template |
+| 429 | Rate limit | "Too many messages sent. Please wait." | Retry after 60 seconds |
+| 500 | "Service temporarily unavailable" | "Messaging service temporarily down. Try again later." | Retry after 5 minutes |
+
 ### Environment Variables Required
 
 ```bash
 TERMII_API_KEY=your_termii_api_key
-TERMII_SENDER_ID=SalonMagik
+TERMII_SENDER_ID=SalonMagik  # Default sender ID for SMS
 PAYSTACK_SECRET_KEY=your_paystack_secret_key
 RESEND_API_KEY=your_resend_api_key
 RESEND_FROM_EMAIL=noreply@salonmagik.com
@@ -685,9 +931,66 @@ META_WHATSAPP_PHONE_NUMBER_ID=your_phone_id
 
 ### API Endpoints
 
-**Termii SMS:** `https://api.ng.termii.com/api/sms/send`  
-**Termii WhatsApp Template:** `https://api.ng.termii.com/api/send/template`  
-**Termii WhatsApp with Media:** `https://api.ng.termii.com/api/send/template/media`  
+#### Termii Messaging APIs
+
+**1. SMS (Single Recipient)**
+- **Method:** POST
+- **Endpoint:** `https://api.ng.termii.com/api/sms/send`
+- **Body:** `{ api_key, to: "2347880234567", from: "SenderID", sms: "message text", type: "plain" | "unicode", channel: "generic" | "dnd" }`
+- **Response:** `{ code: "ok", message_id, balance, message, user }`
+- **Conditions:**
+  - `channel: "generic"` → Promotional, DND-blocked, time-restricted 8PM-8AM (Nigeria MTN only)
+  - `channel: "dnd"` → Transactional, bypasses DND, requires whitelisted Sender ID
+  - 160 chars/SMS (plain), 70 chars/SMS (unicode)
+
+**2. SMS (Bulk - Multiple Recipients)**
+- **Method:** POST
+- **Endpoint:** `https://api.ng.termii.com/api/sms/send/bulk`
+- **Body:** `{ api_key, to: ["234...", "234..."], from: "SenderID", sms: "message text", type: "plain", channel: "generic" | "dnd" }`
+- **Max:** 100 phone numbers per request
+- **Response:** `{ code: "ok", message_id, balance, message, user }`
+
+**3. WhatsApp (Template - No Media)**
+- **Method:** POST
+- **Endpoint:** `https://api.ng.termii.com/api/send/template`
+- **Body:** `{ api_key, phone_number: "2347880234567", device_id: "uuid", template_id: "termii_template_id", data: {"1": "value1", "2": "value2"} }`
+- **Response:** `{ code: "ok", message_id, balance, message, user }`
+- **Conditions:**
+  - Template must be pre-approved by Termii (24-48hr approval time)
+  - Variable placeholders: `{{1}}`, `{{2}}`, `{{3}}` (numeric)
+  - OTP templates: only `data: { otp: "123456" }` allowed
+
+**4. WhatsApp (Template - With Media)**
+- **Method:** POST
+- **Endpoint:** `https://api.ng.termii.com/api/send/template/media`
+- **Body:** `{ api_key, phone_number: "2347880234567", device_id: "uuid", template_id: "termii_template_id", data: {"1": "value1"}, media: { caption: "Image" | "Document" | "Video" | "Location", url: "https://..." } }`
+- **Response:** `{ code: "ok", message_id, balance, message, user }`
+- **Conditions:**
+  - URL must be publicly accessible and downloadable
+  - Supported formats: JPG, PNG (Image), PDF (Document), MP4 with audio (Video), MP3/OGG/AMR (Audio)
+  - OTP templates do NOT support media
+
+**Note:** WhatsApp conversational messages (no template, free-form text) are **OUT OF SCOPE** for this feature. All WhatsApp messages from salon to customer must use pre-approved templates.
+- **Fetch Sender IDs:** `GET https://api.ng.termii.com/api/sender-id?api_key=...`
+- **Request Sender ID:** `POST https://api.ng.termii.com/api/sender-id/request` with `{ api_key, sender_id: "CompanyName", use_case: "OTP sample", company: "Company Name" }`
+- **Response:** `{ code: "ok", message: "Sender Id requested. You will be contacted by your account manager." }`
+
+#### Common Termii Error Responses
+
+- **400 Bad Request:**
+  - "Invalid Sender ID" → Sender ID not registered or misspelled
+  - "Insufficient balance" → Termii account balance low (not our credit balance)
+  - "Device not found" → WhatsApp device ID not registered
+  - "Your device has reached the daily limit" → Daily message quota exceeded
+- **401 Unauthorized:** "Unauthorized" → Check API key and use HTTPS (not HTTP)
+- **403 Forbidden:**
+  - "Your account is not active" → Account disabled
+  - "You are not set up on this route" → Country route not activated
+  - "This service is currently not active on your account" → Feature not enabled
+  - "No active subscription on your device" → WhatsApp device subscription expired
+- **422 Unprocessable Entity:** "Template not approved" or "WhatsApp destination not in free-form window"
+- **429 Too Many Requests:** Rate limit exceeded
+- **500 Server Error:** "Service temporarily unavailable" → Termii downtime  
 
 ### Credit Pricing
 
@@ -811,6 +1114,76 @@ META_WHATSAPP_PHONE_NUMBER_ID=your_phone_id
 10. System shows message: "Template submitted. Approval typically takes 24-48 hours."
 11. Owner receives email when template approved
 12. Template becomes available in SendMessageDialog WhatsApp channel
+
+---
+
+## 10. Quick Reference Tables
+
+### Termii API Endpoint Reference
+
+| Operation | Method | Endpoint | Request Body Keys | Success Response | Use Case |
+|-----------|--------|----------|-------------------|------------------|----------|
+| Send SMS (single) | POST | `/api/sms/send` | `api_key, to, from, sms, type, channel` | `{ code: "ok", message_id, balance }` | Manual single message, appointment reminders |
+| Send SMS (bulk) | POST | `/api/sms/send/bulk` | `api_key, to: [], from, sms, type, channel` | `{ code: "ok", message_id, balance }` | Bulk promotions, announcements |
+| Send WhatsApp (template) | POST | `/api/send/template` | `api_key, phone_number, device_id, template_id, data` | `{ code: "ok", message_id, balance }` | Template-based marketing, reminders (salon → customer only) |
+| Send WhatsApp (template + media) | POST | `/api/send/template/media` | `api_key, phone_number, device_id, template_id, data, media` | `{ code: "ok", message_id, balance }` | Marketing with images/documents (salon → customer only) |
+| Fetch Sender IDs | GET | `/api/sender-id?api_key=...` | N/A | `{ content: [{ sender_id, status, country }] }` | List registered sender IDs |
+| Request Sender ID | POST | `/api/sender-id/request` | `api_key, sender_id, use_case, company` | `{ code: "ok", message: "..." }` | Register new sender ID |
+
+### Message Channel Decision Tree
+
+```
+When should I use which channel?
+
+┌─ Need to send SMS? ──────────────────────────────────────┐
+│                                                            │
+│  Is it promotional/marketing?                             │
+│  ├─ YES → channel: "generic"                              │
+│  │        (DND-blocked, 8PM-8AM restricted in Nigeria)    │
+│  └─ NO  → channel: "dnd"                                  │
+│           (OTP, appointment reminders, invoices)          │
+│           (Requires whitelisted Sender ID)                │
+└────────────────────────────────────────────────────────────┘
+
+┌─ Need to send WhatsApp? ─────────────────────────────────┐
+│                                                            │
+│  Do you have an approved template?                        │
+│  ├─ YES → Use template endpoint                           │
+│  │        (/api/send/template or /api/send/template/media)│
+│  └─ NO  → ERROR: WhatsApp requires approved template      │
+│           Create and get template approved first          │
+│           (No free-form WhatsApp messages in this feature)│
+└────────────────────────────────────────────────────────────┘
+
+┌─ Need to send Email? ────────────────────────────────────┐
+│                                                            │
+│  Always use Resend API (no restrictions)                  │
+│  Credit cost: 1 credit per email                          │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Credit Cost Summary
+
+| Channel | Provider | Credits | Conditions | Suggested Use |
+|---------|----------|---------|------------|---------------|
+| Email | Resend | 1 | None | Invoices, receipts, newsletters |
+| SMS (generic) | Termii | 2 | DND-blocked, 8PM-8AM restricted | Promotions, marketing |
+| SMS (dnd) | Termii | 2 | Requires whitelisted Sender ID | OTP, reminders, critical alerts |
+| WhatsApp (template) | Termii | 2 | Pre-approved template required | Appointment confirmations, promotions (salon → customer only) |
+| WhatsApp (system) | Meta | 0 | System-initiated only | Reactivation campaigns (existing) |
+
+### Common Implementation Pitfalls
+
+| Issue | Symptom | Root Cause | Solution |
+|-------|---------|------------|----------|
+| "Invalid Sender ID" | SMS fails to send | Sender ID not registered with Termii | Register via `/api/sender-id/request`, wait for approval |
+| "Device not found" | WhatsApp fails | Device ID incorrect or not registered | Verify `termii_device_id` in tenant settings |
+| "WhatsApp requires template" | WhatsApp fails | No template selected or template not approved | Create and approve WhatsApp template, then select it |
+| Template not found in SendMessageDialog | Template not listed | Status not 'approved' | Manually mark template as approved after Termii confirmation |
+| SMS not delivered to DND numbers | Silent failure | Using `channel: "generic"` | Switch to `channel: "dnd"` for transactional messages |
+| WhatsApp media not sending | Media URL error | URL not publicly accessible | Use direct download URLs, not Google Drive/Dropbox share links |
+| Bulk SMS failing | 400 error | >100 recipients in single request | Split into batches of 100 |
+| Credits not deducted | Balance unchanged | `initiated_by: "system"` set incorrectly | Set `initiated_by: "salon"` for salon messages |
 
 ---
 
