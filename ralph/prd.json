@@ -50,8 +50,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. Migration file created at supabase/migrations/20260329170000_create_whatsapp_templates_table.sql. Created whatsapp_templates table with all required columns (id, tenant_id, template_name, template_id, template_content, variables, status, provider, created_at, updated_at). Added UNIQUE constraint on (tenant_id, template_name), indexes on tenant_id/status/provider. Implemented RLS policies for SELECT/INSERT/UPDATE/DELETE. Added CHECK constraints for status (pending/approved/rejected) and provider (termii/meta). Added trigger for auto-updating updated_at. Lint passes (no errors, only pre-existing warnings in other files)."
     },
     {
       "id": "US-004",

@@ -47,3 +47,38 @@
 - Indexes on filtered columns (provider, initiated_by) improve query performance for reporting and filtering
 - Partial index on termii_message_id (WHERE NOT NULL) saves space while maintaining query efficiency
 - All columns are nullable to ensure backward compatibility with existing message logs
+
+---
+## 2026-03-29 17:05:00 - US-003: Create WhatsApp Templates Table
+
+### Implemented
+- Created database migration to add whatsapp_templates table for storing WhatsApp template configurations
+- Added all required columns: id (UUID), tenant_id (FK to tenants), template_name (unique per tenant), template_id (provider-assigned after approval), template_content (JSONB), variables (TEXT[]), status (CHECK constraint), provider (CHECK constraint), created_at, updated_at
+- Added UNIQUE constraint on (tenant_id, template_name) to prevent duplicate template names within a tenant
+- Added indexes on tenant_id, status, and provider columns for query performance
+- Implemented comprehensive RLS policies for SELECT, INSERT, UPDATE, DELETE operations (tenants can only access their own templates)
+- Added CHECK constraint for status column: 'pending', 'approved', 'rejected'
+- Added CHECK constraint for provider column: 'termii', 'meta'
+- Added trigger function to automatically update updated_at timestamp on row updates
+- Added detailed column comments for documentation
+
+### Files Changed
+- supabase/migrations/20260329170000_create_whatsapp_templates_table.sql
+
+### Learnings
+- WhatsApp templates require approval before they can be used for messaging
+- The template_id field is NULL initially and gets populated after provider approval
+- template_content is stored as JSONB to support flexible template structures with placeholders
+- variables array stores placeholder names (e.g., ["customer_name", "appointment_time"]) for template variable substitution
+- Multi-provider support (Termii and Meta) allows salons to choose their preferred WhatsApp provider
+- RLS policies ensure tenant isolation - each salon can only manage their own templates
+- Unique constraint on (tenant_id, template_name) prevents naming conflicts within a tenant but allows different tenants to use the same template names
+- Indexes on status and provider columns optimize filtering queries (e.g., "show all approved templates")
+- Auto-updating updated_at via trigger ensures accurate audit trails without manual management
+
+### Notes for future iterations
+- Edge functions that use WhatsApp templates should validate template status='approved' before sending
+- Template approval workflow will be handled by external provider APIs (Termii/Meta)
+- The manage-whatsapp-templates edge function (US-008) will provide CRUD operations for this table
+- Consider adding a rejected_reason TEXT column in future if providers return rejection details
+- Lint passes with only pre-existing warnings in other apps (no errors introduced)
