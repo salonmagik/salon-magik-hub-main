@@ -680,3 +680,60 @@
 - Template variable placeholders use numeric keys ({{1}}, {{2}}) for Termii compatibility
 - Variables array order must match placeholder numeric order (variables[0] → {{1}}, variables[1] → {{2}})
 
+---
+## 2026-03-29 18:30:00 - US-010: Create Send Message Dialog Component
+
+### Implemented
+- Created comprehensive SendMessageDialog component at apps/salon-admin/src/components/messaging/SendMessageDialog.tsx (417 lines)
+- Channel selection via RadioGroup with Email (1 credit), SMS (2 credits), WhatsApp (2 credits)
+- Customer selection via searchable Select dropdown (if customerId not provided), pre-filled if provided via props
+- Subject field for email channel only
+- Message textarea for email and SMS channels with SMS character limit hint (160 plain / 70 unicode)
+- WhatsApp template selector showing only approved templates
+- Dynamic template variable inputs based on selected template's variables array
+- Credit cost preview showing current balance and cost per channel
+- Insufficient credits alert with link to /billing page
+- Form validation: disables send button based on multiple conditions (customer selected, credits available, contact info present, message filled, template selected/variables filled)
+- Channel-specific disabled states with user-friendly messages (e.g., "Customer has no email address", "Create WhatsApp templates first")
+- Success/error toast notifications via useManualMessages hook
+- Dialog closes on successful send
+- Reset form after successful send (unless customerId provided via props)
+
+### Files Changed
+- apps/salon-admin/src/components/messaging/SendMessageDialog.tsx (new file, 417 lines)
+- ralph/prd.json (updated US-010 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- SendMessageDialog integrates with multiple hooks: useManualMessages (sending), useWhatsAppTemplates (template selection), useMessagingCredits (balance check), useCustomers (customer list), useAuth (tenant context)
+- Channel validation pattern: check customer contact info availability before enabling channel option
+- WhatsApp requires approved templates only - no free-form messaging allowed
+- Template variables use numeric placeholders {1}, {2}, etc., shown in Label for clarity
+- Credit cost constant: CREDIT_COST = { email: 1, sms: 2, whatsapp: 2 }
+- Form validation combines multiple conditions: customer selected, credits sufficient, contact info present, message/template filled
+- useEffect pattern to initialize customerId from props and reset template variables on template change
+- Disabled state handling: RadioGroup items can be disabled with inline reasons shown next to label
+- JSX curly brace escaping: use template literal `{${index + 1}}` to display literal braces in text
+- shadcn/ui Dialog pattern: DialogContent with max-h-[90vh] overflow-y-auto for scrollable long forms
+- Alert component for user-friendly error messages (insufficient credits) with inline action link
+- Dev server verification: Started successfully on port 8080, no compilation errors
+- Lint passes with 0 errors in new component (only pre-existing AuditLogPage.tsx error unrelated)
+- LSP errors for @supabase-client are pre-existing type declaration issues (documented in US-011 notes)
+- Component follows codebase patterns: useState for form state, useCallback for handlers, form submission with e.preventDefault(), toast notifications for feedback
+
+### Notes for future iterations
+- US-012 will create MessageHistory component to display sent messages list
+- US-013 will update CustomerDetail page to add "Send Message" button that opens this dialog with customerId pre-filled
+- US-017 will extend this dialog to support bulk customer selection (multiple customers mode)
+- Current implementation sends to single customer only - bulk mode will require toggle switch and customer list with checkboxes
+- Template variable mapping: Frontend sends as Record<string, string>, edge function converts to numeric keys for Termii API
+- WhatsApp template approval workflow: Users create templates via manage-whatsapp-templates, wait for approval, then can use in this dialog
+- Credit balance is fetched from communication_credits table via useMessagingCredits hook
+- Consider adding message preview feature (show how template will look with variables filled)
+- Consider adding message scheduling (send at specific time) in future enhancement
+- Consider adding message templates for email/SMS (not just WhatsApp) for common messages
+- The dialog is designed to be reusable: can be opened from any page with or without customerId pre-filled
+- Customer dropdown includes email in display: "John Doe (john@example.com)" for easier identification
+- Template dropdown shows only approved templates (status='approved') filtered in query
+- Error handling: toast notifications from useManualMessages hook provide user-friendly messages from edge function errors
+
