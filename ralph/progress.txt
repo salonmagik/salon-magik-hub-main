@@ -626,3 +626,57 @@
 - The hook doesn't check credit balance before sending - that's handled by the edge function
 - Template validation (approved status) is handled by the edge function, not the hook
 
+---
+## 2026-03-29 18:00:00 - US-015: Create useWhatsAppTemplates Hook
+
+### Implemented
+- Created comprehensive React hook at apps/salon-admin/src/hooks/useWhatsAppTemplates.tsx (273 lines)
+- Accepts UseWhatsAppTemplatesOptions with tenantId (required), provider (optional: 'termii' | 'meta'), status (optional: 'pending' | 'approved' | 'rejected')
+- Returns object with templates, isLoading, error, createTemplate, updateTemplate, deleteTemplate, checkStatus, refetch
+- Fetches whatsapp_templates from database with filtering by tenantId, provider, and status via Supabase select
+- Sorts templates by created_at DESC to show newest first
+- createTemplate() function calls manage-whatsapp-templates edge function with POST method and body containing templateName, templateContent, variables, provider
+- updateTemplate() function calls edge function with PUT method and body containing id, templateName, templateContent, variables
+- deleteTemplate() function calls edge function with DELETE method and body containing id
+- checkStatus() function calls edge function with GET method to fetch latest approval status from database
+- Uses toast notifications for success and error feedback to user
+- Automatically refreshes templates list after all operations (create/update/delete/checkStatus)
+- Handles authentication errors gracefully with user-friendly messages
+- Exports TypeScript interfaces: UseWhatsAppTemplatesOptions (with tenantId, provider, status), CreateTemplateOptions (with templateName, templateContent, variables, provider), UpdateTemplateOptions (with id and optional fields)
+
+### Files Changed
+- apps/salon-admin/src/hooks/useWhatsAppTemplates.tsx (new file, 273 lines)
+- ralph/prd.json (updated US-015 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Codebase pattern uses useState/useEffect instead of React Query (acceptance criteria mentioned React Query but existing hooks don't use it)
+- Existing hooks follow pattern: useState for data/loading/error, useCallback for fetch functions, useEffect for auto-fetch on mount
+- Hook file extension is .tsx (not .ts) to match codebase convention for React hooks
+- Edge function routing in Supabase: supabase.functions.invoke() accepts method and body parameters for RESTful operations
+- The manage-whatsapp-templates edge function (US-008) handles the actual API logic including validation, database operations, and audit logging
+- checkStatus() fetches status from database (not directly from Termii API) - the edge function can be extended to fetch from Termii API if needed
+- Template filtering by provider and status allows UI components to show specific subsets (e.g., "show all approved Termii templates")
+- Authentication checks use currentTenant?.id and user?.id from useAuth hook for tenant context and user identity
+- Error handling pattern: try-catch with console.error logging and toast notification for user feedback
+- Toast notifications use @ui/ui/use-toast which is the shadcn toast component from shared UI package
+- Pre-existing LSP errors in other hook files are expected (missing type declarations for @supabase-client package)
+- Lint passes with 0 errors and 0 warnings on the new file (pre-existing lint error in AuditLogPage.tsx unrelated to this story)
+
+### Notes for future iterations
+- US-010 will create SendMessageDialog component that consumes this hook for WhatsApp template selection
+- US-014 will create WhatsAppTemplateManager component that consumes this hook for template CRUD operations
+- US-016 will create MessagingSettings page that embeds WhatsAppTemplateManager component
+- Frontend components will call createTemplate(), updateTemplate(), deleteTemplate(), checkStatus() as needed
+- React Query not used but could be added in future for better cache management and automatic refetching
+- Consider adding pagination for template list if tenant has many templates (currently fetches all)
+- Consider adding real-time subscriptions to auto-refresh templates when status changes
+- The templates array is sorted by created_at DESC but could add sorting options (by name, status, provider)
+- checkStatus() currently just refetches from database - could be extended to poll Termii API for actual approval status
+- Template approval workflow: User creates template → Submits to Termii manually → Admin approves via manage-whatsapp-templates API → checkStatus() shows updated status
+- Consider adding template preview feature in UI to show how template will look with sample variables
+- Consider adding template testing feature to send test WhatsApp message before approval
+- The hook doesn't validate template content structure - that's handled by the edge function (US-008)
+- Template variable placeholders use numeric keys ({{1}}, {{2}}) for Termii compatibility
+- Variables array order must match placeholder numeric order (variables[0] → {{1}}, variables[1] → {{2}})
+
