@@ -701,6 +701,64 @@ Deno.serve(async (req) => {
               } else {
                 console.log(`Messaging credits added: ${credits} credits for tenant ${messagingTenantId}`);
               }
+
+              // Send confirmation email to tenant owner
+              if (resendApiKey) {
+                const { data: tenantDetails } = await supabase
+                  .from("tenants")
+                  .select("name, contact_email, currency")
+                  .eq("id", messagingTenantId)
+                  .single();
+
+                // Get salon owner email
+                const { data: owners } = await supabase
+                  .from("user_roles")
+                  .select("user_id")
+                  .eq("tenant_id", messagingTenantId)
+                  .eq("role", "owner");
+
+                if (owners && owners.length > 0 && tenantDetails) {
+                  for (const owner of owners) {
+                    const { data: profile } = await supabase
+                      .from("profiles")
+                      .select("email")
+                      .eq("user_id", owner.user_id)
+                      .single();
+
+                    if (profile?.email) {
+                      try {
+                        await fetch("https://api.resend.com/emails", {
+                          method: "POST",
+                          headers: {
+                            Authorization: `Bearer ${resendApiKey}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            from: buildFromAddress({ mode: "salon", salonName: tenantDetails.name, fromEmail: resendFromEmail }),
+                            to: profile.email,
+                            subject: `Messaging Credits Purchased - ${tenantDetails.name}`,
+                            html: `
+                              <h2>Messaging Credits Purchase Confirmation</h2>
+                              <p>Your messaging credits purchase was successful!</p>
+                              <ul>
+                                <li><strong>Credits Purchased:</strong> ${credits} credits</li>
+                                <li><strong>Amount Paid:</strong> ${tenantDetails.currency} ${messagingAmount}</li>
+                                <li><strong>Payment Method:</strong> Paystack</li>
+                                <li><strong>Transaction Reference:</strong> ${reference}</li>
+                              </ul>
+                              <p>Your new credits have been added to your account and are ready to use for sending messages to your customers.</p>
+                              <p>Thank you for using SalonMagik!</p>
+                            `,
+                          }),
+                        });
+                        console.log(`Confirmation email sent to ${profile.email} for credit purchase`);
+                      } catch (emailError) {
+                        console.error("Error sending credit purchase confirmation email:", emailError);
+                      }
+                    }
+                  }
+                }
+              }
             } catch (creditPurchaseError) {
               console.error("Exception processing messaging credit purchase:", creditPurchaseError);
             }

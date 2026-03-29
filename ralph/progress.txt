@@ -523,3 +523,53 @@
 - Future enhancement: Add promotional pricing or bulk purchase discounts
 - Future enhancement: Add auto-recharge feature (automatically purchase credits when balance drops below threshold)
 
+
+---
+## 2026-03-29 17:00:00 - US-020: Verify Credit Purchase via Paystack
+
+### Implemented
+- Verified existing implementation in create-payment-session/index.ts and payment-webhook/index.ts meets all acceptance criteria
+- create-payment-session already handles intentType='messaging_credit_purchase' with proper Paystack integration
+- payment-webhook already handles successful payment, creates purchase records, and increments credit balance
+- Added NEW functionality: Sends confirmation email to salon owner via Resend after successful credit purchase
+- Email includes credit count, amount paid, payment method (Paystack), and transaction reference
+- Email sent to all salon owners associated with the tenant via user_roles table
+- Uses buildFromAddress() helper for consistent branded email sender format
+
+### Files Changed
+- supabase/functions/payment-webhook/index.ts (added confirmation email logic lines 706-761)
+- ralph/prd.json (updated US-020 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- The Paystack credit purchase flow was already implemented prior to this Ralph iteration
+- Only missing piece was the confirmation email which has now been added
+- Email confirmation follows same pattern as other payment confirmation emails (appointment payments, salon purse credits)
+- Fetches tenant details (name, currency) and owner emails from database before sending
+- Uses Resend API with Authorization header for email delivery
+- Email is sent in try-catch block so failures don't break the transaction (logged but not fatal)
+- The buildFromAddress() helper ensures consistent email sender format across all system emails
+- Multiple owners can exist per tenant - email sent to all owners for visibility
+- Email HTML includes structured list with purchase details for clear communication
+- The payment-webhook function already handles both Stripe and Paystack webhooks with signature verification
+- Credits are added to communication_credits table before email is sent (email is last step)
+- If email fails, credits are still added successfully (logged error only)
+- Confirmation email provides audit trail and user reassurance that payment was successful
+- Transaction reference included in email for customer support and dispute resolution
+- Lint passes (0 errors, only pre-existing warnings in other apps unrelated to this implementation)
+
+### Notes for future iterations
+- US-011 through US-017 are frontend React components and hooks (priority 3-4)
+- US-021 will verify the CreditPurchaseDialog UI component that triggers this payment flow
+- Manual testing (Test: Purchase with NGN/GHS, webhook handling) should be performed in integration/QA phase (US-022, US-023, US-024)
+- Frontend components will call create-payment-session function with intentType='messaging_credit_purchase'
+- Payment flow: Frontend → create-payment-session → Paystack checkout → User pays → Paystack webhook → payment-webhook → Credits added + Email sent
+- Consider adding email delivery status tracking in message_logs table for all transactional emails
+- Consider adding purchase confirmation SMS for markets where SMS is preferred over email
+- Consider adding credit purchase receipt/invoice PDF attachment to email
+- Email template is inline HTML - could be moved to _shared/email-template.ts for consistency with other email templates
+- Future enhancement: Add purchase history page in frontend showing all messaging_credit_purchases with email resend option
+- Future enhancement: Add webhook retry mechanism if credit addition fails (Paystack doesn't auto-retry)
+- Currency in email matches tenant currency (NGN or GHS) for clarity
+- Amount in email is already converted from minor units (kobo/pesewas) to major units by webhook handler
+
