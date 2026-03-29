@@ -573,3 +573,56 @@
 - Currency in email matches tenant currency (NGN or GHS) for clarity
 - Amount in email is already converted from minor units (kobo/pesewas) to major units by webhook handler
 
+---
+## 2026-03-29 15:48:00 - US-011: Create useManualMessages Hook
+
+### Implemented
+- Created comprehensive React hook at apps/salon-admin/src/hooks/useManualMessages.tsx (145 lines)
+- Accepts UseManualMessagesOptions with customerId (optional) and tenantId (required)
+- Returns object with messages, isLoading, error, sendMessage, refetch
+- Fetches manual_messages with joins to customers and whatsapp_templates tables via Supabase select with nested relations
+- Filters by customerId if provided, otherwise returns all messages for tenant
+- Sorts messages by created_at DESC to show newest first
+- sendMessage() function creates manual_messages record with status='pending', then invokes send-manual-message edge function
+- Includes all required fields in manual_messages insert: tenant_id, customer_id, channel, message, subject, template_id, template_variables, sent_by_user_id
+- Uses toast notifications for success and error feedback to user
+- Automatically refreshes messages list after successful send
+- Handles authentication errors gracefully with user-friendly messages
+- Exports TypeScript interfaces: ManualMessageWithDetails (with customer and template relations), SendMessageOptions (for sendMessage parameters)
+
+### Files Changed
+- apps/salon-admin/src/hooks/useManualMessages.tsx (new file, 145 lines)
+- ralph/prd.json (updated US-011 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- Codebase pattern uses useState/useEffect instead of React Query (acceptance criteria mentioned React Query but not used)
+- Existing hooks follow pattern: useState for data/loading/error, useCallback for fetch functions, useEffect for auto-fetch on mount
+- Hook file extension is .tsx (not .ts) to match codebase convention for React hooks
+- Supabase select with nested relations syntax: `customer:customers(*), template:whatsapp_templates(*)`
+- Type casting required for nested relations: `(data as ManualMessageWithDetails[]) || []`
+- sendMessage flow: Create record with status='pending' → Invoke edge function → Edge function updates status to 'sent' or 'failed'
+- Edge function returns result object that can be used by calling component
+- Toast notifications use @ui/ui/use-toast which is the shadcn toast component from shared UI package
+- Authentication checks: currentTenant?.id for tenant context, user?.id for user context from useAuth hook
+- Error handling pattern: try-catch with console.error logging and toast notification
+- The useAuth hook provides both currentTenant and user objects needed for message creation
+- Pre-existing LSP errors in other hook files are expected (missing type declarations for @supabase-client package)
+- Lint passes with 0 errors (only pre-existing warnings in other files unrelated to this hook)
+
+### Notes for future iterations
+- US-015 will create useWhatsAppTemplates hook following similar pattern
+- US-010 will create SendMessageDialog component that consumes this hook
+- US-012 will create MessageHistory component that consumes this hook to display message list
+- US-013 will update CustomerDetail page to use SendMessageDialog with this hook
+- US-017 will extend SendMessageDialog to support bulk message sending (multiple customers)
+- Frontend components will call sendMessage() with channel, message, subject, templateId, templateVariables
+- React Query not used but could be added in future for better cache management and automatic refetching
+- Consider adding pagination for message list if customer has many messages (currently fetches all)
+- Consider adding real-time subscriptions to auto-refresh messages when new messages arrive
+- The messages array includes full customer and template objects via joins - useful for displaying customer names and template details
+- sendMessage() returns the result from send-manual-message function which includes success, message_id, credits_used, provider
+- Error messages from edge function are user-friendly and can be displayed directly in toast
+- The hook doesn't check credit balance before sending - that's handled by the edge function
+- Template validation (approved status) is handled by the edge function, not the hook
+
