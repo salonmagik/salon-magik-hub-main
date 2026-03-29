@@ -1,6 +1,6 @@
 {
   "project": "Message API - Termii Integration",
-  "branchName": "ralph/message-api-termii-integration",
+  "branchName": "feat/messaging",
   "description": "Enhance the salon management platform's messaging infrastructure by integrating Termii's WhatsApp and SMS APIs, enabling salons to send messages directly to customers through multiple channels. Includes credit-based billing where salons can purchase messaging credits from their wallets or via Paystack, with seamless credit burn implementation for all salon-initiated messages.",
   "userStories": [
     {
