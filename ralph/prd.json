@@ -83,8 +83,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed. Migration file created at supabase/migrations/20260329190000_extend_reactivation_campaigns_for_termii.sql. Added whatsapp_provider TEXT column with CHECK constraint ('meta', 'termii'). Added termii_template_id TEXT column for Termii template references. Added termii_device_id TEXT column for device ID override. Existing WhatsApp campaigns default to 'meta' provider for backward compatibility. Added column comments for documentation. Lint passes (0 errors, only pre-existing warnings in other apps)."
     },
     {
       "id": "US-005",

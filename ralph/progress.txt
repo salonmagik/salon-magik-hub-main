@@ -117,3 +117,34 @@
 - The useManualMessages React hook (US-011) will provide CRUD operations for UI components
 - Message history component (US-012) will JOIN manual_messages with message_logs for complete delivery tracking
 - Consider adding a retry_count column in future if implementing automatic retry logic for failed messages
+
+---
+## 2026-03-29 19:05:00 - US-007A: Extend Reactivation Campaign Table for Termii
+
+### Implemented
+- Created database migration to extend customer_reactivation_campaigns table with Termii WhatsApp provider support
+- Added whatsapp_provider TEXT column with CHECK constraint ('meta', 'termii') for provider selection
+- Added termii_template_id TEXT column to store Termii template ID for WhatsApp campaigns
+- Added termii_device_id TEXT column to store Termii device ID for WhatsApp campaigns (overrides tenant-level device ID if specified)
+- Updated existing WhatsApp campaigns to default to 'meta' provider for backward compatibility
+- Added column comments to document purpose and usage
+
+### Files Changed
+- supabase/migrations/20260329190000_extend_reactivation_campaigns_for_termii.sql
+
+### Learnings
+- The customer_reactivation_campaigns table was previously limited to a single WhatsApp provider (Meta)
+- Adding whatsapp_provider column allows salons to choose between Meta and Termii for WhatsApp campaigns
+- The termii_template_id references an approved template in the whatsapp_templates table (validated at application layer)
+- The termii_device_id column is optional - if NULL, the campaign uses the tenant-level termii_device_id
+- Backward compatibility is critical: existing WhatsApp campaigns automatically default to 'meta' provider
+- All new columns are nullable to allow flexibility (SMS/Email campaigns don't need WhatsApp-specific fields)
+- The CHECK constraint on whatsapp_provider ensures only valid provider values are stored
+
+### Notes for future iterations
+- US-007B will update the send-reactivation-campaign edge function to check whatsapp_provider and route accordingly
+- If provider='termii': Use sendTermiiWhatsAppTemplate() from termii-client.ts (US-005)
+- If provider='meta': Use existing Meta WhatsApp Business API (no changes)
+- If provider=NULL: Default to 'meta' for backward compatibility
+- Template validation should ensure termii_template_id references an approved template when provider='termii'
+- Device ID resolution: Use campaign.termii_device_id if specified, otherwise fall back to tenant.termii_device_id
