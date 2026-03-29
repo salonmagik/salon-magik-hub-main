@@ -345,3 +345,48 @@
 - Consider adding template usage tracking (how many messages sent with each template)
 - TERMII_API_KEY environment variable must be set in Supabase Edge Functions for production use
 
+---
+## 2026-03-29 15:40:00 - US-009: Update System Message Functions to Skip Credits
+
+### Implemented
+- Updated all 5 system message edge functions to set initiated_by='system' and credits_used=0
+- send-appointment-notification/index.ts: Updated message_logs insert to include provider='resend', initiated_by='system', credits_used=0 (line 380-392)
+- send-invoice/index.ts: Updated message_logs insert to include provider='resend', initiated_by='system', credits_used=0 (line 166-178)
+- send-staff-invitation/index.ts: Updated message_logs insert to include provider='resend', initiated_by='system', credits_used=0 (line 398-407)
+- send-password-reset/index.ts: Added NEW message_logs insert with provider='resend', initiated_by='system', credits_used=0 (previously missing logging) (line 130-140)
+- send-email-verification/index.ts: Added NEW message_logs insert with provider='resend', initiated_by='system', credits_used=0 (previously missing logging) (line 254-264)
+- Verified no credit deduction logic exists in any system functions (no communication_credits.balance updates)
+
+### Files Changed
+- supabase/functions/send-appointment-notification/index.ts
+- supabase/functions/send-invoice/index.ts
+- supabase/functions/send-staff-invitation/index.ts
+- supabase/functions/send-password-reset/index.ts
+- supabase/functions/send-email-verification/index.ts
+- ralph/prd.json (updated US-009 passes=true with detailed notes)
+- ralph/progress.txt (this entry)
+
+### Learnings
+- System messages vs Salon messages: initiated_by field is critical for distinguishing between system-generated messages (don't consume credits) and salon-initiated messages (do consume credits)
+- send-password-reset and send-email-verification functions were previously NOT logging to message_logs table - this is now fixed
+- All system functions use Resend API for email, so provider='resend' is consistent across all system messages
+- System messages include: appointment notifications (scheduled/cancelled/rescheduled/reminder/completed), invoice emails, staff invitations, password resets, email verifications
+- Salon-initiated messages include: manual messages (US-006), reactivation campaigns (US-007B), future bulk messages (US-018)
+- The initiated_by field enables accurate credit billing logic: system=free, salon=paid
+- message_logs.credits_used=0 for all system messages ensures clear audit trail without consuming tenant credits
+- Reactivation campaigns were already handled in US-007B with initiated_by='salon' and appropriate credit costs
+- Lint passes (0 errors, only pre-existing warning in apps/salon-admin/src/pages/salon/AuditLogPage.tsx unrelated to this story)
+- LSP errors for Deno imports (https://deno.land, https://esm.sh) are expected in edge functions and documented in AGENTS.md
+
+### Notes for future iterations
+- US-018 will create send-bulk-message function for bulk operations (salon-initiated, consumes credits)
+- US-019 and US-020 will verify credit purchase flows (wallet and Paystack)
+- Frontend components (US-010+) will consume the send-manual-message function for salon-initiated messages
+- Credit billing logic is now complete: system messages free (US-009), salon messages paid (US-006, US-007B)
+- message_logs table now accurately tracks all messages with provider, initiated_by, and credits_used fields
+- Future enhancement: Add credit_balance_before/credit_balance_after fields to message_logs for audit trail
+- Future enhancement: Add scheduled_send_at field to manual_messages for delayed message sending
+- All 5 system message functions now have consistent message_logs logging with proper fields
+- Password reset and email verification messages are not tenant-specific (no tenant_id/customer_id in message_logs)
+- Staff invitation messages have tenant_id but no customer_id (staff are not customers)
+
