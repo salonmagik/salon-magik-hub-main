@@ -125,6 +125,16 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       fetchPreferences(session.user.id),
     ]);
 
+    const profileHasPassword = profile?.client_password_initialized === true;
+    const metadataHasPassword = session.user.user_metadata?.password_initialized === true;
+    const profileNeedsPassword = profile?.client_password_initialized === false;
+    const metadataNeedsPassword = session.user.user_metadata?.password_initialized === false;
+
+    const requiresPasswordSetup =
+      profileHasPassword || metadataHasPassword
+        ? false
+        : profileNeedsPassword || metadataNeedsPassword;
+
     setState({
       user: session.user,
       session,
@@ -133,9 +143,7 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       preferences,
       isLoading: false,
       isAuthenticated: true,
-      requiresPasswordSetup:
-        profile?.client_password_initialized === false ||
-        session.user.user_metadata?.password_initialized === false,
+      requiresPasswordSetup,
     });
   };
 
@@ -204,8 +212,11 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshAccount = async () => {
-    if (!state.session) return;
-    await hydrateUserState(state.session);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
+    await hydrateUserState(session);
   };
 
   return (

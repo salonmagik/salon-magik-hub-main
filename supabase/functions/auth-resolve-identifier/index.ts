@@ -167,11 +167,11 @@ serve(async (req) => {
       };
     }
 
+    const matchedCustomerIds = matchedCustomers.map((customer) => customer.id);
     const { error: linkError } = await admin
       .from("customers")
       .update({ user_id: authUser.id })
-      .eq(customerColumn, normalized.value)
-      .or(`user_id.is.null,user_id.neq.${authUser.id}`);
+      .in("id", matchedCustomerIds);
     if (linkError) {
       throw linkError;
     }
@@ -196,12 +196,15 @@ serve(async (req) => {
 
     const { error: profileError } = await admin
       .from("profiles")
-      .upsert({
-        user_id: authUser.id,
-        full_name: fullName,
-        phone,
-        client_password_initialized: hasPassword,
-      });
+      .upsert(
+        {
+          user_id: authUser.id,
+          full_name: fullName,
+          phone,
+          client_password_initialized: hasPassword,
+        },
+        { onConflict: "user_id" } as any,
+      );
 
     if (profileError) {
       throw profileError;
@@ -226,7 +229,8 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("auth-resolve-identifier error", error);
-    return new Response(JSON.stringify({ error: "Failed to resolve account" }), {
+    const message = error instanceof Error ? error.message : "Failed to resolve account";
+    return new Response(JSON.stringify({ error: message || "Failed to resolve account" }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });

@@ -12,6 +12,7 @@ import { Button } from "@ui/button";
 
 type LoginStep = "identifier" | "otp" | "password";
 type IdentifierType = "email" | "phone";
+type EmailOtpVerificationType = "email" | "magiclink";
 type RouteState = {
   from?: {
     pathname?: string;
@@ -55,6 +56,8 @@ export default function ClientLoginPage() {
   const [resolution, setResolution] = useState<Resolution | null>(null);
   const [resendAvailableAt, setResendAvailableAt] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(0);
+  const [emailOtpVerificationType, setEmailOtpVerificationType] =
+    useState<EmailOtpVerificationType>("email");
 
   useEffect(() => {
     if (!resendAvailableAt) {
@@ -175,15 +178,29 @@ export default function ClientLoginPage() {
 
     setResendAvailableAt(limitData.retryAt ?? null);
 
-    const payload =
-      targetType === "email"
-        ? { email: targetIdentifier, options: { shouldCreateUser: false } }
-        : { phone: targetIdentifier, options: { shouldCreateUser: false } };
-    const { error: otpError } = await supabase.auth.signInWithOtp(payload as never);
+    if (targetType === "email") {
+      const { data, error: emailOtpError } = await supabase.functions.invoke("send-client-login-otp", {
+        body: { email: targetIdentifier },
+      });
 
-    if (otpError) {
-      setError(otpError.message);
-      return false;
+      if (emailOtpError || data?.error) {
+        setError(data?.error || emailOtpError?.message || "Failed to send verification email.");
+        return false;
+      }
+
+      setEmailOtpVerificationType(
+        data?.verificationType === "magiclink" ? "magiclink" : "email",
+      );
+    } else {
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        phone: targetIdentifier,
+        options: { shouldCreateUser: false },
+      } as never);
+
+      if (otpError) {
+        setError(otpError.message);
+        return false;
+      }
     }
 
     toast({
@@ -232,8 +249,8 @@ export default function ClientLoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!resolution || otp.length !== 6) {
-      setError("Please enter the 6-digit code");
+    if (!resolution || otp.length !== 8) {
+      setError("Please enter the 8-digit code");
       return;
     }
 
@@ -242,7 +259,7 @@ export default function ClientLoginPage() {
     try {
       const verificationPayload =
         resolution.identifierType === "email"
-          ? { email: resolution.identifier, token: otp, type: "email" as const }
+          ? { email: resolution.identifier, token: otp, type: emailOtpVerificationType }
           : { phone: resolution.identifier, token: otp, type: "sms" as const };
       const { data, error: verifyError } = await supabase.auth.verifyOtp(verificationPayload);
 
@@ -279,6 +296,7 @@ export default function ClientLoginPage() {
       setPassword("");
       setError("");
       setResolution(null);
+      setEmailOtpVerificationType("email");
     }
   };
 
@@ -370,7 +388,7 @@ export default function ClientLoginPage() {
                 <ShieldCheck className="h-6 w-6 text-primary" />
               </div>
 
-              <InputOTP maxLength={6} value={otp} onChange={setOtp} className="justify-center">
+              <InputOTP maxLength={8} value={otp} onChange={setOtp} className="justify-center">
                 <InputOTPGroup>
                   <InputOTPSlot index={0} />
                   <InputOTPSlot index={1} />
@@ -378,6 +396,8 @@ export default function ClientLoginPage() {
                   <InputOTPSlot index={3} />
                   <InputOTPSlot index={4} />
                   <InputOTPSlot index={5} />
+                  <InputOTPSlot index={6} />
+                  <InputOTPSlot index={7} />
                 </InputOTPGroup>
               </InputOTP>
 

@@ -47,6 +47,7 @@ export default function ClientCompleteAccountPage() {
         return;
       }
 
+      await supabase.auth.refreshSession();
       await refreshAccount();
       toast({
         title: "Account secured",
