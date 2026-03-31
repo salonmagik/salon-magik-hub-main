@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { useState, useEffect, useMemo } from "react";
 import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, ShoppingCart, Wallet } from "lucide-react";
 import {
   Dialog,
@@ -13,10 +12,13 @@ import { Separator } from "@ui/separator";
 import {
   useBookingCart,
   useDepositCalculation,
-  useBookingEligibleStaff,
   type PublicTenant,
   type PublicLocation,
   type GiftRecipient,
+  type CartItem,
+  type PublicService,
+  type PublicPackage,
+  type PublicProduct,
 } from "@/hooks";
 import { CartStep } from "./CartStep";
 import { SchedulingStep } from "./SchedulingStep";
@@ -25,9 +27,10 @@ import { GiftRecipientsStep } from "./GiftRecipientsStep";
 import { ReviewStep, type PaymentOption } from "./ReviewStep";
 import { PaymentStep, type PaymentGateway, type PaymentMode } from "./PaymentStep";
 import { type AppliedVoucher } from "@/components/VoucherInput";
-import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { FunctionsHttpError } from "@supabase/supabase-js";
+import { formatCurrency } from "@shared/currency";
 
 interface BookingWizardProps {
   open: boolean;
@@ -35,9 +38,46 @@ interface BookingWizardProps {
   salon: PublicTenant;
   locations: PublicLocation[];
   selectedCountryCode?: string | null;
+  services?: PublicService[];
+  packages?: PublicPackage[];
+  products?: PublicProduct[];
 }
 
 type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "payment" | "confirmation";
+
+const emptyDeliveryAddress = {
+  line1: "",
+  line2: "",
+  city: "",
+  state: "",
+  postalCode: "",
+  country: "",
+  deliveryNotes: "",
+};
+
+function isDeliveryAddressComplete(address: BookerInfo["deliveryAddress"] | GiftRecipient["address"] | undefined) {
+  return Boolean(address?.line1?.trim() && address?.city?.trim() && address?.country?.trim());
+}
+
+async function extractFunctionErrorMessage(error: unknown): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const response = error.context as Response | undefined;
+      const payload = response ? await response.json() : null;
+      if (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string") {
+        return payload.error;
+      }
+    } catch {
+      // Fall through to generic handling
+    }
+  }
+
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+
+  return "Something went wrong. Please try again.";
+}
 
 export function BookingWizard({
   open,
@@ -45,32 +85,32 @@ export function BookingWizard({
   salon,
   locations,
   selectedCountryCode,
+  services = [],
+  packages = [],
+  products = [],
 }: BookingWizardProps) {
-  const { items, getTotal, getTotalDuration, clearCart, getGiftItems, getItemCount } = useBookingCart();
+  const {
+    items,
+    meta,
+    updateMeta,
+    updateItem,
+    getTotal,
+    clearCart,
+    getGiftItems,
+  } = useBookingCart();
   const [step, setStep] = useState<WizardStep>("cart");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
 
-  // Schedule state
-  const [selectedLocation, setSelectedLocation] = useState<PublicLocation | undefined>(undefined);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
-  const [selectedTime, setSelectedTime] = useState<string | undefined>(undefined);
-  const [selectedStaffId, setSelectedStaffId] = useState<string | undefined>(undefined);
-  const [leaveUnscheduled, setLeaveUnscheduled] = useState(false);
-
-  // Customer state
   const [bookerInfo, setBookerInfo] = useState<BookerInfo>({
     firstName: "",
     lastName: "",
     email: "",
     phone: "",
     notes: "",
+    deliveryAddress: emptyDeliveryAddress,
   });
-
-  // Gift recipients
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
-
-  // Payment state
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("stripe");
@@ -81,20 +121,11 @@ export function BookingWizard({
   const [splitPurseAmount, setSplitPurseAmount] = useState(0);
   const [splitCardAmount, setSplitCardAmount] = useState(0);
 
-  // Sync location when locations load
-  useEffect(() => {
-    if (locations.length > 0 && !selectedLocation) {
-      setSelectedLocation(locations[0]);
-    }
-  }, [locations, selectedLocation]);
-
-  // Fetch customer purse balance when email is available
   useEffect(() => {
     const fetchPurseBalance = async () => {
       if (!bookerInfo.email || !salon.id) return;
 
       try {
-        // Look up customer by email and tenant
         const { data: customer, error: customerError } = await supabase
           .from("customers")
           .select("id")
@@ -110,7 +141,6 @@ export function BookingWizard({
 
         setCustomerId(customer.id);
 
-        // Get purse balance
         const { data: purse } = await supabase
           .from("customer_purses")
           .select("balance")
@@ -128,39 +158,21 @@ export function BookingWizard({
 
     fetchPurseBalance();
   }, [bookerInfo.email, salon.id]);
-
-  const totalDuration = getTotalDuration();
   const giftItems = getGiftItems();
-  const hasSchedulableItems = items.some((item) => item.type !== "product");
-  const selectedServiceIds = items
-    .filter((item) => item.type === "service")
-    .map((item) => item.itemId);
-
-  const { data: eligibleStaff = [], isLoading: eligibleStaffLoading } = useBookingEligibleStaff({
-    tenantId: salon.id,
-    locationId: selectedLocation?.id,
-    serviceIds: selectedServiceIds,
-    enabled:
-      Boolean(selectedLocation?.id) &&
-      Boolean(salon.allow_staff_selection || salon.require_staff_selection) &&
-      !leaveUnscheduled &&
-      hasSchedulableItems,
-  });
-
-  useEffect(() => {
-    if (!selectedStaffId) return;
-    if (!eligibleStaff.some((staff) => staff.userId === selectedStaffId)) {
-      setSelectedStaffId(undefined);
-    }
-  }, [eligibleStaff, selectedStaffId]);
-
-  // Calculate deposit
-  const depositCalc = useDepositCalculation(
-    items,
-    salon.deposits_enabled ? (salon.default_deposit_percentage || 0) : 0
+  const schedulableItems = useMemo(
+    () => items.filter((item) => item.type === "service" || item.type === "package"),
+    [items],
+  );
+  const scheduleNowItems = schedulableItems.filter((item) => item.scheduleMode !== "leave_unscheduled");
+  const deliveredNonGiftProducts = items.filter(
+    (item) => item.type === "product" && item.fulfillmentType === "delivery" && !item.isGift,
   );
 
-  // Calculate final amounts
+  const depositCalc = useDepositCalculation(
+    items,
+    salon.deposits_enabled ? (salon.default_deposit_percentage || 0) : 0,
+  );
+
   const subtotal = getTotal();
   const voucherDiscount = appliedVoucher?.discountAmount || 0;
   const afterVoucher = Math.max(0, subtotal - voucherDiscount);
@@ -177,17 +189,70 @@ export function BookingWizard({
           : 0;
 
   const amountDueAtSalon = afterPurse - amountDueNow;
+  const deliveryCountryCode = useMemo(() => {
+    const deliveryItem = deliveredNonGiftProducts[0];
+    if (!deliveryItem) return null;
+    return (
+      deliveryItem.eligibleBranches?.find((branch) => branch.id === deliveryItem.branchId)?.country_code ||
+      (deliveryItem.eligibleBranches?.length === 1 ? deliveryItem.eligibleBranches[0].country_code : null) ||
+      null
+    );
+  }, [deliveredNonGiftProducts]);
 
-  // Determine if we should skip scheduling step
-  const shouldSkipScheduling = !hasSchedulableItems;
+  const catalogLookup = useMemo(() => {
+    const serviceMap = new Map(services.map((service) => [service.id, service]));
+    const packageMap = new Map(packages.map((pkg) => [pkg.id, pkg]));
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    return { serviceMap, packageMap, productMap };
+  }, [packages, products, services]);
 
-  // Step configuration - always include cart as first step
-  const getStepConfig = () => {
+  useEffect(() => {
+    items.forEach((item) => {
+      const source =
+        item.type === "service"
+          ? catalogLookup.serviceMap.get(item.itemId)
+          : item.type === "package"
+          ? catalogLookup.packageMap.get(item.itemId)
+          : catalogLookup.productMap.get(item.itemId);
+
+      if (!source) return;
+
+      const nextBranches = source.branches ?? [];
+      const nextDuration =
+        item.type === "service" || item.type === "package"
+          ? source.duration_minutes ?? item.durationMinutes
+          : item.durationMinutes;
+      const nextServiceIds = item.type === "package" ? source.service_ids ?? item.serviceIds : item.serviceIds;
+      const branchName =
+        item.branchId && nextBranches.length > 0
+          ? nextBranches.find((branch) => branch.id === item.branchId)?.name || item.branchName
+          : item.branchName;
+
+      const branchesChanged =
+        JSON.stringify(item.eligibleBranches || []) !== JSON.stringify(nextBranches);
+      const durationChanged = nextDuration !== item.durationMinutes;
+      const serviceIdsChanged =
+        item.type === "package" &&
+        JSON.stringify(item.serviceIds || []) !== JSON.stringify(nextServiceIds || []);
+      const branchNameChanged = branchName !== item.branchName;
+
+      if (branchesChanged || durationChanged || serviceIdsChanged || branchNameChanged) {
+        updateItem(item.id, {
+          eligibleBranches: nextBranches,
+          durationMinutes: nextDuration,
+          serviceIds: nextServiceIds,
+          branchName,
+        });
+      }
+    });
+  }, [catalogLookup, items, updateItem]);
+
+  const stepConfig = useMemo(() => {
     const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
       { key: "cart", label: "Your Cart", icon: <ShoppingCart className="h-4 w-4" /> },
     ];
 
-    if (!shouldSkipScheduling) {
+    if (scheduleNowItems.length > 0) {
       steps.push({ key: "scheduling", label: "Schedule", icon: <Calendar className="h-4 w-4" /> });
     }
 
@@ -199,112 +264,107 @@ export function BookingWizard({
 
     steps.push({ key: "review", label: "Review", icon: <CreditCard className="h-4 w-4" /> });
 
-    // Add payment step if payment is required
     if (amountDueNow > 0) {
       steps.push({ key: "payment", label: "Payment", icon: <Wallet className="h-4 w-4" /> });
     }
 
     steps.push({ key: "confirmation", label: "Done", icon: <CheckCircle className="h-4 w-4" /> });
-
     return steps;
-  };
+  }, [amountDueNow, giftItems.length, scheduleNowItems.length]);
 
-  const steps = getStepConfig();
+  const currentStepIndex = stepConfig.findIndex((entry) => entry.key === step);
+
+  const getItemLocationName = (item: CartItem) =>
+    item.branchName ||
+    item.eligibleBranches?.find((branch) => branch.id === item.branchId)?.name ||
+    "";
+
+  const isCartComplete = useMemo(() => {
+    if (items.length === 0) return false;
+    return items.every((item) => {
+      const needsBranch = (item.eligibleBranches?.length || 0) > 0;
+      if (needsBranch && !item.branchId) return false;
+      if (item.type === "product" && !item.fulfillmentType) return false;
+      if ((item.type === "service" || item.type === "package") && !item.scheduleMode) return false;
+      return true;
+    });
+  }, [items]);
+
+  const isSchedulingComplete = useMemo(() => {
+    return scheduleNowItems.every((item) => {
+      if (!item.branchId || !item.scheduledDate || !item.scheduledTime) return false;
+      if (salon.require_staff_selection && !item.selectedStaffId) return false;
+      return true;
+    });
+  }, [salon.require_staff_selection, scheduleNowItems]);
+
+  const isBookerInfoComplete = useMemo(() => {
+    const baseValid =
+      Boolean(bookerInfo.firstName.trim()) &&
+      Boolean(bookerInfo.lastName.trim()) &&
+      Boolean(bookerInfo.email.trim()) &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookerInfo.email);
+
+    if (!baseValid) return false;
+    if (deliveredNonGiftProducts.length === 0) return true;
+    return isDeliveryAddressComplete(bookerInfo.deliveryAddress);
+  }, [bookerInfo, deliveredNonGiftProducts.length]);
+
+  const isGiftStepComplete = useMemo(() => {
+    return giftItems.every((item) => {
+      const recipient = giftRecipients[item.id];
+      if (!recipient?.firstName?.trim() || !recipient?.lastName?.trim() || !recipient?.email?.trim() || !recipient?.phone?.trim()) {
+        return false;
+      }
+      if (item.type === "product" && item.fulfillmentType === "delivery") {
+        return isDeliveryAddressComplete(recipient.address);
+      }
+      return true;
+    });
+  }, [giftItems, giftRecipients]);
+
+  const isCurrentStepComplete = (() => {
+    switch (step) {
+      case "cart":
+        return isCartComplete;
+      case "scheduling":
+        return isSchedulingComplete;
+      case "booker":
+        return isBookerInfoComplete;
+      case "gifts":
+        return isGiftStepComplete;
+      case "review":
+        return true;
+      default:
+        return false;
+    }
+  })();
 
   const handleNext = () => {
     if (step === "cart") {
-      if (items.length === 0) {
-        toast({
-          title: "Cart is empty",
-          description: "Please add items to your cart before proceeding",
-          variant: "destructive",
-        });
-        return;
-      }
-      // Check fulfillment type for products
-      const productsWithoutFulfillment = items.filter(
-        (item) => item.type === "product" && !item.fulfillmentType
-      );
-      if (productsWithoutFulfillment.length > 0) {
-        toast({
-          title: "Select fulfillment",
-          description: "Please select Pickup or Delivery for all products",
-          variant: "destructive",
-        });
-        return;
-      }
-      setStep(shouldSkipScheduling ? "booker" : "scheduling");
-    } else if (step === "scheduling") {
-      if (hasSchedulableItems && !selectedLocation) {
-        toast({
-          title: "Missing location",
-          description: "Please select a location before continuing",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (!leaveUnscheduled && hasSchedulableItems && (!selectedDate || !selectedTime || !selectedLocation)) {
-        toast({
-          title: "Missing selection",
-          description: "Please select a date, time, and location, or choose to leave unscheduled",
-          variant: "destructive",
-        });
-        return;
-      }
-      if (!leaveUnscheduled && hasSchedulableItems && salon.require_staff_selection && !selectedStaffId) {
-        toast({
-          title: "Staff selection required",
-          description: "Please select a staff member before continuing.",
-          variant: "destructive",
-        });
-        return;
-      }
+      setStep(scheduleNowItems.length > 0 ? "scheduling" : "booker");
+      return;
+    }
+    if (step === "scheduling") {
       setStep("booker");
-    } else if (step === "booker") {
-      if (!bookerInfo.firstName || !bookerInfo.lastName || !bookerInfo.email) {
-        toast({
-          title: "Missing information",
-          description: "Please fill in all required fields",
-          variant: "destructive",
-        });
-        return;
-      }
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(bookerInfo.email)) {
-        toast({
-          title: "Invalid email",
-          description: "Please enter a valid email address",
-          variant: "destructive",
-        });
-        return;
-      }
-      // Go to gifts step if there are gift items, otherwise review
+      return;
+    }
+    if (step === "booker") {
       setStep(giftItems.length > 0 ? "gifts" : "review");
-    } else if (step === "gifts") {
-      // Validate gift recipients
-      for (const item of giftItems) {
-        const recipient = giftRecipients[item.id];
-        if (!recipient?.firstName || !recipient?.lastName || !recipient?.email || !recipient?.phone) {
-          toast({
-            title: "Missing gift recipient",
-            description: `Please fill in all recipient details for "${item.name}"`,
-            variant: "destructive",
-          });
-          return;
-        }
-      }
+      return;
+    }
+    if (step === "gifts") {
       setStep("review");
     }
   };
 
   const handleBack = () => {
     if (step === "cart") {
-      onOpenChange(false); // Close modal
+      onOpenChange(false);
     } else if (step === "scheduling") {
       setStep("cart");
     } else if (step === "booker") {
-      setStep(shouldSkipScheduling ? "cart" : "scheduling");
+      setStep(scheduleNowItems.length > 0 ? "scheduling" : "cart");
     } else if (step === "gifts") {
       setStep("booker");
     } else if (step === "review") {
@@ -314,66 +374,67 @@ export function BookingWizard({
     }
   };
 
-  // Called from review step to proceed to payment
+  const buildSubmissionItems = () =>
+    items.map((item) => ({
+      ...item,
+      locationId: item.branchId,
+      locationName: getItemLocationName(item),
+      giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
+    }));
+
+  const handleCreateBooking = async () => {
+    const { data, error } = await supabase.functions.invoke("create-public-booking", {
+      body: {
+        tenantId: salon.id,
+        customer: bookerInfo,
+        items: buildSubmissionItems(),
+        payAtSalon: paymentOption === "pay_at_salon",
+        voucherCode: appliedVoucher?.code || null,
+        voucherDiscount,
+        purseAmount,
+        depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
+        giftsBelongToSamePerson: meta.giftsBelongToSamePerson,
+      },
+    });
+
+    if (error) throw error;
+    return data as { reference?: string; appointmentId?: string; appointmentIds?: string[] };
+  };
+
   const handleProceedToPayment = () => {
     if (amountDueNow > 0) {
       setStep("payment");
-    } else {
-      handleSubmitBooking();
+      return;
     }
+    void handleSubmitBooking();
   };
 
-  // Handler for payment mode changes from PaymentStep
   const handlePaymentModeChange = (mode: PaymentMode, purseAmt: number, cardAmt: number) => {
     setPaymentMode(mode);
     setSplitPurseAmount(purseAmt);
     setSplitCardAmount(cardAmt);
   };
 
-  // Called from payment step to submit with payment
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // Handle pay with purse only
+      const booking = await handleCreateBooking();
+      const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
+      const primaryAppointmentId = appointmentIds[0];
+
       if (paymentMode === "purse") {
-        if (!customerId) {
+        if (!customerId || !primaryAppointmentId) {
           throw new Error("Customer not found");
         }
 
-        // Call edge function to create booking
-        const { data, error } = await supabase.functions.invoke("create-public-booking", {
-          body: {
-            tenantId: salon.id,
-            locationId: selectedLocation?.id,
-            scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
-            scheduledTime: leaveUnscheduled ? null : selectedTime,
-            customer: bookerInfo,
-            isUnscheduled: leaveUnscheduled,
-            items: items.map((item) => ({
-              ...item,
-              giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
-            })),
-            payAtSalon: false,
-            voucherCode: appliedVoucher?.code || null,
-            voucherDiscount: voucherDiscount,
-            purseAmount: 0, // Don't apply purse through booking, we'll debit directly
-            depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
-          },
-        });
-
-        if (error) throw error;
-
-        const appointmentId = data.appointmentId;
         const amountToDebit = amountDueNow;
-
-        // Debit customer purse directly via RPC
-        const { data: ledgerData, error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
-          p_appointment_id: appointmentId,
+          p_appointment_id: primaryAppointmentId,
           p_amount: amountToDebit,
           p_currency: salon.currency,
-          p_idempotency_key: `booking_purse_${appointmentId}_${Date.now()}`,
+          p_idempotency_key: `booking_purse_${primaryAppointmentId}_${Date.now()}`,
         });
 
         if (debitError) {
@@ -381,60 +442,34 @@ export function BookingWizard({
           throw new Error("Failed to debit purse balance: " + debitError.message);
         }
 
-        // Update appointment to mark as paid
-        await supabase
-          .from("appointments")
-          .update({
-            payment_status: "fully_paid",
-            amount_paid: amountToDebit,
-          })
-          .eq("id", appointmentId);
+        if (appointmentIds.length > 0) {
+          await supabase
+            .from("appointments")
+            .update({
+              payment_status: "fully_paid",
+              amount_paid: amountToDebit,
+            })
+            .in("id", appointmentIds);
+        }
 
-        setBookingReference(data.reference || "CONFIRMED");
+        setBookingReference(booking.reference || "CONFIRMED");
         setStep("confirmation");
         clearCart();
         return;
       }
 
-      // Handle split payment
       if (paymentMode === "split") {
-        if (!customerId) {
+        if (!customerId || !primaryAppointmentId) {
           throw new Error("Customer not found");
         }
 
-        // Call edge function to create booking
-        const { data, error } = await supabase.functions.invoke("create-public-booking", {
-          body: {
-            tenantId: salon.id,
-            locationId: selectedLocation?.id,
-            scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
-            scheduledTime: leaveUnscheduled ? null : selectedTime,
-            customer: bookerInfo,
-            isUnscheduled: leaveUnscheduled,
-            items: items.map((item) => ({
-              ...item,
-              giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
-            })),
-            payAtSalon: false,
-            voucherCode: appliedVoucher?.code || null,
-            voucherDiscount: voucherDiscount,
-            purseAmount: 0, // Don't apply purse through booking, we'll debit directly
-            depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
-          },
-        });
-
-        if (error) throw error;
-
-        const appointmentId = data.appointmentId;
-
-        // Debit customer purse for the purse portion
         const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
-          p_appointment_id: appointmentId,
+          p_appointment_id: primaryAppointmentId,
           p_amount: splitPurseAmount,
           p_currency: salon.currency,
-          p_idempotency_key: `booking_split_purse_${appointmentId}_${Date.now()}`,
+          p_idempotency_key: `booking_split_purse_${primaryAppointmentId}_${Date.now()}`,
         });
 
         if (debitError) {
@@ -442,11 +477,11 @@ export function BookingWizard({
           throw new Error("Failed to debit purse balance: " + debitError.message);
         }
 
-        // Create payment session for card portion
         const paymentResponse = await supabase.functions.invoke("create-payment-session", {
           body: {
             tenantId: salon.id,
-            appointmentId: appointmentId,
+            appointmentId: primaryAppointmentId,
+            appointmentIds,
             amount: splitCardAmount,
             currency: salon.currency,
             customerEmail: bookerInfo.email,
@@ -465,37 +500,12 @@ export function BookingWizard({
         }
       }
 
-      // Handle card payment only (original flow)
       if (paymentMode === "card") {
-        // Call edge function to create booking
-        const { data, error } = await supabase.functions.invoke("create-public-booking", {
-          body: {
-            tenantId: salon.id,
-            locationId: selectedLocation?.id,
-            scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
-            scheduledTime: leaveUnscheduled ? null : selectedTime,
-            customer: bookerInfo,
-            isUnscheduled: leaveUnscheduled,
-            items: items.map((item) => ({
-              ...item,
-              giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
-            })),
-            payAtSalon: false,
-            voucherCode: appliedVoucher?.code || null,
-            voucherDiscount: voucherDiscount,
-            purseAmount: purseAmount,
-            depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
-            selectedStaffId: selectedStaffId || null,
-          },
-        });
-
-        if (error) throw error;
-
-        // Redirect to selected payment gateway
         const paymentResponse = await supabase.functions.invoke("create-payment-session", {
           body: {
             tenantId: salon.id,
-            appointmentId: data.appointmentId,
+            appointmentId: primaryAppointmentId,
+            appointmentIds,
             amount: amountDueNow,
             currency: salon.currency,
             customerEmail: bookerInfo.email,
@@ -515,10 +525,7 @@ export function BookingWizard({
       }
     } catch (err: unknown) {
       console.error("Payment error:", err);
-      const message =
-        err && typeof err === "object" && "message" in err && typeof err.message === "string"
-          ? err.message
-          : "Something went wrong. Please try again.";
+      const message = await extractFunctionErrorMessage(err);
       toast({
         title: "Payment failed",
         description: message,
@@ -529,42 +536,16 @@ export function BookingWizard({
     }
   };
 
-  // Called when no payment required or pay at salon
   const handleSubmitBooking = async () => {
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("create-public-booking", {
-        body: {
-          tenantId: salon.id,
-          locationId: selectedLocation?.id,
-          scheduledDate: leaveUnscheduled ? null : selectedDate ? format(selectedDate, "yyyy-MM-dd") : null,
-          scheduledTime: leaveUnscheduled ? null : selectedTime,
-          customer: bookerInfo,
-          isUnscheduled: leaveUnscheduled,
-          items: items.map((item) => ({
-            ...item,
-            giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
-          })),
-          payAtSalon: paymentOption === "pay_at_salon",
-          voucherCode: appliedVoucher?.code || null,
-          voucherDiscount: voucherDiscount,
-          purseAmount: purseAmount,
-          depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
-          selectedStaffId: selectedStaffId || null,
-        },
-      });
-
-      if (error) throw error;
-
-      setBookingReference(data.reference || "CONFIRMED");
+      const booking = await handleCreateBooking();
+      setBookingReference(booking.reference || "CONFIRMED");
       setStep("confirmation");
       clearCart();
     } catch (err: unknown) {
       console.error("Booking error:", err);
-      const message =
-        err && typeof err === "object" && "message" in err && typeof err.message === "string"
-          ? err.message
-          : "Something went wrong. Please try again.";
+      const message = await extractFunctionErrorMessage(err);
       toast({
         title: "Booking failed",
         description: message,
@@ -578,29 +559,27 @@ export function BookingWizard({
   const handleClose = () => {
     if (step === "confirmation") {
       setStep("cart");
-      setSelectedDate(undefined);
-      setSelectedTime(undefined);
-      setSelectedStaffId(undefined);
-      setLeaveUnscheduled(false);
-      setBookerInfo({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
+      setBookerInfo({
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        notes: "",
+        deliveryAddress: emptyDeliveryAddress,
+      });
       setGiftRecipients({});
       setBookingReference(null);
       setAppliedVoucher(null);
       setPurseAmount(0);
       setPaymentOption("pay_at_salon");
+      updateMeta({ giftsBelongToSamePerson: true });
     }
     onOpenChange(false);
   };
 
-  // Reset step when opening
   useEffect(() => {
-    if (open) {
-      setStep("cart");
-    }
+    if (open) setStep("cart");
   }, [open]);
-
-  const currentStepIndex = steps.findIndex((s) => s.key === step);
-  const isCartStep = step === "cart";
 
   const brandColor = salon.brand_color || "#2563EB";
 
@@ -617,33 +596,34 @@ export function BookingWizard({
           <DialogTitle>Complete Checkout</DialogTitle>
         </DialogHeader>
 
-        {/* Steps Progress - hidden scrollbar, reduced padding */}
         <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] shrink-0">
           <div className="flex items-center gap-2 px-4 py-2 min-w-max">
-            {steps.map((s, i) => (
-              <div key={s.key} className="flex items-center gap-2 shrink-0">
+            {stepConfig.map((entry, index) => (
+              <div key={entry.key} className="flex items-center gap-2 shrink-0">
                 <div
-                  className={`flex items-center gap-1.5 ${step === s.key
+                  className={`flex items-center gap-1.5 ${
+                    step === entry.key
                       ? "text-primary"
-                      : currentStepIndex > i
-                        ? "text-muted-foreground"
-                        : "text-muted-foreground/50"
-                    }`}
+                      : currentStepIndex > index
+                      ? "text-muted-foreground"
+                      : "text-muted-foreground/50"
+                  }`}
                 >
                   <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${step === s.key
+                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
+                      step === entry.key
                         ? "text-white border-transparent"
-                        : currentStepIndex > i
-                          ? "border-muted-foreground bg-muted"
-                          : "border-muted"
-                      }`}
-                    style={step === s.key ? { backgroundColor: "var(--brand-color)" } : undefined}
+                        : currentStepIndex > index
+                        ? "border-muted-foreground bg-muted"
+                        : "border-muted"
+                    }`}
+                    style={step === entry.key ? { backgroundColor: "var(--brand-color)" } : undefined}
                   >
-                    {s.icon}
+                    {entry.icon}
                   </div>
-                  <span className="text-xs font-medium whitespace-nowrap">{s.label}</span>
+                  <span className="text-xs font-medium whitespace-nowrap">{entry.label}</span>
                 </div>
-                {i < steps.length - 1 && <div className="w-6 h-px bg-muted shrink-0" />}
+                {index < stepConfig.length - 1 && <div className="w-6 h-px bg-muted shrink-0" />}
               </div>
             ))}
           </div>
@@ -651,7 +631,6 @@ export function BookingWizard({
 
         <Separator />
 
-        {/* Step Content - scrollable */}
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="px-6 py-4">
             {step === "cart" && (
@@ -665,26 +644,18 @@ export function BookingWizard({
               <SchedulingStep
                 salon={salon}
                 locations={locations}
-                selectedLocation={selectedLocation}
-                onLocationChange={setSelectedLocation}
-                selectedDate={selectedDate}
-                onDateChange={setSelectedDate}
-                selectedTime={selectedTime}
-                onTimeChange={setSelectedTime}
-                leaveUnscheduled={leaveUnscheduled}
-                onLeaveUnscheduledChange={setLeaveUnscheduled}
-                totalDuration={totalDuration}
-                allowStaffSelection={Boolean(salon.allow_staff_selection)}
-                requireStaffSelection={Boolean(salon.require_staff_selection)}
-                eligibleStaff={eligibleStaff}
-                selectedStaffId={selectedStaffId}
-                onStaffChange={setSelectedStaffId}
-                staffLoading={eligibleStaffLoading}
+                items={scheduleNowItems}
+                onItemChange={updateItem}
               />
             )}
 
             {step === "booker" && (
-              <BookerInfoStep info={bookerInfo} onChange={setBookerInfo} />
+              <BookerInfoStep
+                info={bookerInfo}
+                onChange={setBookerInfo}
+                requiresDeliveryAddress={deliveredNonGiftProducts.length > 0}
+                deliveryCountryCode={deliveryCountryCode}
+              />
             )}
 
             {step === "gifts" && (
@@ -692,17 +663,15 @@ export function BookingWizard({
                 giftItems={giftItems}
                 recipients={giftRecipients}
                 onRecipientsChange={setGiftRecipients}
+                sameRecipient={meta.giftsBelongToSamePerson}
+                onSameRecipientChange={(value) => updateMeta({ giftsBelongToSamePerson: value })}
               />
             )}
 
             {step === "review" && (
               <ReviewStep
-                selectedDate={selectedDate}
-                selectedTime={selectedTime}
-                selectedLocation={selectedLocation}
-                leaveUnscheduled={leaveUnscheduled}
-                bookerInfo={bookerInfo}
                 items={items}
+                bookerInfo={bookerInfo}
                 giftRecipients={giftRecipients}
                 salon={{
                   id: salon.id,
@@ -766,16 +735,12 @@ export function BookingWizard({
           </div>
         </div>
 
-        {/* Footer Actions */}
         {step !== "confirmation" && step !== "payment" && (
           <div className="border-t bg-background shrink-0">
             <div className="p-4 flex items-center justify-between">
-              <Button
-                variant="outline"
-                onClick={handleBack}
-              >
+              <Button variant="outline" onClick={handleBack}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                {isCartStep ? "Close" : "Back"}
+                {step === "cart" ? "Close" : "Back"}
               </Button>
 
               {step === "review" ? (
@@ -788,16 +753,12 @@ export function BookingWizard({
                     color: "var(--brand-foreground, white)",
                   }}
                 >
-                  {isSubmitting
-                    ? "Submitting..."
-                    : amountDueNow > 0
-                      ? "Continue to Payment"
-                      : "Confirm Booking"}
+                  {isSubmitting ? "Submitting..." : amountDueNow > 0 ? "Continue to Payment" : "Confirm Booking"}
                 </Button>
               ) : (
                 <Button
                   onClick={handleNext}
-                  disabled={step === "cart" && items.length === 0}
+                  disabled={!isCurrentStepComplete}
                   className="border-0"
                   style={{
                     backgroundColor: "var(--brand-color)",

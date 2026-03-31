@@ -58,6 +58,28 @@ interface AppointmentDetailsDialogProps {
   onRefresh?: () => void;
 }
 
+type AppointmentBookingMetadata = {
+  line_item?: {
+    branch_name?: string | null;
+    schedule_mode?: string | null;
+    fulfillment_type?: string | null;
+    type?: string | null;
+  } | null;
+  gift?: {
+    recipient?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    } | null;
+    shared_recipient?: boolean;
+  } | null;
+  delivery_address?: {
+    line1?: string;
+    city?: string;
+    country?: string;
+  } | null;
+} | null;
+
 export function AppointmentDetailsDialog({
   open,
   onOpenChange,
@@ -93,6 +115,8 @@ export function AppointmentDetailsDialog({
   if (!appointment) return null;
 
   const { label, variant } = statusConfig[appointment.status];
+  const bookingReference = (appointment as CalendarAppointment & { booking_reference?: string | null }).booking_reference || null;
+  const bookingMetadata = ((appointment as CalendarAppointment & { booking_metadata?: AppointmentBookingMetadata }).booking_metadata || null) as AppointmentBookingMetadata;
   const scheduledDate = appointment.scheduled_start
     ? format(new Date(appointment.scheduled_start), "EEEE, MMMM d, yyyy")
     : "Not scheduled";
@@ -211,6 +235,42 @@ export function AppointmentDetailsDialog({
                 </p>
               </div>
             </div>
+
+            {(bookingReference || bookingMetadata?.gift || bookingMetadata?.delivery_address || bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled") && (
+              <div className="flex items-start gap-3">
+                <Package className="w-5 h-5 text-muted-foreground mt-0.5" />
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium">Booking Context</p>
+                  {bookingReference && (
+                    <p className="text-muted-foreground">Reference: <span className="font-medium text-foreground">{bookingReference}</span></p>
+                  )}
+                  {bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled" && (
+                    <p className="text-muted-foreground">This item was left unscheduled during checkout.</p>
+                  )}
+                  {bookingMetadata?.line_item?.fulfillment_type && (
+                    <p className="text-muted-foreground capitalize">
+                      Fulfillment: <span className="font-medium text-foreground">{bookingMetadata.line_item.fulfillment_type}</span>
+                    </p>
+                  )}
+                  {bookingMetadata?.gift?.recipient && (
+                    <p className="text-muted-foreground">
+                      Gift recipient:{" "}
+                      <span className="font-medium text-foreground">
+                        {[bookingMetadata.gift.recipient.firstName, bookingMetadata.gift.recipient.lastName].filter(Boolean).join(" ")}
+                      </span>
+                    </p>
+                  )}
+                  {bookingMetadata?.delivery_address && (
+                    <p className="text-muted-foreground">
+                      Delivery:{" "}
+                      <span className="font-medium text-foreground">
+                        {[bookingMetadata.delivery_address.line1, bookingMetadata.delivery_address.city, bookingMetadata.delivery_address.country].filter(Boolean).join(", ")}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Services */}
             <div className="flex items-start gap-3">

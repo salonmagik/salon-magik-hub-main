@@ -19,7 +19,9 @@ import {
   User,
   CreditCard,
   FileText,
-  Package
+  Package,
+  Gift,
+  Truck
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
@@ -48,11 +50,33 @@ type AppointmentProduct = {
   total_price: number;
 };
 
+type BookingLineMetadata = {
+  line_item?: {
+    type?: string | null;
+    fulfillment_type?: string | null;
+    schedule_mode?: string | null;
+  } | null;
+  gift?: {
+    recipient?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    } | null;
+    shared_recipient?: boolean;
+  } | null;
+  delivery_address?: {
+    line1?: string;
+    city?: string;
+    country?: string;
+  } | null;
+} | null;
+
 export default function ClientBookingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { customers, isAuthenticated } = useClientAuth();
   const [booking, setBooking] = useState<ClientAppointmentWithDetails | null>(null);
+  const [relatedBookings, setRelatedBookings] = useState<Array<{ id: string; status: string; scheduled_start: string | null; total_amount: number | null }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,7 +104,23 @@ export default function ClientBookingDetailPage() {
           .single();
 
         if (fetchError) throw fetchError;
-        setBooking(data as ClientAppointmentWithDetails);
+        const nextBooking = data as ClientAppointmentWithDetails;
+        setBooking(nextBooking);
+
+        const bookingReference = (nextBooking as ClientAppointmentWithDetails & { booking_reference?: string | null }).booking_reference;
+        if (bookingReference) {
+          const { data: siblings } = await supabase
+            .from("appointments")
+            .select("id, status, scheduled_start, total_amount")
+            .eq("booking_reference", bookingReference)
+            .in("customer_id", customerIds)
+            .neq("id", id)
+            .order("scheduled_start", { ascending: true, nullsFirst: false });
+
+          setRelatedBookings((siblings as typeof relatedBookings) || []);
+        } else {
+          setRelatedBookings([]);
+        }
       } catch (err) {
         console.error("Error fetching booking:", err);
         setError("Booking not found or access denied");
@@ -152,6 +192,10 @@ export default function ClientBookingDetailPage() {
   const services = booking.services || [];
   const products = (booking as { products?: AppointmentProduct[] }).products || [];
   const servicesTotalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+  const bookingReference = (booking as ClientAppointmentWithDetails & { booking_reference?: string | null }).booking_reference || null;
+  const bookingMetadata = ((booking as ClientAppointmentWithDetails & { booking_metadata?: BookingLineMetadata }).booking_metadata || null) as BookingLineMetadata;
+  const giftRecipient = bookingMetadata?.gift?.recipient;
+  const deliveryAddress = bookingMetadata?.delivery_address;
 
   return (
     <ClientSidebar>
@@ -174,7 +218,65 @@ export default function ClientBookingDetailPage() {
           <Badge className={status.className}>{status.label}</Badge>
           <Badge className={payment.className}>{payment.label}</Badge>
           {booking.is_walk_in && <Badge variant="outline">Walk-in</Badge>}
+          {bookingReference && <Badge variant="outline">Ref {bookingReference}</Badge>}
         </div>
+
+        {(bookingReference || giftRecipient || deliveryAddress || relatedBookings.length > 0) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Booking Group</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {bookingReference && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Reference</span>
+                  <span className="font-medium">{bookingReference}</span>
+                </div>
+              )}
+              {bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled" && (
+                <p className="text-muted-foreground">This item was left unscheduled and will be confirmed by the salon.</p>
+              )}
+              {giftRecipient && (
+                <div className="flex items-start gap-2 rounded-lg border p-3">
+                  <Gift className="mt-0.5 h-4 w-4 text-primary" />
+                  <div>
+                    <p className="font-medium">
+                      Gift recipient: {[giftRecipient.firstName, giftRecipient.lastName].filter(Boolean).join(" ")}
+                    </p>
+                    {giftRecipient.email && (
+                      <p className="text-muted-foreground">{giftRecipient.email}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {deliveryAddress && (
+                <div className="flex items-start gap-2 rounded-lg border p-3">
+                  <Truck className="mt-0.5 h-4 w-4 text-primary" />
+                  <div>
+                    <p className="font-medium">Delivery address</p>
+                    <p className="text-muted-foreground">
+                      {[deliveryAddress.line1, deliveryAddress.city, deliveryAddress.country].filter(Boolean).join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {relatedBookings.length > 0 && (
+                <div className="space-y-2">
+                  <p className="font-medium">Other items from this checkout</p>
+                  {relatedBookings.map((related) => (
+                    <div key={related.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                      <div>
+                        <p className="font-medium">{related.scheduled_start ? format(new Date(related.scheduled_start), "EEE, MMM d · h:mm a") : "Unscheduled item"}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{related.status}</p>
+                      </div>
+                      <span className="text-sm font-medium">{formatCurrency(Number(related.total_amount || 0), currency)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Booking Actions */}
         {["scheduled", "started", "paused"].includes(booking.status) && (

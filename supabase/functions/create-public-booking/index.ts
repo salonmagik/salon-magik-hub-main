@@ -6,6 +6,26 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+interface DeliveryAddress {
+  line1: string;
+  line2?: string;
+  city: string;
+  state?: string;
+  postalCode?: string;
+  country: string;
+  deliveryNotes?: string;
+}
+
+interface GiftRecipient {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  message?: string;
+  hideSender: boolean;
+  address?: DeliveryAddress;
+}
+
 interface CartItem {
   id: string;
   type: "service" | "package" | "product";
@@ -14,34 +34,35 @@ interface CartItem {
   price: number;
   quantity: number;
   durationMinutes?: number;
-  schedulingOption: string;
+  scheduleMode?: "schedule_now" | "leave_unscheduled";
+  scheduledDate?: string;
+  scheduledTime?: string;
+  selectedStaffId?: string | null;
   isGift: boolean;
-  giftRecipient?: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    message?: string;
-    hideSender: boolean;
-  };
+  fulfillmentType?: "pickup" | "delivery";
+  giftRecipient?: GiftRecipient;
+  locationId?: string;
+  locationName?: string;
+  serviceIds?: string[];
 }
 
 interface BookingRequest {
   tenantId: string;
-  locationId?: string;
-  selectedStaffId?: string | null;
-  scheduledDate?: string;
-  scheduledTime?: string;
-  isUnscheduled?: boolean;
   customer: {
     firstName: string;
     lastName: string;
     email: string;
     phone?: string;
     notes?: string;
+    deliveryAddress?: DeliveryAddress;
   };
   items: CartItem[];
   payAtSalon?: boolean;
+  voucherCode?: string | null;
+  voucherDiscount?: number;
+  purseAmount?: number;
+  depositAmount?: number;
+  giftsBelongToSamePerson?: boolean;
 }
 
 function normalizeEmail(email?: string | null) {
@@ -52,8 +73,11 @@ function normalizePhone(phone?: string | null) {
   return phone?.replace(/[^\d]/g, "") || "";
 }
 
+function isDeliveryAddressComplete(address?: DeliveryAddress) {
+  return Boolean(address?.line1?.trim() && address?.city?.trim() && address?.country?.trim());
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -64,17 +88,24 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: BookingRequest = await req.json();
-    const { tenantId, locationId, selectedStaffId, scheduledDate, scheduledTime, isUnscheduled, customer, items, payAtSalon } = body;
+    const {
+      tenantId,
+      customer,
+      items,
+      payAtSalon,
+      voucherDiscount = 0,
+      purseAmount = 0,
+      depositAmount = 0,
+      giftsBelongToSamePerson = true,
+    } = body;
 
-    // Validate required fields
     if (!tenantId || !customer.email || !customer.firstName || !customer.lastName || items.length === 0) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Verify tenant exists and has online booking enabled
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
       .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, allow_staff_selection, require_staff_selection, auto_assign_staff")
@@ -85,27 +116,10 @@ serve(async (req) => {
     if (tenantError || !tenant) {
       return new Response(
         JSON.stringify({ error: "Salon not found or booking not enabled" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const hasSchedulableItems = items.some((item) => item.type !== "product");
-
-    if (hasSchedulableItems && !locationId) {
-      return new Response(
-        JSON.stringify({ error: "Please select a location before continuing." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (hasSchedulableItems && !isUnscheduled && (!scheduledDate || !scheduledTime)) {
-      return new Response(
-        JSON.stringify({ error: "Please select an available date and time, or leave the booking unscheduled." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Find or create customer
     const customerFullName = `${customer.firstName} ${customer.lastName}`;
     const normalizedEmail = normalizeEmail(customer.email);
     const normalizedPhone = normalizePhone(customer.phone);
@@ -115,9 +129,7 @@ serve(async (req) => {
       .select("id, email, phone, status")
       .eq("tenant_id", tenantId);
 
-    if (tenantCustomersError) {
-      throw tenantCustomersError;
-    }
+    if (tenantCustomersError) throw tenantCustomersError;
 
     const emailMatches = (tenantCustomers || []).filter(
       (row) => row.status !== "deleted" && normalizedEmail && normalizeEmail(row.email) === normalizedEmail,
@@ -125,17 +137,16 @@ serve(async (req) => {
     const phoneMatches = (tenantCustomers || []).filter(
       (row) => row.status !== "deleted" && normalizedPhone && normalizePhone(row.phone) === normalizedPhone,
     );
-
     const matchedIds = [...new Set([...emailMatches, ...phoneMatches].map((row) => row.id))];
+
     if (matchedIds.length > 1) {
       return new Response(
         JSON.stringify({ error: "A customer conflict was found for this email or phone number. Please contact the salon." }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     let customerId: string;
-
     if (matchedIds.length === 1) {
       customerId = matchedIds[0];
     } else {
@@ -151,278 +162,238 @@ serve(async (req) => {
         .single();
 
       if (customerError || !newCustomer) {
-        console.error("Error creating customer:", customerError);
-        const isDuplicateCustomerError = Boolean(
-          customerError?.message && /customer.*(email|phone)|already exists|duplicate/i.test(customerError.message),
-        );
         return new Response(
-          JSON.stringify({
-            error: isDuplicateCustomerError
-              ? customerError.message
-              : "Failed to create customer",
-          }),
-          {
-            status: isDuplicateCustomerError ? 409 : 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          JSON.stringify({ error: customerError?.message || "Failed to create customer" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       customerId = newCustomer.id;
     }
 
-    // Calculate totals
-    let totalAmount = 0;
-    let totalDuration = 0;
-    
+    const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    const createdAppointmentIds: string[] = [];
+
     for (const item of items) {
-      totalAmount += item.price * item.quantity;
-      if (item.type !== "product" && item.durationMinutes) {
-        totalDuration += item.durationMinutes * item.quantity;
+      if (!item.locationId) {
+        return new Response(
+          JSON.stringify({ error: `Please select a branch for ${item.name}.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
-    }
 
-    // Parse scheduled start time
-    let scheduledStart: string | null = null;
-    let scheduledEnd: string | null = null;
+      if ((item.type === "service" || item.type === "package") && item.scheduleMode !== "leave_unscheduled") {
+        if (!item.scheduledDate || !item.scheduledTime) {
+          return new Response(
+            JSON.stringify({ error: `Please schedule ${item.name} before continuing.` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      }
 
-    if (scheduledDate && scheduledTime && locationId) {
-      scheduledStart = `${scheduledDate}T${scheduledTime}:00`;
-      // Add duration to get end time
-      const startDate = new Date(scheduledStart);
-      const endDate = new Date(startDate.getTime() + totalDuration * 60 * 1000);
-      scheduledEnd = endDate.toISOString();
-    }
+      if (item.type === "product" && item.fulfillmentType === "delivery" && !item.isGift && !isDeliveryAddressComplete(customer.deliveryAddress)) {
+        return new Response(
+          JSON.stringify({ error: `Please enter a delivery address for ${item.name}.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
 
-    if (locationId) {
+      if (item.type === "product" && item.fulfillmentType === "delivery" && item.isGift && !isDeliveryAddressComplete(item.giftRecipient?.address)) {
+        return new Response(
+          JSON.stringify({ error: `Please enter the gift delivery address for ${item.name}.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      let scheduledStart: string | null = null;
+      let scheduledEnd: string | null = null;
+
+      if ((item.type === "service" || item.type === "package") && item.scheduleMode !== "leave_unscheduled") {
+        scheduledStart = `${item.scheduledDate}T${item.scheduledTime}:00`;
+        const startDate = new Date(scheduledStart);
+        const endDate = new Date(startDate.getTime() + (item.durationMinutes || 60) * 60 * 1000);
+        scheduledEnd = endDate.toISOString();
+      }
+
       const windowCheckStart = scheduledStart ? new Date(scheduledStart).toISOString() : new Date().toISOString();
       const windowCheckEnd =
         scheduledEnd ||
-        new Date(new Date(windowCheckStart).getTime() + Math.max(totalDuration, 1) * 60 * 1000).toISOString();
+        new Date(new Date(windowCheckStart).getTime() + Math.max(item.durationMinutes || 1, 1) * 60 * 1000).toISOString();
 
-      const { data: activeWindow, error: windowError } = await (supabase as any)
+      const { data: activeWindow } = await (supabase as any)
         .from("branch_unavailability_windows")
-        .select("id, starts_at, ends_at, is_indefinite")
+        .select("id")
         .eq("tenant_id", tenantId)
-        .eq("location_id", locationId)
+        .eq("location_id", item.locationId)
         .is("ended_at", null)
         .lte("starts_at", windowCheckEnd)
         .or(`ends_at.is.null,ends_at.gte.${windowCheckStart}`)
         .limit(1)
         .maybeSingle();
 
-      if (windowError) {
-        console.error("Error checking branch unavailability:", windowError);
-      }
-
       if (activeWindow) {
         return new Response(
-          JSON.stringify({
-            error: "This branch is temporarily unavailable for new bookings at the selected time.",
-          }),
+          JSON.stringify({ error: `${item.locationName || "This branch"} is temporarily unavailable for ${item.name}.` }),
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-    }
 
-    // Generate reference number
-    const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
-
-    // Check for gift items
-    const hasGifts = items.some((item) => item.isGift);
-
-    // Resolve eligible/selected staff for this booking.
-    const selectedServiceIds = items
-      .filter((item) => item.type === "service")
-      .map((item) => item.itemId);
-
-    let assignedStaffId: string | null = null;
-    if (locationId) {
-      const { data: eligibleStaffRows, error: eligibleStaffError } = await supabase.rpc(
-        "list_public_booking_eligible_staff",
-        {
+      let assignedStaffId: string | null = null;
+      const serviceIds = item.type === "service" ? [item.itemId] : item.type === "package" ? item.serviceIds || null : null;
+      if ((item.type === "service" || item.type === "package") && item.locationId) {
+        const { data: eligibleStaffRows } = await supabase.rpc("list_public_booking_eligible_staff", {
           p_tenant_id: tenantId,
-          p_location_id: locationId,
-          p_service_ids: selectedServiceIds.length > 0 ? selectedServiceIds : null,
-        },
-      );
-
-      if (eligibleStaffError) {
-        console.error("Error resolving eligible staff:", eligibleStaffError);
-      }
-
-      const eligibleStaff = (eligibleStaffRows || []) as Array<{ user_id: string }>;
-
-      if (selectedStaffId) {
-        if (!tenant.allow_staff_selection) {
-          await supabase.from("audit_logs").insert({
-            tenant_id: tenantId,
-            actor_user_id: null,
-            action: "booking.staff_selection_denied",
-            entity_type: "booking",
-            metadata: { reason: "staff_selection_disabled", selectedStaffId },
-          });
-
-          return new Response(
-            JSON.stringify({ error: "Staff selection is not enabled for this booking site" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-
-        const isSelectedStaffEligible = eligibleStaff.some((staff) => staff.user_id === selectedStaffId);
-        if (!isSelectedStaffEligible) {
-          await supabase.from("audit_logs").insert({
-            tenant_id: tenantId,
-            actor_user_id: null,
-            action: "booking.staff_selection_denied",
-            entity_type: "booking",
-            metadata: { reason: "staff_not_eligible", selectedStaffId, locationId, selectedServiceIds },
-          });
-
-          return new Response(
-            JSON.stringify({ error: "Selected staff member is not eligible for this booking" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-          );
-        }
-
-        assignedStaffId = selectedStaffId;
-      } else if (tenant.require_staff_selection) {
-        await supabase.from("audit_logs").insert({
-          tenant_id: tenantId,
-          actor_user_id: null,
-          action: "booking.staff_selection_denied",
-          entity_type: "booking",
-          metadata: { reason: "staff_selection_required", locationId, selectedServiceIds },
+          p_location_id: item.locationId,
+          p_service_ids: serviceIds && serviceIds.length > 0 ? serviceIds : null,
         });
 
-        return new Response(
-          JSON.stringify({ error: "Staff selection is required for this booking" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      } else if (tenant.auto_assign_staff && eligibleStaff.length > 0) {
-        assignedStaffId = eligibleStaff[0].user_id;
+        const eligibleStaff = (eligibleStaffRows || []) as Array<{ user_id: string }>;
+        if (item.selectedStaffId) {
+          if (!tenant.allow_staff_selection) {
+            return new Response(
+              JSON.stringify({ error: "Staff selection is not enabled for this booking site" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          if (!eligibleStaff.some((staff) => staff.user_id === item.selectedStaffId)) {
+            return new Response(
+              JSON.stringify({ error: `Selected staff member is not eligible for ${item.name}` }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          assignedStaffId = item.selectedStaffId;
+        } else if (tenant.require_staff_selection && item.scheduleMode !== "leave_unscheduled") {
+          return new Response(
+            JSON.stringify({ error: `Staff selection is required for ${item.name}` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        } else if (tenant.auto_assign_staff && eligibleStaff.length > 0 && item.scheduleMode !== "leave_unscheduled") {
+          assignedStaffId = eligibleStaff[0].user_id;
+        }
       }
-    }
 
-    // Create appointment
-    const { data: appointment, error: appointmentError } = await supabase
-      .from("appointments")
-      .insert({
+      const recipient = item.isGift ? item.giftRecipient : null;
+      const deliveryAddress =
+        item.type === "product" && item.fulfillmentType === "delivery"
+          ? item.isGift
+            ? recipient?.address || null
+            : customer.deliveryAddress || null
+          : null;
+
+      const bookingMetadata = {
+        source: "public_booking",
+        booking_reference: reference,
+        line_item: {
+          id: item.id,
+          type: item.type,
+          item_id: item.itemId,
+          name: item.name,
+          quantity: item.quantity,
+          fulfillment_type: item.fulfillmentType || null,
+          branch_id: item.locationId,
+          branch_name: item.locationName || null,
+          schedule_mode: item.scheduleMode || null,
+        },
+        gift: item.isGift
+          ? {
+              recipient,
+              shared_recipient: giftsBelongToSamePerson,
+            }
+          : null,
+        delivery_address: deliveryAddress,
+      };
+
+      const lineTotal = item.price * item.quantity;
+      const { data: appointment, error: appointmentError } = await supabase
+        .from("appointments")
+        .insert({
+          tenant_id: tenantId,
+          customer_id: customerId,
+          location_id: item.locationId,
+          assigned_staff_id: assignedStaffId,
+          scheduled_start: scheduledStart,
+          scheduled_end: scheduledEnd,
+          is_unscheduled: !scheduledStart,
+          is_gifted: item.isGift,
+          status: "scheduled",
+          payment_status: payAtSalon ? "pay_at_salon" : "unpaid",
+          total_amount: lineTotal,
+          notes: customer.notes || null,
+          booking_reference: reference,
+          booking_metadata: bookingMetadata,
+        })
+        .select("id")
+        .single();
+
+      if (appointmentError || !appointment) {
+        console.error("Error creating appointment:", appointmentError);
+        return new Response(
+          JSON.stringify({ error: `Failed to create appointment for ${item.name}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      createdAppointmentIds.push(appointment.id);
+
+      if (item.type === "service" || item.type === "package") {
+        const { error: servicesError } = await supabase.from("appointment_services").insert({
+          appointment_id: appointment.id,
+          service_id: item.type === "service" ? item.itemId : null,
+          package_id: item.type === "package" ? item.itemId : null,
+          service_name: item.name,
+          duration_minutes: item.durationMinutes || 60,
+          price: item.price,
+          status: "scheduled",
+        });
+
+        if (servicesError) console.error("Error adding appointment service:", servicesError);
+      }
+
+      if (item.type === "product") {
+        const { error: productsError } = await supabase.from("appointment_products").insert({
+          appointment_id: appointment.id,
+          product_id: item.itemId,
+          product_name: item.name,
+          quantity: item.quantity,
+          unit_price: item.price,
+          total_price: item.price * item.quantity,
+          fulfillment_status: "pending",
+        });
+        if (productsError) console.error("Error adding appointment product:", productsError);
+      }
+
+      await supabase.from("notifications").insert({
         tenant_id: tenantId,
-        customer_id: customerId,
-        location_id: locationId,
-        assigned_staff_id: assignedStaffId,
-        scheduled_start: scheduledStart,
-        scheduled_end: scheduledEnd,
-        is_unscheduled: !scheduledStart,
-        is_gifted: hasGifts,
-        status: tenant.auto_confirm_bookings ? "scheduled" : "scheduled",
-        payment_status: payAtSalon ? "pay_at_salon" : "unpaid",
-        total_amount: totalAmount,
-        notes: customer.notes || null,
-      })
-      .select("id")
-      .single();
-
-    if (appointmentError || !appointment) {
-      console.error("Error creating appointment:", appointmentError);
-      return new Response(
-        JSON.stringify({ error: "Failed to create appointment" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (assignedStaffId) {
-      await supabase.from("audit_logs").insert({
-        tenant_id: tenantId,
-        actor_user_id: null,
-        action: selectedStaffId ? "booking.staff_assignment_changed" : "booking.staff_auto_assigned",
+        type: "new_booking",
+        title: "New Booking",
+        description: `${customerFullName} booked ${item.name}`,
         entity_type: "appointment",
         entity_id: appointment.id,
-        metadata: {
-          assignedStaffId,
-          selectedStaffId: selectedStaffId || null,
-          locationId: locationId || null,
-          selectedServiceIds,
-        },
+        urgent: false,
       });
     }
-
-    // Add services and products to appointment
-    const serviceItems = items.filter((item) => item.type === "service" || item.type === "package");
-    const productItems = items.filter((item) => item.type === "product");
-
-    // Insert appointment services
-    if (serviceItems.length > 0) {
-      const servicesToInsert = serviceItems.map((item) => ({
-        appointment_id: appointment.id,
-        service_id: item.type === "service" ? item.itemId : null,
-        package_id: item.type === "package" ? item.itemId : null,
-        service_name: item.name,
-        duration_minutes: item.durationMinutes || 60,
-        price: item.price,
-        status: "scheduled",
-      }));
-
-      const { error: servicesError } = await supabase
-        .from("appointment_services")
-        .insert(servicesToInsert);
-
-      if (servicesError) {
-        console.error("Error adding services:", servicesError);
-      }
-    }
-
-    // Insert appointment products
-    if (productItems.length > 0) {
-      const productsToInsert = productItems.map((item) => ({
-        appointment_id: appointment.id,
-        product_id: item.itemId,
-        product_name: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        total_price: item.price * item.quantity,
-        fulfillment_status: "pending",
-      }));
-
-      const { error: productsError } = await supabase
-        .from("appointment_products")
-        .insert(productsToInsert);
-
-      if (productsError) {
-        console.error("Error adding products:", productsError);
-      }
-    }
-
-    // Create notification for salon
-    await supabase.from("notifications").insert({
-      tenant_id: tenantId,
-      type: "new_booking",
-      title: "New Booking",
-      description: `${customerFullName} booked ${items.length} item(s) for ${new Intl.NumberFormat("en-US", { style: "currency", currency: tenant.currency }).format(totalAmount)}`,
-      entity_type: "appointment",
-      entity_id: appointment.id,
-      urgent: false,
-    });
-
-    // TODO: Send confirmation email to customer
 
     return new Response(
       JSON.stringify({
         success: true,
         reference,
-        appointmentId: appointment.id,
+        appointmentId: createdAppointmentIds[0],
+        appointmentIds: createdAppointmentIds,
+        totals: {
+          subtotal: totalAmount,
+          voucherDiscount,
+          purseAmount,
+          depositAmount,
+        },
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Error processing booking:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

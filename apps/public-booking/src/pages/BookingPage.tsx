@@ -87,6 +87,22 @@ function BookingPageContent() {
       (location) => toCountryCode(location.country) === selectedCountryCode,
     );
   }, [countryContextEnabled, selectedCountryCode, locations]);
+  const checkoutLocations = useMemo(() => {
+    if (countryScopedLocations.length > 0) return countryScopedLocations;
+    if (countryContextEnabled && selectedCountryCode && locations.length > 0) {
+      console.warn("[public-booking] Falling back to unfiltered locations for checkout", {
+        selectedCountryCode,
+        rawLocationCount: locations.length,
+        locationCountries: locations.map((location) => ({
+          id: location.id,
+          country: location.country,
+          normalizedCountry: toCountryCode(location.country),
+        })),
+      });
+      return locations;
+    }
+    return countryScopedLocations;
+  }, [countryContextEnabled, countryScopedLocations, locations, selectedCountryCode]);
   const locationIds = useMemo(
     () => countryScopedLocations.map((location) => location.id),
     [countryScopedLocations],
@@ -238,8 +254,11 @@ function BookingPageContent() {
           open={checkoutOpen}
           onOpenChange={setCheckoutOpen}
           salon={salon}
-          locations={countryScopedLocations}
+          locations={checkoutLocations}
           selectedCountryCode={selectedCountryCode}
+          services={services}
+          packages={packages}
+          products={products}
         />
 
         <Dialog open={isCatalogBlocked}>
