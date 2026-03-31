@@ -84,6 +84,12 @@ export function SchedulingStep({
     15
   );
 
+  const availableDayKeys = new Set(
+    (availableDays || [])
+      .filter((day) => day.hasSlots)
+      .map((day) => format(day.date, "yyyy-MM-dd"))
+  );
+
   // Check if a day is a closed day (salon not open)
   const isClosedDay = (date: Date): boolean => {
     if (!selectedLocation?.opening_days) return false;
@@ -98,6 +104,10 @@ export function SchedulingStep({
     if (date < today) return true;
     // Disable closed days
     if (isClosedDay(date)) return true;
+    // Disable days that have no available slots once availability has loaded
+    if (!daysLoading && availableDays) {
+      return !availableDayKeys.has(format(date, "yyyy-MM-dd"));
+    }
     return false;
   };
 
@@ -135,33 +145,43 @@ export function SchedulingStep({
         </div>
       </div>
 
+      {/* Location Selection */}
+      {locations.length > 1 && (
+        <div className="space-y-2">
+          <Label>{leaveUnscheduled ? "Preferred Location" : "Select Location"}</Label>
+          <Select
+            value={selectedLocation?.id}
+            onValueChange={(id) => {
+              const loc = locations.find((l) => l.id === id);
+              if (loc) {
+                onLocationChange(loc);
+                onDateChange(undefined);
+                onTimeChange(undefined);
+                onStaffChange?.(undefined);
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Choose a location" />
+            </SelectTrigger>
+            <SelectContent>
+              {locations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.id}>
+                  {loc.name} - {loc.city}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {leaveUnscheduled && (
+            <p className="text-xs text-muted-foreground">
+              We'll attach this booking to your preferred branch so the salon can schedule you correctly.
+            </p>
+          )}
+        </div>
+      )}
+
       {!leaveUnscheduled && (
         <>
-          {/* Location Selection */}
-          {locations.length > 1 && (
-            <div className="space-y-2">
-              <Label>Select Location</Label>
-              <Select
-                value={selectedLocation?.id}
-                onValueChange={(id) => {
-                  const loc = locations.find((l) => l.id === id);
-                  if (loc) onLocationChange(loc);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a location" />
-                </SelectTrigger>
-                <SelectContent>
-                  {locations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.name} - {loc.city}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           {/* Date and Time Selection - Compact Layout */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -197,6 +217,11 @@ export function SchedulingStep({
               {daysLoading && (
                 <p className="text-xs text-muted-foreground">Loading availability...</p>
               )}
+              {!daysLoading && availableDays && availableDayKeys.size === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No booking dates are currently available for this location.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -209,6 +234,11 @@ export function SchedulingStep({
                 disabled={!selectedDate}
                 placeholder={!selectedDate ? "Select date first" : "Select time"}
               />
+              {!slotsLoading && selectedDate && (availableSlots?.length || 0) === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No times are available for this date. Choose another date or leave the booking unscheduled.
+                </p>
+              )}
             </div>
           </div>
 

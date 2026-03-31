@@ -109,8 +109,13 @@ export function ReviewStep({
       {leaveUnscheduled && (
         <div className="p-4 border rounded-lg bg-muted/30">
           <p className="text-sm text-muted-foreground">
-            📅 Unscheduled booking - you'll schedule your appointment after checkout
+            Unscheduled booking - you'll schedule your appointment after checkout.
           </p>
+          {selectedLocation && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Preferred location: {selectedLocation.name}, {selectedLocation.city}
+            </p>
+          )}
         </div>
       )}
 

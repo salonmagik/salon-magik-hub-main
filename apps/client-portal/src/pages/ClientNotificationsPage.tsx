@@ -22,11 +22,11 @@ export default function ClientNotificationsPage() {
   return (
     <ClientSidebar>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground">Notifications</h1>
-            <p className="text-muted-foreground mt-1">
-              Stay updated on your bookings and account
+            <h1>Notifications</h1>
+            <p className="text-muted-foreground mt-2">
+              Stay updated with your appointments and account activity
             </p>
           </div>
           {unreadCount > 0 && (

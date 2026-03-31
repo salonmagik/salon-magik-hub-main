@@ -37,11 +37,12 @@ import {
 import { useCustomerPurse, type Transaction } from "@/hooks/useCustomerPurse";
 import { useAppointments } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
+import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import type { Tables } from "@supabase-client";
 
-type Customer = Tables<"customers">;
+type Customer = CustomerWithVisitSummary;
 type AppointmentAttachment = Tables<"appointment_attachments">;
 
 interface AppointmentNote {
@@ -317,6 +318,31 @@ export function CustomerDetailDialog({
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardContent className="p-4">
+                <h4 className="font-medium text-sm text-muted-foreground mb-3">Branches Visited</h4>
+                {customer.visitedLocations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No branch visits recorded yet. This customer will appear here once an appointment is created.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {customer.visitedLocations.map((location) => (
+                      <div
+                        key={location.locationId}
+                        className="flex items-center justify-between rounded-lg border p-3"
+                      >
+                        <span className="text-sm font-medium">{location.locationName}</span>
+                        <Badge variant="secondary">
+                          {location.visitCount} {location.visitCount === 1 ? "visit" : "visits"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardContent className="p-4 space-y-3">

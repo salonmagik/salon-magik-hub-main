@@ -131,7 +131,7 @@ export default function ClientBookingDetailPage() {
     return (
       <ClientSidebar>
         <div className="space-y-6">
-          <Button variant="ghost" onClick={() => navigate("/client/bookings")}>
+          <Button variant="ghost" onClick={() => navigate("/bookings")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Bookings
           </Button>
@@ -158,7 +158,7 @@ export default function ClientBookingDetailPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/client/bookings")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/bookings")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">

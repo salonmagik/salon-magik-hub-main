@@ -13,7 +13,7 @@ type RouteState = {
 };
 
 export function ClientProtectedRoute({ children }: ClientProtectedRouteProps) {
-  const { isLoading, isAuthenticated } = useClientAuth();
+  const { isLoading, isAuthenticated, requiresPasswordSetup } = useClientAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -29,6 +29,10 @@ export function ClientProtectedRoute({ children }: ClientProtectedRouteProps) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (requiresPasswordSetup && location.pathname !== "/complete-account") {
+    return <Navigate to="/complete-account" replace />;
   }
 
   return <>{children}</>;

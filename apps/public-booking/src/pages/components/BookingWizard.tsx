@@ -235,6 +235,14 @@ export function BookingWizard({
       }
       setStep(shouldSkipScheduling ? "booker" : "scheduling");
     } else if (step === "scheduling") {
+      if (hasSchedulableItems && !selectedLocation) {
+        toast({
+          title: "Missing location",
+          description: "Please select a location before continuing",
+          variant: "destructive",
+        });
+        return;
+      }
       if (!leaveUnscheduled && hasSchedulableItems && (!selectedDate || !selectedTime || !selectedLocation)) {
         toast({
           title: "Missing selection",
@@ -507,7 +515,10 @@ export function BookingWizard({
       }
     } catch (err: unknown) {
       console.error("Payment error:", err);
-      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      const message =
+        err && typeof err === "object" && "message" in err && typeof err.message === "string"
+          ? err.message
+          : "Something went wrong. Please try again.";
       toast({
         title: "Payment failed",
         description: message,
@@ -550,7 +561,10 @@ export function BookingWizard({
       clearCart();
     } catch (err: unknown) {
       console.error("Booking error:", err);
-      const message = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      const message =
+        err && typeof err === "object" && "message" in err && typeof err.message === "string"
+          ? err.message
+          : "Something went wrong. Please try again.";
       toast({
         title: "Booking failed",
         description: message,

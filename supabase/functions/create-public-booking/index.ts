@@ -32,6 +32,7 @@ interface BookingRequest {
   selectedStaffId?: string | null;
   scheduledDate?: string;
   scheduledTime?: string;
+  isUnscheduled?: boolean;
   customer: {
     firstName: string;
     lastName: string;
@@ -41,6 +42,14 @@ interface BookingRequest {
   };
   items: CartItem[];
   payAtSalon?: boolean;
+}
+
+function normalizeEmail(email?: string | null) {
+  return email?.trim().toLowerCase() || "";
+}
+
+function normalizePhone(phone?: string | null) {
+  return phone?.replace(/[^\d]/g, "") || "";
 }
 
 serve(async (req) => {
@@ -55,7 +64,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: BookingRequest = await req.json();
-    const { tenantId, locationId, selectedStaffId, scheduledDate, scheduledTime, customer, items, payAtSalon } = body;
+    const { tenantId, locationId, selectedStaffId, scheduledDate, scheduledTime, isUnscheduled, customer, items, payAtSalon } = body;
 
     // Validate required fields
     if (!tenantId || !customer.email || !customer.firstName || !customer.lastName || items.length === 0) {
@@ -80,37 +89,82 @@ serve(async (req) => {
       );
     }
 
+    const hasSchedulableItems = items.some((item) => item.type !== "product");
+
+    if (hasSchedulableItems && !locationId) {
+      return new Response(
+        JSON.stringify({ error: "Please select a location before continuing." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (hasSchedulableItems && !isUnscheduled && (!scheduledDate || !scheduledTime)) {
+      return new Response(
+        JSON.stringify({ error: "Please select an available date and time, or leave the booking unscheduled." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Find or create customer
     const customerFullName = `${customer.firstName} ${customer.lastName}`;
-    
-    let { data: existingCustomer } = await supabase
+    const normalizedEmail = normalizeEmail(customer.email);
+    const normalizedPhone = normalizePhone(customer.phone);
+
+    const { data: tenantCustomers, error: tenantCustomersError } = await supabase
       .from("customers")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("email", customer.email)
-      .maybeSingle();
+      .select("id, email, phone, status")
+      .eq("tenant_id", tenantId);
+
+    if (tenantCustomersError) {
+      throw tenantCustomersError;
+    }
+
+    const emailMatches = (tenantCustomers || []).filter(
+      (row) => row.status !== "deleted" && normalizedEmail && normalizeEmail(row.email) === normalizedEmail,
+    );
+    const phoneMatches = (tenantCustomers || []).filter(
+      (row) => row.status !== "deleted" && normalizedPhone && normalizePhone(row.phone) === normalizedPhone,
+    );
+
+    const matchedIds = [...new Set([...emailMatches, ...phoneMatches].map((row) => row.id))];
+    if (matchedIds.length > 1) {
+      return new Response(
+        JSON.stringify({ error: "A customer conflict was found for this email or phone number. Please contact the salon." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     let customerId: string;
 
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
+    if (matchedIds.length === 1) {
+      customerId = matchedIds[0];
     } else {
       const { data: newCustomer, error: customerError } = await supabase
         .from("customers")
         .insert({
           tenant_id: tenantId,
           full_name: customerFullName,
-          email: customer.email,
-          phone: customer.phone || null,
+          email: normalizedEmail,
+          phone: customer.phone?.trim() || null,
         })
         .select("id")
         .single();
 
       if (customerError || !newCustomer) {
         console.error("Error creating customer:", customerError);
+        const isDuplicateCustomerError = Boolean(
+          customerError?.message && /customer.*(email|phone)|already exists|duplicate/i.test(customerError.message),
+        );
         return new Response(
-          JSON.stringify({ error: "Failed to create customer" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: isDuplicateCustomerError
+              ? customerError.message
+              : "Failed to create customer",
+          }),
+          {
+            status: isDuplicateCustomerError ? 409 : 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
         );
       }
 
@@ -256,7 +310,7 @@ serve(async (req) => {
       .insert({
         tenant_id: tenantId,
         customer_id: customerId,
-        location_id: locationId || null,
+        location_id: locationId,
         assigned_staff_id: assignedStaffId,
         scheduled_start: scheduledStart,
         scheduled_end: scheduledEnd,
