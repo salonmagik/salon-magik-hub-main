@@ -37,13 +37,13 @@ interface ClientSidebarProps {
 }
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/client" },
-  { label: "Bookings", icon: Calendar, path: "/client/bookings" },
-  { label: "History", icon: Clock, path: "/client/history" },
-  { label: "Refunds & Credits", icon: RefreshCcw, path: "/client/refunds" },
-  { label: "Notifications", icon: Bell, path: "/client/notifications" },
-  { label: "Profile & Security", icon: User, path: "/client/profile" },
-  { label: "Help & Support", icon: HelpCircle, path: "/client/help" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+  { label: "Bookings", icon: Calendar, path: "/bookings" },
+  { label: "History", icon: Clock, path: "/history" },
+  { label: "Refunds & Credits", icon: RefreshCcw, path: "/refunds" },
+  { label: "Notifications", icon: Bell, path: "/notifications" },
+  { label: "Profile & Security", icon: User, path: "/profile" },
+  { label: "Help & Support", icon: HelpCircle, path: "/help" },
 ];
 
 export function ClientSidebar({ children }: ClientSidebarProps) {
@@ -56,29 +56,26 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
 
   const handleLogout = async () => {
     await signOut();
-    navigate("/client/login", { replace: true });
+    navigate("/login", { replace: true });
   };
 
   const isActive = (path: string) => {
-    if (path === "/client") {
-      return location.pathname === "/client";
+    if (path === "/") {
+      return location.pathname === "/";
     }
     return location.pathname.startsWith(path);
   };
 
-  const NavContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+  const NavContent = ({ onItemClick, forceExpanded = false }: { onItemClick?: () => void; forceExpanded?: boolean }) => (
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="p-4 flex items-center justify-between">
-        <Link to="/client" className="flex items-center gap-2">
-          <SalonMagikLogo className="h-8 w-8" />
-          {!isCollapsed && (
-            <span className="font-semibold text-foreground">My Account</span>
-          )}
+        <Link to="/" className="flex items-center gap-2">
+          <SalonMagikLogo variant="white" size="sm" showText={forceExpanded || !isCollapsed} />
         </Link>
       </div>
 
-      <Separator />
+      <Separator className="bg-white/10" />
 
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
@@ -91,18 +88,18 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive(item.path)
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-white/15 text-white"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
               )}
             >
               <item.icon className="h-5 w-5 shrink-0" />
-              {!isCollapsed && <span>{item.label}</span>}
+              {(forceExpanded || !isCollapsed) && <span>{item.label}</span>}
             </Link>
           ))}
         </nav>
       </ScrollArea>
 
-      <Separator />
+      <Separator className="bg-white/10" />
 
       {/* Logout */}
       <div className="p-3">
@@ -110,11 +107,11 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           onClick={() => setShowLogoutDialog(true)}
           className={cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            "text-white/80 hover:bg-white/10 hover:text-white"
           )}
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          {!isCollapsed && <span>Sign out</span>}
+          {(forceExpanded || !isCollapsed) && <span>Sign out</span>}
         </button>
       </div>
     </div>
@@ -124,22 +121,21 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
     <ClientInactivityGuard>
       <div className="min-h-screen bg-background">
         {/* Mobile Header */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 lg:hidden">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-white/10 bg-primary px-4 text-white lg:hidden">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 hover:text-white">
                 <Menu className="h-5 w-5" />
                 <span className="sr-only">Toggle menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
-              <NavContent onItemClick={() => setMobileOpen(false)} />
+            <SheetContent side="left" className="w-72 border-white/10 bg-primary p-0 text-white">
+              <NavContent onItemClick={() => setMobileOpen(false)} forceExpanded />
             </SheetContent>
           </Sheet>
           <div className="flex-1">
-            <Link to="/client" className="flex items-center gap-2">
-              <SalonMagikLogo className="h-6 w-6" />
-              <span className="font-semibold">My Account</span>
+            <Link to="/" className="flex items-center gap-2">
+              <SalonMagikLogo variant="white" size="sm" />
             </Link>
           </div>
         </header>
@@ -148,7 +144,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           {/* Desktop Sidebar */}
           <aside
             className={cn(
-              "sticky top-0 hidden h-screen border-r bg-card lg:flex lg:flex-col transition-all duration-300",
+              "sticky top-0 hidden h-screen border-r border-white/10 bg-primary text-white lg:flex lg:flex-col transition-all duration-300",
               isCollapsed ? "w-16" : "w-64"
             )}
           >
@@ -159,7 +155,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-6 w-6 rounded-full bg-background"
+                className="h-6 w-6 rounded-full border-white/15 bg-primary text-white hover:bg-white/10 hover:text-white"
                 onClick={() => setIsCollapsed(!isCollapsed)}
               >
                 {isCollapsed ? (

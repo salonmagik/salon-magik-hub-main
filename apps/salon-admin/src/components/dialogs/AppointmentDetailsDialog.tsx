@@ -25,6 +25,7 @@ import {
   CreditCard,
   Package,
   ShoppingBag,
+  Loader2,
 } from "lucide-react";
 import { useAppointmentProducts, type AppointmentProduct } from "@/hooks/useAppointmentProducts";
 import { useAuth } from "@/hooks/useAuth";
@@ -58,6 +59,28 @@ interface AppointmentDetailsDialogProps {
   onRefresh?: () => void;
 }
 
+type AppointmentBookingMetadata = {
+  line_item?: {
+    branch_name?: string | null;
+    schedule_mode?: string | null;
+    fulfillment_type?: string | null;
+    type?: string | null;
+  } | null;
+  gift?: {
+    recipient?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    } | null;
+    shared_recipient?: boolean;
+  } | null;
+  delivery_address?: {
+    line1?: string;
+    city?: string;
+    country?: string;
+  } | null;
+} | null;
+
 export function AppointmentDetailsDialog({
   open,
   onOpenChange,
@@ -68,6 +91,7 @@ export function AppointmentDetailsDialog({
   const { currentTenant, roles } = useAuth();
   const [isGifted, setIsGifted] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
   const { products, isLoading: productsLoading } = useAppointmentProducts(appointment?.id);
 
   const currency = currentTenant?.currency || "USD";
@@ -93,6 +117,8 @@ export function AppointmentDetailsDialog({
   if (!appointment) return null;
 
   const { label, variant } = statusConfig[appointment.status];
+  const bookingReference = (appointment as CalendarAppointment & { booking_reference?: string | null }).booking_reference || null;
+  const bookingMetadata = ((appointment as CalendarAppointment & { booking_metadata?: AppointmentBookingMetadata }).booking_metadata || null) as AppointmentBookingMetadata;
   const scheduledDate = appointment.scheduled_start
     ? format(new Date(appointment.scheduled_start), "EEEE, MMMM d, yyyy")
     : "Not scheduled";
@@ -118,7 +144,11 @@ export function AppointmentDetailsDialog({
 
   const totalAmount = Number(appointment.total_amount) || servicesSubtotal + productsSubtotal;
   const amountPaid = Number(appointment.amount_paid) || 0;
-  const balanceDue = totalAmount - amountPaid;
+  const balanceDue = appointment.status === "cancelled" ? 0 : Math.max(0, totalAmount - amountPaid);
+  const canRefundCancelledAppointment =
+    appointment.status === "cancelled" &&
+    amountPaid > 0 &&
+    appointment.payment_status !== "refunded_full";
 
   const handleGiftedToggle = async (checked: boolean) => {
     if (!appointment?.id) return;
@@ -153,6 +183,36 @@ export function AppointmentDetailsDialog({
   const handleGoToAppointments = () => {
     onOpenChange(false);
     navigate("/salon/appointments");
+  };
+
+  const handleRefundToPurse = async () => {
+    if (!appointment?.id) return;
+
+    setIsRefunding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("refund-cancelled-appointment", {
+        body: { appointmentId: appointment.id },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Failed to refund appointment");
+      }
+
+      toast({
+        title: "Refund completed",
+        description: "The customer's purse has been credited with the paid amount.",
+      });
+      onRefresh?.();
+    } catch (err) {
+      console.error("Error refunding cancelled appointment:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to process refund",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefunding(false);
+    }
   };
 
   // Mask phone for staff role
@@ -211,6 +271,42 @@ export function AppointmentDetailsDialog({
                 </p>
               </div>
             </div>
+
+            {(bookingReference || bookingMetadata?.gift || bookingMetadata?.delivery_address || bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled") && (
+              <div className="flex items-start gap-3">
+                <Package className="w-5 h-5 text-muted-foreground mt-0.5" />
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium">Booking Context</p>
+                  {bookingReference && (
+                    <p className="text-muted-foreground">Reference: <span className="font-medium text-foreground">{bookingReference}</span></p>
+                  )}
+                  {bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled" && (
+                    <p className="text-muted-foreground">This item was left unscheduled during checkout.</p>
+                  )}
+                  {bookingMetadata?.line_item?.fulfillment_type && (
+                    <p className="text-muted-foreground capitalize">
+                      Fulfillment: <span className="font-medium text-foreground">{bookingMetadata.line_item.fulfillment_type}</span>
+                    </p>
+                  )}
+                  {bookingMetadata?.gift?.recipient && (
+                    <p className="text-muted-foreground">
+                      Gift recipient:{" "}
+                      <span className="font-medium text-foreground">
+                        {[bookingMetadata.gift.recipient.firstName, bookingMetadata.gift.recipient.lastName].filter(Boolean).join(" ")}
+                      </span>
+                    </p>
+                  )}
+                  {bookingMetadata?.delivery_address && (
+                    <p className="text-muted-foreground">
+                      Delivery:{" "}
+                      <span className="font-medium text-foreground">
+                        {[bookingMetadata.delivery_address.line1, bookingMetadata.delivery_address.city, bookingMetadata.delivery_address.country].filter(Boolean).join(", ")}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Services */}
             <div className="flex items-start gap-3">
@@ -311,13 +407,36 @@ export function AppointmentDetailsDialog({
                     <span className="text-muted-foreground">Paid</span>
                     <span className="text-success">{formatCurrency(amountPaid)}</span>
                   </div>
+                  {appointment.payment_status === "refunded_full" && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Refunded to purse</span>
+                      <span className="text-primary">{formatCurrency(amountPaid)}</span>
+                    </div>
+                  )}
                   {balanceDue > 0 && (
                     <div className="flex justify-between font-medium">
                       <span>Balance Due</span>
                       <span className="text-destructive">{formatCurrency(balanceDue)}</span>
                     </div>
                   )}
+                  {appointment.status === "cancelled" && (
+                    <div className="flex justify-between font-medium">
+                      <span>Balance Due</span>
+                      <span>{formatCurrency(0)}</span>
+                    </div>
+                  )}
                 </div>
+                {canRefundCancelledAppointment && (
+                  <Button
+                    variant="outline"
+                    className="mt-3 w-full"
+                    onClick={handleRefundToPurse}
+                    disabled={isRefunding}
+                  >
+                    {isRefunding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+                    Refund Paid Amount to Purse
+                  </Button>
+                )}
               </div>
             </div>
 

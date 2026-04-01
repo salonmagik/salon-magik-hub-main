@@ -7,16 +7,30 @@ interface ValidationChecklistItem {
 }
 
 interface ValidationChecklistProps {
-  items: ValidationChecklistItem[];
+  items?: ValidationChecklistItem[];
+  rules?: ValidationChecklistItem[];
+  title?: string;
+  description?: string;
   className?: string;
 }
 
-export function ValidationChecklist({ items, className }: ValidationChecklistProps): JSX.Element {
+export function ValidationChecklist({
+  items,
+  rules,
+  title = "Password requirements",
+  description,
+  className,
+}: ValidationChecklistProps): JSX.Element {
+  const checklistItems = items ?? rules ?? [];
+
   return (
     <div className={cn("rounded-lg border bg-muted/30 p-3", className)}>
-      <p className="mb-2 text-sm font-medium">Password requirements</p>
+      <p className="mb-2 text-sm font-medium">{title}</p>
+      {description ? (
+        <p className="mb-3 text-sm text-muted-foreground">{description}</p>
+      ) : null}
       <ul className="space-y-1">
-        {items.map((item) => (
+        {checklistItems.map((item) => (
           <li
             key={item.label}
             className={cn(

@@ -41,6 +41,7 @@ type CatalogItem = {
   originalPrice?: number;
   imageUrls: string[];
   durationMinutes?: number;
+  serviceIds?: string[];
   stockQuantity?: number;
   type: "service" | "package" | "product";
   categoryId?: string | null;
@@ -93,6 +94,8 @@ export function CatalogView({
       price: Number(p.price),
       originalPrice: p.original_price ? Number(p.original_price) : undefined,
       imageUrls: p.image_urls || [],
+      durationMinutes: p.duration_minutes || undefined,
+      serviceIds: p.service_ids ?? [],
       type: "package" as const,
       branches: p.branches ?? [],
       locationIds: p.location_ids ?? [],
@@ -230,8 +233,10 @@ export function CatalogView({
             originalPrice={item.originalPrice}
             currency={currency}
             imageUrls={item.imageUrls}
-            durationMinutes={item.durationMinutes}
-            stockQuantity={item.stockQuantity}
+                durationMinutes={item.durationMinutes}
+                serviceIds={item.serviceIds}
+                stockQuantity={item.stockQuantity}
+                branches={item.branches}
             locationNames={item.locationNames}
           />
         ))}

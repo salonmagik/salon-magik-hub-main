@@ -55,6 +55,9 @@ import {
   Gift,
   Share2,
   Ticket,
+  Wallet,
+  Banknote,
+  ArrowDownUp,
   CalendarX2,
 } from "lucide-react";
 import { cn } from "@shared/utils";
@@ -66,6 +69,12 @@ import { supabase } from "@/lib/supabase";
 import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { toast } from "@ui/ui/use-toast";
 import { differenceInDays, format } from "date-fns";
+import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
+import { WalletLedger } from "@/components/billing/WalletLedger";
+import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
+import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
+import { useSalonWallet } from "@/hooks/useSalonWallet";
+
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch";
 
@@ -84,6 +93,9 @@ const BASE_SETTINGS_TABS = [
   { id: "hours", label: "Business Hours", icon: Clock },
   { id: "booking", label: "Booking Settings", icon: User },
   { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "wallet", label: "Wallet", icon: Wallet },
+  { id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
+  { id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
 ] as const;
@@ -107,11 +119,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [isSaving, setIsSaving] = useState(false);
   const { currentTenant, profile, user, activeContextType, activeLocationId } = useAuth();
   const { locations, defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
-  const { 
-    settings: dbNotificationSettings, 
-    isLoading: notificationsLoading, 
-    isSaving: notificationsSaving, 
-    saveSettings: saveNotificationSettings 
+  const {
+    settings: dbNotificationSettings,
+    isLoading: notificationsLoading,
+    isSaving: notificationsSaving,
+    saveSettings: saveNotificationSettings
   } = useNotificationSettings();
 
   const isChain = currentTenant?.plan === "chain";
@@ -148,6 +160,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     const tab = searchParams.get("tab");
     return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
   });
+
+  const { wallet } = useSalonWallet(currentTenant?.id);
 
   // Sync tab with URL params
   useEffect(() => {
@@ -450,7 +464,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
   const handleLogoUpload = async (file: File) => {
     if (!currentTenant?.id) return;
-    
+
     // Validate file type and size
     const validTypes = ["image/jpeg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
@@ -591,14 +605,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         const locationUpdates =
           resolvedScope === "business"
             ? {
-                city: profileData.city,
-                address: profileData.address,
-              }
+              city: profileData.city,
+              address: profileData.address,
+            }
             : {
-                name: profileData.salonName,
-                city: profileData.city,
-                address: profileData.address,
-              };
+              name: profileData.salonName,
+              city: profileData.city,
+              address: profileData.address,
+            };
         const { error: locationError } = await supabase
           .from("locations")
           .update(locationUpdates)
@@ -822,7 +836,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       // Refresh tenant + location state so renamed salon/location labels propagate to switchers immediately.
       await Promise.all([refreshTenants(), refetchLocations()]);
       setBookingBaseline({ ...bookingSettings });
-      
+
       toast({ title: "Saved", description: "Booking settings updated" });
     } catch (err) {
       console.error("Error saving booking settings:", err);
@@ -1150,7 +1164,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     checked: boolean
   ) => {
     setNotificationSettings((prev) => ({ ...prev, [field]: checked }));
-    
+
     const fieldMap: Record<string, string> = {
       emailAppointmentReminders: "email_appointment_reminders",
       smsAppointmentReminders: "sms_appointment_reminders",
@@ -1158,11 +1172,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       emailCancellations: "email_cancellations",
       emailDailyDigest: "email_daily_digest",
     };
-    
+
     const success = await saveNotificationSettings({
       [fieldMap[field]]: checked,
     });
-    
+
     if (!success) {
       // Revert on failure
       setNotificationSettings((prev) => ({ ...prev, [field]: !checked }));
@@ -1479,7 +1493,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                     .eq("id", currentTenant.id);
                   if (error) throw error;
                   await refreshTenants();
-                  toast({ 
+                  toast({
                     title: checked ? "Online booking enabled" : "Online booking disabled",
                     description: checked ? "Customers can now book online" : "Online booking is now off"
                   });
@@ -1940,8 +1954,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               <p className="font-semibold capitalize">{currentTenant?.plan || "Solo"} Plan</p>
               <Badge className={cn(
                 currentTenant?.subscription_status === "active" ? "bg-success text-success-foreground" :
-                currentTenant?.subscription_status === "trialing" ? "bg-primary text-primary-foreground" :
-                "bg-destructive text-destructive-foreground"
+                  currentTenant?.subscription_status === "trialing" ? "bg-primary text-primary-foreground" :
+                    "bg-destructive text-destructive-foreground"
               )}>
                 {currentTenant?.subscription_status?.replace("_", " ") || "Unknown"}
               </Badge>
@@ -2009,7 +2023,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
       hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
     });
-    
+
     return (
       <div className="space-y-6">
         {/* Referral Program */}
@@ -2175,6 +2189,27 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     );
   };
 
+  const renderWalletTab = () => (
+    <div className="space-y-6">
+      <SalonWalletCard />
+      {wallet && (
+        <WalletLedger
+          walletType="salon"
+          walletId={wallet.id}
+          currency={wallet.currency}
+        />
+      )}
+    </div>
+  );
+
+  const renderPayoutDestinationsTab = () => (
+    <PayoutDestinationsManager />
+  );
+
+  const renderWithdrawalsTab = () => (
+    <WithdrawalHistory />
+  );
+
   const renderPlaceholderTab = () => (
     <Card>
       <CardContent className="p-12 text-center">
@@ -2287,6 +2322,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             {activeTab === "branches" && renderBranchesTab()}
             {activeTab === "booking" && renderBookingTab()}
             {activeTab === "payments" && renderPaymentsTab()}
+            {activeTab === "wallet" && renderWalletTab()}
+            {activeTab === "payout-destinations" && renderPayoutDestinationsTab()}
+            {activeTab === "withdrawals" && renderWithdrawalsTab()}
             {activeTab === "promotions" && renderPromotionsTab()}
             {activeTab === "notifications" && renderNotificationsTab()}
             {activeTab === "roles" && renderRolesTab()}

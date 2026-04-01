@@ -18,6 +18,7 @@ export type PublicTenant = Pick<
   | "cancellation_grace_hours"
   | "booking_status_message"
   | "slot_capacity_default"
+  | "default_buffer_minutes"
   | "pay_at_salon_enabled"
   | "allow_staff_selection"
   | "require_staff_selection"

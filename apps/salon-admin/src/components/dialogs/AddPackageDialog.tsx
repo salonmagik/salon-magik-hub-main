@@ -19,6 +19,7 @@ import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { formatCurrency, getCurrencySymbol } from "@shared/currency";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
+import { moveThumbnailToFront } from "@/lib/imageOrder";
 
 interface PreSelectedItem {
   id: string;
@@ -69,6 +70,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   const { products, isLoading: productsLoading } = useProducts();
   const { createPackage } = usePackages();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"services" | "products">("services");
   const [formData, setFormData] = useState({
     name: "",
@@ -179,6 +181,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       images: [],
       locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
+    setThumbnailIndex(0);
     setSelectedServices([]);
     setSelectedProducts([]);
     setActiveTab("services");
@@ -241,7 +244,7 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
         price: parseAmountInput(formData.price),
         originalPrice: originalPrice || undefined,
         description: formData.description || undefined,
-        imageUrls: formData.images,
+        imageUrls: moveThumbnailToFront(formData.images, thumbnailIndex),
         serviceItems: selectedServices.map((item) => ({
           serviceId: item.serviceId,
           quantity: item.quantity,
@@ -537,6 +540,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
             <ImageUploadZone
               images={formData.images}
               onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
+              thumbnailIndex={thumbnailIndex}
+              onThumbnailIndexChange={setThumbnailIndex}
               maxImages={2}
               disabled={isSubmitting}
             />

@@ -11,6 +11,13 @@ export interface TransactionWithDetails extends Transaction {
     id: string;
     full_name: string;
   } | null;
+  appointment?: {
+    id: string;
+    status: string;
+    payment_status: string;
+    amount_paid: number;
+    total_amount: number;
+  } | null;
 }
 
 export function useTransactions(filters?: {
@@ -43,7 +50,8 @@ export function useTransactions(filters?: {
         .from("transactions")
         .select(`
           *,
-          customer:customers(id, full_name)
+          customer:customers(id, full_name),
+          appointment:appointments(id, status, payment_status, amount_paid, total_amount)
         `)
         .eq("tenant_id", currentTenant.id)
         .order("created_at", { ascending: false });

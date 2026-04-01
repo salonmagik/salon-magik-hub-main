@@ -68,6 +68,18 @@ interface TenantTrialOverride {
   created_at: string;
 }
 
+interface SupportTicket {
+  id: string;
+  source_app: string;
+  tenant_id: string | null;
+  issue_type: string;
+  subject: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  assigned_backoffice_user_id: string | null;
+}
+
 const LEGAL_STATUS_OPTIONS: { value: LegalStatus; label: string }[] = [
   { value: "planned", label: "Planned" },
   { value: "legal_approved", label: "Legal Approved" },
@@ -192,6 +204,20 @@ export default function BackofficeSettingsPage() {
       return (data ?? []) as TenantTrialOverride[];
     },
   });
+
+  const { data: supportTickets = [], isLoading: supportTicketsLoading } = useQuery({
+    queryKey: ["support-tickets-admin"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("support_tickets" as any)
+        .select("id, source_app, tenant_id, issue_type, subject, status, priority, created_at, assigned_backoffice_user_id")
+        .order("created_at", { ascending: false })
+        .limit(50) as any);
+      if (error) throw error;
+      return (data ?? []) as SupportTicket[];
+    },
+  });
+  const safeSupportTickets = supportTickets ?? [];
 
   const selectedCountry = useMemo(
     () => marketCountries.find((country) => country.country_code === selectedCountryCode) || null,
@@ -321,6 +347,24 @@ export default function BackofficeSettingsPage() {
       toast.success("Trial override revoked");
     },
     onError: (error: Error) => toast.error(error.message || "Failed to revoke override"),
+  });
+
+  const updateSupportTicketMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await (supabase
+        .from("support_tickets" as any)
+        .update({
+          status,
+          assigned_backoffice_user_id: backofficeUser?.user_id ?? null,
+        } as any)
+        .eq("id", id) as any);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["support-tickets-admin"] });
+      toast.success("Support ticket updated");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to update support ticket"),
   });
 
   const updateCountryMutation = useMutation({
@@ -490,6 +534,7 @@ export default function BackofficeSettingsPage() {
           <TabsList>
             <TabsTrigger value="operations">Operations</TabsTrigger>
             <TabsTrigger value="markets">Markets</TabsTrigger>
+            <TabsTrigger value="support">Support</TabsTrigger>
           </TabsList>
 
           <TabsContent value="operations" className="space-y-6">
@@ -910,6 +955,66 @@ export default function BackofficeSettingsPage() {
                       ))}
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="support" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Support Ticket Queue</CardTitle>
+                <CardDescription>
+                  Manage support tickets submitted by clients and route them through the correct SLA state.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {supportTicketsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading support tickets...</p>
+                ) : safeSupportTickets.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No support tickets available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {safeSupportTickets.map((ticket) => (
+                      <div key={ticket.id} className="rounded-lg border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium">{ticket.subject}</p>
+                              <Badge variant="secondary">{ticket.priority}</Badge>
+                              <Badge>{ticket.status.replace(/_/g, " ")}</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {ticket.issue_type.replace(/_/g, " ")} · {ticket.source_app.replace(/_/g, " ")} ·{" "}
+                              {new Date(ticket.created_at).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {ticket.tenant_id ? `Tenant: ${ticket.tenant_id}` : "Platform-level ticket"}
+                            </p>
+                          </div>
+
+                          <div className="min-w-[220px]">
+                            <Select
+                              value={ticket.status}
+                              onValueChange={(value) => updateSupportTicketMutation.mutate({ id: ticket.id, status: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="open">Open</SelectItem>
+                                <SelectItem value="in_progress">In progress</SelectItem>
+                                <SelectItem value="waiting_on_salon">Waiting on salon</SelectItem>
+                                <SelectItem value="waiting_on_customer">Waiting on customer</SelectItem>
+                                <SelectItem value="resolved">Resolved</SelectItem>
+                                <SelectItem value="closed">Closed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
