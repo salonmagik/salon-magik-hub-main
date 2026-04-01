@@ -217,6 +217,7 @@ export default function BackofficeSettingsPage() {
       return (data ?? []) as SupportTicket[];
     },
   });
+  const safeSupportTickets = supportTickets ?? [];
 
   const selectedCountry = useMemo(
     () => marketCountries.find((country) => country.country_code === selectedCountryCode) || null,
@@ -970,11 +971,11 @@ export default function BackofficeSettingsPage() {
               <CardContent>
                 {supportTicketsLoading ? (
                   <p className="text-sm text-muted-foreground">Loading support tickets...</p>
-                ) : supportTickets.length === 0 ? (
+                ) : safeSupportTickets.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No support tickets available.</p>
                 ) : (
                   <div className="space-y-3">
-                    {supportTickets.map((ticket) => (
+                    {safeSupportTickets.map((ticket) => (
                       <div key={ticket.id} className="rounded-lg border p-4">
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="space-y-1">
