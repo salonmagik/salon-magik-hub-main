@@ -97,8 +97,8 @@ export function useAvailableSlots(
           .gte("scheduled_start", dayStart)
           .lte("scheduled_start", dayEnd)
           .in("status", ["scheduled", "started", "paused"]),
-        (supabase as any)
-          .from("branch_unavailability_windows")
+        supabase
+          .from("branch_unavailability_windows" as never)
           .select("starts_at, ends_at, ended_at")
           .eq("tenant_id", tenantId)
           .eq("location_id", location.id)

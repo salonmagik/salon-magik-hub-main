@@ -14,6 +14,12 @@ interface UseBookingEligibleStaffArgs {
   enabled?: boolean;
 }
 
+interface EligibleStaffRow {
+  user_id: string;
+  full_name: string;
+  role: string;
+}
+
 export function useBookingEligibleStaff({
   tenantId,
   locationId,
@@ -28,7 +34,7 @@ export function useBookingEligibleStaff({
     queryFn: async (): Promise<BookingEligibleStaff[]> => {
       if (!tenantId || !locationId) return [];
 
-      const { data, error } = await (supabase.rpc as any)("list_public_booking_eligible_staff", {
+      const { data, error } = await supabase.rpc("list_public_booking_eligible_staff" as never, {
         p_tenant_id: tenantId,
         p_location_id: locationId,
         p_service_ids: serviceIds.length > 0 ? serviceIds : null,
@@ -36,7 +42,7 @@ export function useBookingEligibleStaff({
 
       if (error) throw error;
 
-      return ((data || []) as any[]).map((row) => ({
+      return ((data || []) as EligibleStaffRow[]).map((row) => ({
         userId: row.user_id,
         fullName: row.full_name,
         role: row.role,

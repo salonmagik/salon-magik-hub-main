@@ -6,6 +6,7 @@ import { Badge } from "@ui/badge";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Tag, X, CheckCircle } from "lucide-react";
 import { formatCurrency } from "@shared/currency";
+import type { Tables } from "@supabase-client";
 
 interface VoucherInputProps {
   tenantId: string;
@@ -24,6 +25,8 @@ export interface AppliedVoucher {
   discountValue: number;
   discountAmount: number;
 }
+
+type VoucherLocationRow = Pick<Tables<"voucher_locations">, "voucher_id">;
 
 export function VoucherInput({
   tenantId,
@@ -51,14 +54,15 @@ export function VoucherInput({
       let allowedVoucherIds: string[] | null = null;
 
       if (selectedLocationId) {
-        const { data: scopedVoucherRows, error: scopedVoucherError } = await (supabase.from as any)("voucher_locations")
+        const { data: scopedVoucherRows, error: scopedVoucherError } = await supabase
+          .from("voucher_locations" as never)
           .select("voucher_id")
           .eq("tenant_id", tenantId)
           .eq("location_id", selectedLocationId)
           .eq("is_enabled", true);
 
         if (scopedVoucherError) throw scopedVoucherError;
-        allowedVoucherIds = (scopedVoucherRows ?? []).map((row: { voucher_id: string }) => row.voucher_id);
+        allowedVoucherIds = ((scopedVoucherRows ?? []) as VoucherLocationRow[]).map((row) => row.voucher_id);
       } else if (selectedCountryCode) {
         const { data: locationRows, error: locationError } = await supabase
           .from("locations")
@@ -71,14 +75,15 @@ export function VoucherInput({
 
         const countryLocationIds = (locationRows ?? []).map((row) => row.id);
         if (countryLocationIds.length > 0) {
-          const { data: scopedVoucherRows, error: scopedVoucherError } = await (supabase.from as any)("voucher_locations")
+          const { data: scopedVoucherRows, error: scopedVoucherError } = await supabase
+            .from("voucher_locations" as never)
             .select("voucher_id")
             .eq("tenant_id", tenantId)
             .eq("is_enabled", true)
             .in("location_id", countryLocationIds);
 
           if (scopedVoucherError) throw scopedVoucherError;
-          allowedVoucherIds = (scopedVoucherRows ?? []).map((row: { voucher_id: string }) => row.voucher_id);
+          allowedVoucherIds = ((scopedVoucherRows ?? []) as VoucherLocationRow[]).map((row) => row.voucher_id);
         } else {
           allowedVoucherIds = [];
         }
