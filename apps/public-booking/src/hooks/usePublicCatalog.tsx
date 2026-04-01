@@ -83,7 +83,7 @@ export function usePublicCatalog(
         };
       }
 
-      const { data, error } = await (supabase.rpc as any)("get_public_catalog_payload", {
+      const { data, error } = await supabase.rpc("get_public_catalog_payload" as never, {
         p_tenant_id: tenantId,
         p_mode: mode,
         p_country_code: isChainCountryScoped ? countryCode || null : null,

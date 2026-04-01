@@ -207,6 +207,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     smsAppointmentReminders: false,
     emailNewBookings: true,
     emailCancellations: true,
+    emailTransactionAlerts: true,
+    inAppTransactionAlerts: true,
     emailDailyDigest: false,
   });
 
@@ -431,6 +433,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         smsAppointmentReminders: dbNotificationSettings.sms_appointment_reminders,
         emailNewBookings: dbNotificationSettings.email_new_bookings,
         emailCancellations: dbNotificationSettings.email_cancellations,
+        emailTransactionAlerts: dbNotificationSettings.email_transaction_alerts,
+        inAppTransactionAlerts: dbNotificationSettings.in_app_transaction_alerts,
         emailDailyDigest: dbNotificationSettings.email_daily_digest,
       });
     }
@@ -442,6 +446,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       sms_appointment_reminders: notificationSettings.smsAppointmentReminders,
       email_new_bookings: notificationSettings.emailNewBookings,
       email_cancellations: notificationSettings.emailCancellations,
+      email_transaction_alerts: notificationSettings.emailTransactionAlerts,
+      in_app_transaction_alerts: notificationSettings.inAppTransactionAlerts,
       email_daily_digest: notificationSettings.emailDailyDigest,
     });
   };
@@ -1170,6 +1176,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       smsAppointmentReminders: "sms_appointment_reminders",
       emailNewBookings: "email_new_bookings",
       emailCancellations: "email_cancellations",
+      emailTransactionAlerts: "email_transaction_alerts",
+      inAppTransactionAlerts: "in_app_transaction_alerts",
       emailDailyDigest: "email_daily_digest",
     };
 
@@ -1252,6 +1260,38 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             disabled={notificationsSaving}
             onCheckedChange={(checked) =>
               handleNotificationToggle("emailCancellations", checked)
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">Email transaction alerts</p>
+            <p className="text-sm text-muted-foreground">
+              Email owners and managers when a payment or wallet top-up completes
+            </p>
+          </div>
+          <Switch
+            checked={notificationSettings.emailTransactionAlerts}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("emailTransactionAlerts", checked)
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="font-medium">In-app transaction alerts</p>
+            <p className="text-sm text-muted-foreground">
+              Create dashboard notifications for payment and purse activity
+            </p>
+          </div>
+          <Switch
+            checked={notificationSettings.inAppTransactionAlerts}
+            disabled={notificationsSaving}
+            onCheckedChange={(checked) =>
+              handleNotificationToggle("inAppTransactionAlerts", checked)
             }
           />
         </div>

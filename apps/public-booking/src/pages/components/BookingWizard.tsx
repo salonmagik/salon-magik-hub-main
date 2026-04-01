@@ -121,7 +121,7 @@ export function BookingWizard({
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
-  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("stripe");
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack");
   const [purseAmount, setPurseAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("card");
   const [purseBalance, setPurseBalance] = useState(0);
@@ -654,7 +654,7 @@ export function BookingWizard({
         }
 
         const amountToDebit = amountDueNow;
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as never, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
           p_appointment_id: primaryAppointmentId,
@@ -689,7 +689,7 @@ export function BookingWizard({
           throw new Error("Customer not found");
         }
 
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as never, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
           p_appointment_id: primaryAppointmentId,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -17,15 +17,12 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { DatePicker } from "@ui/date-picker";
 import {
-  User,
   Mail,
   Phone,
   Calendar,
   CreditCard,
   Clock,
   Plus,
-  ArrowUpRight,
-  ArrowDownLeft,
   FileText,
   Pencil,
   Image as ImageIcon,
@@ -34,8 +31,6 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import { useCustomerPurse, type Transaction } from "@/hooks/useCustomerPurse";
-import { useAppointments } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { supabase } from "@/lib/supabase";
@@ -44,6 +39,15 @@ import type { Tables } from "@supabase-client";
 
 type Customer = Partial<CustomerWithVisitSummary> & Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
+type CustomerTransaction = Tables<"transactions">;
+type CustomerPurse = Tables<"customer_purses">;
+type WalletLedgerEntry = Tables<"wallet_ledger_entries">;
+type CustomerAppointment = Tables<"appointments"> & {
+  location?: {
+    id: string;
+    name: string;
+  } | null;
+};
 
 interface AppointmentNote {
   appointmentId: string;
@@ -71,103 +75,149 @@ export function CustomerDetailDialog({
   customer,
 }: CustomerDetailDialogProps) {
   const { currentTenant } = useAuth();
-  const { purse, fetchPurseTransactions, fetchAllCustomerTransactions, isLoading: purseLoading } = useCustomerPurse(customer?.id || undefined);
-  const { appointments, isLoading: appointmentsLoading } = useAppointments();
-  const [purseTransactions, setPurseTransactions] = useState<any[]>([]);
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [appointmentNotes, setAppointmentNotes] = useState<AppointmentNote[]>([]);
-  const [notesLoading, setNotesLoading] = useState(false);
-  
+
   // Transaction filters
   const [txSearchQuery, setTxSearchQuery] = useState("");
   const [txStartDate, setTxStartDate] = useState<Date | undefined>();
   const [txEndDate, setTxEndDate] = useState<Date | undefined>();
   const [showFilters, setShowFilters] = useState(false);
 
-  const fetchAppointmentNotes = useCallback(async () => {
-    if (!customer?.id || !currentTenant?.id) return;
+  const customerId = customer?.id;
+  const currency = currentTenant?.currency || "USD";
+  const { data: customerDetail, isLoading: customerDetailLoading } = useQuery({
+    queryKey: ["customer-detail-dialog", currentTenant?.id, customerId, open],
+    queryFn: async () => {
+      if (!currentTenant?.id || !customerId) return null;
 
-    setNotesLoading(true);
-    try {
-      // Fetch appointments for this customer that have notes or attachments
-      const { data: customerAppts } = await supabase
+      const { data: appointmentsData, error: appointmentsError } = await supabase
         .from("appointments")
-        .select("id, scheduled_start, notes")
-        .eq("customer_id", customer.id)
+        .select(`
+          *,
+          location:locations(id, name)
+        `)
         .eq("tenant_id", currentTenant.id)
+        .eq("customer_id", customerId)
         .order("scheduled_start", { ascending: false });
 
-      if (!customerAppts?.length) {
-        setAppointmentNotes([]);
-        return;
+      if (appointmentsError) throw appointmentsError;
+
+      const customerAppointments = (appointmentsData as CustomerAppointment[] | null) || [];
+      const appointmentIds = customerAppointments.map((appointment) => appointment.id);
+
+      const [
+        transactionsResult,
+        purseResult,
+        attachmentsResult,
+      ] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*")
+          .eq("tenant_id", currentTenant.id)
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("customer_purses")
+          .select("*")
+          .eq("tenant_id", currentTenant.id)
+          .eq("customer_id", customerId)
+          .maybeSingle(),
+        appointmentIds.length > 0
+          ? supabase
+              .from("appointment_attachments")
+              .select("*")
+              .in("appointment_id", appointmentIds)
+              .order("created_at", { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (transactionsResult.error) throw transactionsResult.error;
+      if (purseResult.error) throw purseResult.error;
+      if (attachmentsResult.error) throw attachmentsResult.error;
+
+      const transactions = (transactionsResult.data as CustomerTransaction[] | null) || [];
+      const purse = (purseResult.data as CustomerPurse | null) || null;
+      const attachments = (attachmentsResult.data as AppointmentAttachment[] | null) || [];
+
+      let purseLedgerEntries: WalletLedgerEntry[] = [];
+      if (purse?.id) {
+        const { data: ledgerData, error: ledgerError } = await supabase
+          .from("wallet_ledger_entries")
+          .select("*")
+          .eq("wallet_type", "customer")
+          .eq("wallet_id", purse.id)
+          .order("created_at", { ascending: false });
+
+        if (ledgerError) throw ledgerError;
+        purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
       }
 
-      const apptIds = customerAppts.map((a) => a.id);
-
-      // Fetch attachments for these appointments
-      const { data: attachments } = await supabase
-        .from("appointment_attachments")
-        .select("*")
-        .in("appointment_id", apptIds)
-        .order("created_at", { ascending: false });
-
-      // Group by appointment
-      const notes: AppointmentNote[] = customerAppts
-        .filter((apt) => apt.notes || attachments?.some((a) => a.appointment_id === apt.id))
-        .map((apt) => ({
-          appointmentId: apt.id,
-          appointmentDate: apt.scheduled_start,
-          note: apt.notes,
-          attachments: attachments?.filter((a) => a.appointment_id === apt.id) || [],
+      const appointmentNotes: AppointmentNote[] = customerAppointments
+        .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
+        .map((appointment) => ({
+          appointmentId: appointment.id,
+          appointmentDate: appointment.scheduled_start,
+          note: appointment.notes,
+          attachments: attachments.filter((item) => item.appointment_id === appointment.id),
         }));
 
-      setAppointmentNotes(notes);
-    } catch (err) {
-      console.error("Error fetching appointment notes:", err);
-    } finally {
-      setNotesLoading(false);
-    }
-  }, [customer?.id, currentTenant?.id]);
+      const visitsByLocation = new Map<string, CustomerVisitedLocation>();
+      for (const appointment of customerAppointments) {
+        const countsAsVisit =
+          Boolean(appointment.actual_start) || ["started", "paused", "completed"].includes(appointment.status);
 
-  const fetchTransactions = useCallback(async () => {
-    if (!customer?.id || !currentTenant?.id) return;
-    
-    setTransactionsLoading(true);
-    try {
-      const [purseData, allData] = await Promise.all([
-        fetchPurseTransactions(),
-        fetchAllCustomerTransactions({
-          startDate: txStartDate?.toISOString(),
-          endDate: txEndDate?.toISOString(),
-        }),
-      ]);
-      setPurseTransactions(purseData);
-      setAllTransactions(allData);
-    } catch (err) {
-      console.error("Error loading transactions:", err);
-    } finally {
-      setTransactionsLoading(false);
-    }
-  }, [customer?.id, currentTenant?.id, fetchPurseTransactions, fetchAllCustomerTransactions, txStartDate, txEndDate]);
+        if (!countsAsVisit || !appointment.location_id) continue;
 
-  // Fetch data when dialog opens with a customer
-  useEffect(() => {
-    if (customer?.id && open && currentTenant?.id) {
-      fetchTransactions();
-      fetchAppointmentNotes();
-    }
-  }, [customer?.id, open, currentTenant?.id]);
-  
-  // Re-fetch when date filters change
-  useEffect(() => {
-    if (customer?.id && open && currentTenant?.id && (txStartDate || txEndDate)) {
-      fetchTransactions();
-    }
-  }, [txStartDate, txEndDate]);
+        const existing = visitsByLocation.get(appointment.location_id);
+        if (existing) {
+          existing.visitCount += 1;
+          continue;
+        }
+
+        visitsByLocation.set(appointment.location_id, {
+          locationId: appointment.location_id,
+          locationName: appointment.location?.name || "Unknown branch",
+          visitCount: 1,
+        });
+      }
+
+      const visitedLocations = Array.from(visitsByLocation.values()).sort(
+        (a, b) => b.visitCount - a.visitCount || a.locationName.localeCompare(b.locationName),
+      );
+
+      const outstandingBalance = customerAppointments.reduce((sum, appointment) => {
+        const paymentStatus = appointment.payment_status || "unpaid";
+        const countsAsOutstanding =
+          appointment.status !== "cancelled" &&
+          !["fully_paid", "refunded_full"].includes(paymentStatus);
+
+        if (!countsAsOutstanding) return sum;
+
+        const due = Math.max(Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0), 0);
+        return sum + due;
+      }, 0);
+
+      return {
+        appointments: customerAppointments,
+        transactions,
+        purse,
+        purseLedgerEntries,
+        appointmentNotes,
+        visitedLocations,
+        visitCount: visitedLocations.reduce((sum, location) => sum + location.visitCount, 0),
+        outstandingBalance,
+        lastTransactionAt: transactions[0]?.created_at ?? null,
+      };
+    },
+    enabled: Boolean(currentTenant?.id && customerId && open),
+  });
 
   // Filter transactions by search query
-  const filteredTransactions = allTransactions.filter((tx) => {
+  const filteredTransactions = (customerDetail?.transactions || []).filter((tx) => {
+    const createdAt = new Date(tx.created_at);
+    const matchesStartDate = !txStartDate || createdAt >= txStartDate;
+    const matchesEndDate = !txEndDate || createdAt <= txEndDate;
+
+    if (!matchesStartDate || !matchesEndDate) return false;
     if (!txSearchQuery) return true;
     const query = txSearchQuery.toLowerCase();
     return (
@@ -179,11 +229,6 @@ export function CustomerDetailDialog({
     );
   });
 
-  const customerId = customer?.id;
-  const customerAppointments = customerId
-    ? appointments.filter((a) => a.customer_id === customerId)
-    : [];
-  const currency = currentTenant?.currency || "USD";
   const { data: engagementSummary } = useQuery({
     queryKey: ["customer-engagement-summary", currentTenant?.id, customerId],
     queryFn: async () => {
@@ -200,9 +245,19 @@ export function CustomerDetailDialog({
 
   if (!customer) return null;
 
-  const visitedLocations: CustomerVisitedLocation[] = customer.visitedLocations ?? [];
-  const visitCount = customer.visit_count ?? customerAppointments.length;
-  const outstandingBalance = Number(customer.outstanding_balance ?? 0);
+  const customerAppointments = customerDetail?.appointments || [];
+  const visitedLocations: CustomerVisitedLocation[] = customerDetail?.visitedLocations || customer.visitedLocations || [];
+  const visitCount = customerDetail?.visitCount ?? customer.visit_count ?? 0;
+  const outstandingBalance = customerDetail?.outstandingBalance ?? Number(customer.outstanding_balance ?? 0);
+  const appointmentNotes = customerDetail?.appointmentNotes || [];
+  const purse = customerDetail?.purse || null;
+  const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
+  const purseLoading = customerDetailLoading;
+  const appointmentsLoading = customerDetailLoading;
+  const transactionsLoading = customerDetailLoading;
+  const notesLoading = customerDetailLoading;
+  const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
+  const filteredPurseEntries = purseLedgerEntries;
 
   const getInitials = (name: string) => {
     const parts = name.split(" ");
@@ -355,7 +410,7 @@ export function CustomerDetailDialog({
                   <p>Most ordered service: <span className="font-medium">{engagementSummary?.most_ordered_service || "—"}</span></p>
                   <p>Most ordered product: <span className="font-medium">{engagementSummary?.most_ordered_product || "—"}</span></p>
                   <p>Refunds count: <span className="font-medium">{engagementSummary?.refunds_count ?? 0}</span></p>
-                  <p>Last transaction date: <span className="font-medium">{engagementSummary?.last_transaction_at ? format(new Date(engagementSummary.last_transaction_at), "MMM d, yyyy") : "—"}</span></p>
+                  <p>Last transaction date: <span className="font-medium">{lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "—"}</span></p>
                   <p>Services completed: <span className="font-medium">{engagementSummary?.services_completed ?? 0}</span></p>
                   <p>Products fulfilled: <span className="font-medium">{engagementSummary?.products_fulfilled ?? 0}</span></p>
                   <p>Services cancelled: <span className="font-medium">{engagementSummary?.services_cancelled ?? 0}</span></p>
@@ -411,14 +466,27 @@ export function CustomerDetailDialog({
                   <Skeleton key={i} className="h-20 w-full" />
                 ))}
               </div>
-            ) : appointmentNotes.length === 0 ? (
+            ) : appointmentNotes.length === 0 && !customer.notes ? (
               <div className="text-center py-8">
                 <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No notes from appointments yet</p>
+                <p className="text-muted-foreground">No notes recorded yet</p>
               </div>
             ) : (
               <ScrollArea className="h-[300px]">
                 <div className="space-y-4 pr-4">
+                  {customer.notes && (
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex gap-2">
+                          <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium mb-1">Customer profile note</p>
+                            <p className="text-sm">{customer.notes}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {appointmentNotes.map((note) => (
                     <Card key={note.appointmentId}>
                       <CardContent className="p-4">
@@ -635,50 +703,53 @@ export function CustomerDetailDialog({
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : purseTransactions.length === 0 ? (
+            ) : filteredPurseEntries.length === 0 ? (
               <div className="text-center py-8">
                 <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
                 <p className="text-muted-foreground">No purse transactions yet</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {purseTransactions.map((tx) => (
-                  <Card key={tx.id}>
-                    <CardContent className="p-3 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`p-2 rounded-lg ${
-                            tx.type === "credit" || tx.type === "refund"
-                              ? "bg-success/10"
-                              : "bg-destructive/10"
+                {filteredPurseEntries.map((entry) => {
+                  const isCredit = ["customer_purse_topup", "customer_purse_reversal"].includes(entry.entry_type);
+                  const entryLabel = entry.entry_type
+                    .replace(/^customer_purse_/, "")
+                    .replace(/_/g, " ");
+
+                  return (
+                    <Card key={entry.id}>
+                      <CardContent className="p-3 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`p-2 rounded-lg ${
+                              isCredit
+                                ? "bg-success/10"
+                                : "bg-destructive/10"
+                            }`}
+                          >
+                            <CreditCard className={`w-4 h-4 ${isCredit ? "text-success" : "text-destructive"}`} />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm capitalize">{entryLabel}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(entry.created_at), "MMM d, yyyy")}
+                            </p>
+                          </div>
+                        </div>
+                        <p
+                          className={`font-semibold ${
+                            isCredit
+                              ? "text-success"
+                              : "text-destructive"
                           }`}
                         >
-                          {tx.type === "credit" || tx.type === "refund" ? (
-                            <ArrowDownLeft className="w-4 h-4 text-success" />
-                          ) : (
-                            <ArrowUpRight className="w-4 h-4 text-destructive" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm capitalize">{tx.type}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(tx.created_at), "MMM d, yyyy")}
-                          </p>
-                        </div>
-                      </div>
-                      <p
-                        className={`font-semibold ${
-                          tx.type === "credit" || tx.type === "refund"
-                            ? "text-success"
-                            : "text-destructive"
-                        }`}
-                      >
-                        {tx.type === "credit" || tx.type === "refund" ? "+" : "-"}
-                        {currency} {Number(tx.amount).toFixed(2)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
+                          {isCredit ? "+" : "-"}
+                          {currency} {Number(entry.amount).toFixed(2)}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

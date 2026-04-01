@@ -10,6 +10,8 @@ export interface NotificationSettings {
   sms_appointment_reminders: boolean;
   email_new_bookings: boolean;
   email_cancellations: boolean;
+  email_transaction_alerts: boolean;
+  in_app_transaction_alerts: boolean;
   email_daily_digest: boolean;
   reminder_hours_before: number;
   created_at: string;
@@ -21,6 +23,8 @@ const defaultSettings: Omit<NotificationSettings, "id" | "tenant_id" | "created_
   sms_appointment_reminders: false,
   email_new_bookings: true,
   email_cancellations: true,
+  email_transaction_alerts: true,
+  in_app_transaction_alerts: true,
   email_daily_digest: false,
   reminder_hours_before: 24,
 };

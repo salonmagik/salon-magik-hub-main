@@ -1,8 +1,7 @@
-import { useState } from "react";
-import { CreditCard, Building2, Smartphone, Globe, Wallet, DollarSign } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CreditCard, Building2, Smartphone, Wallet, DollarSign, Info } from "lucide-react";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
-import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import { Label } from "@ui/label";
 import { Slider } from "@ui/slider";
 import { formatCurrency } from "@shared/currency";
@@ -15,7 +14,6 @@ interface PaymentMethod {
   id: string;
   name: string;
   icon: React.ReactNode;
-  gateway: PaymentGateway;
 }
 
 interface PaymentStepProps {
@@ -33,44 +31,24 @@ interface PaymentStepProps {
   onPaymentModeChange?: (mode: PaymentMode, purseAmount: number, cardAmount: number) => void;
 }
 
-const STRIPE_METHODS: PaymentMethod[] = [
-  { id: "card", name: "Credit/Debit Card", icon: <CreditCard className="h-5 w-5" />, gateway: "stripe" },
-  { id: "apple_pay", name: "Apple Pay", icon: <Smartphone className="h-5 w-5" />, gateway: "stripe" },
-  { id: "google_pay", name: "Google Pay", icon: <Wallet className="h-5 w-5" />, gateway: "stripe" },
-];
-
 const PAYSTACK_METHODS: PaymentMethod[] = [
-  { id: "card", name: "Card Payment", icon: <CreditCard className="h-5 w-5" />, gateway: "paystack" },
-  { id: "bank_transfer", name: "Bank Transfer", icon: <Building2 className="h-5 w-5" />, gateway: "paystack" },
-  { id: "ussd", name: "USSD", icon: <Smartphone className="h-5 w-5" />, gateway: "paystack" },
-  { id: "mobile_money", name: "Mobile Money", icon: <Wallet className="h-5 w-5" />, gateway: "paystack" },
+  { id: "card", name: "Card Payment", icon: <CreditCard className="h-5 w-5" /> },
+  { id: "bank_transfer", name: "Bank Transfer", icon: <Building2 className="h-5 w-5" /> },
+  { id: "ussd", name: "USSD", icon: <Smartphone className="h-5 w-5" /> },
+  { id: "mobile_money", name: "Mobile Money", icon: <Wallet className="h-5 w-5" /> },
 ];
-
-// Countries/currencies where Paystack is recommended
-const PAYSTACK_REGIONS = ["NG", "GH", "Nigeria", "Ghana"];
-const PAYSTACK_CURRENCIES = ["NGN", "GHS"];
 
 export function PaymentStep({
   amountDue,
   currency,
-  country,
   onGatewaySelect,
   onSubmit,
   isSubmitting,
   brandColor = "#2563EB",
   purseBalance = 0,
-  customerId,
-  customerEmail,
-  tenantId,
   onPaymentModeChange,
 }: PaymentStepProps) {
-  const isPaystackRecommended = 
-    PAYSTACK_REGIONS.includes(country) || 
-    PAYSTACK_CURRENCIES.includes(currency.toUpperCase());
-  
-  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>(
-    isPaystackRecommended ? "paystack" : "stripe"
-  );
+  const [selectedGateway] = useState<PaymentGateway>("paystack");
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode>(
     purseBalance >= amountDue ? "purse" : purseBalance > 0 ? "split" : "card"
@@ -80,10 +58,9 @@ export function PaymentStep({
   const initialPurseAmount = Math.min(purseBalance, amountDue / 2);
   const [purseAmount, setPurseAmount] = useState(initialPurseAmount);
 
-  const handleGatewayChange = (gateway: PaymentGateway) => {
-    setSelectedGateway(gateway);
-    onGatewaySelect(gateway);
-  };
+  useEffect(() => {
+    onGatewaySelect("paystack");
+  }, [onGatewaySelect]);
 
   const handlePaymentModeChange = (mode: PaymentMode) => {
     setPaymentMode(mode);
@@ -102,7 +79,6 @@ export function PaymentStep({
       onPaymentModeChange(mode, purseAmt, cardAmt);
     }
   };
-
   const handleSliderChange = (values: number[]) => {
     const newPurseAmount = values[0];
     setPurseAmount(newPurseAmount);
@@ -111,7 +87,7 @@ export function PaymentStep({
     }
   };
 
-  const methods = selectedGateway === "stripe" ? STRIPE_METHODS : PAYSTACK_METHODS;
+  const methods = PAYSTACK_METHODS;
 
   const cardAmount = paymentMode === "purse" ? 0 : paymentMode === "split" ? amountDue - purseAmount : amountDue;
   const showGatewaySelection = paymentMode !== "purse";
@@ -121,9 +97,6 @@ export function PaymentStep({
     <div className="space-y-6">
       <div>
         <h3 className="font-semibold text-lg mb-2">Select Payment Method</h3>
-        <p className="text-sm text-muted-foreground">
-          Choose how you would like to pay
-        </p>
       </div>
 
       {/* Payment Mode Selection */}
@@ -262,44 +235,13 @@ export function PaymentStep({
             <Label className="text-sm text-muted-foreground mb-2 block">
               Payment Provider
             </Label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => handleGatewayChange("stripe")}
-                className={cn(
-                  "p-4 rounded-lg border-2 transition-all text-left",
-                  selectedGateway === "stripe"
-                    ? "border-primary bg-primary/5"
-                    : "border-muted hover:border-muted-foreground/30"
-                )}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Globe className="h-5 w-5" />
-                  <span className="font-medium">Stripe</span>
-                  {!isPaystackRecommended && (
-                    <Badge variant="secondary" className="text-xs">Recommended</Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">International payments</p>
-              </button>
-
-              <button
-                onClick={() => handleGatewayChange("paystack")}
-                className={cn(
-                  "p-4 rounded-lg border-2 transition-all text-left",
-                  selectedGateway === "paystack"
-                    ? "border-primary bg-primary/5"
-                    : "border-muted hover:border-muted-foreground/30"
-                )}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Building2 className="h-5 w-5" />
-                  <span className="font-medium">Paystack</span>
-                  {isPaystackRecommended && (
-                    <Badge variant="secondary" className="text-xs">Recommended</Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">African payments</p>
-              </button>
+            <div className="rounded-lg border-2 border-primary bg-primary/5 p-4 text-left">
+              <div className="flex items-center gap-2 mb-1">
+                <Building2 className="h-5 w-5" />
+                <span className="font-medium">Paystack</span>
+                <Badge variant="secondary" className="text-xs">Active</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">Paystack is the current payment provider for this checkout.</p>
             </div>
           </div>
 
@@ -357,6 +299,17 @@ export function PaymentStep({
         )}
       </div>
 
+      {paymentMode !== "purse" && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
+          <div className="flex items-start gap-2">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              Paystack will open in a new tab. If the payment page does not load, try Safari or disable strict browser privacy shields for the payment tab.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Pay Button */}
       <Button
         onClick={onSubmit}
@@ -375,7 +328,7 @@ export function PaymentStep({
 
       {paymentMode !== "purse" && (
         <p className="text-xs text-center text-muted-foreground">
-          You will be redirected to {selectedGateway === "stripe" ? "Stripe" : "Paystack"} to complete your payment securely.
+          You will be redirected to Paystack to complete your payment securely.
         </p>
       )}
       {paymentMode === "purse" && (

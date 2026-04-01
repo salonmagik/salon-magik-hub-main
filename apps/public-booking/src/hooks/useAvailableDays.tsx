@@ -82,8 +82,8 @@ export function useAvailableDays(
         .gte("scheduled_start", monthStart.toISOString())
         .lte("scheduled_start", monthEnd.toISOString())
           .in("status", ["scheduled", "started", "paused"]),
-        (supabase as any)
-          .from("branch_unavailability_windows")
+        supabase
+          .from("branch_unavailability_windows" as never)
           .select("starts_at, ends_at, ended_at")
           .eq("tenant_id", tenantId)
           .eq("location_id", location.id)

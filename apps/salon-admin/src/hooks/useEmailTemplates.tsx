@@ -24,7 +24,8 @@ export type TemplateType =
   | "payment_failed"
   | "store_credit_restored"
   | "gift_received"
-  | "voucher_applied";
+  | "voucher_applied"
+  | "daily_digest";
 
 export interface EmailTemplate {
   id: string;
@@ -59,6 +60,7 @@ export const templateTypeLabels: Record<TemplateType, string> = {
   store_credit_restored: "Store Credit Restored",
   gift_received: "Gift Received",
   voucher_applied: "Voucher Applied",
+  daily_digest: "Daily Digest",
 };
 
 export const templateTypeCategories: Record<string, TemplateType[]> = {
@@ -85,6 +87,9 @@ export const templateTypeCategories: Record<string, TemplateType[]> = {
     "store_credit_restored",
     "gift_received",
     "voucher_applied",
+  ],
+  "Operations": [
+    "daily_digest",
   ],
   "Subscription": [
     "trial_ending_7d",
@@ -349,6 +354,23 @@ export const defaultTemplates: Record<TemplateType, { subject: string; body_html
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi {{customer_name}},</p>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Your voucher has been applied to your booking at {{salon_name}}.</p>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Enjoy your service!</p>
+    `),
+  },
+  daily_digest: {
+    subject: "Daily digest for {{salon_name}}",
+    body_html: salonMagikBrandWrapper(`
+      <h2 style="color: #1f2937; margin-bottom: 16px; font-size: 24px;">Daily Digest</h2>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi {{first_name}},</p>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Here is your daily summary for {{salon_name}}.</p>
+      <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin: 24px 0;">
+        <p style="margin: 0 0 8px 0;"><strong>Date:</strong> {{digest_date}}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Upcoming appointments:</strong> {{upcoming_appointments_count}}</p>
+        <p style="margin: 0 0 8px 0;"><strong>Payments received:</strong> {{payments_received}}</p>
+        <p style="margin: 0;"><strong>Outstanding balances:</strong> {{outstanding_balances}}</p>
+      </div>
+      <div style="text-align: center; margin: 32px 0;">
+        <a href="{{cta_link}}" style="background-color: #E11D48; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 500;">Open Dashboard</a>
+      </div>
     `),
   },
 };
