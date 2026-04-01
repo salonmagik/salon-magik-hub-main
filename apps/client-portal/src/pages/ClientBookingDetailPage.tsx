@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { startClientBookingPayment } from "@/lib/bookingPayments";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   scheduled: { label: "Scheduled", className: "bg-blue-100 text-blue-800" },
@@ -76,9 +77,10 @@ export default function ClientBookingDetailPage() {
   const navigate = useNavigate();
   const { customers, isAuthenticated } = useClientAuth();
   const [booking, setBooking] = useState<ClientAppointmentWithDetails | null>(null);
-  const [relatedBookings, setRelatedBookings] = useState<Array<{ id: string; status: string; scheduled_start: string | null; total_amount: number | null }>>([]);
+  const [relatedBookings, setRelatedBookings] = useState<Array<{ id: string; status: string; scheduled_start: string | null; total_amount: number | null; amount_paid: number | null; payment_status: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
 
   const customerIds = customers.map((c) => c.id);
 
@@ -111,7 +113,7 @@ export default function ClientBookingDetailPage() {
         if (bookingReference) {
           const { data: siblings } = await supabase
             .from("appointments")
-            .select("id, status, scheduled_start, total_amount")
+            .select("id, status, scheduled_start, total_amount, amount_paid, payment_status")
             .eq("booking_reference", bookingReference)
             .in("customer_id", customerIds)
             .neq("id", id)
@@ -196,6 +198,55 @@ export default function ClientBookingDetailPage() {
   const bookingMetadata = ((booking as ClientAppointmentWithDetails & { booking_metadata?: BookingLineMetadata }).booking_metadata || null) as BookingLineMetadata;
   const giftRecipient = bookingMetadata?.gift?.recipient;
   const deliveryAddress = bookingMetadata?.delivery_address;
+  const customerRecord = customers.find((item) => item.id === booking.customer_id) || null;
+  const payableBookings = [
+    {
+      id: booking.id,
+      total_amount: booking.total_amount,
+      amount_paid: booking.amount_paid,
+      payment_status: booking.payment_status,
+      status: booking.status,
+    },
+    ...relatedBookings,
+  ].filter((item) => {
+    if (item.status === "cancelled") return false;
+    if (["fully_paid", "refunded_full", "pay_at_salon"].includes(item.payment_status)) return false;
+    return Number(item.total_amount || 0) > Number(item.amount_paid || 0);
+  });
+  const outstandingAmount = payableBookings.reduce((sum, item) => {
+    return sum + Math.max(Number(item.total_amount || 0) - Number(item.amount_paid || 0), 0);
+  }, 0);
+  const canCompletePayment = outstandingAmount > 0 && Boolean(customerRecord?.email);
+
+  const handleCompletePayment = async () => {
+    if (!customerRecord?.email) {
+      setError("Customer email missing for payment");
+      return;
+    }
+
+    setIsStartingPayment(true);
+    try {
+      const bookingIdsToPay = payableBookings.map((item) => item.id);
+      const pageUrl = window.location.href;
+      await startClientBookingPayment({
+        tenantId: booking.tenant_id,
+        appointmentIds: bookingIdsToPay,
+        amount: outstandingAmount,
+        currency,
+        customerEmail: customerRecord.email,
+        customerName: customerRecord.full_name || "Customer",
+        description: bookingReference
+          ? `Complete payment for booking ${bookingReference}`
+          : `Complete payment for booking ${booking.id}`,
+        successUrl: pageUrl,
+        cancelUrl: pageUrl,
+      });
+    } catch (paymentError) {
+      console.error("Error starting booking payment:", paymentError);
+      setError(paymentError instanceof Error ? paymentError.message : "Failed to start payment");
+      setIsStartingPayment(false);
+    }
+  };
 
   return (
     <ClientSidebar>
@@ -437,9 +488,25 @@ export default function ClientBookingDetailPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Balance Due</span>
                 <span className="font-medium text-destructive">
-                  {formatCurrency(booking.total_amount - booking.amount_paid, currency)}
+                  {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
                 </span>
               </div>
+            )}
+
+            {canCompletePayment && (
+              <Button
+                className="w-full"
+                onClick={handleCompletePayment}
+                disabled={isStartingPayment}
+              >
+                {isStartingPayment ? "Opening payment..." : "Complete Payment"}
+              </Button>
+            )}
+
+            {!canCompletePayment && booking.amount_paid < booking.total_amount && booking.payment_status !== "pay_at_salon" && (
+              <p className="text-sm text-muted-foreground">
+                Payment can be completed here once a valid customer email is available.
+              </p>
             )}
           </CardContent>
         </Card>

@@ -1,5 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import {
+  createTenantNotification,
+  getSalonRecipients,
+  getTenantNotificationSettings,
+  sendResendEmail,
+} from "../_shared/salon-notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,6 +152,47 @@ Deno.serve(async (req) => {
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const sendTransactionAlerts = async (input: {
+      tenantId: string;
+      tenantName?: string | null;
+      currency?: string | null;
+      customerName?: string | null;
+      amount: number;
+      gateway: "stripe" | "paystack";
+      title: string;
+      description: string;
+      entityId?: string | null;
+      htmlContent: string;
+    }) => {
+      const settings = await getTenantNotificationSettings(supabase, input.tenantId);
+
+      if (settings.in_app_transaction_alerts) {
+        await createTenantNotification(supabase, {
+          tenantId: input.tenantId,
+          type: "payment",
+          title: input.title,
+          description: input.description,
+          entityType: input.entityId ? "appointment" : "payment",
+          entityId: input.entityId ?? null,
+          urgent: true,
+        });
+      }
+
+      if (!settings.email_transaction_alerts) return;
+
+      const recipients = await getSalonRecipients(supabase, input.tenantId, ["owner", "manager"]);
+      if (recipients.length === 0) return;
+
+      await sendResendEmail({
+        resendApiKey,
+        fromEmail: resendFromEmail,
+        to: recipients.map((recipient) => recipient.email),
+        subject: input.title,
+        salonName: input.tenantName || undefined,
+        htmlContent: input.htmlContent,
+      });
+    };
 
     // Determine gateway from headers
     const stripeSignature = req.headers.get("stripe-signature");
@@ -387,23 +433,33 @@ Deno.serve(async (req) => {
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
                 appointment_id: primaryAppointment.id,
-                type: "payment",
+                type: isDeposit ? "deposit" : "payment",
                 amount,
-                payment_method: "card",
-                gateway: event.gateway,
-                gateway_reference: reference,
+                currency: tenant?.currency || "USD",
+                method: "card",
+                provider: event.gateway,
+                provider_reference: reference,
                 status: "completed",
                 ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
               });
 
-              await supabase.from("notifications").insert({
-                tenant_id: primaryAppointment.tenant_id,
-                type: "payment",
-                title: isDeposit ? "New Deposit Paid" : "New Paid Booking",
-                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking`,
-                entity_type: "appointment",
-                entity_id: primaryAppointment.id,
-                urgent: true,
+              await sendTransactionAlerts({
+                tenantId: primaryAppointment.tenant_id,
+                tenantName: tenant?.name,
+                currency: tenant?.currency,
+                customerName: customer?.full_name,
+                amount,
+                gateway: event.gateway,
+                title: `${isDeposit ? "Deposit received" : "Payment received"} at ${tenant?.name || "your salon"}`,
+                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking.`,
+                entityId: primaryAppointment.id,
+                htmlContent: `
+                  <h2 style="color: #2563EB; margin-bottom: 16px;">${isDeposit ? "Deposit received" : "Payment received"}</h2>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
+                `,
               });
 
               try {
@@ -420,54 +476,6 @@ Deno.serve(async (req) => {
                 });
               } catch (emailError) {
                 console.error("Error sending customer notification:", emailError);
-              }
-
-              if (resendApiKey && tenant) {
-                const { data: owners } = await supabase
-                  .from("user_roles")
-                  .select("user_id")
-                  .eq("tenant_id", primaryAppointment.tenant_id)
-                  .in("role", ["owner", "manager"]);
-
-                if (owners && owners.length > 0) {
-                  for (const owner of owners) {
-                    const { data: profile } = await supabase
-                      .from("profiles")
-                      .select("email")
-                      .eq("user_id", owner.user_id)
-                      .single();
-
-                    if (profile?.email) {
-                      try {
-                        await fetch("https://api.resend.com/emails", {
-                          method: "POST",
-                          headers: {
-                            Authorization: `Bearer ${resendApiKey}`,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({
-                            from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail }),
-                            to: profile.email,
-                            subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
-                            html: `
-                          <h2>${isDeposit ? "Deposit Received" : "New Paid Booking"}</h2>
-                          <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
-                          <ul>
-                            <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
-                            <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
-                            <li><strong>Gateway:</strong> ${event.gateway}</li>
-                            <li><strong>Appointments:</strong> ${appointments.length}</li>
-                          </ul>
-                          <p>Please review the booking in your dashboard.</p>
-                        `,
-                          }),
-                        });
-                      } catch (ownerEmailError) {
-                        console.error("Error sending owner notification:", ownerEmailError);
-                      }
-                    }
-                  }
-                }
               }
 
               try {
@@ -539,9 +547,15 @@ Deno.serve(async (req) => {
           if (customerId && tenantId && amount) {
             const { data: tenant } = await supabase
               .from("tenants")
-              .select("currency")
+              .select("name, currency")
               .eq("id", tenantId)
               .single();
+            const { data: customer } = await supabase
+              .from("customers")
+              .select("full_name")
+              .eq("id", customerId)
+              .eq("tenant_id", tenantId)
+              .maybeSingle();
 
             try {
               const { error: creditError } = await supabase.rpc("credit_customer_purse", {
@@ -556,6 +570,41 @@ Deno.serve(async (req) => {
               if (creditError) {
                 console.error("Error crediting customer purse:", creditError);
               } else {
+                const { error: transactionError } = await supabase.from("transactions").insert({
+                  tenant_id: tenantId,
+                  customer_id: customerId,
+                  appointment_id: null,
+                  type: "purse_topup",
+                  amount,
+                  currency: tenant?.currency || "USD",
+                  method: "card",
+                  provider: event.gateway,
+                  provider_reference: reference,
+                  status: "completed",
+                  ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
+                });
+
+                if (transactionError) {
+                  console.error("Error recording purse topup transaction:", transactionError);
+                }
+
+                await sendTransactionAlerts({
+                  tenantId,
+                  tenantName: tenant?.name,
+                  currency: tenant?.currency,
+                  customerName: customer?.full_name,
+                  amount,
+                  gateway: event.gateway,
+                  title: `Purse top-up received at ${tenant?.name || "your salon"}`,
+                  description: `${customer?.full_name || "A customer"} added ${tenant?.currency || ""} ${amount} to their purse.`,
+                  htmlContent: `
+                    <h2 style="color: #2563EB; margin-bottom: 16px;">Purse top-up received</h2>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
+                  `,
+                });
+
                 console.log(`Customer purse credited: ${amount} ${tenant?.currency || "NGN"} for customer ${customerId}`);
               }
             } catch (purseError) {

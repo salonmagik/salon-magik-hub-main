@@ -4,6 +4,7 @@ import { ClientSidebar } from "@/components/ClientSidebar";
 import { useClientBookings } from "@/hooks";
 import type { ClientAppointmentWithDetails } from "@/hooks";
 import { Card, CardContent } from "@ui/card";
+import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -42,6 +43,12 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
       default: return status;
     }
   };
+
+  const balanceDue = Math.max(Number(booking.total_amount || 0) - Number(booking.amount_paid || 0), 0);
+  const canCompletePayment =
+    balanceDue > 0 &&
+    booking.status !== "cancelled" &&
+    !["fully_paid", "refunded_full", "pay_at_salon"].includes(booking.payment_status);
 
   return (
     <Card 
@@ -119,6 +126,17 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
                 </p>
               )}
             </div>
+            {canCompletePayment && (
+              <Button
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  navigate(`/bookings/${booking.id}`);
+                }}
+              >
+                Complete Payment
+              </Button>
+            )}
             <ChevronRight className="h-5 w-5 text-muted-foreground" />
           </div>
         </div>

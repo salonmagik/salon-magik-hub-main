@@ -54,10 +54,11 @@ export function useCustomers() {
 
       const { data: appointmentRows, error: appointmentError } = await supabase
         .from("appointments")
-        .select("customer_id, location_id")
+        .select("customer_id, location_id, actual_start, status")
         .eq("tenant_id", currentTenant.id)
         .not("customer_id", "is", null)
-        .not("location_id", "is", null);
+        .not("location_id", "is", null)
+        .in("status", ["started", "paused", "completed"]);
 
       if (appointmentError) throw appointmentError;
 
@@ -79,6 +80,7 @@ export function useCustomers() {
       const visitsByCustomer = new Map<string, Map<string, number>>();
       for (const row of appointmentRows || []) {
         if (!row.customer_id || !row.location_id) continue;
+        if (!row.actual_start && row.status !== "completed") continue;
         const perCustomer = visitsByCustomer.get(row.customer_id) ?? new Map<string, number>();
         perCustomer.set(row.location_id, (perCustomer.get(row.location_id) || 0) + 1);
         visitsByCustomer.set(row.customer_id, perCustomer);
