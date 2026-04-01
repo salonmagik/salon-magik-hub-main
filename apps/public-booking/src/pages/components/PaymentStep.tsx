@@ -1,5 +1,10 @@
+<<<<<<< development-only
 import { useEffect, useState } from "react";
 import { CreditCard, Building2, Smartphone, Wallet, DollarSign, Info } from "lucide-react";
+=======
+import { useState } from "react";
+import { CreditCard, Building2, Smartphone, Globe, Wallet, DollarSign } from "lucide-react";
+>>>>>>> main
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
@@ -59,10 +64,18 @@ export function PaymentStep({
     purseBalance >= amountDue ? "purse" : purseBalance > 0 ? "split" : "card"
   );
 
+<<<<<<< development-only
+=======
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(
+    purseBalance >= amountDue ? "purse" : purseBalance > 0 ? "split" : "card"
+  );
+
+>>>>>>> main
   // For split payment, start with 50% purse if available, otherwise max purse
   const initialPurseAmount = Math.min(purseBalance, amountDue / 2);
   const [purseAmount, setPurseAmount] = useState(initialPurseAmount);
 
+<<<<<<< development-only
   useEffect(() => {
     onGatewaySelect("paystack");
   }, [onGatewaySelect]);
@@ -85,6 +98,31 @@ export function PaymentStep({
     }
   };
 
+=======
+  const handleGatewayChange = (gateway: PaymentGateway) => {
+    setSelectedGateway(gateway);
+    onGatewaySelect(gateway);
+  };
+
+  const handlePaymentModeChange = (mode: PaymentMode) => {
+    setPaymentMode(mode);
+    let purseAmt = 0;
+    let cardAmt = amountDue;
+
+    if (mode === "purse") {
+      purseAmt = Math.min(purseBalance, amountDue);
+      cardAmt = 0;
+    } else if (mode === "split") {
+      purseAmt = purseAmount;
+      cardAmt = amountDue - purseAmt;
+    }
+
+    if (onPaymentModeChange) {
+      onPaymentModeChange(mode, purseAmt, cardAmt);
+    }
+  };
+
+>>>>>>> main
   const handleSliderChange = (values: number[]) => {
     const newPurseAmount = values[0];
     setPurseAmount(newPurseAmount);
@@ -93,7 +131,15 @@ export function PaymentStep({
     }
   };
 
+<<<<<<< development-only
   const methods = PAYSTACK_METHODS;
+
+  const cardAmount = paymentMode === "purse" ? 0 : paymentMode === "split" ? amountDue - purseAmount : amountDue;
+  const showGatewaySelection = paymentMode !== "purse";
+  const showPaymentMethods = paymentMode !== "purse";
+=======
+  const methods = selectedGateway === "stripe" ? STRIPE_METHODS : PAYSTACK_METHODS;
+>>>>>>> main
 
   const cardAmount = paymentMode === "purse" ? 0 : paymentMode === "split" ? amountDue - purseAmount : amountDue;
   const showGatewaySelection = paymentMode !== "purse";
@@ -103,6 +149,12 @@ export function PaymentStep({
     <div className="space-y-6">
       <div>
         <h3 className="font-semibold text-lg mb-2">Select Payment Method</h3>
+<<<<<<< development-only
+=======
+        <p className="text-sm text-muted-foreground">
+          Choose how you would like to pay
+        </p>
+>>>>>>> main
       </div>
 
       {/* Payment Mode Selection */}
@@ -241,6 +293,7 @@ export function PaymentStep({
             <Label className="text-sm text-muted-foreground mb-2 block">
               Payment Provider
             </Label>
+<<<<<<< development-only
             <div className="rounded-lg border-2 border-primary bg-primary/5 p-4 text-left">
               <div className="flex items-center gap-2 mb-1">
                 <Building2 className="h-5 w-5" />
@@ -248,6 +301,46 @@ export function PaymentStep({
                 <Badge variant="secondary" className="text-xs">Active</Badge>
               </div>
               <p className="text-xs text-muted-foreground">Paystack is the current payment provider for this checkout.</p>
+=======
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => handleGatewayChange("stripe")}
+                className={cn(
+                  "p-4 rounded-lg border-2 transition-all text-left",
+                  selectedGateway === "stripe"
+                    ? "border-primary bg-primary/5"
+                    : "border-muted hover:border-muted-foreground/30"
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Globe className="h-5 w-5" />
+                  <span className="font-medium">Stripe</span>
+                  {!isPaystackRecommended && (
+                    <Badge variant="secondary" className="text-xs">Recommended</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">International payments</p>
+              </button>
+
+              <button
+                onClick={() => handleGatewayChange("paystack")}
+                className={cn(
+                  "p-4 rounded-lg border-2 transition-all text-left",
+                  selectedGateway === "paystack"
+                    ? "border-primary bg-primary/5"
+                    : "border-muted hover:border-muted-foreground/30"
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="h-5 w-5" />
+                  <span className="font-medium">Paystack</span>
+                  {isPaystackRecommended && (
+                    <Badge variant="secondary" className="text-xs">Recommended</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">African payments</p>
+              </button>
+>>>>>>> main
             </div>
           </div>
 
@@ -334,7 +427,11 @@ export function PaymentStep({
 
       {paymentMode !== "purse" && (
         <p className="text-xs text-center text-muted-foreground">
+<<<<<<< development-only
           You will be redirected to Paystack to complete your payment securely.
+=======
+          You will be redirected to {selectedGateway === "stripe" ? "Stripe" : "Paystack"} to complete your payment securely.
+>>>>>>> main
         </p>
       )}
       {paymentMode === "purse" && (
