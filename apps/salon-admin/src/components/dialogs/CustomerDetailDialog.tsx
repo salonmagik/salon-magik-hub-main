@@ -37,12 +37,12 @@ import {
 import { useCustomerPurse, type Transaction } from "@/hooks/useCustomerPurse";
 import { useAppointments } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
-import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
+import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import type { Tables } from "@supabase-client";
 
-type Customer = CustomerWithVisitSummary;
+type Customer = Partial<CustomerWithVisitSummary> & Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
 
 interface AppointmentNote {
@@ -200,6 +200,10 @@ export function CustomerDetailDialog({
 
   if (!customer) return null;
 
+  const visitedLocations: CustomerVisitedLocation[] = customer.visitedLocations ?? [];
+  const visitCount = customer.visit_count ?? customerAppointments.length;
+  const outstandingBalance = Number(customer.outstanding_balance ?? 0);
+
   const getInitials = (name: string) => {
     const parts = name.split(" ");
     if (parts.length >= 2) {
@@ -235,7 +239,7 @@ export function CustomerDetailDialog({
                   {customer.status}
                 </Badge>
                 <span className="text-sm text-muted-foreground">
-                  {customer.visit_count} visits
+                  {visitCount} visits
                 </span>
               </div>
             </div>
@@ -313,7 +317,7 @@ export function CustomerDetailDialog({
                 <CardContent className="p-4">
                   <p className="text-sm text-muted-foreground">Outstanding</p>
                   <p className="text-xl font-semibold">
-                    {currency} {Number(customer.outstanding_balance).toFixed(2)}
+                    {currency} {outstandingBalance.toFixed(2)}
                   </p>
                 </CardContent>
               </Card>
@@ -322,13 +326,13 @@ export function CustomerDetailDialog({
             <Card>
               <CardContent className="p-4">
                 <h4 className="font-medium text-sm text-muted-foreground mb-3">Branches Visited</h4>
-                {customer.visitedLocations.length === 0 ? (
+                {visitedLocations.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No branch visits recorded yet. This customer will appear here once an appointment is created.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {customer.visitedLocations.map((location) => (
+                    {visitedLocations.map((location) => (
                       <div
                         key={location.locationId}
                         className="flex items-center justify-between rounded-lg border p-3"

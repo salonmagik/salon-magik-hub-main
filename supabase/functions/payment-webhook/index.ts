@@ -398,7 +398,7 @@ Deno.serve(async (req) => {
 
               await supabase.from("notifications").insert({
                 tenant_id: primaryAppointment.tenant_id,
-                type: "new_booking",
+                type: "payment",
                 title: isDeposit ? "New Deposit Paid" : "New Paid Booking",
                 description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking`,
                 entity_type: "appointment",
@@ -427,7 +427,7 @@ Deno.serve(async (req) => {
                   .from("user_roles")
                   .select("user_id")
                   .eq("tenant_id", primaryAppointment.tenant_id)
-                  .eq("role", "owner");
+                  .in("role", ["owner", "manager"]);
 
                 if (owners && owners.length > 0) {
                   for (const owner of owners) {

@@ -44,6 +44,14 @@ interface BookingWizardProps {
 }
 
 type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "payment" | "confirmation";
+type BookerEmailStage = "email" | "otp" | "password" | "details";
+type BookerResolution = {
+  exists: boolean;
+  identifier: string;
+  identifierType: "email" | "phone";
+  hasPassword: boolean;
+  requiresOtp: boolean;
+};
 
 const emptyDeliveryAddress = {
   line1: "",
@@ -120,6 +128,34 @@ export function BookingWizard({
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [splitPurseAmount, setSplitPurseAmount] = useState(0);
   const [splitCardAmount, setSplitCardAmount] = useState(0);
+  const [bookerEmailStage, setBookerEmailStage] = useState<BookerEmailStage>("email");
+  const [bookerResolution, setBookerResolution] = useState<BookerResolution | null>(null);
+  const [bookerPassword, setBookerPassword] = useState("");
+  const [bookerOtp, setBookerOtp] = useState("");
+  const [bookerError, setBookerError] = useState("");
+  const [isBookerProcessing, setIsBookerProcessing] = useState(false);
+  const [bookerHasExistingAccount, setBookerHasExistingAccount] = useState(false);
+  const [bookerResendAvailableAt, setBookerResendAvailableAt] = useState<string | null>(null);
+  const [bookerOtpCountdown, setBookerOtpCountdown] = useState(0);
+
+  useEffect(() => {
+    if (!bookerResendAvailableAt) {
+      setBookerOtpCountdown(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remainingSeconds = Math.max(
+        0,
+        Math.ceil((new Date(bookerResendAvailableAt).getTime() - Date.now()) / 1000),
+      );
+      setBookerOtpCountdown(remainingSeconds);
+    };
+
+    updateCountdown();
+    const interval = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(interval);
+  }, [bookerResendAvailableAt]);
 
   useEffect(() => {
     const fetchPurseBalance = async () => {
@@ -299,6 +335,7 @@ export function BookingWizard({
   }, [salon.require_staff_selection, scheduleNowItems]);
 
   const isBookerInfoComplete = useMemo(() => {
+    if (bookerEmailStage !== "details") return false;
     const baseValid =
       Boolean(bookerInfo.firstName.trim()) &&
       Boolean(bookerInfo.lastName.trim()) &&
@@ -308,7 +345,7 @@ export function BookingWizard({
     if (!baseValid) return false;
     if (deliveredNonGiftProducts.length === 0) return true;
     return isDeliveryAddressComplete(bookerInfo.deliveryAddress);
-  }, [bookerInfo, deliveredNonGiftProducts.length]);
+  }, [bookerEmailStage, bookerInfo, deliveredNonGiftProducts.length]);
 
   const isGiftStepComplete = useMemo(() => {
     return giftItems.every((item) => {
@@ -364,6 +401,11 @@ export function BookingWizard({
     } else if (step === "scheduling") {
       setStep("cart");
     } else if (step === "booker") {
+      setBookerError("");
+      setBookerEmailStage("email");
+      setBookerResolution(null);
+      setBookerPassword("");
+      setBookerOtp("");
       setStep(scheduleNowItems.length > 0 ? "scheduling" : "cart");
     } else if (step === "gifts") {
       setStep("booker");
@@ -381,6 +423,190 @@ export function BookingWizard({
       locationName: getItemLocationName(item),
       giftRecipient: item.isGift ? giftRecipients[item.id] : undefined,
     }));
+
+  const fetchBookingPrefill = async (accessToken?: string) => {
+    const { data, error } = await supabase.functions.invoke("public-booking-prefill", {
+      body: { tenantId: salon.id },
+      headers: accessToken
+        ? {
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : undefined,
+    });
+
+    if (error || data?.error) {
+      throw new Error(data?.error || error?.message || "Failed to load saved details");
+    }
+
+    if (data?.found && data.profile) {
+      setBookerInfo((prev) => ({
+        ...prev,
+        firstName: data.profile.firstName || prev.firstName,
+        lastName: data.profile.lastName || prev.lastName,
+        email: data.profile.email || prev.email,
+        phone: data.profile.phone || prev.phone,
+        notes: data.profile.notes || prev.notes,
+        deliveryAddress: data.profile.deliveryAddress || prev.deliveryAddress,
+      }));
+    }
+  };
+
+  const sendBookerOtp = async (email: string) => {
+    const { data, error } = await supabase.functions.invoke("send-client-login-otp", {
+      body: { email },
+    });
+
+    if (error || data?.error) {
+      throw new Error(data?.error || error?.message || "Failed to send verification email");
+    }
+
+    setBookerResendAvailableAt(new Date(Date.now() + 60_000).toISOString());
+  };
+
+  const handleBookerEmailContinue = async () => {
+    const normalizedEmail = bookerInfo.email.trim().toLowerCase();
+    setBookerError("");
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setBookerError("Please enter a valid email address.");
+      return;
+    }
+
+    setIsBookerProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auth-resolve-identifier", {
+        body: { identifier: normalizedEmail },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Failed to verify email");
+      }
+
+      setBookerInfo((prev) => ({ ...prev, email: normalizedEmail }));
+      const resolution: BookerResolution = {
+        exists: Boolean(data?.exists),
+        identifier: data?.identifier || normalizedEmail,
+        identifierType: data?.identifierType || "email",
+        hasPassword: Boolean(data?.hasPassword),
+        requiresOtp: Boolean(data?.requiresOtp),
+      };
+
+      setBookerResolution(resolution);
+      setBookerHasExistingAccount(resolution.exists);
+
+      if (!resolution.exists) {
+        setBookerEmailStage("details");
+        return;
+      }
+
+      if (resolution.hasPassword) {
+        setBookerPassword("");
+        setBookerEmailStage("password");
+        return;
+      }
+
+      if (resolution.requiresOtp) {
+        await sendBookerOtp(resolution.identifier);
+        setBookerEmailStage("otp");
+        return;
+      }
+
+      setBookerEmailStage("details");
+    } catch (error) {
+      setBookerError(error instanceof Error ? error.message : "Failed to verify email");
+    } finally {
+      setIsBookerProcessing(false);
+    }
+  };
+
+  const handleBookerOtpSubmit = async () => {
+    setBookerError("");
+    if (bookerOtp.length !== 8) {
+      setBookerError("Please enter the 8-digit code.");
+      return;
+    }
+
+    setIsBookerProcessing(true);
+    try {
+      const email = bookerResolution?.identifier || bookerInfo.email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: bookerOtp,
+        type: "email",
+      });
+
+      if (error) {
+        throw new Error("Invalid or expired code. Please try again.");
+      }
+
+      if (!data.session) {
+        throw new Error("Verification failed. Please try again.");
+      }
+
+      await supabase.auth.setSession(data.session);
+      await fetchBookingPrefill(data.session.access_token);
+      setBookerEmailStage("details");
+      setBookerOtp("");
+    } catch (error) {
+      setBookerError(error instanceof Error ? error.message : "Failed to verify email");
+    } finally {
+      setIsBookerProcessing(false);
+    }
+  };
+
+  const handleBookerOtpResend = async () => {
+    if (bookerOtpCountdown > 0 || !bookerResolution?.identifier) return;
+    setBookerError("");
+    setIsBookerProcessing(true);
+    try {
+      await sendBookerOtp(bookerResolution.identifier);
+    } catch (error) {
+      setBookerError(error instanceof Error ? error.message : "Failed to resend code");
+    } finally {
+      setIsBookerProcessing(false);
+    }
+  };
+
+  const handleBookerPasswordSubmit = async () => {
+    if (!bookerResolution || !bookerPassword.trim()) {
+      setBookerError("Enter your password to continue.");
+      return;
+    }
+
+    setBookerError("");
+    setIsBookerProcessing(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: bookerResolution.identifier,
+        password: bookerPassword,
+      });
+
+      if (error) {
+        throw new Error("Incorrect password. Please try again.");
+      }
+
+      if (!data.session) {
+        throw new Error("Sign-in failed. Please try again.");
+      }
+
+      await fetchBookingPrefill(data.session.access_token);
+      setBookerEmailStage("details");
+      setBookerPassword("");
+    } catch (error) {
+      setBookerError(error instanceof Error ? error.message : "Failed to sign in");
+    } finally {
+      setIsBookerProcessing(false);
+    }
+  };
+
+  const resetBookerIdentity = () => {
+    setBookerEmailStage("email");
+    setBookerResolution(null);
+    setBookerHasExistingAccount(false);
+    setBookerPassword("");
+    setBookerOtp("");
+    setBookerError("");
+  };
 
   const handleCreateBooking = async () => {
     const { data, error } = await supabase.functions.invoke("create-public-booking", {
@@ -655,6 +881,20 @@ export function BookingWizard({
                 onChange={setBookerInfo}
                 requiresDeliveryAddress={deliveredNonGiftProducts.length > 0}
                 deliveryCountryCode={deliveryCountryCode}
+                emailStage={bookerEmailStage}
+                password={bookerPassword}
+                otpCode={bookerOtp}
+                otpCountdown={bookerOtpCountdown}
+                isProcessingEmail={isBookerProcessing}
+                hasExistingAccount={bookerHasExistingAccount}
+                verificationError={bookerError}
+                onEmailContinue={handleBookerEmailContinue}
+                onPasswordChange={setBookerPassword}
+                onPasswordSubmit={handleBookerPasswordSubmit}
+                onResetIdentity={resetBookerIdentity}
+                onOtpChange={setBookerOtp}
+                onOtpSubmit={handleBookerOtpSubmit}
+                onOtpResend={handleBookerOtpResend}
               />
             )}
 

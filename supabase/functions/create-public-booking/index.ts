@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import {
+  createTenantNotification,
+  getSalonRecipients,
+  getTenantNotificationSettings,
+  sendResendEmail,
+} from "../_shared/salon-notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,6 +81,47 @@ function normalizePhone(phone?: string | null) {
 
 function isDeliveryAddressComplete(address?: DeliveryAddress) {
   return Boolean(address?.line1?.trim() && address?.city?.trim() && address?.country?.trim());
+}
+
+function formatLineSchedule(item: CartItem) {
+  if (item.type === "product") {
+    return item.fulfillmentType === "delivery" ? "Delivery" : "Pickup at salon";
+  }
+
+  if (item.scheduleMode === "leave_unscheduled") {
+    return "Leave unscheduled";
+  }
+
+  if (item.scheduledDate && item.scheduledTime) {
+    return `${item.scheduledDate} at ${item.scheduledTime}`;
+  }
+
+  return "Schedule pending";
+}
+
+function renderBookingSummary(items: CartItem[], currency: string) {
+  return items
+    .map((item) => {
+      const branchName = item.locationName || "Main branch";
+      const quantityText = item.quantity > 1 ? ` x${item.quantity}` : "";
+      const fulfillment = item.type === "product"
+        ? `<div><strong>Fulfillment:</strong> ${item.fulfillmentType === "delivery" ? "Delivery" : "Pickup"}</div>`
+        : "";
+      const staff = item.selectedStaffId ? `<div><strong>Staff selected:</strong> Assigned by salon preference</div>` : "";
+
+      return `
+        <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 0 0 12px 0;">
+          <div style="font-weight: 600; margin-bottom: 6px;">${item.name}${quantityText}</div>
+          <div><strong>Type:</strong> ${item.type}</div>
+          <div><strong>Branch:</strong> ${branchName}</div>
+          <div><strong>When:</strong> ${formatLineSchedule(item)}</div>
+          ${fulfillment}
+          ${staff}
+          <div><strong>Amount:</strong> ${currency} ${(item.price * item.quantity).toFixed(2)}</div>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 serve(async (req) => {
@@ -171,6 +218,8 @@ serve(async (req) => {
       customerId = newCustomer.id;
     }
 
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const createdAppointmentIds: string[] = [];
@@ -363,15 +412,65 @@ serve(async (req) => {
         if (productsError) console.error("Error adding appointment product:", productsError);
       }
 
-      await supabase.from("notifications").insert({
-        tenant_id: tenantId,
-        type: "new_booking",
-        title: "New Booking",
-        description: `${customerFullName} booked ${item.name}`,
-        entity_type: "appointment",
-        entity_id: appointment.id,
-        urgent: false,
+    }
+
+    const primaryAppointmentId = createdAppointmentIds[0] ?? null;
+    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+    const bookingSummaryHtml = renderBookingSummary(items, tenant.currency || "USD");
+    const paymentLine = payAtSalon
+      ? `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Payment will be completed at the salon.</p>`
+      : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Payment status: pending checkout completion.</p>`;
+
+    await createTenantNotification(supabase, {
+      tenantId,
+      title: "New Booking",
+      description: `${customerFullName} placed a booking for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
+      entityId: primaryAppointmentId,
+      urgent: false,
+    });
+
+    if (customer.email) {
+      await sendResendEmail({
+        resendApiKey,
+        fromEmail: resendFromEmail,
+        to: [customer.email],
+        subject: `Booking received at ${tenant.name}`,
+        salonName: tenant.name,
+        htmlContent: `
+          <h2 style="color: #2563EB; margin-bottom: 16px;">Your booking is in</h2>
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi ${customer.firstName},</p>
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">We’ve received your booking with <strong>${tenant.name}</strong>.</p>
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Booking reference:</strong> ${reference}</p>
+          ${paymentLine}
+          <div style="margin: 24px 0;">
+            ${bookingSummaryHtml}
+          </div>
+          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}</p>
+        `,
       });
+    }
+
+    const notificationSettings = await getTenantNotificationSettings(supabase, tenantId);
+    if (notificationSettings.email_new_bookings) {
+      const recipients = await getSalonRecipients(supabase, tenantId, ["owner", "manager"]);
+      if (recipients.length > 0) {
+        await sendResendEmail({
+          resendApiKey,
+          fromEmail: resendFromEmail,
+          to: recipients.map((recipient) => recipient.email),
+          subject: `New booking at ${tenant.name}`,
+          salonName: tenant.name,
+          htmlContent: `
+            <h2 style="color: #2563EB; margin-bottom: 16px;">New booking received</h2>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customerFullName}</p>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Booking reference:</strong> ${reference}</p>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}</p>
+            <div style="margin: 24px 0;">
+              ${bookingSummaryHtml}
+            </div>
+          `,
+        });
+      }
     }
 
     return new Response(

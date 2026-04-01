@@ -123,7 +123,9 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
           .select("total_amount, amount_paid")
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", false)
+          .neq("status", "cancelled")
           .neq("payment_status", "fully_paid")
+          .neq("payment_status", "refunded_full")
           .gte("scheduled_start", startOfRange)
           .lte("scheduled_start", endOfRange),
         

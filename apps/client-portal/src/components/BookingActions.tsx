@@ -152,13 +152,12 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from("appointments")
-        .update({
-          status: "cancelled",
-          cancellation_reason: cancelReason.trim(),
-        })
-        .eq("id", booking.id);
+      const { error } = await supabase.functions.invoke("client-cancel-booking", {
+        body: {
+          appointmentId: booking.id,
+          reason: cancelReason.trim(),
+        },
+      });
 
       if (error) throw error;
 
