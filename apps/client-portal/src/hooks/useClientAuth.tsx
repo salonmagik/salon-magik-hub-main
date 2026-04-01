@@ -5,22 +5,33 @@ import type { Tables } from "@/lib/supabase";
 
 type Customer = Tables<"customers">;
 type Tenant = Tables<"tenants">;
+type Profile = Tables<"profiles">;
 
 interface CustomerWithTenant extends Customer {
   tenant: Tenant;
 }
 
+interface ClientPreferences {
+  email_booking_updates: boolean;
+  sms_booking_updates: boolean;
+  marketing_opt_in: boolean;
+}
+
 interface ClientAuthState {
   user: User | null;
   session: Session | null;
+  profile: Profile | null;
   customers: CustomerWithTenant[];
+  preferences: ClientPreferences | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  requiresPasswordSetup: boolean;
 }
 
 interface ClientAuthContextType extends ClientAuthState {
   signOut: () => Promise<void>;
   refreshCustomers: () => Promise<void>;
+  refreshAccount: () => Promise<void>;
 }
 
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined);
@@ -29,9 +40,12 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ClientAuthState>({
     user: null,
     session: null,
+    profile: null,
     customers: [],
+    preferences: null,
     isLoading: true,
     isAuthenticated: false,
+    requiresPasswordSetup: false,
   });
 
   // Fetch customer records linked to this user across all salons
@@ -74,6 +88,65 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       .filter((c) => c.tenant); // Only include customers with valid tenant
   };
 
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
+    const { data, error } = await supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle();
+    if (error) {
+      console.error("Error fetching client profile:", error);
+      return null;
+    }
+    return data as Profile | null;
+  };
+
+  const fetchPreferences = async (userId: string): Promise<ClientPreferences | null> => {
+    const { data, error } = await (supabase
+      .from("client_account_preferences" as any)
+      .select("email_booking_updates, sms_booking_updates, marketing_opt_in")
+      .eq("user_id", userId)
+      .maybeSingle() as any);
+
+    if (error) {
+      console.error("Error fetching client preferences:", error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return {
+      email_booking_updates: Boolean(data.email_booking_updates),
+      sms_booking_updates: Boolean(data.sms_booking_updates),
+      marketing_opt_in: Boolean(data.marketing_opt_in),
+    };
+  };
+
+  const hydrateUserState = async (session: Session) => {
+    const [customers, profile, preferences] = await Promise.all([
+      fetchCustomers(session.user.id),
+      fetchProfile(session.user.id),
+      fetchPreferences(session.user.id),
+    ]);
+
+    const profileHasPassword = profile?.client_password_initialized === true;
+    const metadataHasPassword = session.user.user_metadata?.password_initialized === true;
+    const profileNeedsPassword = profile?.client_password_initialized === false;
+    const metadataNeedsPassword = session.user.user_metadata?.password_initialized === false;
+
+    const requiresPasswordSetup =
+      profileHasPassword || metadataHasPassword
+        ? false
+        : profileNeedsPassword || metadataNeedsPassword;
+
+    setState({
+      user: session.user,
+      session,
+      profile,
+      customers,
+      preferences,
+      isLoading: false,
+      isAuthenticated: true,
+      requiresPasswordSetup,
+    });
+  };
+
   // Initialize auth state
   const initializeAuth = async () => {
     try {
@@ -86,9 +159,12 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
             setState({
               user: null,
               session: null,
+              profile: null,
               customers: [],
+              preferences: null,
               isLoading: false,
               isAuthenticated: false,
+              requiresPasswordSetup: false,
             });
             return;
           }
@@ -96,15 +172,7 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
           if (session?.user) {
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
-              const customers = await fetchCustomers(session.user.id);
-              
-              setState({
-                user: session.user,
-                session,
-                customers,
-                isLoading: false,
-                isAuthenticated: true,
-              });
+              await hydrateUserState(session);
             }, 0);
           }
         }
@@ -114,15 +182,7 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        const customers = await fetchCustomers(session.user.id);
-        
-        setState({
-          user: session.user,
-          session,
-          customers,
-          isLoading: false,
-          isAuthenticated: true,
-        });
+        await hydrateUserState(session);
       } else {
         setState((prev) => ({ ...prev, isLoading: false }));
       }
@@ -151,12 +211,21 @@ export function ClientAuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, customers }));
   };
 
+  const refreshAccount = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
+    await hydrateUserState(session);
+  };
+
   return (
     <ClientAuthContext.Provider
       value={{
         ...state,
         signOut,
         refreshCustomers,
+        refreshAccount,
       }}
     >
       {children}

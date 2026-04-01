@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
@@ -25,6 +28,7 @@ import {
   BarChart3,
   Play,
   Video,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 
@@ -145,8 +149,32 @@ const resources = [
   },
 ];
 
+interface SupportTicketRow {
+  id: string;
+  issue_type: string;
+  subject: string;
+  status: string;
+  created_at: string;
+}
+
 export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const { currentTenant } = useAuth();
+
+  const { data: supportTickets = [] } = useQuery({
+    queryKey: ["salon-support-tickets", currentTenant?.id],
+    enabled: Boolean(currentTenant?.id),
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("support_tickets" as any)
+        .select("id, issue_type, subject, status, created_at")
+        .eq("tenant_id", currentTenant?.id)
+        .order("created_at", { ascending: false })
+        .limit(10) as any);
+      if (error) throw error;
+      return (data ?? []) as SupportTicketRow[];
+    },
+  });
 
   const filteredFaqs = faqs.filter(
     (faq) =>
@@ -317,6 +345,39 @@ export default function HelpPage() {
                       </AccordionItem>
                     ))}
                   </Accordion>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <LifeBuoy className="w-5 h-5 text-primary" />
+                  Client Support Tickets
+                </CardTitle>
+                <CardDescription>
+                  Recent support requests submitted by clients for this salon.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {supportTickets.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No support tickets for this salon yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {supportTickets.map((ticket) => (
+                      <div key={ticket.id} className="rounded-lg border p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{ticket.subject}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {ticket.issue_type.replace(/_/g, " ")} · {new Date(ticket.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Badge variant="secondary">{ticket.status.replace(/_/g, " ")}</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -46,7 +46,7 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
   return (
     <Card 
       className="mb-4 cursor-pointer hover:border-primary/50 transition-colors"
-      onClick={() => navigate(`/client/bookings/${booking.id}`)}
+      onClick={() => navigate(`/bookings/${booking.id}`)}
     >
       <CardContent className="pt-4">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -190,24 +190,21 @@ export default function ClientBookingsPage() {
     <ClientSidebar>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">My Bookings</h1>
-          <p className="text-muted-foreground mt-1">
-            View and manage your appointments
+          <h1>My Bookings</h1>
+          <p className="text-muted-foreground mt-2">
+            View and manage your appointments across all salons
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as BookingFilter)}>
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="upcoming" className="gap-2">
-              <Calendar className="h-4 w-4 hidden sm:inline" />
+            <TabsTrigger value="upcoming">
               Upcoming
             </TabsTrigger>
-            <TabsTrigger value="completed" className="gap-2">
-              <Clock className="h-4 w-4 hidden sm:inline" />
+            <TabsTrigger value="completed">
               Completed
             </TabsTrigger>
-            <TabsTrigger value="cancelled" className="gap-2">
-              <XCircle className="h-4 w-4 hidden sm:inline" />
+            <TabsTrigger value="cancelled">
               Cancelled
             </TabsTrigger>
           </TabsList>

@@ -135,6 +135,34 @@ export default function LoginPage() {
     
     try {
       persistRememberMePreference(rememberMe);
+      const { data: limitData, error: limitError } = await supabase.functions.invoke("auth-check-otp-rate-limit", {
+        body: {
+          identifier: phone,
+          appScope: "salon_admin",
+        },
+      });
+
+      if (limitError || limitData?.error) {
+        toast({
+          title: "Failed to send code",
+          description: limitData?.error || limitError?.message || "Unable to prepare OTP request.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!limitData?.allowed) {
+        toast({
+          title: "OTP unavailable",
+          description:
+            limitData.reason === "hourly_limit"
+              ? "You have reached the maximum number of OTP requests for this hour."
+              : "Please wait 60 seconds before requesting another code.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Phone is already in E.164 format from PhoneInput
       const { error } = await supabase.auth.signInWithOtp({
         phone,

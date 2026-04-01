@@ -8,6 +8,7 @@ const corsHeaders = {
 interface PaymentRequest {
   tenantId: string;
   appointmentId?: string;
+  appointmentIds?: string[];
   amount: number;
   currency: string;
   customerEmail: string;
@@ -102,6 +103,10 @@ Deno.serve(async (req) => {
         status: "pending",
         paystack_reference: usePaystack ? reference : null,
         intent_type: intentType,
+        metadata: {
+          appointment_ids: body.appointmentIds || [appointmentId],
+        },
+        intent_type: intentType,
       })
       .select("id")
       .single();
@@ -137,6 +142,8 @@ Deno.serve(async (req) => {
           reference: reference,
           callback_url: successUrl,
           metadata: {
+            appointment_id: appointmentId || null,
+            appointment_ids: body.appointmentIds || [appointmentId],
             appointment_id: appointmentId || null,
             payment_intent_id: paymentIntent?.id,
             tenant_id: tenantId,
@@ -202,8 +209,11 @@ Deno.serve(async (req) => {
           "success_url": `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
           "cancel_url": cancelUrl,
           "metadata[appointment_id]": appointmentId || "",
+          "metadata[appointment_id]": appointmentId || "",
+          "metadata[appointment_ids]": JSON.stringify(body.appointmentIds || (appointmentId ? [appointmentId] : [])),
           "metadata[payment_intent_id]": paymentIntent?.id || "",
           "metadata[tenant_id]": tenantId,
+          "metadata[is_deposit]": isDeposit ? "true" : "false",
           "metadata[intent_type]": intentType,
           "metadata[customer_id]": customerId || "",
           "metadata[invoice_id]": invoiceId || "",

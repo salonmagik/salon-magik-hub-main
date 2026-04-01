@@ -12,12 +12,12 @@ vi.mock("@/hooks", () => ({
 
 describe("ClientProtectedRoute", () => {
   it("redirects unauthenticated users to login", () => {
-    useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: false });
+    useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: false, requiresPasswordSetup: false });
     render(
-      <MemoryRouter initialEntries={["/client"]} future={routerFuture}>
+      <MemoryRouter initialEntries={["/"]} future={routerFuture}>
         <Routes>
           <Route
-            path="/client"
+            path="/"
             element={
               <ClientProtectedRoute>
                 <div>Dashboard</div>
@@ -33,7 +33,7 @@ describe("ClientProtectedRoute", () => {
   });
 
   it("redirects authenticated users away from login", () => {
-    useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: true });
+    useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: true, requiresPasswordSetup: false });
     render(
       <MemoryRouter initialEntries={["/login"]} future={routerFuture}>
         <Routes>
@@ -51,5 +51,27 @@ describe("ClientProtectedRoute", () => {
     );
 
     expect(screen.getByText("Home")).toBeInTheDocument();
+  });
+
+  it("redirects users requiring password setup to the completion route", () => {
+    useClientAuthMock.mockReturnValue({ isLoading: false, isAuthenticated: true, requiresPasswordSetup: true });
+
+    render(
+      <MemoryRouter initialEntries={["/bookings"]} future={routerFuture}>
+        <Routes>
+          <Route
+            path="/bookings"
+            element={
+              <ClientProtectedRoute>
+                <div>Bookings</div>
+              </ClientProtectedRoute>
+            }
+          />
+          <Route path="/complete-account" element={<div>Complete account</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Complete account")).toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
+import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const SignupPage = lazy(() => import("./pages/auth/SignupPage"));
@@ -15,6 +16,7 @@ const ForgotPasswordPage = lazy(() => import("./pages/auth/ForgotPasswordPage"))
 const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPasswordPage"));
 const InvitationExpiredPage = lazy(() => import("./pages/auth/InvitationExpiredPage"));
 const VerifyEmailPage = lazy(() => import("./pages/auth/VerifyEmailPage"));
+const CompleteSignupPage = lazy(() => import("./pages/auth/CompleteSignupPage"));
 const OnboardingPage = lazy(() => import("./pages/onboarding/OnboardingPage"));
 const SalonDashboard = lazy(() => import("./pages/salon/SalonDashboard"));
 const AppointmentsPage = lazy(() => import("./pages/salon/AppointmentsPage"));
@@ -66,7 +68,7 @@ function RouteLoading() {
 
 // Smart root route component - redirects based on auth state
 function RootRoute() {
-  const { isAuthenticated, isLoading, hasCompletedOnboarding, isAssignmentPending, getFirstAllowedRoute } = useAuth();
+  const { isAuthenticated, isLoading, hasCompletedOnboarding, isAssignmentPending, getFirstAllowedRoute, user } = useAuth();
   const [targetRoute, setTargetRoute] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,6 +96,10 @@ function RootRoute() {
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (needsGoogleProfileCompletion(user)) {
+    return <Navigate to="/complete-signup" replace />;
   }
 
   if (!hasCompletedOnboarding) {
@@ -138,6 +144,14 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/invitation-expired" element={<InvitationExpiredPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route
+              path="/complete-signup"
+              element={
+                <ProtectedRoute requireOnboarding={false}>
+                  <CompleteSignupPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Onboarding - requires auth but NOT onboarding completion */}
             <Route

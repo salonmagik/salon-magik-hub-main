@@ -38,6 +38,7 @@ import {
 import { useCustomerPurse, type Transaction } from "@/hooks/useCustomerPurse";
 import { useAppointments } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
+import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import type { Tables } from "@supabase-client";
@@ -45,7 +46,7 @@ import { SendMessageDialog } from "@/components/messaging/SendMessageDialog";
 import { MessageHistory } from "@/components/messaging/MessageHistory";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@ui/tooltip";
 
-type Customer = Tables<"customers">;
+type Customer = Partial<CustomerWithVisitSummary> & Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
 
 interface AppointmentNote {
@@ -82,7 +83,7 @@ export function CustomerDetailDialog({
   const [appointmentNotes, setAppointmentNotes] = useState<AppointmentNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
-  
+
   // Transaction filters
   const [txSearchQuery, setTxSearchQuery] = useState("");
   const [txStartDate, setTxStartDate] = useState<Date | undefined>();
@@ -136,7 +137,7 @@ export function CustomerDetailDialog({
 
   const fetchTransactions = useCallback(async () => {
     if (!customer?.id || !currentTenant?.id) return;
-    
+
     setTransactionsLoading(true);
     try {
       const [purseData, allData] = await Promise.all([
@@ -162,7 +163,7 @@ export function CustomerDetailDialog({
       fetchAppointmentNotes();
     }
   }, [customer?.id, open, currentTenant?.id]);
-  
+
   // Re-fetch when date filters change
   useEffect(() => {
     if (customer?.id && open && currentTenant?.id && (txStartDate || txEndDate)) {
@@ -204,6 +205,10 @@ export function CustomerDetailDialog({
 
   if (!customer) return null;
 
+  const visitedLocations: CustomerVisitedLocation[] = customer.visitedLocations ?? [];
+  const visitCount = customer.visit_count ?? customerAppointments.length;
+  const outstandingBalance = Number(customer.outstanding_balance ?? 0);
+
   const getInitials = (name: string) => {
     const parts = name.split(" ");
     if (parts.length >= 2) {
@@ -239,8 +244,8 @@ export function CustomerDetailDialog({
                       customer.status === "active"
                         ? "bg-success/10 text-success"
                         : customer.status === "vip"
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-muted text-muted-foreground"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-muted text-muted-foreground"
                     }
                   >
                     {customer.status}
@@ -251,7 +256,7 @@ export function CustomerDetailDialog({
                 </div>
               </div>
             </div>
-            
+
             {/* Send Message Button */}
             <TooltipProvider>
               <Tooltip>
@@ -290,14 +295,14 @@ export function CustomerDetailDialog({
             <Card>
               <CardContent className="p-4 space-y-3">
                 <h4 className="font-medium text-sm text-muted-foreground">Contact Information</h4>
-                
+
                 {customer.email && (
                   <div className="flex items-center gap-3">
                     <Mail className="w-4 h-4 text-muted-foreground" />
                     <span className="text-sm">{customer.email}</span>
                   </div>
                 )}
-                
+
                 {customer.phone && (
                   <div className="flex items-center gap-3">
                     <Phone className="w-4 h-4 text-muted-foreground" />
@@ -347,11 +352,36 @@ export function CustomerDetailDialog({
                 <CardContent className="p-4">
                   <p className="text-sm text-muted-foreground">Outstanding</p>
                   <p className="text-xl font-semibold">
-                    {currency} {Number(customer.outstanding_balance).toFixed(2)}
+                    {currency} {outstandingBalance.toFixed(2)}
                   </p>
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardContent className="p-4">
+                <h4 className="font-medium text-sm text-muted-foreground mb-3">Branches Visited</h4>
+                {visitedLocations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No branch visits recorded yet. This customer will appear here once an appointment is created.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {visitedLocations.map((location) => (
+                      <div
+                        key={location.locationId}
+                        className="flex items-center justify-between rounded-lg border p-3"
+                      >
+                        <span className="text-sm font-medium">{location.locationName}</span>
+                        <Badge variant="secondary">
+                          {location.visitCount} {location.visitCount === 1 ? "visit" : "visits"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             <Card>
               <CardContent className="p-4 space-y-3">
@@ -435,14 +465,14 @@ export function CustomerDetailDialog({
                               : "Unscheduled appointment"}
                           </span>
                         </div>
-                        
+
                         {note.note && (
                           <div className="flex gap-2 mb-3">
                             <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                             <p className="text-sm">{note.note}</p>
                           </div>
                         )}
-                        
+
                         {note.attachments.length > 0 && (
                           <div className="space-y-2">
                             <p className="text-xs text-muted-foreground font-medium">Attachments</p>
@@ -567,17 +597,15 @@ export function CustomerDetailDialog({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div
-                              className={`p-2 rounded-lg ${
-                                tx.type.includes("refund") || tx.type === "purse_topup"
+                              className={`p-2 rounded-lg ${tx.type.includes("refund") || tx.type === "purse_topup"
                                   ? "bg-success/10"
                                   : "bg-primary/10"
-                              }`}
+                                }`}
                             >
-                              <Receipt className={`w-4 h-4 ${
-                                tx.type.includes("refund") || tx.type === "purse_topup"
+                              <Receipt className={`w-4 h-4 ${tx.type.includes("refund") || tx.type === "purse_topup"
                                   ? "text-success"
                                   : "text-primary"
-                              }`} />
+                                }`} />
                             </div>
                             <div>
                               <p className="font-medium text-sm capitalize">
@@ -596,13 +624,12 @@ export function CustomerDetailDialog({
                             </p>
                             <Badge
                               variant="secondary"
-                              className={`text-xs ${
-                                tx.status === "completed"
+                              className={`text-xs ${tx.status === "completed"
                                   ? "bg-success/10 text-success"
                                   : tx.status === "pending"
-                                  ? "bg-warning/10 text-warning"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
+                                    ? "bg-warning/10 text-warning"
+                                    : "bg-muted text-muted-foreground"
+                                }`}
                             >
                               {tx.status}
                             </Badge>
@@ -656,11 +683,10 @@ export function CustomerDetailDialog({
                     <CardContent className="p-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div
-                          className={`p-2 rounded-lg ${
-                            tx.type === "credit" || tx.type === "refund"
+                          className={`p-2 rounded-lg ${tx.type === "credit" || tx.type === "refund"
                               ? "bg-success/10"
                               : "bg-destructive/10"
-                          }`}
+                            }`}
                         >
                           {tx.type === "credit" || tx.type === "refund" ? (
                             <ArrowDownLeft className="w-4 h-4 text-success" />
@@ -676,11 +702,10 @@ export function CustomerDetailDialog({
                         </div>
                       </div>
                       <p
-                        className={`font-semibold ${
-                          tx.type === "credit" || tx.type === "refund"
+                        className={`font-semibold ${tx.type === "credit" || tx.type === "refund"
                             ? "text-success"
                             : "text-destructive"
-                        }`}
+                          }`}
                       >
                         {tx.type === "credit" || tx.type === "refund" ? "+" : "-"}
                         {currency} {Number(tx.amount).toFixed(2)}
@@ -693,7 +718,7 @@ export function CustomerDetailDialog({
           </TabsContent>
         </Tabs>
       </DialogContent>
-      
+
       {/* Send Message Dialog */}
       <SendMessageDialog
         open={sendMessageDialogOpen}

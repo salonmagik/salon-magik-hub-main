@@ -7,7 +7,15 @@ export {
   type PublicCategory,
   type PublicBranch,
 } from "./usePublicCatalog";
-export { useBookingCart, BookingCartProvider, type CartItem, type GiftRecipient } from "./useBookingCart";
+export {
+  useBookingCart,
+  BookingCartProvider,
+  type CartItem,
+  type GiftRecipient,
+  type DeliveryAddress,
+  type BranchOption,
+  type ScheduleMode,
+} from "./useBookingCart";
 export { useBookingEligibleStaff, type BookingEligibleStaff } from "./useBookingEligibleStaff";
 export { useAvailableSlots } from "./useAvailableSlots";
 export { useAvailableDays } from "./useAvailableDays";

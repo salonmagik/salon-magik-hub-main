@@ -24,9 +24,9 @@ vi.mock("@/components/ClientSidebar", () => ({
 describe("ClientBookingDetailPage", () => {
   it("shows booking not found state when no customer context exists", () => {
     render(
-      <MemoryRouter initialEntries={["/client/bookings/booking-1"]} future={routerFuture}>
+      <MemoryRouter initialEntries={["/bookings/booking-1"]} future={routerFuture}>
         <Routes>
-          <Route path="/client/bookings/:id" element={<ClientBookingDetailPage />} />
+          <Route path="/bookings/:id" element={<ClientBookingDetailPage />} />
         </Routes>
       </MemoryRouter>
     );

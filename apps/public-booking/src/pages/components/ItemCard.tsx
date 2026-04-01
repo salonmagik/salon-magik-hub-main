@@ -3,7 +3,7 @@ import { ShoppingBag, Clock, Package as PackageIcon, MapPin } from "lucide-react
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
-import { useBookingCart } from "@/hooks";
+import { useBookingCart, type BranchOption } from "@/hooks";
 import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
 import { QuantityControl } from "./QuantityControl";
@@ -19,7 +19,9 @@ interface ItemCardProps {
   currency: string;
   imageUrls?: string[];
   durationMinutes?: number;
+  serviceIds?: string[];
   stockQuantity?: number;
+  branches?: BranchOption[];
   locationNames?: string[];
 }
 
@@ -33,7 +35,9 @@ export function ItemCard({
   currency,
   imageUrls = [],
   durationMinutes,
+  serviceIds,
   stockQuantity,
+  branches = [],
   locationNames = [],
 }: ItemCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -58,10 +62,12 @@ export function ItemCard({
       name,
       price,
       quantity: 1,
-      durationMinutes: type === "service" ? durationMinutes : undefined,
+      durationMinutes: type === "service" || type === "package" ? durationMinutes : undefined,
+      serviceIds: type === "package" ? serviceIds : undefined,
       isGift: false,
       fulfillmentType: type === "product" ? "pickup" : undefined,
       imageUrl: imageUrls?.[0] || undefined,
+      eligibleBranches: branches,
     });
 
     toast({
@@ -82,11 +88,11 @@ export function ItemCard({
         return;
       }
     }
-    updateQuantity(id, 1);
+    updateQuantity(id, type, 1);
   };
 
   const handleDecrement = () => {
-    updateQuantity(id, -1);
+    updateQuantity(id, type, -1);
   };
 
   const isOutOfStock = type === "product" && stockQuantity !== undefined && stockQuantity <= 0;

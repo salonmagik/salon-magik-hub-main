@@ -12,6 +12,7 @@ interface WebhookEvent {
   data: {
     paymentIntentId?: string;
     appointmentId?: string;
+    appointmentIds?: string[];
     tenantId?: string;
     customerId?: string;
     invoiceId?: string;
@@ -19,12 +20,33 @@ interface WebhookEvent {
     amount?: number;
     status?: string;
     reference?: string;
+    isDeposit?: boolean;
   };
 }
 
 function isValidUUID(value: string): boolean {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(value);
+}
+
+function parseAppointmentIds(raw: string | string[] | undefined, fallback?: string): string[] {
+  const values =
+    typeof raw === "string"
+      ? (() => {
+          try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [raw];
+          } catch {
+            return [raw];
+          }
+        })()
+      : Array.isArray(raw)
+      ? raw
+      : fallback
+      ? [fallback]
+      : [];
+
+  return values.filter((value): value is string => typeof value === "string" && isValidUUID(value));
 }
 
 // Verify Stripe webhook signature using HMAC SHA256
@@ -186,6 +208,7 @@ Deno.serve(async (req) => {
         data: {
           paymentIntentId: metadata?.payment_intent_id,
           appointmentId: metadata?.appointment_id,
+          appointmentIds: parseAppointmentIds(metadata?.appointment_ids, metadata?.appointment_id),
           tenantId: metadata?.tenant_id,
           customerId: metadata?.customer_id,
           invoiceId: metadata?.invoice_id,
@@ -193,6 +216,7 @@ Deno.serve(async (req) => {
           amount: object.amount_received ? object.amount_received / 100 : undefined,
           status: object.status,
           reference: object.id,
+          isDeposit: metadata?.is_deposit === "true",
         },
       };
     } else if (paystackSignature) {
@@ -240,6 +264,7 @@ Deno.serve(async (req) => {
         data: {
           paymentIntentId: metadata?.payment_intent_id,
           appointmentId: metadata?.appointment_id,
+          appointmentIds: parseAppointmentIds(metadata?.appointment_ids, metadata?.appointment_id),
           tenantId: metadata?.tenant_id,
           customerId: metadata?.customer_id,
           invoiceId: metadata?.invoice_id,
@@ -247,6 +272,7 @@ Deno.serve(async (req) => {
           amount: data.amount ? data.amount / 100 : undefined,
           status: data.status,
           reference: data.reference,
+          isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
         },
       };
     } else {
@@ -265,12 +291,9 @@ Deno.serve(async (req) => {
       event.type === "payment_intent.succeeded" ||
       event.type === "charge.success"
     ) {
-      const { appointmentId, paymentIntentId, amount, reference, tenantId } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit } = event.data;
 
-      // Fetch payment intent to get intent_type
-      let intentType = "appointment_payment"; // Default for backward compatibility
-      let paymentIntent = null;
-
+      let intentType = "appointment_payment";
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
         const { data } = await supabase
           .from("payment_intents")
@@ -280,119 +303,131 @@ Deno.serve(async (req) => {
 
         if (data?.intent_type) {
           intentType = data.intent_type;
-          paymentIntent = data;
         }
       }
 
       console.log("Processing payment with intent_type:", intentType);
 
-      // Validate appointment ID if present
-      if (appointmentId && !isValidUUID(appointmentId)) {
-        console.error("Invalid appointment_id format:", appointmentId);
-        return new Response(
-          JSON.stringify({ error: "Invalid appointment_id format" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Handle different payment intent types
       switch (intentType) {
         case "appointment_payment": {
-          if (appointmentId && amount) {
-            // Update appointment payment status
-            const { error: appointmentError } = await supabase
-              .from("appointments")
-              .update({
-                payment_status: "paid",
-                amount_paid: amount,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", appointmentId);
+          const targetAppointmentIds = parseAppointmentIds(appointmentIds, appointmentId);
+          if (targetAppointmentIds.length === 0) {
+            console.error("No valid appointment ids found on payment webhook");
+            return new Response(
+              JSON.stringify({ error: "Invalid appointment ids" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
 
-            if (appointmentError) {
-              console.error("Error updating appointment:", appointmentError);
+          if (amount) {
+            const { data: appointments, error: appointmentsError } = await supabase
+              .from("appointments")
+              .select("id, tenant_id, customer_id, total_amount, booking_reference")
+              .in("id", targetAppointmentIds);
+
+            if (appointmentsError) {
+              console.error("Error loading appointments from payment webhook:", appointmentsError);
             }
 
-            // Get appointment details for transaction
-            const { data: appointment } = await supabase
-              .from("appointments")
-              .select("tenant_id, customer_id, total_amount, location_id")
-              .eq("id", appointmentId)
-              .single();
+            if (appointments && appointments.length > 0) {
+              const totalAppointmentAmount = appointments.reduce(
+                (sum, entry) => sum + Number(entry.total_amount || 0),
+                0,
+              );
+              const paymentStatus = isDeposit ? "deposit_paid" : "fully_paid";
+              const allocatedAmounts = appointments.map((entry, index) => {
+                const proportionalAmount =
+                  totalAppointmentAmount > 0
+                    ? Number((((Number(entry.total_amount || 0) / totalAppointmentAmount) * amount)).toFixed(2))
+                    : Number((amount / appointments.length).toFixed(2));
+                if (index === appointments.length - 1) {
+                  const previousTotal = appointments
+                    .slice(0, -1)
+                    .reduce((sum, prior) => {
+                      const priorAmount =
+                        totalAppointmentAmount > 0
+                          ? Number((((Number(prior.total_amount || 0) / totalAppointmentAmount) * amount)).toFixed(2))
+                          : Number((amount / appointments.length).toFixed(2));
+                      return sum + priorAmount;
+                    }, 0);
+                  return Number((amount - previousTotal).toFixed(2));
+                }
+                return proportionalAmount;
+              });
 
-            if (appointment) {
-              // Record transaction
-              const transactionData: Record<string, unknown> = {
-                tenant_id: appointment.tenant_id,
-                customer_id: appointment.customer_id,
-                appointment_id: appointmentId,
+              for (const [index, entry] of appointments.entries()) {
+                const { error: appointmentError } = await supabase
+                  .from("appointments")
+                  .update({
+                    payment_status: paymentStatus,
+                    amount_paid: allocatedAmounts[index],
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq("id", entry.id);
+
+                if (appointmentError) {
+                  console.error("Error updating appointment:", appointmentError);
+                }
+              }
+
+              const primaryAppointment = appointments[0];
+              const { data: customer } = await supabase
+                .from("customers")
+                .select("full_name, email")
+                .eq("id", primaryAppointment.customer_id)
+                .single();
+
+              const { data: tenant } = await supabase
+                .from("tenants")
+                .select("name, contact_email, currency")
+                .eq("id", primaryAppointment.tenant_id)
+                .single();
+
+              await supabase.from("transactions").insert({
+                tenant_id: primaryAppointment.tenant_id,
+                customer_id: primaryAppointment.customer_id,
+                appointment_id: primaryAppointment.id,
                 type: "payment",
-                amount: amount,
+                amount,
                 payment_method: "card",
                 gateway: event.gateway,
                 gateway_reference: reference,
                 status: "completed",
-              };
+                ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
+              });
 
-              // Add Paystack reference if applicable
-              if (event.gateway === "paystack" && reference) {
-                transactionData.paystack_reference = reference;
-              }
-
-              await supabase.from("transactions").insert(transactionData);
-
-              // Get customer details
-              const { data: customer } = await supabase
-                .from("customers")
-                .select("full_name, email")
-                .eq("id", appointment.customer_id)
-                .single();
-
-              // Get tenant details
-              const { data: tenant } = await supabase
-                .from("tenants")
-                .select("name, contact_email, currency")
-                .eq("id", appointment.tenant_id)
-                .single();
-
-              // Create urgent in-app notification for salon (new booking)
               await supabase.from("notifications").insert({
-                tenant_id: appointment.tenant_id,
-                type: "new_booking",
-                title: "New Paid Booking",
-                description: `${customer?.full_name || "A customer"} completed payment of ${tenant?.currency || ""} ${amount} for their booking`,
+                tenant_id: primaryAppointment.tenant_id,
+                type: "payment",
+                title: isDeposit ? "New Deposit Paid" : "New Paid Booking",
+                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking`,
                 entity_type: "appointment",
-                entity_id: appointmentId,
+                entity_id: primaryAppointment.id,
                 urgent: true,
               });
 
-              // Send confirmation email to customer
               try {
-                await fetch(
-                  `${supabaseUrl}/functions/v1/send-appointment-notification`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${supabaseServiceKey}`,
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      appointmentId: appointmentId,
-                      action: "scheduled",
-                    }),
-                  }
-                );
+                await fetch(`${supabaseUrl}/functions/v1/send-appointment-notification`, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${supabaseServiceKey}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    appointmentId: primaryAppointment.id,
+                    action: "scheduled",
+                  }),
+                });
               } catch (emailError) {
                 console.error("Error sending customer notification:", emailError);
               }
 
-              // Send email to salon owners
               if (resendApiKey && tenant) {
                 const { data: owners } = await supabase
                   .from("user_roles")
                   .select("user_id")
-                  .eq("tenant_id", appointment.tenant_id)
-                  .eq("role", "owner");
+                  .eq("tenant_id", primaryAppointment.tenant_id)
+                  .in("role", ["owner", "manager"]);
 
                 if (owners && owners.length > 0) {
                   for (const owner of owners) {
@@ -413,14 +448,15 @@ Deno.serve(async (req) => {
                           body: JSON.stringify({
                             from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail }),
                             to: profile.email,
-                            subject: `New Paid Booking at ${tenant.name}`,
+                            subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
                             html: `
-                          <h2>New Paid Booking</h2>
-                          <p>A customer has just completed payment for a booking.</p>
+                          <h2>${isDeposit ? "Deposit Received" : "New Paid Booking"}</h2>
+                          <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
                           <ul>
                             <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
                             <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
                             <li><strong>Gateway:</strong> ${event.gateway}</li>
+                            <li><strong>Appointments:</strong> ${appointments.length}</li>
                           </ul>
                           <p>Please review the booking in your dashboard.</p>
                         `,
@@ -434,13 +470,11 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Generate invoice
               try {
-                // Generate invoice number
                 const { data: invoiceCount } = await supabase
                   .from("invoices")
                   .select("id", { count: "exact", head: true })
-                  .eq("tenant_id", appointment.tenant_id);
+                  .eq("tenant_id", primaryAppointment.tenant_id);
 
                 const count = (invoiceCount as unknown as number) || 0;
                 const prefix = tenant?.name?.substring(0, 3).toUpperCase() || "INV";
@@ -449,20 +483,19 @@ Deno.serve(async (req) => {
                 const { data: invoice } = await supabase
                   .from("invoices")
                   .insert({
-                    tenant_id: appointment.tenant_id,
-                    customer_id: appointment.customer_id,
-                    appointment_id: appointmentId,
+                    tenant_id: primaryAppointment.tenant_id,
+                    customer_id: primaryAppointment.customer_id,
+                    appointment_id: primaryAppointment.id,
                     invoice_number: invoiceNumber,
                     currency: tenant?.currency || "USD",
                     subtotal: amount,
                     total: amount,
-                    status: "paid",
+                    status: isDeposit ? "sent" : "paid",
                     paid_at: new Date().toISOString(),
                   })
                   .select("id")
                   .single();
 
-                // Send invoice email
                 if (invoice?.id) {
                   await fetch(`${supabaseUrl}/functions/v1/send-invoice`, {
                     method: "POST",
@@ -477,13 +510,12 @@ Deno.serve(async (req) => {
                 console.error("Error generating invoice:", invoiceError);
               }
 
-              // Credit salon purse for the appointment payment
               try {
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                  p_tenant_id: appointment.tenant_id,
+                  p_tenant_id: primaryAppointment.tenant_id,
                   p_entry_type: "salon_purse_credit_booking",
                   p_reference_type: "appointment",
-                  p_reference_id: appointmentId,
+                  p_reference_id: primaryAppointment.id,
                   p_amount: amount,
                   p_currency: tenant?.currency || "NGN",
                   p_idempotency_key: `booking_${reference}`,
@@ -493,22 +525,18 @@ Deno.serve(async (req) => {
                 if (creditError) {
                   console.error("Error crediting salon purse:", creditError);
                 } else {
-                  console.log(`Salon purse credited: ${amount} ${tenant?.currency || "NGN"} for appointment ${appointmentId}`);
+                  console.log(`Salon purse credited: ${amount} ${tenant?.currency || "NGN"} for appointment ${primaryAppointment.id}`);
                 }
               } catch (purseError) {
                 console.error("Exception crediting salon purse:", purseError);
               }
             }
-            break;
           }
+          break;
         }
 
         case "customer_purse_topup": {
-          // Handle customer purse topup
-          const { customerId, tenantId } = event.data;
-
           if (customerId && tenantId && amount) {
-            // Get tenant details for currency
             const { data: tenant } = await supabase
               .from("tenants")
               .select("currency")
@@ -540,11 +568,8 @@ Deno.serve(async (req) => {
         }
 
         case "salon_purse_topup": {
-          // Handle salon purse topup
-          const { tenantId: salonTenantId } = event.data;
-
+          const salonTenantId = tenantId;
           if (salonTenantId && amount && paymentIntentId) {
-            // Get tenant details for currency
             const { data: salonTenant } = await supabase
               .from("tenants")
               .select("currency")
@@ -578,11 +603,7 @@ Deno.serve(async (req) => {
         }
 
         case "invoice_payment": {
-          // Handle invoice payment
-          const { invoiceId } = event.data;
-
           if (invoiceId && isValidUUID(invoiceId) && amount && tenantId) {
-            // Get tenant details for currency
             const { data: invoiceTenant } = await supabase
               .from("tenants")
               .select("currency")
@@ -590,7 +611,6 @@ Deno.serve(async (req) => {
               .single();
 
             try {
-              // Update invoice status to 'paid' and set paid_at timestamp
               const { error: invoiceUpdateError } = await supabase
                 .from("invoices")
                 .update({
@@ -602,11 +622,8 @@ Deno.serve(async (req) => {
 
               if (invoiceUpdateError) {
                 console.error("Error updating invoice:", invoiceUpdateError);
-              } else {
-                console.log(`Invoice ${invoiceId} marked as paid`);
               }
 
-              // Credit salon purse for the invoice payment
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: tenantId,
                 p_entry_type: "salon_purse_credit_invoice",
@@ -620,8 +637,6 @@ Deno.serve(async (req) => {
 
               if (creditError) {
                 console.error("Error crediting salon purse for invoice:", creditError);
-              } else {
-                console.log(`Salon purse credited: ${amount} ${invoiceTenant?.currency || "NGN"} for invoice ${invoiceId}`);
               }
             } catch (invoiceError) {
               console.error("Exception processing invoice payment:", invoiceError);
@@ -633,14 +648,11 @@ Deno.serve(async (req) => {
         }
 
         case "messaging_credit_purchase": {
-          // Handle messaging credit purchase
-          const { credits } = event.data;
-          const messagingTenantId = event.data.tenantId;
+          const messagingTenantId = tenantId;
           const messagingAmount = amount;
           const messagingPaymentIntentId = paymentIntentId;
 
           if (credits && messagingTenantId && messagingAmount && messagingPaymentIntentId && isValidUUID(messagingPaymentIntentId)) {
-            // Get tenant details for currency
             const { data: messagingTenant } = await supabase
               .from("tenants")
               .select("currency")
@@ -648,7 +660,6 @@ Deno.serve(async (req) => {
               .single();
 
             try {
-              // First, check if communication_credits record exists
               const { data: existingCredits } = await supabase
                 .from("communication_credits")
                 .select("id, balance")
@@ -656,7 +667,6 @@ Deno.serve(async (req) => {
                 .single();
 
               if (existingCredits) {
-                // Update existing record by incrementing balance
                 const { error: updateError } = await supabase
                   .from("communication_credits")
                   .update({
@@ -669,7 +679,6 @@ Deno.serve(async (req) => {
                   console.error("Error updating communication_credits balance:", updateError);
                 }
               } else {
-                // Create new record with initial balance
                 const { error: insertError } = await supabase
                   .from("communication_credits")
                   .insert({
@@ -683,12 +692,11 @@ Deno.serve(async (req) => {
                 }
               }
 
-              // Insert messaging_credit_purchases record for audit trail
               const { error: purchaseInsertError } = await supabase
                 .from("messaging_credit_purchases")
                 .insert({
                   tenant_id: messagingTenantId,
-                  credits: credits,
+                  credits,
                   currency: messagingTenant?.currency || "NGN",
                   amount: messagingAmount,
                   paid_via: "paystack",
@@ -698,8 +706,6 @@ Deno.serve(async (req) => {
 
               if (purchaseInsertError) {
                 console.error("Error inserting messaging_credit_purchases:", purchaseInsertError);
-              } else {
-                console.log(`Messaging credits added: ${credits} credits for tenant ${messagingTenantId}`);
               }
 
               // Send confirmation email to tenant owner
@@ -767,7 +773,7 @@ Deno.serve(async (req) => {
               credits,
               messagingTenantId,
               messagingAmount,
-              messagingPaymentIntentId
+              messagingPaymentIntentId,
             });
           }
           break;
@@ -778,8 +784,7 @@ Deno.serve(async (req) => {
           break;
       }
 
-      // Update payment intent status
-      if (event.data.paymentIntentId && isValidUUID(event.data.paymentIntentId)) {
+      if (paymentIntentId && isValidUUID(paymentIntentId)) {
         await supabase
           .from("payment_intents")
           .update({
@@ -787,18 +792,7 @@ Deno.serve(async (req) => {
             gateway_reference: reference,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", event.data.paymentIntentId);
-      }
-
-      if (tenantId && reference) {
-        await supabase.rpc("finalize_sales_conversion_from_webhook", {
-          p_payment_ref: reference,
-          p_tenant_id: tenantId,
-          p_status: "paid",
-          p_amount: amount ?? null,
-          p_currency: "USD",
-          p_paid_at: new Date().toISOString(),
-        });
+          .eq("id", paymentIntentId);
       }
 
       if (tenantId && reference) {

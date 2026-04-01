@@ -27,7 +27,7 @@ function titleCase(value: string) {
     .replace(/[._/-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/\w/g, (char) => char.toUpperCase());
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function routeToPageLabel(route: string) {

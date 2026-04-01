@@ -25,6 +25,13 @@ import type { Tables } from "@supabase-client";
 
 type Transaction = Tables<"transactions"> & {
   customer?: { id: string; full_name: string } | null;
+  appointment?: {
+    id: string;
+    status: string;
+    payment_status: string;
+    amount_paid: number;
+    total_amount: number;
+  } | null;
 };
 
 interface RequestRefundDialogProps {
@@ -47,6 +54,45 @@ export function RequestRefundDialog({
     reason: "",
     refundType: "original_method" as "original_method" | "store_credit" | "offline",
   });
+
+  const isCancelledAppointmentRefundReady =
+    transaction?.appointment?.status === "cancelled" &&
+    Number(transaction.appointment.amount_paid || 0) > 0 &&
+    transaction.appointment.payment_status !== "refunded_full";
+
+  const handleRefundToPurse = async () => {
+    if (!transaction?.appointment?.id) return;
+
+    setIsSubmitting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("refund-cancelled-appointment", {
+        body: {
+          appointmentId: transaction.appointment.id,
+          transactionId: transaction.id,
+        },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Failed to refund appointment");
+      }
+
+      toast({
+        title: "Refund completed",
+        description: "The paid amount has been credited to the customer's purse.",
+      });
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (err) {
+      console.error("Error refunding cancelled appointment:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to refund to customer purse",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +176,32 @@ export function RequestRefundDialog({
               </p>
             )}
           </div>
+
+          {isCancelledAppointmentRefundReady && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div>
+                <p className="font-medium">Cancelled appointment refund</p>
+                <p className="text-sm text-muted-foreground">
+                  This appointment is cancelled and has already received payment. You can credit the full paid amount to the customer's purse immediately.
+                </p>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Refund to purse</span>
+                <span className="font-medium">
+                  {currency} {Number(transaction.appointment?.amount_paid || 0).toFixed(2)}
+                </span>
+              </div>
+              <Button
+                type="button"
+                onClick={handleRefundToPurse}
+                disabled={isSubmitting}
+                className="w-full"
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ArrowDownLeft className="w-4 h-4 mr-2" />}
+                Refund to Customer Purse
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>Refund Amount <span className="text-destructive">*</span></Label>

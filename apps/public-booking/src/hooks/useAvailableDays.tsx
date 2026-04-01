@@ -34,10 +34,37 @@ export function useAvailableDays(
   serviceDurationMinutes: number = 0,
   bufferMinutes: number = 0
 ) {
+  const formattedMonth = month ? format(month, "yyyy-MM") : undefined;
+  const isEnabled = !!tenantId && !!location && !!month;
+
+  console.log("[public-booking] useAvailableDays state", {
+    tenantId: tenantId ?? null,
+    locationId: location?.id ?? null,
+    month: formattedMonth ?? null,
+    slotCapacity,
+    serviceDurationMinutes,
+    bufferMinutes,
+    enabled: isEnabled,
+  });
+
   return useQuery({
-    queryKey: ["available-days", tenantId, location?.id, month ? format(month, "yyyy-MM") : undefined, slotCapacity, serviceDurationMinutes],
+    queryKey: [
+      "available-days",
+      tenantId,
+      location?.id,
+      formattedMonth,
+      slotCapacity,
+      serviceDurationMinutes,
+      bufferMinutes,
+    ],
     queryFn: async (): Promise<DayAvailability[]> => {
       if (!tenantId || !location || !month) return [];
+
+      console.log("[public-booking] Fetching available days", {
+        tenantId,
+        locationId: location.id,
+        month: formattedMonth,
+      });
 
       const monthStart = startOfMonth(month);
       const monthEnd = endOfMonth(month);
@@ -147,9 +174,25 @@ export function useAvailableDays(
         return { date, available: hasAvailableSlot, hasSlots: hasAvailableSlot };
       });
 
+      if (!availability.some((day) => day.hasSlots)) {
+        console.debug("[public-booking] No available days in month", {
+          tenantId,
+          locationId: location.id,
+          month: format(month, "yyyy-MM"),
+          slotCapacity,
+          serviceDurationMinutes,
+          bufferMinutes,
+          openingDays: location.opening_days,
+          openingTime: location.opening_time,
+          closingTime: location.closing_time,
+          appointmentCount: appointments.length,
+          activeWindowCount: windows.length,
+        });
+      }
+
       return availability;
     },
-    enabled: !!tenantId && !!location && !!month,
+    enabled: isEnabled,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 }
