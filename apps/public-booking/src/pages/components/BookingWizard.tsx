@@ -121,7 +121,7 @@ export function BookingWizard({
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
-  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("stripe");
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack"); // default is paystack
   const [purseAmount, setPurseAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("card");
   const [purseBalance, setPurseBalance] = useState(0);
@@ -248,8 +248,8 @@ export function BookingWizard({
         item.type === "service"
           ? catalogLookup.serviceMap.get(item.itemId)
           : item.type === "package"
-          ? catalogLookup.packageMap.get(item.itemId)
-          : catalogLookup.productMap.get(item.itemId);
+            ? catalogLookup.packageMap.get(item.itemId)
+            : catalogLookup.productMap.get(item.itemId);
 
       if (!source) return;
 
@@ -429,8 +429,8 @@ export function BookingWizard({
       body: { tenantId: salon.id },
       headers: accessToken
         ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
+          Authorization: `Bearer ${accessToken}`,
+        }
         : undefined,
     });
 
@@ -608,9 +608,9 @@ export function BookingWizard({
     setBookerError("");
   };
 
-  const handleCreateBooking = async () => {
-    const { data, error } = await supabase.functions.invoke("create-public-booking", {
-      body: {
+  const handleCreateBooking = async (includePaymentSession = false, customPaymentAmount?: number) => {
+    try {
+      const requestBody: any = {
         tenantId: salon.id,
         customer: bookerInfo,
         items: buildSubmissionItems(),
@@ -620,11 +620,50 @@ export function BookingWizard({
         purseAmount,
         depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
         giftsBelongToSamePerson: meta.giftsBelongToSamePerson,
-      },
-    });
+      };
 
-    if (error) throw error;
-    return data as { reference?: string; appointmentId?: string; appointmentIds?: string[] };
+      // Add payment session creation parameters if needed
+      if (includePaymentSession) {
+        const paymentAmountToUse = customPaymentAmount ?? amountDueNow;
+        requestBody.createPaymentSession = true;
+        requestBody.paymentAmount = paymentAmountToUse;
+        requestBody.paymentCurrency = salon.currency;
+        requestBody.paymentDescription = paymentOption === "pay_deposit"
+          ? "Booking Deposit"
+          : paymentMode === "split"
+            ? `Booking Payment (${formatCurrency(splitPurseAmount, salon.currency)} from purse)`
+            : "Booking Payment";
+        requestBody.paymentIsDeposit = paymentOption === "pay_deposit";
+        requestBody.paymentSuccessUrl = window.location.href;
+        requestBody.paymentCancelUrl = window.location.href;
+        requestBody.preferredPaymentGateway = selectedGateway;
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-public-booking", {
+        body: requestBody,
+      });
+
+      if (error) {
+        console.error("Supabase function error:", error);
+        throw error;
+      }
+
+      if (data?.error) {
+        console.error("Function returned error:", data.error, data.details);
+        throw new Error(data.error);
+      }
+
+      return data as {
+        reference?: string;
+        appointmentId?: string;
+        appointmentIds?: string[];
+        checkoutUrl?: string;
+        paymentGateway?: string;
+      };
+    } catch (err) {
+      console.error("handleCreateBooking failed:", err);
+      throw err;
+    }
   };
 
   const handleProceedToPayment = () => {
@@ -644,11 +683,12 @@ export function BookingWizard({
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const booking = await handleCreateBooking();
-      const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
-      const primaryAppointmentId = appointmentIds[0];
-
+      // For purse-only payment, create booking without payment session
       if (paymentMode === "purse") {
+        const booking = await handleCreateBooking(false);
+        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
+        const primaryAppointmentId = appointmentIds[0];
+
         if (!customerId || !primaryAppointmentId) {
           throw new Error("Customer not found");
         }
@@ -684,11 +724,17 @@ export function BookingWizard({
         return;
       }
 
+      // For split payment, debit purse first, then create booking with payment session for remaining amount
       if (paymentMode === "split") {
+        const booking = await handleCreateBooking(true, splitCardAmount);
+        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
+        const primaryAppointmentId = appointmentIds[0];
+
         if (!customerId || !primaryAppointmentId) {
           throw new Error("Customer not found");
         }
 
+        // Debit purse amount
         const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
@@ -703,51 +749,25 @@ export function BookingWizard({
           throw new Error("Failed to debit purse balance: " + debitError.message);
         }
 
-        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
-          body: {
-            tenantId: salon.id,
-            appointmentId: primaryAppointmentId,
-            appointmentIds,
-            amount: splitCardAmount,
-            currency: salon.currency,
-            customerEmail: bookerInfo.email,
-            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
-            description: `Booking Payment (${formatCurrency(splitPurseAmount, salon.currency)} from purse)`,
-            isDeposit: false,
-            successUrl: window.location.href,
-            cancelUrl: window.location.href,
-            preferredGateway: selectedGateway,
-          },
-        });
-
-        if (paymentResponse.data?.checkoutUrl) {
-          window.location.href = paymentResponse.data.checkoutUrl;
+        // Redirect to payment gateway for card portion
+        if (booking.checkoutUrl) {
+          window.location.href = booking.checkoutUrl;
           return;
         }
+
+        throw new Error("Failed to create payment session");
       }
 
+      // For card payment, create booking with integrated payment session
       if (paymentMode === "card") {
-        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
-          body: {
-            tenantId: salon.id,
-            appointmentId: primaryAppointmentId,
-            appointmentIds,
-            amount: amountDueNow,
-            currency: salon.currency,
-            customerEmail: bookerInfo.email,
-            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
-            description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
-            isDeposit: paymentOption === "pay_deposit",
-            successUrl: window.location.href,
-            cancelUrl: window.location.href,
-            preferredGateway: selectedGateway,
-          },
-        });
+        const booking = await handleCreateBooking(true);
 
-        if (paymentResponse.data?.checkoutUrl) {
-          window.location.href = paymentResponse.data.checkoutUrl;
+        if (booking.checkoutUrl) {
+          window.location.href = booking.checkoutUrl;
           return;
         }
+
+        throw new Error("Failed to create payment session");
       }
     } catch (err: unknown) {
       console.error("Payment error:", err);
@@ -827,22 +847,20 @@ export function BookingWizard({
             {stepConfig.map((entry, index) => (
               <div key={entry.key} className="flex items-center gap-2 shrink-0">
                 <div
-                  className={`flex items-center gap-1.5 ${
-                    step === entry.key
-                      ? "text-primary"
-                      : currentStepIndex > index
+                  className={`flex items-center gap-1.5 ${step === entry.key
+                    ? "text-primary"
+                    : currentStepIndex > index
                       ? "text-muted-foreground"
                       : "text-muted-foreground/50"
-                  }`}
+                    }`}
                 >
                   <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
-                      step === entry.key
-                        ? "text-white border-transparent"
-                        : currentStepIndex > index
+                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${step === entry.key
+                      ? "text-white border-transparent"
+                      : currentStepIndex > index
                         ? "border-muted-foreground bg-muted"
                         : "border-muted"
-                    }`}
+                      }`}
                     style={step === entry.key ? { backgroundColor: "var(--brand-color)" } : undefined}
                   >
                     {entry.icon}
