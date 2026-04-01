@@ -121,7 +121,7 @@ export function BookingWizard({
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
-  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("stripe");
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack");
   const [purseAmount, setPurseAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("card");
   const [purseBalance, setPurseBalance] = useState(0);
