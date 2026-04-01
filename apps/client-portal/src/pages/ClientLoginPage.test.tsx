@@ -55,8 +55,11 @@ describe("ClientLoginPage", () => {
       .mockResolvedValueOnce({
         data: { allowed: true, retryAt: new Date(Date.now() + 60_000).toISOString() },
         error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { verificationType: "email" },
+        error: null,
       });
-    signInWithOtpMock.mockResolvedValue({ error: null });
     render(
       <MemoryRouter future={routerFuture}>
         <ClientLoginPage />
