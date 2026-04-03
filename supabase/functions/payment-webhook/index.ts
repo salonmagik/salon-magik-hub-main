@@ -33,18 +33,18 @@ function parseAppointmentIds(raw: string | string[] | undefined, fallback?: stri
   const values =
     typeof raw === "string"
       ? (() => {
-          try {
-            const parsed = JSON.parse(raw);
-            return Array.isArray(parsed) ? parsed : [raw];
-          } catch {
-            return [raw];
-          }
-        })()
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [raw];
+        } catch {
+          return [raw];
+        }
+      })()
       : Array.isArray(raw)
-      ? raw
-      : fallback
-      ? [fallback]
-      : [];
+        ? raw
+        : fallback
+          ? [fallback]
+          : [];
 
   return values.filter((value): value is string => typeof value === "string" && isValidUUID(value));
 }
@@ -134,157 +134,19 @@ async function verifyPaystackSignature(
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+// Process webhook asynchronously to avoid timeouts
+async function processWebhook(
+  event: WebhookEvent,
+  supabaseUrl: string,
+  supabaseServiceKey: string,
+  resendApiKey?: string,
+  resendFromEmail?: string
+) {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  console.log("Processing webhook event:", event.type, event.gateway);
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const stripeWebhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Determine gateway from headers
-    const stripeSignature = req.headers.get("stripe-signature");
-    const paystackSignature = req.headers.get("x-paystack-signature");
-
-    // Get raw body for signature verification
-    const rawBody = await req.text();
-    let body: Record<string, unknown>;
-
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      console.error("Invalid JSON payload");
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON payload" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    let event: WebhookEvent;
-
-    if (stripeSignature) {
-      // Verify Stripe webhook signature
-      if (!stripeWebhookSecret) {
-        console.error("STRIPE_WEBHOOK_SECRET not configured");
-        return new Response(
-          JSON.stringify({ error: "Webhook secret not configured" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const isValid = await verifyStripeSignature(rawBody, stripeSignature, stripeWebhookSecret);
-      if (!isValid) {
-        console.error("Invalid Stripe webhook signature");
-        return new Response(
-          JSON.stringify({ error: "Invalid signature" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const stripeEvent = body as {
-        type: string;
-        data: {
-          object: {
-            id: string;
-            status?: string;
-            amount_received?: number;
-            metadata?: Record<string, string>;
-          };
-        };
-      };
-
-      const object = stripeEvent.data.object;
-      const metadata = object.metadata;
-
-      event = {
-        type: stripeEvent.type,
-        gateway: "stripe",
-        data: {
-          paymentIntentId: metadata?.payment_intent_id,
-          appointmentId: metadata?.appointment_id,
-          appointmentIds: parseAppointmentIds(metadata?.appointment_ids, metadata?.appointment_id),
-          tenantId: metadata?.tenant_id,
-          customerId: metadata?.customer_id,
-          invoiceId: metadata?.invoice_id,
-          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
-          amount: object.amount_received ? object.amount_received / 100 : undefined,
-          status: object.status,
-          reference: object.id,
-          isDeposit: metadata?.is_deposit === "true",
-        },
-      };
-    } else if (paystackSignature) {
-      // Verify Paystack webhook signature
-      if (!paystackSecretKey) {
-        console.error("PAYSTACK_SECRET_KEY not configured");
-        return new Response(
-          JSON.stringify({ error: "Webhook secret not configured" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const isValid = await verifyPaystackSignature(rawBody, paystackSignature, paystackSecretKey);
-      if (!isValid) {
-        console.error("Invalid Paystack webhook signature");
-        return new Response(
-          JSON.stringify({ error: "Invalid signature" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const paystackEvent = body as {
-        event: string;
-        data: {
-          reference?: string;
-          status?: string;
-          amount?: number;
-          metadata?: {
-            appointment_id?: string;
-            payment_intent_id?: string;
-            tenant_id?: string;
-            customer_id?: string;
-            invoice_id?: string;
-            credits?: string;
-          };
-        };
-      };
-
-      const data = paystackEvent.data;
-      const metadata = data.metadata;
-
-      event = {
-        type: paystackEvent.event,
-        gateway: "paystack",
-        data: {
-          paymentIntentId: metadata?.payment_intent_id,
-          appointmentId: metadata?.appointment_id,
-          appointmentIds: parseAppointmentIds(metadata?.appointment_ids, metadata?.appointment_id),
-          tenantId: metadata?.tenant_id,
-          customerId: metadata?.customer_id,
-          invoiceId: metadata?.invoice_id,
-          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
-          amount: data.amount ? data.amount / 100 : undefined,
-          status: data.status,
-          reference: data.reference,
-          isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
-        },
-      };
-    } else {
-      console.error("No webhook signature provided");
-      return new Response(
-        JSON.stringify({ error: "Missing webhook signature" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log("Processing webhook event:", event.type, event.gateway);
-
     // Handle payment success
     if (
       event.type === "checkout.session.completed" ||
@@ -313,10 +175,7 @@ Deno.serve(async (req) => {
           const targetAppointmentIds = parseAppointmentIds(appointmentIds, appointmentId);
           if (targetAppointmentIds.length === 0) {
             console.error("No valid appointment ids found on payment webhook");
-            return new Response(
-              JSON.stringify({ error: "Invalid appointment ids" }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return;
           }
 
           if (amount) {
@@ -836,6 +695,184 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log("Webhook processing completed:", event.type, event.gateway);
+  } catch (error) {
+    console.error("Error in async webhook processing:", error);
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const stripeWebhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
+
+    // Determine gateway from headers
+    const stripeSignature = req.headers.get("stripe-signature");
+    const paystackSignature = req.headers.get("x-paystack-signature");
+
+    // Log all headers for debugging
+    console.log("=== WEBHOOK REQUEST HEADERS ===");
+    req.headers.forEach((value, key) => {
+      console.log(`${key}: ${value}`);
+    });
+
+    // Get raw body for signature verification
+    const rawBody = await req.text();
+    console.log("=== RAW BODY LENGTH ===", rawBody.length);
+    console.log("=== RAW BODY PREVIEW ===", rawBody.substring(0, 200));
+
+    let body: Record<string, unknown>;
+
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      console.error("Invalid JSON payload");
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON payload" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let event: WebhookEvent;
+
+    if (stripeSignature) {
+      // Verify Stripe webhook signature
+      if (!stripeWebhookSecret) {
+        console.error("STRIPE_WEBHOOK_SECRET not configured");
+        return new Response(
+          JSON.stringify({ error: "Webhook secret not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const isValid = await verifyStripeSignature(rawBody, stripeSignature, stripeWebhookSecret);
+      if (!isValid) {
+        console.error("Invalid Stripe webhook signature");
+        return new Response(
+          JSON.stringify({ error: "Invalid signature" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const stripeEvent = body as {
+        type: string;
+        data: {
+          object: {
+            id: string;
+            status?: string;
+            amount_received?: number;
+            metadata?: Record<string, string>;
+          };
+        };
+      };
+
+      const object = stripeEvent.data.object;
+      const metadata = object.metadata;
+
+      event = {
+        type: stripeEvent.type,
+        gateway: "stripe",
+        data: {
+          paymentIntentId: metadata?.payment_intent_id,
+          appointmentId: metadata?.appointment_id,
+          appointmentIds: parseAppointmentIds(metadata?.appointment_ids, metadata?.appointment_id),
+          tenantId: metadata?.tenant_id,
+          customerId: metadata?.customer_id,
+          invoiceId: metadata?.invoice_id,
+          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
+          amount: object.amount_received ? object.amount_received / 100 : undefined,
+          status: object.status,
+          reference: object.id,
+          isDeposit: metadata?.is_deposit === "true",
+        },
+      };
+    } else if (paystackSignature) {
+      // Verify Paystack webhook signature
+      console.log("=== PAYSTACK WEBHOOK DETECTED ===");
+      console.log("Paystack signature header:", paystackSignature);
+      console.log("Secret key present:", !!paystackSecretKey);
+      console.log("Secret key length:", paystackSecretKey?.length || 0);
+
+      if (!paystackSecretKey) {
+        console.error("PAYSTACK_SECRET_KEY not configured");
+        return new Response(
+          JSON.stringify({ error: "Webhook secret not configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const isValid = await verifyPaystackSignature(rawBody, paystackSignature, paystackSecretKey);
+      console.log("Paystack signature valid:", isValid);
+
+      if (!isValid) {
+        console.error("Invalid Paystack webhook signature");
+        return new Response(
+          JSON.stringify({ error: "Invalid signature" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const paystackEvent = body as {
+        event: string;
+        data: {
+          reference?: string;
+          status?: string;
+          amount?: number;
+          metadata?: {
+            appointment_id?: string;
+            appointment_ids?: string;
+            payment_intent_id?: string;
+            tenant_id?: string;
+            customer_id?: string;
+            invoice_id?: string;
+            credits?: string;
+            is_deposit?: boolean | string;
+          };
+        };
+      };
+
+      const data = paystackEvent.data;
+      const metadata = data.metadata;
+
+      event = {
+        type: paystackEvent.event,
+        gateway: "paystack",
+        data: {
+          paymentIntentId: metadata?.payment_intent_id,
+          appointmentId: metadata?.appointment_id,
+          appointmentIds: parseAppointmentIds(metadata?.appointment_ids, metadata?.appointment_id),
+          tenantId: metadata?.tenant_id,
+          customerId: metadata?.customer_id,
+          invoiceId: metadata?.invoice_id,
+          credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
+          amount: data.amount ? data.amount / 100 : undefined,
+          status: data.status,
+          reference: data.reference,
+          isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
+        },
+      };
+    } else {
+      console.error("No webhook signature provided");
+      return new Response(
+        JSON.stringify({ error: "Missing webhook signature" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Webhook signature verified, processing asynchronously...");
+
+    // Process webhook asynchronously - don't await
+    processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
+
+    // Return 200 immediately to prevent Paystack timeout/retries
     return new Response(
       JSON.stringify({ received: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
