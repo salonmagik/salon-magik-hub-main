@@ -55,24 +55,24 @@ async function findUserByEmail(
   admin: ReturnType<typeof createClient>,
   email: string,
 ): Promise<AuthUserSummary | null> {
-  for (let page = 1; page <= 20; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw error;
+  // Use custom RPC function for efficient auth.users lookup (single query with index)
+  const { data, error } = await admin.rpc("get_auth_user_by_email", {
+    lookup_email: email
+  });
 
-    const user =
-      data.users.find((candidate) => (candidate.email || "").toLowerCase() === email.toLowerCase()) ?? null;
-    if (user) {
-      return {
-        id: user.id,
-        email: user.email ?? null,
-        user_metadata: (user.user_metadata as Record<string, unknown> | null) ?? {},
-      };
-    }
-
-    if (data.users.length < 1000) break;
+  if (error) {
+    throw error;
   }
 
-  return null;
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: data.id,
+    email: data.email ?? null,
+    user_metadata: (data.user_metadata as Record<string, unknown> | null) ?? {},
+  };
 }
 
 serve(async (req) => {
@@ -117,6 +117,7 @@ serve(async (req) => {
     }
 
     const emailOtp = (generated.data?.properties as Record<string, unknown> | undefined)?.email_otp;
+    console.log("Generated OTP for", "OTP:", emailOtp);
     if (!emailOtp || typeof emailOtp !== "string") {
       throw new Error("Failed to generate email OTP");
     }
