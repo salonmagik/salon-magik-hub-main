@@ -63,14 +63,36 @@ export function useWithdrawals(tenantId?: string) {
 
     try {
       // Call the process-salon-withdrawal edge function
-      const { data: withdrawal, error: createError } = await supabase.functions.invoke(
+      const response = await supabase.functions.invoke(
         "process-salon-withdrawal",
         {
           body: data,
         }
       );
 
-      if (createError) throw createError;
+      // Check for edge function errors
+      if (response.error) {
+        // Try to parse error details from response body
+        let errorMessage = "We're unable to process your withdrawal at this time.";
+        
+        if (response.error.context?.body) {
+          try {
+            const errorBody = typeof response.error.context.body === 'string' 
+              ? JSON.parse(response.error.context.body) 
+              : response.error.context.body;
+            
+            if (errorBody.error || errorBody.details) {
+              errorMessage = "We're unable to process your withdrawal at this time. " + 
+                            "This may be due to your account settings or payment provider limitations. " +
+                            "Please contact our support team for assistance.";
+            }
+          } catch (parseError) {
+            console.error("Error parsing error response:", parseError);
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
 
       toast({
         title: "Success",
@@ -80,15 +102,15 @@ export function useWithdrawals(tenantId?: string) {
       // Refetch withdrawals to update the list
       await fetchWithdrawals();
       
-      return withdrawal as SalonWithdrawal;
+      return response.data as SalonWithdrawal;
     } catch (err) {
       console.error("Error creating withdrawal:", err);
       toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to process withdrawal",
+        title: "Withdrawal Not Processed",
+        description: err instanceof Error ? err.message : "We're unable to process your withdrawal at this time. Please contact support for assistance.",
         variant: "destructive",
       });
-      return null;
+      throw err;
     }
   };
 
