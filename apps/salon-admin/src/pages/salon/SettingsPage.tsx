@@ -179,6 +179,34 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     }
   }, [activeTab, setSearchParams, settingsTabs]);
 
+  // Handle top-up success/cancel notifications
+  useEffect(() => {
+    const topupStatus = searchParams.get("topup");
+    
+    if (topupStatus === "success") {
+      toast({
+        title: "Top-Up Successful",
+        description: "Your wallet has been topped up successfully. Funds will appear in your balance shortly.",
+      });
+      
+      // Clean up URL parameter
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("topup");
+      setSearchParams(newParams, { replace: true });
+    } else if (topupStatus === "cancelled") {
+      toast({
+        title: "Top-Up Cancelled",
+        description: "Your top-up was cancelled. No charges were made.",
+        variant: "destructive",
+      });
+      
+      // Clean up URL parameter
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("topup");
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
     setSearchParams({ tab: tabId });
