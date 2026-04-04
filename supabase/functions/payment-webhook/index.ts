@@ -316,7 +316,7 @@ async function processWebhook(
                             "Content-Type": "application/json",
                           },
                           body: JSON.stringify({
-                            from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail }),
+                            from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail! }),
                             to: profile.email,
                             subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
                             html: `
