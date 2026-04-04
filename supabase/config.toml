@@ -93,3 +93,6 @@ verify_jwt = false
 
 [functions.payment-webhook]
 verify_jwt = false
+
+[functions.get-banks-and-momo-providers]
+verify_jwt = false

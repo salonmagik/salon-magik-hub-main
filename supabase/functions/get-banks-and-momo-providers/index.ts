@@ -27,10 +27,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Parse query parameters
-    const url = new URL(req.url);
-    const country = url.searchParams.get("country"); // NG or GH
-    const type = url.searchParams.get("type"); // optional: mobile_money
+    // Parse request body
+    const { country, type } = await req.json();
 
     if (!country) {
       return new Response(
@@ -39,21 +37,32 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Map country codes to Paystack country names
+    const countryMap: Record<string, string> = {
+      'GH': 'ghana',
+      'NG': 'nigeria',
+      'KE': 'kenya',
+      'ZA': 'south africa',
+    };
+
+    const paystackCountry = countryMap[country] || country.toLowerCase();
+
     // Build Paystack API URL
     const paystackUrl = new URL("https://api.paystack.co/bank");
-    paystackUrl.searchParams.set("country", country);
+    paystackUrl.searchParams.set("country", paystackCountry);
 
     // For Ghana without type, set pay_with_bank_transfer=true
     if (country === "GH" && !type) {
       paystackUrl.searchParams.set("pay_with_bank_transfer", "true");
     }
 
-    // If type is provided (mobile_money), pass it to Paystack
+    // If type is provided (mobile_money or ghipss for Ghana), pass it to Paystack
     if (type) {
       paystackUrl.searchParams.set("type", type);
     }
 
     // Call Paystack API
+    console.log("Calling Paystack API:", paystackUrl.toString());
     const paystackResponse = await fetch(paystackUrl.toString(), {
       method: "GET",
       headers: {
@@ -63,6 +72,8 @@ Deno.serve(async (req) => {
     });
 
     const paystackData = await paystackResponse.json();
+    console.log("Paystack response status:", paystackResponse.status);
+    console.log("Paystack response data:", paystackData);
 
     if (!paystackResponse.ok || !paystackData.status) {
       console.error("Paystack error:", paystackData);
@@ -73,7 +84,7 @@ Deno.serve(async (req) => {
     }
 
     // Extract and format bank data
-    const banks: Bank[] = paystackData.data.map((bank: any) => ({
+    const banks: Bank[] = (paystackData.data || []).map((bank: any) => ({
       id: bank.id,
       name: bank.name,
       slug: bank.slug,
@@ -81,6 +92,8 @@ Deno.serve(async (req) => {
       type: bank.type,
       currency: bank.currency,
     }));
+
+    console.log(`Returning ${banks.length} banks/providers`);
 
     return new Response(
       JSON.stringify({ banks }),
