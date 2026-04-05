@@ -67,13 +67,68 @@ function isDeliveryAddressComplete(address: BookerInfo["deliveryAddress"] | Gift
   return Boolean(address?.line1?.trim() && address?.city?.trim() && address?.country?.trim());
 }
 
+function formatErrorMessage(message: string, statusCode?: number): string {
+  // Common error patterns and their user-friendly replacements
+  const patterns = [
+    {
+      // Pattern: "Mama amks already uses this customer phone number."
+      regex: /(.+?)\s+already uses this customer phone number/i,
+      replacement: "This phone number is already registered with another customer. Please use a different phone number or contact the salon."
+    },
+    {
+      // Pattern: "Customer with email X already exists"
+      regex: /customer with email (.+?) already exists/i,
+      replacement: "An account with this email address already exists. Please sign in or use a different email."
+    },
+    {
+      // Pattern: "Phone number already in use"
+      regex: /phone number already in use/i,
+      replacement: "This phone number is already registered. Please use a different phone number or contact the salon."
+    },
+    {
+      // Pattern: "Email already in use"
+      regex: /email already in use/i,
+      replacement: "This email address is already registered. Please sign in or use a different email."
+    },
+  ];
+
+  // Try to match and replace known patterns first, regardless of status code
+  for (const pattern of patterns) {
+    if (pattern.regex.test(message)) {
+      return message.replace(pattern.regex, pattern.replacement);
+    }
+  }
+
+  // For 5xx errors (server errors) without a known pattern, show a generic message
+  if (statusCode && statusCode >= 500) {
+    return "We're experiencing technical difficulties. Please try again in a few moments or contact the salon directly.";
+  }
+
+  // For 4xx errors or errors without status codes, return cleaned up message
+  const cleaned = message.trim();
+  if (!cleaned) {
+    return statusCode && statusCode >= 400 && statusCode < 500
+      ? "Invalid request. Please check your information and try again."
+      : "Something went wrong. Please try again.";
+  }
+  
+  const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  return capitalized.endsWith('.') ? capitalized : `${capitalized}.`;
+}
+
 async function extractFunctionErrorMessage(error: unknown): Promise<string> {
   if (error instanceof FunctionsHttpError) {
     try {
       const response = error.context as Response | undefined;
+      const statusCode = response?.status;
       const payload = response ? await response.json() : null;
       if (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string") {
-        return payload.error;
+        return formatErrorMessage(payload.error, statusCode);
+      }
+      
+      // If no error message in payload, use status code to generate message
+      if (statusCode) {
+        return formatErrorMessage("", statusCode);
       }
     } catch {
       // Fall through to generic handling
@@ -81,7 +136,7 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string> {
   }
 
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message;
+    return formatErrorMessage(error.message);
   }
 
   return "Something went wrong. Please try again.";
