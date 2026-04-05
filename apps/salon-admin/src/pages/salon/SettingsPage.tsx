@@ -629,7 +629,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           .from("tenants")
           .update({
             name: profileData.salonName,
-            currency: profileData.currency,
           })
           .eq("id", currentTenant.id);
         if (tenantError) throw tenantError;
@@ -952,7 +951,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       profileData.salonName !== profileBaseline.salonName ||
       profileData.city !== profileBaseline.city ||
       profileData.address !== profileBaseline.address ||
-      profileData.currency !== profileBaseline.currency ||
       profileData.ownerName !== profileBaseline.ownerName ||
       profileData.phone !== profileBaseline.phone
     );
@@ -1085,31 +1083,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           </div>
         </div>
 
-        {resolvedScope === "branch" ? (
-          <div className="space-y-2">
-            <Label>Default currency</Label>
-            <Input value={profileData.currency} disabled />
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Label>Default currency</Label>
-            <Select
-              value={profileData.currency}
-              onValueChange={(v) => setProfileData((prev) => ({ ...prev, currency: v }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="GHS">Ghanaian Cedi (GHS)</SelectItem>
-                <SelectItem value="NGN">Nigerian Naira (NGN)</SelectItem>
-                <SelectItem value="USD">US Dollar (USD)</SelectItem>
-                <SelectItem value="EUR">Euro (EUR)</SelectItem>
-                <SelectItem value="GBP">British Pound (GBP)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Default currency</Label>
+          <Input value={profileData.currency} disabled />
+        </div>
 
         {/* Save Button */}
         <div className="flex justify-end pt-4 border-t">
