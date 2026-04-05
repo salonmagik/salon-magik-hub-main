@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import { ScrollArea } from "@ui/scroll-area";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { DatePicker } from "@ui/date-picker";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@ui/tooltip";
 import {
   Mail,
   Phone,
@@ -33,13 +35,11 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { supabase } from "@/lib/supabase";
-import { format } from "date-fns";
-import type { Tables } from "@supabase-client";
 import { SendMessageDialog } from "@/components/messaging/SendMessageDialog";
 import { MessageHistory } from "@/components/messaging/MessageHistory";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@ui/tooltip";
+import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
+import type { Tables } from "@supabase-client";
 
 type Customer = Partial<CustomerWithVisitSummary> & Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
@@ -72,6 +72,42 @@ const statusStyles: Record<string, { bg: string; text: string }> = {
   completed: { bg: "bg-success/10", text: "text-success" },
   cancelled: { bg: "bg-destructive/10", text: "text-destructive" },
 };
+
+function getInitials(name: string): string {
+  const parts = name.split(" ");
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+function getCustomerStatusBadgeClass(status: string): string {
+  if (status === "active") {
+    return "bg-success/10 text-success";
+  }
+  if (status === "vip") {
+    return "bg-purple-100 text-purple-700";
+  }
+  return "bg-muted text-muted-foreground";
+}
+
+function getTransactionStatusBadgeClass(status: string): string {
+  if (status === "completed") {
+    return "bg-success/10 text-success";
+  }
+  if (status === "pending") {
+    return "bg-warning/10 text-warning";
+  }
+  return "bg-muted text-muted-foreground";
+}
+
+function isTransactionCredit(type: string): boolean {
+  return type.includes("refund") || type === "purse_topup";
+}
+
+function isPurseEntryCredit(entryType: string): boolean {
+  return ["customer_purse_topup", "customer_purse_reversal"].includes(entryType);
+}
 
 export function CustomerDetailDialog({
   open,
@@ -258,26 +294,18 @@ export function CustomerDetailDialog({
   const appointmentNotes = customerDetail?.appointmentNotes || [];
   const purse = customerDetail?.purse || null;
   const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
-  const purseLoading = customerDetailLoading;
-  const appointmentsLoading = customerDetailLoading;
-  const transactionsLoading = customerDetailLoading;
-  const notesLoading = customerDetailLoading;
   const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
-  const filteredPurseEntries = purseLedgerEntries;
 
-  const getInitials = (name: string) => {
-    const parts = name.split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  };
+  const canSendMessage = Boolean(customer.email || customer.phone);
+  const sendMessageTooltip = canSendMessage
+    ? "Send Email, SMS, or WhatsApp"
+    : "Customer has no email or phone number";
 
-  // Check if customer can receive messages
-  const canSendMessage = customer.email || customer.phone;
-  const sendMessageTooltip = !canSendMessage
-    ? "Customer has no email or phone number"
-    : "Send Email, SMS, or WhatsApp";
+  function clearFilters(): void {
+    setTxStartDate(undefined);
+    setTxEndDate(undefined);
+    setTxSearchQuery("");
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -296,13 +324,7 @@ export function CustomerDetailDialog({
                 <div className="flex items-center gap-2 mt-1">
                   <Badge
                     variant="secondary"
-                    className={
-                      customer.status === "active"
-                        ? "bg-success/10 text-success"
-                        : customer.status === "vip"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-muted text-muted-foreground"
-                    }
+                    className={getCustomerStatusBadgeClass(customer.status)}
                   >
                     {customer.status}
                   </Badge>
@@ -457,7 +479,7 @@ export function CustomerDetailDialog({
           </TabsContent>
 
           <TabsContent value="appointments" className="mt-4">
-            {appointmentsLoading ? (
+            {customerDetailLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-16 w-full" />
@@ -496,7 +518,7 @@ export function CustomerDetailDialog({
           </TabsContent>
 
           <TabsContent value="notes" className="mt-4">
-            {notesLoading ? (
+            {customerDetailLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-20 w-full" />
@@ -627,11 +649,7 @@ export function CustomerDetailDialog({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          setTxStartDate(undefined);
-                          setTxEndDate(undefined);
-                          setTxSearchQuery("");
-                        }}
+                        onClick={clearFilters}
                       >
                         <X className="w-4 h-4 mr-1" />
                         Clear Filters
@@ -642,7 +660,7 @@ export function CustomerDetailDialog({
               )}
             </div>
 
-            {transactionsLoading ? (
+            {customerDetailLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-16 w-full" />
@@ -660,59 +678,52 @@ export function CustomerDetailDialog({
             ) : (
               <ScrollArea className="h-[300px]">
                 <div className="space-y-2 pr-4">
-                  {filteredTransactions.map((tx) => (
-                    <Card key={tx.id}>
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`p-2 rounded-lg ${tx.type.includes("refund") || tx.type === "purse_topup"
-                                ? "bg-success/10"
-                                : "bg-primary/10"
-                                }`}
-                            >
-                              <Receipt className={`w-4 h-4 ${tx.type.includes("refund") || tx.type === "purse_topup"
-                                ? "text-success"
-                                : "text-primary"
-                                }`} />
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm capitalize">
-                                {tx.type.replace(/_/g, " ")}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span>{format(new Date(tx.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
-                                <span>•</span>
-                                <span className="capitalize">{tx.method.replace(/_/g, " ")}</span>
+                  {filteredTransactions.map((tx) => {
+                    const isCredit = isTransactionCredit(tx.type);
+                    const iconBgClass = isCredit ? "bg-success/10" : "bg-primary/10";
+                    const iconColorClass = isCredit ? "text-success" : "text-primary";
+
+                    return (
+                      <Card key={tx.id}>
+                        <CardContent className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${iconBgClass}`}>
+                                <Receipt className={`w-4 h-4 ${iconColorClass}`} />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm capitalize">
+                                  {tx.type.replace(/_/g, " ")}
+                                </p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{format(new Date(tx.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
+                                  <span>•</span>
+                                  <span className="capitalize">{tx.method.replace(/_/g, " ")}</span>
+                                </div>
                               </div>
                             </div>
+                            <div className="text-right">
+                              <p className="font-semibold">
+                                {currency} {Number(tx.amount).toFixed(2)}
+                              </p>
+                              <Badge
+                                variant="secondary"
+                                className={`text-xs ${getTransactionStatusBadgeClass(tx.status)}`}
+                              >
+                                {tx.status}
+                              </Badge>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold">
-                              {currency} {Number(tx.amount).toFixed(2)}
-                            </p>
-                            <Badge
-                              variant="secondary"
-                              className={`text-xs ${tx.status === "completed"
-                                ? "bg-success/10 text-success"
-                                : tx.status === "pending"
-                                  ? "bg-warning/10 text-warning"
-                                  : "bg-muted text-muted-foreground"
-                                }`}
-                            >
-                              {tx.status}
-                            </Badge>
-                          </div>
-                        </div>
-                        {tx.appointment_id && (
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            <span className="font-medium">Booking: </span>
-                            <span className="font-mono">{tx.appointment_id.slice(0, 8)}...</span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
+                          {tx.appointment_id && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              <span className="font-medium">Booking: </span>
+                              <span className="font-mono">{tx.appointment_id.slice(0, 8)}...</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               </ScrollArea>
             )}
@@ -734,36 +745,34 @@ export function CustomerDetailDialog({
               </CardContent>
             </Card>
 
-            {purseLoading ? (
+            {customerDetailLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : filteredPurseEntries.length === 0 ? (
+            ) : purseLedgerEntries.length === 0 ? (
               <div className="text-center py-8">
                 <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
                 <p className="text-muted-foreground">No purse transactions yet</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {filteredPurseEntries.map((entry) => {
-                  const isCredit = ["customer_purse_topup", "customer_purse_reversal"].includes(entry.entry_type);
+                {purseLedgerEntries.map((entry) => {
+                  const isCredit = isPurseEntryCredit(entry.entry_type);
                   const entryLabel = entry.entry_type
                     .replace(/^customer_purse_/, "")
                     .replace(/_/g, " ");
+                  const iconBgClass = isCredit ? "bg-success/10" : "bg-destructive/10";
+                  const iconColorClass = isCredit ? "text-success" : "text-destructive";
+                  const amountColorClass = isCredit ? "text-success" : "text-destructive";
 
                   return (
                     <Card key={entry.id}>
                       <CardContent className="p-3 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={`p-2 rounded-lg ${isCredit
-                              ? "bg-success/10"
-                              : "bg-destructive/10"
-                              }`}
-                          >
-                            <CreditCard className={`w-4 h-4 ${isCredit ? "text-success" : "text-destructive"}`} />
+                          <div className={`p-2 rounded-lg ${iconBgClass}`}>
+                            <CreditCard className={`w-4 h-4 ${iconColorClass}`} />
                           </div>
                           <div>
                             <p className="font-medium text-sm capitalize">{entryLabel}</p>
@@ -772,12 +781,7 @@ export function CustomerDetailDialog({
                             </p>
                           </div>
                         </div>
-                        <p
-                          className={`font-semibold ${isCredit
-                            ? "text-success"
-                            : "text-destructive"
-                            }`}
-                        >
+                        <p className={`font-semibold ${amountColorClass}`}>
                           {isCredit ? "+" : "-"}
                           {currency} {Number(entry.amount).toFixed(2)}
                         </p>

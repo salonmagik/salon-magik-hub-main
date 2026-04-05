@@ -420,40 +420,45 @@ async function processWebhook(
 
                 if (owners && owners.length > 0) {
                   for (const owner of owners) {
-                    const { data: profile } = await supabase
-                      .from("profiles")
-                      .select("email")
-                      .eq("user_id", owner.user_id)
-                      .single();
-
-                    if (profile?.email) {
-                      try {
-                        await fetch("https://api.resend.com/emails", {
-                          method: "POST",
-                          headers: {
-                            Authorization: `Bearer ${resendApiKey}`,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({
-                            from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail! }),
-                            to: profile.email,
-                            subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
-                            html: `
-                          <h2>${isDeposit ? "Deposit Received" : "New Paid Booking"}</h2>
-                          <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
-                          <ul>
-                            <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
-                            <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
-                            <li><strong>Gateway:</strong> ${event.gateway}</li>
-                            <li><strong>Appointments:</strong> ${appointments.length}</li>
-                          </ul>
-                          <p>Please review the booking in your dashboard.</p>
-                        `,
-                          }),
-                        });
-                      } catch (ownerEmailError) {
-                        console.error("Error sending owner notification:", ownerEmailError);
+                    try {
+                      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(owner.user_id);
+                      
+                      if (authError) {
+                        console.error("Error fetching auth user:", authError);
+                        continue;
                       }
+
+                      if (authUser?.user?.email) {
+                        try {
+                          await fetch("https://api.resend.com/emails", {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${resendApiKey}`,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                              from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail! }),
+                              to: authUser.user.email,
+                              subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
+                              html: `
+                            <h2>${isDeposit ? "Deposit Received" : "New Paid Booking"}</h2>
+                            <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
+                            <ul>
+                              <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
+                              <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
+                              <li><strong>Gateway:</strong> ${event.gateway}</li>
+                              <li><strong>Appointments:</strong> ${appointments.length}</li>
+                            </ul>
+                            <p>Please review the booking in your dashboard.</p>
+                          `,
+                            }),
+                          });
+                        } catch (ownerEmailError) {
+                          console.error("Error sending owner notification:", ownerEmailError);
+                        }
+                      }
+                    } catch (err) {
+                      console.error("Error processing owner notification:", err);
                     }
                   }
                 }
@@ -751,41 +756,46 @@ async function processWebhook(
 
                 if (owners && owners.length > 0 && tenantDetails) {
                   for (const owner of owners) {
-                    const { data: profile } = await supabase
-                      .from("profiles")
-                      .select("email")
-                      .eq("user_id", owner.user_id)
-                      .single();
-
-                    if (profile?.email) {
-                      try {
-                        await fetch("https://api.resend.com/emails", {
-                          method: "POST",
-                          headers: {
-                            Authorization: `Bearer ${resendApiKey}`,
-                            "Content-Type": "application/json",
-                          },
-                          body: JSON.stringify({
-                            from: buildFromAddress({ mode: "salon", salonName: tenantDetails.name, fromEmail: resendFromEmail }),
-                            to: profile.email,
-                            subject: `Messaging Credits Purchased - ${tenantDetails.name}`,
-                            html: `
-                              <h2>Messaging Credits Purchase Confirmation</h2>
-                              <p>Your messaging credits purchase was successful!</p>
-                              <ul>
-                                <li><strong>Credits Purchased:</strong> ${credits} credits</li>
-                                <li><strong>Amount Paid:</strong> ${messagingTenant.currency} ${messagingAmount}</li>
-                                <li><strong>Payment Method:</strong> Paystack</li>
-                                <li><strong>Transaction Reference:</strong> ${reference}</li>
-                              </ul>
-                              <p>Your new credits have been added to your account and are ready to use for sending messages to your customers.</p>
-                              <p>Thank you for using SalonMagik!</p>
-                            `,
-                          }),
-                        });
-                      } catch (emailError) {
-                        console.error("Error sending credit purchase confirmation email:", emailError);
+                    try {
+                      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(owner.user_id);
+                      
+                      if (authError) {
+                        console.error("Error fetching auth user:", authError);
+                        continue;
                       }
+
+                      if (authUser?.user?.email) {
+                        try {
+                          await fetch("https://api.resend.com/emails", {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${resendApiKey}`,
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                              from: buildFromAddress({ mode: "salon", salonName: tenantDetails.name, fromEmail: resendFromEmail }),
+                              to: authUser.user.email,
+                              subject: `Messaging Credits Purchased - ${tenantDetails.name}`,
+                              html: `
+                                <h2>Messaging Credits Purchase Confirmation</h2>
+                                <p>Your messaging credits purchase was successful!</p>
+                                <ul>
+                                  <li><strong>Credits Purchased:</strong> ${credits} credits</li>
+                                  <li><strong>Amount Paid:</strong> ${messagingTenant.currency} ${messagingAmount}</li>
+                                  <li><strong>Payment Method:</strong> Paystack</li>
+                                  <li><strong>Transaction Reference:</strong> ${reference}</li>
+                                </ul>
+                                <p>Your new credits have been added to your account and are ready to use for sending messages to your customers.</p>
+                                <p>Thank you for using SalonMagik!</p>
+                              `,
+                            }),
+                          });
+                        } catch (emailError) {
+                          console.error("Error sending credit purchase confirmation email:", emailError);
+                        }
+                      }
+                    } catch (err) {
+                      console.error("Error processing owner email notification:", err);
                     }
                   }
                 }
