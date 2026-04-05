@@ -5,11 +5,14 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
+import { buildFromAddress } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature, x-paystack-signature",
 };
+
+const STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300;
 
 interface WebhookEvent {
   type: string;
@@ -35,23 +38,96 @@ function isValidUUID(value: string): boolean {
 }
 
 function parseAppointmentIds(raw: string | string[] | undefined, fallback?: string): string[] {
-  const values =
-    typeof raw === "string"
-      ? (() => {
-        try {
-          const parsed = JSON.parse(raw);
-          return Array.isArray(parsed) ? parsed : [raw];
-        } catch {
-          return [raw];
-        }
-      })()
-      : Array.isArray(raw)
-        ? raw
-        : fallback
-          ? [fallback]
-          : [];
+  let values: string[] = [];
+  
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      values = Array.isArray(parsed) ? parsed : [raw];
+    } catch {
+      values = [raw];
+    }
+  } else if (Array.isArray(raw)) {
+    values = raw;
+  } else if (fallback) {
+    values = [fallback];
+  }
 
   return values.filter((value): value is string => typeof value === "string" && isValidUUID(value));
+}
+
+function isPaymentSuccessEvent(eventType: string): boolean {
+  return eventType === "checkout.session.completed" 
+    || eventType === "payment_intent.succeeded" 
+    || eventType === "charge.success";
+}
+
+function isPaymentFailureEvent(eventType: string): boolean {
+  return eventType === "payment_intent.payment_failed" 
+    || eventType === "charge.failed";
+}
+
+function calculateProportionalAmount(
+  appointmentAmount: number,
+  totalAmount: number,
+  paymentAmount: number,
+  appointmentCount: number
+): number {
+  if (totalAmount > 0) {
+    return Number(((appointmentAmount / totalAmount) * paymentAmount).toFixed(2));
+  }
+  return Number((paymentAmount / appointmentCount).toFixed(2));
+}
+
+async function validateTenant(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  context: string
+): Promise<{ name: string | null; currency: string }> {
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("name, currency")
+    .eq("id", tenantId)
+    .single();
+
+  if (tenantError) {
+    console.error(`Error fetching tenant for ${context}:`, tenantError);
+    throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
+  }
+
+  if (!tenant) {
+    console.error(`Tenant not found for ${context}:`, tenantId);
+    throw new Error(`Tenant not found: ${tenantId}`);
+  }
+
+  if (!tenant.currency) {
+    console.error(`Tenant currency is not set for ${context}:`, tenantId);
+    throw new Error(`Tenant currency is not configured for tenant: ${tenantId}`);
+  }
+
+  return tenant;
+}
+
+async function validateWalletCurrency(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  expectedCurrency: string
+): Promise<void> {
+  const { data: walletCheck, error: walletError } = await supabase
+    .from("salon_wallets")
+    .select("currency")
+    .eq("tenant_id", tenantId)
+    .single();
+
+  if (walletError) {
+    console.error("Error fetching salon wallet for validation:", walletError);
+    throw new Error(`Failed to validate salon wallet: ${walletError.message}`);
+  }
+
+  if (walletCheck && walletCheck.currency !== expectedCurrency) {
+    console.error(`Currency mismatch: tenant ${tenantId} currency is ${expectedCurrency} but wallet currency is ${walletCheck.currency}`);
+    throw new Error(`Currency configuration error for tenant ${tenantId}: wallet currency ${walletCheck.currency} does not match tenant currency ${expectedCurrency}`);
+  }
 }
 
 // Verify Stripe webhook signature using HMAC SHA256
@@ -77,7 +153,7 @@ async function verifyStripeSignature(
 
     // Check timestamp is within 5 minutes
     const timestampAge = Math.floor(Date.now() / 1000) - parseInt(timestamp);
-    if (timestampAge > 300) {
+    if (timestampAge > STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS) {
       console.error("Stripe webhook timestamp too old");
       return false;
     }
@@ -139,6 +215,50 @@ async function verifyPaystackSignature(
   }
 }
 
+const sendTransactionAlerts = async (input: {
+  tenantId: string;
+  tenantName?: string | null;
+  currency?: string | null;
+  customerName?: string | null;
+  amount: number;
+  gateway: "stripe" | "paystack";
+  title: string;
+  description: string;
+  entityId?: string | null;
+  htmlContent: string;
+  supabase: ReturnType<typeof createClient>;
+  resendApiKey?: string | null;
+  resendFromEmail?: string | null;
+}) => {
+  const settings = await getTenantNotificationSettings(input.supabase, input.tenantId);
+
+  if (settings.in_app_transaction_alerts) {
+    await createTenantNotification(input.supabase, {
+      tenantId: input.tenantId,
+      type: "payment",
+      title: input.title,
+      description: input.description,
+      entityType: input.entityId ? "appointment" : "payment",
+      entityId: input.entityId ?? null,
+      urgent: true,
+    });
+  }
+
+  if (!settings.email_transaction_alerts) return;
+
+  const recipients = await getSalonRecipients(input.supabase, input.tenantId, ["owner", "manager"]);
+  if (recipients.length === 0) return;
+
+  await sendResendEmail({
+    resendApiKey: input.resendApiKey,
+    fromEmail: input.resendFromEmail!,
+    to: recipients.map((recipient) => recipient.email),
+    subject: input.title,
+    salonName: input.tenantName || undefined,
+    htmlContent: input.htmlContent,
+  });
+};
+
 // Process webhook asynchronously to avoid timeouts
 async function processWebhook(
   event: WebhookEvent,
@@ -151,11 +271,7 @@ async function processWebhook(
 
   try {
     // Handle payment success
-    if (
-      event.type === "checkout.session.completed" ||
-      event.type === "payment_intent.succeeded" ||
-      event.type === "charge.success"
-    ) {
+    if (isPaymentSuccessEvent(event.type)) {
       const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit } = event.data;
 
       let intentType = "appointment_payment";
@@ -196,23 +312,27 @@ async function processWebhook(
               );
               const paymentStatus = isDeposit ? "deposit_paid" : "fully_paid";
               const allocatedAmounts = appointments.map((entry, index) => {
-                const proportionalAmount =
-                  totalAppointmentAmount > 0
-                    ? Number((((Number(entry.total_amount || 0) / totalAppointmentAmount) * amount)).toFixed(2))
-                    : Number((amount / appointments.length).toFixed(2));
                 if (index === appointments.length - 1) {
                   const previousTotal = appointments
                     .slice(0, -1)
                     .reduce((sum, prior) => {
-                      const priorAmount =
-                        totalAppointmentAmount > 0
-                          ? Number((((Number(prior.total_amount || 0) / totalAppointmentAmount) * amount)).toFixed(2))
-                          : Number((amount / appointments.length).toFixed(2));
+                      const priorAmount = calculateProportionalAmount(
+                        Number(prior.total_amount || 0),
+                        totalAppointmentAmount,
+                        amount,
+                        appointments.length
+                      );
                       return sum + priorAmount;
                     }, 0);
                   return Number((amount - previousTotal).toFixed(2));
                 }
-                return proportionalAmount;
+                
+                return calculateProportionalAmount(
+                  Number(entry.total_amount || 0),
+                  totalAppointmentAmount,
+                  amount,
+                  appointments.length
+                );
               });
 
               for (const [index, entry] of appointments.entries()) {
@@ -237,26 +357,7 @@ async function processWebhook(
                 .eq("id", primaryAppointment.customer_id)
                 .single();
 
-              const { data: tenant, error: tenantError } = await supabase
-                .from("tenants")
-                .select("name, currency")
-                .eq("id", primaryAppointment.tenant_id)
-                .single();
-
-              if (tenantError) {
-                console.error("Error fetching tenant for appointment payment:", tenantError);
-                throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
-              }
-
-              if (!tenant) {
-                console.error("Tenant not found for appointment payment:", primaryAppointment.tenant_id);
-                throw new Error(`Tenant not found: ${primaryAppointment.tenant_id}`);
-              }
-
-              if (!tenant.currency) {
-                console.error("Tenant currency is not set:", primaryAppointment.tenant_id);
-                throw new Error(`Tenant currency is not configured for tenant: ${primaryAppointment.tenant_id}`);
-              }
+              const tenant = await validateTenant(supabase, primaryAppointment.tenant_id, "appointment payment");
 
               await supabase.from("transactions").insert({
                 tenant_id: primaryAppointment.tenant_id,
@@ -289,6 +390,9 @@ async function processWebhook(
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
                 `,
+                supabase,
+                resendApiKey,
+                resendFromEmail,
               });
 
               try {
@@ -397,21 +501,7 @@ async function processWebhook(
 
               try {
                 // Validate salon wallet currency matches tenant currency
-                const { data: walletCheck, error: walletError } = await supabase
-                  .from("salon_wallets")
-                  .select("currency")
-                  .eq("tenant_id", primaryAppointment.tenant_id)
-                  .single();
-
-                if (walletError) {
-                  console.error("Error fetching salon wallet for validation:", walletError);
-                  throw new Error(`Failed to validate salon wallet: ${walletError.message}`);
-                }
-
-                if (walletCheck && walletCheck.currency !== tenant.currency) {
-                  console.error(`Currency mismatch: tenant ${primaryAppointment.tenant_id} currency is ${tenant.currency} but wallet currency is ${walletCheck.currency}`);
-                  throw new Error(`Currency configuration error for tenant ${primaryAppointment.tenant_id}: wallet currency ${walletCheck.currency} does not match tenant currency ${tenant.currency}`);
-                }
+                await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
@@ -439,47 +529,13 @@ async function processWebhook(
 
         case "customer_purse_topup": {
           if (customerId && tenantId && amount) {
-            const { data: tenant, error: tenantError } = await supabase
-              .from("tenants")
-              .select("name, currency")
-              .eq("id", tenantId)
-              .single();
+            const tenant = await validateTenant(supabase, tenantId, "customer purse topup");
             const { data: customer } = await supabase
               .from("customers")
               .select("full_name")
               .eq("id", customerId)
               .eq("tenant_id", tenantId)
               .maybeSingle();
-
-            if (tenantError) {
-              console.error("Error fetching tenant for customer purse topup:", tenantError);
-              throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
-            }
-
-            if (!tenant) {
-              console.error("Tenant not found for customer purse topup:", tenantId);
-              throw new Error(`Tenant not found: ${tenantId}`);
-            }
-
-            if (!tenant.currency) {
-              console.error("Tenant currency is not set:", tenantId);
-              throw new Error(`Tenant currency is not configured for tenant: ${tenantId}`);
-            }
-
-            if (tenantError) {
-              console.error("Error fetching tenant for customer purse topup:", tenantError);
-              throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
-            }
-
-            if (!tenant) {
-              console.error("Tenant not found for customer purse topup:", tenantId);
-              throw new Error(`Tenant not found: ${tenantId}`);
-            }
-
-            if (!tenant.currency) {
-              console.error("Tenant currency is not set:", tenantId);
-              throw new Error(`Tenant currency is not configured for tenant: ${tenantId}`);
-            }
 
             try {
               const { error: creditError } = await supabase.rpc("credit_customer_purse", {
@@ -527,6 +583,9 @@ async function processWebhook(
                     <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
                     <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   `,
+                  supabase,
+                  resendApiKey,
+                  resendFromEmail,
                 });
 
                 console.log(`Customer purse credited: ${amount} ${tenant.currency} for customer ${customerId}`);
@@ -543,44 +602,11 @@ async function processWebhook(
         case "salon_purse_topup": {
           const salonTenantId = tenantId;
           if (salonTenantId && amount && paymentIntentId) {
-            const { data: salonTenant, error: tenantError } = await supabase
-              .from("tenants")
-              .select("currency")
-              .eq("id", salonTenantId)
-              .single();
-
-            if (tenantError) {
-              console.error("Error fetching tenant for salon purse topup:", tenantError);
-              throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
-            }
-
-            if (!salonTenant) {
-              console.error("Tenant not found for salon purse topup:", salonTenantId);
-              throw new Error(`Tenant not found: ${salonTenantId}`);
-            }
-
-            if (!salonTenant.currency) {
-              console.error("Tenant currency is not set:", salonTenantId);
-              throw new Error(`Tenant currency is not configured for tenant: ${salonTenantId}`);
-            }
+            const salonTenant = await validateTenant(supabase, salonTenantId, "salon purse topup");
 
             try {
               // Validate salon wallet currency matches tenant currency
-              const { data: walletCheck, error: walletError } = await supabase
-                .from("salon_wallets")
-                .select("currency")
-                .eq("tenant_id", salonTenantId)
-                .single();
-
-              if (walletError) {
-                console.error("Error fetching salon wallet for validation:", walletError);
-                throw new Error(`Failed to validate salon wallet: ${walletError.message}`);
-              }
-
-              if (walletCheck && walletCheck.currency !== salonTenant.currency) {
-                console.error(`Currency mismatch: tenant ${salonTenantId} currency is ${salonTenant.currency} but wallet currency is ${walletCheck.currency}`);
-                throw new Error(`Currency configuration error for tenant ${salonTenantId}: wallet currency ${walletCheck.currency} does not match tenant currency ${salonTenant.currency}`);
-              }
+              await validateWalletCurrency(supabase, salonTenantId, salonTenant.currency);
 
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: salonTenantId,
@@ -609,26 +635,7 @@ async function processWebhook(
 
         case "invoice_payment": {
           if (invoiceId && isValidUUID(invoiceId) && amount && tenantId) {
-            const { data: invoiceTenant, error: tenantError } = await supabase
-              .from("tenants")
-              .select("currency")
-              .eq("id", tenantId)
-              .single();
-
-            if (tenantError) {
-              console.error("Error fetching tenant for invoice payment:", tenantError);
-              throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
-            }
-
-            if (!invoiceTenant) {
-              console.error("Tenant not found for invoice payment:", tenantId);
-              throw new Error(`Tenant not found: ${tenantId}`);
-            }
-
-            if (!invoiceTenant.currency) {
-              console.error("Tenant currency is not set:", tenantId);
-              throw new Error(`Tenant currency is not configured for tenant: ${tenantId}`);
-            }
+            const invoiceTenant = await validateTenant(supabase, tenantId, "invoice payment");
 
             try {
               const { error: invoiceUpdateError } = await supabase
@@ -645,21 +652,7 @@ async function processWebhook(
               }
 
               // Validate salon wallet currency matches tenant currency
-              const { data: walletCheck, error: walletError } = await supabase
-                .from("salon_wallets")
-                .select("currency")
-                .eq("tenant_id", tenantId)
-                .single();
-
-              if (walletError) {
-                console.error("Error fetching salon wallet for validation:", walletError);
-                throw new Error(`Failed to validate salon wallet: ${walletError.message}`);
-              }
-
-              if (walletCheck && walletCheck.currency !== invoiceTenant.currency) {
-                console.error(`Currency mismatch: tenant ${tenantId} currency is ${invoiceTenant.currency} but wallet currency is ${walletCheck.currency}`);
-                throw new Error(`Currency configuration error for tenant ${tenantId}: wallet currency ${walletCheck.currency} does not match tenant currency ${invoiceTenant.currency}`);
-              }
+              await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: tenantId,
@@ -690,26 +683,7 @@ async function processWebhook(
           const messagingPaymentIntentId = paymentIntentId;
 
           if (credits && messagingTenantId && messagingAmount && messagingPaymentIntentId && isValidUUID(messagingPaymentIntentId)) {
-            const { data: messagingTenant, error: tenantError } = await supabase
-              .from("tenants")
-              .select("currency")
-              .eq("id", messagingTenantId)
-              .single();
-
-            if (tenantError) {
-              console.error("Error fetching tenant for messaging credit purchase:", tenantError);
-              throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
-            }
-
-            if (!messagingTenant) {
-              console.error("Tenant not found for messaging credit purchase:", messagingTenantId);
-              throw new Error(`Tenant not found: ${messagingTenantId}`);
-            }
-
-            if (!messagingTenant.currency) {
-              console.error("Tenant currency is not set:", messagingTenantId);
-              throw new Error(`Tenant currency is not configured for tenant: ${messagingTenantId}`);
-            }
+            const messagingTenant = await validateTenant(supabase, messagingTenantId, "messaging credit purchase");
 
             try {
               const { data: existingCredits } = await supabase
@@ -859,10 +833,7 @@ async function processWebhook(
     }
 
     // Handle payment failure
-    if (
-      event.type === "payment_intent.payment_failed" ||
-      event.type === "charge.failed"
-    ) {
+    if (isPaymentFailureEvent(event.type)) {
       const { paymentIntentId, tenantId, reference, amount } = event.data;
 
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
