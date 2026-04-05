@@ -67,13 +67,68 @@ function isDeliveryAddressComplete(address: BookerInfo["deliveryAddress"] | Gift
   return Boolean(address?.line1?.trim() && address?.city?.trim() && address?.country?.trim());
 }
 
+function formatErrorMessage(message: string, statusCode?: number): string {
+  // Common error patterns and their user-friendly replacements
+  const patterns = [
+    {
+      // Pattern: "Mama amks already uses this customer phone number."
+      regex: /(.+?)\s+already uses this customer phone number/i,
+      replacement: "This phone number is already registered with another customer. Please use a different phone number or contact the salon."
+    },
+    {
+      // Pattern: "Customer with email X already exists"
+      regex: /customer with email (.+?) already exists/i,
+      replacement: "An account with this email address already exists. Please sign in or use a different email."
+    },
+    {
+      // Pattern: "Phone number already in use"
+      regex: /phone number already in use/i,
+      replacement: "This phone number is already registered. Please use a different phone number or contact the salon."
+    },
+    {
+      // Pattern: "Email already in use"
+      regex: /email already in use/i,
+      replacement: "This email address is already registered. Please sign in or use a different email."
+    },
+  ];
+
+  // Try to match and replace known patterns first, regardless of status code
+  for (const pattern of patterns) {
+    if (pattern.regex.test(message)) {
+      return message.replace(pattern.regex, pattern.replacement);
+    }
+  }
+
+  // For 5xx errors (server errors) without a known pattern, show a generic message
+  if (statusCode && statusCode >= 500) {
+    return "We're experiencing technical difficulties. Please try again in a few moments or contact the salon directly.";
+  }
+
+  // For 4xx errors or errors without status codes, return cleaned up message
+  const cleaned = message.trim();
+  if (!cleaned) {
+    return statusCode && statusCode >= 400 && statusCode < 500
+      ? "Invalid request. Please check your information and try again."
+      : "Something went wrong. Please try again.";
+  }
+  
+  const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  return capitalized.endsWith('.') ? capitalized : `${capitalized}.`;
+}
+
 async function extractFunctionErrorMessage(error: unknown): Promise<string> {
   if (error instanceof FunctionsHttpError) {
     try {
       const response = error.context as Response | undefined;
+      const statusCode = response?.status;
       const payload = response ? await response.json() : null;
       if (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string") {
-        return payload.error;
+        return formatErrorMessage(payload.error, statusCode);
+      }
+      
+      // If no error message in payload, use status code to generate message
+      if (statusCode) {
+        return formatErrorMessage("", statusCode);
       }
     } catch {
       // Fall through to generic handling
@@ -81,7 +136,7 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string> {
   }
 
   if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message;
+    return formatErrorMessage(error.message);
   }
 
   return "Something went wrong. Please try again.";
@@ -121,7 +176,7 @@ export function BookingWizard({
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
-  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack");
+  const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack"); // default is paystack
   const [purseAmount, setPurseAmount] = useState(0);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("card");
   const [purseBalance, setPurseBalance] = useState(0);
@@ -248,8 +303,8 @@ export function BookingWizard({
         item.type === "service"
           ? catalogLookup.serviceMap.get(item.itemId)
           : item.type === "package"
-          ? catalogLookup.packageMap.get(item.itemId)
-          : catalogLookup.productMap.get(item.itemId);
+            ? catalogLookup.packageMap.get(item.itemId)
+            : catalogLookup.productMap.get(item.itemId);
 
       if (!source) return;
 
@@ -429,8 +484,8 @@ export function BookingWizard({
       body: { tenantId: salon.id },
       headers: accessToken
         ? {
-            Authorization: `Bearer ${accessToken}`,
-          }
+          Authorization: `Bearer ${accessToken}`,
+        }
         : undefined,
     });
 
@@ -608,9 +663,9 @@ export function BookingWizard({
     setBookerError("");
   };
 
-  const handleCreateBooking = async () => {
-    const { data, error } = await supabase.functions.invoke("create-public-booking", {
-      body: {
+  const handleCreateBooking = async (includePaymentSession = false, customPaymentAmount?: number) => {
+    try {
+      const requestBody: any = {
         tenantId: salon.id,
         customer: bookerInfo,
         items: buildSubmissionItems(),
@@ -620,11 +675,50 @@ export function BookingWizard({
         purseAmount,
         depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
         giftsBelongToSamePerson: meta.giftsBelongToSamePerson,
-      },
-    });
+      };
 
-    if (error) throw error;
-    return data as { reference?: string; appointmentId?: string; appointmentIds?: string[] };
+      // Add payment session creation parameters if needed
+      if (includePaymentSession) {
+        const paymentAmountToUse = customPaymentAmount ?? amountDueNow;
+        requestBody.createPaymentSession = true;
+        requestBody.paymentAmount = paymentAmountToUse;
+        requestBody.paymentCurrency = salon.currency;
+        requestBody.paymentDescription = paymentOption === "pay_deposit"
+          ? "Booking Deposit"
+          : paymentMode === "split"
+            ? `Booking Payment (${formatCurrency(splitPurseAmount, salon.currency)} from purse)`
+            : "Booking Payment";
+        requestBody.paymentIsDeposit = paymentOption === "pay_deposit";
+        requestBody.paymentSuccessUrl = window.location.href;
+        requestBody.paymentCancelUrl = window.location.href;
+        requestBody.preferredPaymentGateway = selectedGateway;
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-public-booking", {
+        body: requestBody,
+      });
+
+      if (error) {
+        console.error("Supabase function error:", error);
+        throw error;
+      }
+
+      if (data?.error) {
+        console.error("Function returned error:", data.error, data.details);
+        throw new Error(data.error);
+      }
+
+      return data as {
+        reference?: string;
+        appointmentId?: string;
+        appointmentIds?: string[];
+        checkoutUrl?: string;
+        paymentGateway?: string;
+      };
+    } catch (err) {
+      console.error("handleCreateBooking failed:", err);
+      throw err;
+    }
   };
 
   const handleProceedToPayment = () => {
@@ -644,11 +738,12 @@ export function BookingWizard({
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const booking = await handleCreateBooking();
-      const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
-      const primaryAppointmentId = appointmentIds[0];
-
+      // For purse-only payment, create booking without payment session
       if (paymentMode === "purse") {
+        const booking = await handleCreateBooking(false);
+        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
+        const primaryAppointmentId = appointmentIds[0];
+
         if (!customerId || !primaryAppointmentId) {
           throw new Error("Customer not found");
         }
@@ -684,12 +779,18 @@ export function BookingWizard({
         return;
       }
 
+      // For split payment, debit purse first, then create booking with payment session for remaining amount
       if (paymentMode === "split") {
+        const booking = await handleCreateBooking(true, splitCardAmount);
+        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
+        const primaryAppointmentId = appointmentIds[0];
+
         if (!customerId || !primaryAppointmentId) {
           throw new Error("Customer not found");
         }
 
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as never, {
+        // Debit purse amount
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
           p_appointment_id: primaryAppointmentId,
@@ -703,51 +804,25 @@ export function BookingWizard({
           throw new Error("Failed to debit purse balance: " + debitError.message);
         }
 
-        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
-          body: {
-            tenantId: salon.id,
-            appointmentId: primaryAppointmentId,
-            appointmentIds,
-            amount: splitCardAmount,
-            currency: salon.currency,
-            customerEmail: bookerInfo.email,
-            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
-            description: `Booking Payment (${formatCurrency(splitPurseAmount, salon.currency)} from purse)`,
-            isDeposit: false,
-            successUrl: window.location.href,
-            cancelUrl: window.location.href,
-            preferredGateway: selectedGateway,
-          },
-        });
-
-        if (paymentResponse.data?.checkoutUrl) {
-          window.location.href = paymentResponse.data.checkoutUrl;
+        // Redirect to payment gateway for card portion
+        if (booking.checkoutUrl) {
+          window.location.href = booking.checkoutUrl;
           return;
         }
+
+        throw new Error("Failed to create payment session");
       }
 
+      // For card payment, create booking with integrated payment session
       if (paymentMode === "card") {
-        const paymentResponse = await supabase.functions.invoke("create-payment-session", {
-          body: {
-            tenantId: salon.id,
-            appointmentId: primaryAppointmentId,
-            appointmentIds,
-            amount: amountDueNow,
-            currency: salon.currency,
-            customerEmail: bookerInfo.email,
-            customerName: `${bookerInfo.firstName} ${bookerInfo.lastName}`,
-            description: paymentOption === "pay_deposit" ? "Booking Deposit" : "Booking Payment",
-            isDeposit: paymentOption === "pay_deposit",
-            successUrl: window.location.href,
-            cancelUrl: window.location.href,
-            preferredGateway: selectedGateway,
-          },
-        });
+        const booking = await handleCreateBooking(true);
 
-        if (paymentResponse.data?.checkoutUrl) {
-          window.location.href = paymentResponse.data.checkoutUrl;
+        if (booking.checkoutUrl) {
+          window.location.href = booking.checkoutUrl;
           return;
         }
+
+        throw new Error("Failed to create payment session");
       }
     } catch (err: unknown) {
       console.error("Payment error:", err);
@@ -827,22 +902,20 @@ export function BookingWizard({
             {stepConfig.map((entry, index) => (
               <div key={entry.key} className="flex items-center gap-2 shrink-0">
                 <div
-                  className={`flex items-center gap-1.5 ${
-                    step === entry.key
-                      ? "text-primary"
-                      : currentStepIndex > index
+                  className={`flex items-center gap-1.5 ${step === entry.key
+                    ? "text-primary"
+                    : currentStepIndex > index
                       ? "text-muted-foreground"
                       : "text-muted-foreground/50"
-                  }`}
+                    }`}
                 >
                   <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${
-                      step === entry.key
-                        ? "text-white border-transparent"
-                        : currentStepIndex > index
+                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${step === entry.key
+                      ? "text-white border-transparent"
+                      : currentStepIndex > index
                         ? "border-muted-foreground bg-muted"
                         : "border-muted"
-                    }`}
+                      }`}
                     style={step === entry.key ? { backgroundColor: "var(--brand-color)" } : undefined}
                   >
                     {entry.icon}

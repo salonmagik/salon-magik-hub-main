@@ -6,17 +6,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/c
 import { Button } from "@ui/button";
 import { Loader2, Wallet, Plus, ArrowUpRight } from "lucide-react";
 import { WithdrawalDialog } from "./WithdrawalDialog";
+import { TopUpDialog } from "./TopUpDialog";
 
 export function SalonWalletCard() {
   const { currentTenant } = useAuth();
   const { wallet, isLoading, error, refetch } = useSalonWallet(currentTenant?.id);
   const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
+  const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
 
-  const currency = currentTenant?.currency || "NGN";
+  const currency = currentTenant?.currency;
 
   const handleTopUp = () => {
-    // TODO: Implement top-up functionality
-    console.log("Top up clicked");
+    setTopUpDialogOpen(true);
   };
 
   const handleWithdraw = () => {
@@ -25,6 +26,14 @@ export function SalonWalletCard() {
 
   const handleWithdrawalDialogClose = (open: boolean) => {
     setWithdrawalDialogOpen(open);
+    // Refetch wallet balance when dialog closes
+    if (!open) {
+      refetch();
+    }
+  };
+
+  const handleTopUpDialogClose = (open: boolean) => {
+    setTopUpDialogOpen(open);
     // Refetch wallet balance when dialog closes
     if (!open) {
       refetch();
@@ -57,10 +66,10 @@ export function SalonWalletCard() {
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Available Balance</p>
               <p className="text-4xl font-bold">
-                {formatCurrency(Number(wallet?.balance || 0), currency)}
+                {formatCurrency(Number(wallet?.balance || 0), wallet?.currency)}
               </p>
               <p className="text-xs text-muted-foreground">
-                Currency: {wallet?.currency || currency}
+                Currency: {wallet?.currency}
               </p>
             </div>
 
@@ -77,6 +86,12 @@ export function SalonWalletCard() {
           </div>
         )}
       </CardContent>
+
+      {/* Top Up Dialog */}
+      <TopUpDialog
+        open={topUpDialogOpen}
+        onOpenChange={handleTopUpDialogClose}
+      />
 
       {/* Withdrawal Dialog */}
       <WithdrawalDialog

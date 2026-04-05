@@ -39,29 +39,54 @@ export async function getSalonRecipients(
   const userIds = [...new Set(roleRows.map((row: { user_id: string }) => row.user_id).filter(Boolean))];
   if (userIds.length === 0) return [];
 
-  const { data: profiles, error: profileError } = await supabase
+  // Get profiles for full_name
+  const { data: profiles } = await supabase
     .from("profiles")
-    .select("user_id, email, first_name, last_name")
+    .select("user_id, full_name")
     .in("user_id", userIds);
 
-  if (profileError || !profiles?.length) {
-    if (profileError) console.error("Failed to fetch salon recipient profiles:", profileError);
-    return [];
-  }
+  const profileByUserId = new Map(
+    (profiles || []).map((p: { user_id: string; full_name: string }) => [p.user_id, p.full_name]),
+  );
 
   const roleByUserId = new Map(
     roleRows.map((row: { user_id: string; role: string }) => [row.user_id, row.role]),
   );
 
-  return profiles
-    .filter((profile: { email?: string | null }) => Boolean(profile.email))
-    .map((profile: { user_id: string; email: string; first_name?: string | null; last_name?: string | null }) => ({
-      userId: profile.user_id,
-      email: profile.email,
-      firstName: profile.first_name ?? null,
-      lastName: profile.last_name ?? null,
-      role: roleByUserId.get(profile.user_id),
-    }));
+  // Fetch emails from auth.users using the Supabase Admin API
+  const recipients: SalonRecipient[] = [];
+  
+  for (const userId of userIds) {
+    try {
+      // @ts-expect-error - admin property exists on service role client
+      const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId);
+      
+      if (authError) {
+        console.error(`Failed to fetch auth user ${userId}:`, authError);
+        continue;
+      }
+
+      if (authUser?.user?.email) {
+        const fullName = profileByUserId.get(userId);
+        // Parse first/last name from full_name
+        const nameParts = fullName?.split(" ") || [];
+        const firstName = nameParts[0] || null;
+        const lastName = nameParts.slice(1).join(" ") || null;
+
+        recipients.push({
+          userId,
+          email: authUser.user.email,
+          firstName,
+          lastName,
+          role: roleByUserId.get(userId),
+        });
+      }
+    } catch (err) {
+      console.error(`Exception fetching user ${userId}:`, err);
+    }
+  }
+
+  return recipients;
 }
 
 export async function getTenantNotificationSettings(

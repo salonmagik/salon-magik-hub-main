@@ -69,6 +69,15 @@ interface BookingRequest {
   purseAmount?: number;
   depositAmount?: number;
   giftsBelongToSamePerson?: boolean;
+  // Payment session creation fields (optional)
+  createPaymentSession?: boolean;
+  paymentAmount?: number;
+  paymentCurrency?: string;
+  paymentDescription?: string;
+  paymentIsDeposit?: boolean;
+  paymentSuccessUrl?: string;
+  paymentCancelUrl?: string;
+  preferredPaymentGateway?: "stripe" | "paystack";
 }
 
 function normalizeEmail(email?: string | null) {
@@ -144,7 +153,23 @@ serve(async (req) => {
       purseAmount = 0,
       depositAmount = 0,
       giftsBelongToSamePerson = true,
+      createPaymentSession = false,
+      paymentAmount,
+      paymentCurrency,
+      paymentDescription,
+      paymentIsDeposit = false,
+      paymentSuccessUrl,
+      paymentCancelUrl,
+      preferredPaymentGateway,
     } = body;
+
+    console.log("Payment session params:", { 
+      createPaymentSession, 
+      paymentAmount, 
+      paymentCurrency, 
+      preferredPaymentGateway,
+      paymentSuccessUrl 
+    });
 
     if (!tenantId || !customer.email || !customer.firstName || !customer.lastName || items.length === 0) {
       return new Response(
@@ -155,7 +180,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, allow_staff_selection, require_staff_selection, auto_assign_staff")
+      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff")
       .eq("id", tenantId)
       .eq("online_booking_enabled", true)
       .single();
@@ -178,17 +203,32 @@ serve(async (req) => {
 
     if (tenantCustomersError) throw tenantCustomersError;
 
-    const emailMatches = (tenantCustomers || []).filter(
-      (row) => row.status !== "deleted" && normalizedEmail && normalizeEmail(row.email) === normalizedEmail,
+    // Use AND matching: both email AND phone must match to consider it the same customer
+    // This prevents false matches when phone numbers are reused or shared
+    const matches = (tenantCustomers || []).filter(
+      (row) => {
+        if (row.status === "deleted") return false;
+        
+        // Both email and phone must be present in both the new booking and existing customer
+        const hasEmail = normalizedEmail && row.email;
+        const hasPhone = normalizedPhone && row.phone;
+        
+        // Skip if either email or phone is missing from either side
+        if (!hasEmail || !hasPhone) return false;
+        
+        // Both must match
+        const emailMatch = normalizeEmail(row.email) === normalizedEmail;
+        const phoneMatch = normalizePhone(row.phone) === normalizedPhone;
+        
+        return emailMatch && phoneMatch;
+      }
     );
-    const phoneMatches = (tenantCustomers || []).filter(
-      (row) => row.status !== "deleted" && normalizedPhone && normalizePhone(row.phone) === normalizedPhone,
-    );
-    const matchedIds = [...new Set([...emailMatches, ...phoneMatches].map((row) => row.id))];
+
+    const matchedIds = [...new Set(matches.map((row) => row.id))];
 
     if (matchedIds.length > 1) {
       return new Response(
-        JSON.stringify({ error: "A customer conflict was found for this email or phone number. Please contact the salon." }),
+        JSON.stringify({ error: "A customer conflict was found for this email and phone number. Please contact the salon." }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -473,12 +513,235 @@ serve(async (req) => {
       }
     }
 
+    // Optionally create payment session for online payment
+    let checkoutUrl: string | null = null;
+    let paymentGateway: string | null = null;
+
+    console.log("Checking payment session creation condition:", {
+      createPaymentSession,
+      paymentAmount,
+      check: createPaymentSession && paymentAmount && paymentAmount > 0
+    });
+
+    if (createPaymentSession && paymentAmount && paymentAmount > 0) {
+      try {
+        console.log("Creating payment session...");
+        const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+        const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+        
+        // Determine gateway based on preference or region
+        const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country || "") ||
+                            ["NGN", "GHS"].includes((paymentCurrency || tenant.currency || "USD").toUpperCase());
+        const usePaystack = preferredPaymentGateway 
+          ? preferredPaymentGateway === "paystack" 
+          : isPaystackRegion;
+
+        console.log("Payment gateway selection:", {
+          usePaystack,
+          isPaystackRegion,
+          preferredPaymentGateway,
+          hasPaystackKey: !!paystackSecretKey,
+          hasStripeKey: !!stripeSecretKey,
+          tenantCountry: tenant.country,
+          paymentCurrency: paymentCurrency || tenant.currency
+        });
+
+      // Validate that we have the required secret key for the selected gateway
+      if (usePaystack && !paystackSecretKey) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Paystack payment is not configured. Please contact the salon or try a different payment method." 
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (!usePaystack && !stripeSecretKey) {
+        console.error("Stripe key not configured but Stripe was selected");
+        return new Response(
+          JSON.stringify({ 
+            error: "Stripe payment is not configured. Please contact the salon or try a different payment method." 
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const primaryAppointmentId = createdAppointmentIds[0];
+      const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
+      
+      // Store payment intent
+      const { data: paymentIntent, error: paymentIntentError } = await supabase
+        .from("payment_intents")
+        .insert({
+          tenant_id: tenantId,
+          appointment_id: primaryAppointmentId,
+          amount: paymentAmount,
+          currency: (paymentCurrency || tenant.currency || "USD").toUpperCase(),
+          customer_email: customer.email,
+          customer_name: `${customer.firstName} ${customer.lastName}`,
+          gateway: usePaystack ? "paystack" : "stripe",
+          is_deposit: paymentIsDeposit,
+          status: "pending",
+          paystack_reference: usePaystack ? sessionReference : null,
+          intent_type: "appointment_payment",
+          metadata: {
+            appointment_ids: createdAppointmentIds,
+          },
+        })
+        .select("id")
+        .single();
+
+      if (paymentIntentError) {
+        console.error("Failed to create payment intent:", paymentIntentError);
+        return new Response(
+          JSON.stringify({ 
+            error: "Failed to create payment record. Please try again." 
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (usePaystack && paystackSecretKey) {
+        // Create Paystack transaction
+        const amountInMinorUnits = Math.round(paymentAmount * 100);
+        const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${paystackSecretKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: customer.email,
+            amount: amountInMinorUnits,
+            currency: (paymentCurrency || tenant.currency || "USD").toUpperCase(),
+            reference: sessionReference,
+            callback_url: paymentSuccessUrl,
+            metadata: {
+              appointment_id: primaryAppointmentId,
+              appointment_ids: createdAppointmentIds,
+              payment_intent_id: paymentIntent?.id,
+              tenant_id: tenantId,
+              is_deposit: paymentIsDeposit,
+              customer_name: `${customer.firstName} ${customer.lastName}`,
+              intent_type: "appointment_payment",
+            },
+          }),
+        });
+
+        const paystackData = await paystackResponse.json();
+        console.log("Paystack API response:", { 
+          ok: paystackResponse.ok, 
+          status: paystackResponse.status,
+          data: paystackData 
+        });
+        
+        if (paystackResponse.ok && paystackData.status) {
+          // Update payment intent with access code
+          if (paymentIntent?.id) {
+            await supabase
+              .from("payment_intents")
+              .update({
+                paystack_access_code: paystackData.data.access_code,
+                status: "processing",
+              })
+              .eq("id", paymentIntent.id);
+          }
+          checkoutUrl = paystackData.data.authorization_url;
+          paymentGateway = "paystack";
+        } else {
+          console.error("Paystack payment initialization failed:", paystackData);
+          
+          // Provide user-friendly error messages
+          let errorMessage = paystackData.message || "Unknown error";
+          if (paystackData.code === "unsupported_currency") {
+            errorMessage = `This payment method doesn't support ${(paymentCurrency || tenant.currency || "NGN").toUpperCase()}. Please contact the salon for alternative payment options.`;
+          }
+          
+          return new Response(
+            JSON.stringify({ 
+              error: errorMessage
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else if (!usePaystack && stripeSecretKey) {
+        // Create Stripe checkout session
+        const amountInCents = Math.round(paymentAmount * 100);
+        const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${stripeSecretKey}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            "mode": "payment",
+            "payment_method_types[0]": "card",
+            "line_items[0][price_data][currency]": (paymentCurrency || tenant.currency || "USD").toLowerCase(),
+            "line_items[0][price_data][product_data][name]": paymentDescription || "Booking Payment",
+            "line_items[0][price_data][unit_amount]": amountInCents.toString(),
+            "line_items[0][quantity]": "1",
+            "customer_email": customer.email,
+            "success_url": `${paymentSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`,
+            "cancel_url": paymentCancelUrl || paymentSuccessUrl || "",
+            "metadata[appointment_id]": primaryAppointmentId,
+            "metadata[appointment_ids]": JSON.stringify(createdAppointmentIds),
+            "metadata[payment_intent_id]": paymentIntent?.id || "",
+            "metadata[tenant_id]": tenantId,
+            "metadata[is_deposit]": paymentIsDeposit ? "true" : "false",
+            "metadata[intent_type]": "appointment_payment",
+          }),
+        });
+
+        const stripeData = await stripeResponse.json();
+        console.log("Stripe API response:", { 
+          ok: stripeResponse.ok, 
+          status: stripeResponse.status,
+          data: stripeData 
+        });
+        
+        if (stripeResponse.ok) {
+          // Update payment intent with session ID
+          if (paymentIntent?.id) {
+            await supabase
+              .from("payment_intents")
+              .update({
+                stripe_session_id: stripeData.id,
+                status: "processing",
+              })
+              .eq("id", paymentIntent.id);
+          }
+          checkoutUrl = stripeData.url;
+          paymentGateway = "stripe";
+        } else {
+          console.error("Stripe payment session creation failed:", stripeData);
+          return new Response(
+            JSON.stringify({ 
+              error: `Payment initialization failed: ${stripeData.error?.message || "Unknown error"}` 
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+      } catch (paymentError) {
+        console.error("Payment session creation error:", paymentError);
+        const errorMessage = paymentError instanceof Error ? paymentError.message : "Failed to create payment session";
+        return new Response(
+          JSON.stringify({ 
+            error: `Payment session creation failed: ${errorMessage}` 
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         reference,
         appointmentId: createdAppointmentIds[0],
         appointmentIds: createdAppointmentIds,
+        checkoutUrl,
+        paymentGateway,
         totals: {
           subtotal: totalAmount,
           voucherDiscount,
@@ -490,8 +753,15 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error processing booking:", error);
+    const errorMessage = error instanceof Error ? error.message : "Internal server error";
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error details:", { message: errorMessage, stack: errorStack });
+    
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ 
+        error: errorMessage,
+        details: errorStack 
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

@@ -33,6 +33,7 @@ const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
 const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
 const CalendarPage = lazy(() => import("./pages/salon/CalendarPage"));
 const EmailTemplatesPage = lazy(() => import("./pages/salon/EmailTemplatesPage"));
+const MessagingSettingsPage = lazy(() => import("./pages/salon/MessagingSettingsPage"));
 const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
 const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
@@ -289,6 +290,16 @@ const App = () => (
                 <ProtectedRoute>
                   <ModuleProtectedRoute module="settings">
                     <BranchSettingsPage />
+                  </ModuleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/salon/settings/messaging"
+              element={
+                <ProtectedRoute>
+                  <ModuleProtectedRoute module="settings">
+                    <MessagingSettingsPage />
                   </ModuleProtectedRoute>
                 </ProtectedRoute>
               }

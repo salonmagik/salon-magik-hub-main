@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     // Fetch customer email
     const { data: customer, error: customerError } = await supabase
       .from("customers")
-      .select("email, first_name, last_name")
+      .select("email, full_name")
       .eq("id", invoice.customer_id)
       .single();
 
@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
     }
 
     const customerEmail = customer.email;
-    const customerName = `${customer.first_name || ""} ${customer.last_name || ""}`.trim();
+    const customerName = customer.full_name || "";
 
     // Create payment intent with intent_type='invoice_payment'
     const reference = `invoice_${invoiceId.substring(0, 8)}_${Date.now()}`;
