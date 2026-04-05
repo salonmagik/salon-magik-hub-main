@@ -203,17 +203,32 @@ serve(async (req) => {
 
     if (tenantCustomersError) throw tenantCustomersError;
 
-    const emailMatches = (tenantCustomers || []).filter(
-      (row) => row.status !== "deleted" && normalizedEmail && normalizeEmail(row.email) === normalizedEmail,
+    // Use AND matching: both email AND phone must match to consider it the same customer
+    // This prevents false matches when phone numbers are reused or shared
+    const matches = (tenantCustomers || []).filter(
+      (row) => {
+        if (row.status === "deleted") return false;
+        
+        // Both email and phone must be present in both the new booking and existing customer
+        const hasEmail = normalizedEmail && row.email;
+        const hasPhone = normalizedPhone && row.phone;
+        
+        // Skip if either email or phone is missing from either side
+        if (!hasEmail || !hasPhone) return false;
+        
+        // Both must match
+        const emailMatch = normalizeEmail(row.email) === normalizedEmail;
+        const phoneMatch = normalizePhone(row.phone) === normalizedPhone;
+        
+        return emailMatch && phoneMatch;
+      }
     );
-    const phoneMatches = (tenantCustomers || []).filter(
-      (row) => row.status !== "deleted" && normalizedPhone && normalizePhone(row.phone) === normalizedPhone,
-    );
-    const matchedIds = [...new Set([...emailMatches, ...phoneMatches].map((row) => row.id))];
+
+    const matchedIds = [...new Set(matches.map((row) => row.id))];
 
     if (matchedIds.length > 1) {
       return new Response(
-        JSON.stringify({ error: "A customer conflict was found for this email or phone number. Please contact the salon." }),
+        JSON.stringify({ error: "A customer conflict was found for this email and phone number. Please contact the salon." }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
