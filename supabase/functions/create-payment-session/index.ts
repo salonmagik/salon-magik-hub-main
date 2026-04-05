@@ -24,6 +24,13 @@ interface PaymentRequest {
   credits?: number;
 }
 
+function jsonResponse(payload: Record<string, unknown>, status: number) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -35,6 +42,7 @@ Deno.serve(async (req) => {
     const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const authHeader = req.headers.get("Authorization");
 
     const body: PaymentRequest = await req.json();
     const {
@@ -55,15 +63,74 @@ Deno.serve(async (req) => {
       credits,
     } = body;
 
-    // Validate required fields
     if (!tenantId || !amount || !customerEmail) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Missing required fields" }, 400);
     }
 
-    // Fetch tenant to determine payment gateway
+    const requiresAuthenticatedCaller = intentType !== "appointment_payment";
+    let authenticatedUserId: string | null = null;
+
+    if (requiresAuthenticatedCaller) {
+      if (!authHeader) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
+      const accessToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+      if (!accessToken) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser(accessToken);
+
+      if (authError || !user) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
+      authenticatedUserId = user.id;
+
+      if (intentType === "customer_purse_topup") {
+        if (!customerId) {
+          return jsonResponse({ error: "Customer is required" }, 400);
+        }
+
+        const { data: customerRecord, error: customerLookupError } = await supabase
+          .from("customers")
+          .select("id, user_id")
+          .eq("id", customerId)
+          .eq("tenant_id", tenantId)
+          .maybeSingle();
+
+        if (customerLookupError) {
+          console.error("Error validating customer purse topup:", customerLookupError);
+          return jsonResponse({ error: "Failed to validate customer" }, 500);
+        }
+
+        if (!customerRecord || customerRecord.user_id !== authenticatedUserId) {
+          return jsonResponse({ error: "Unauthorized" }, 401);
+        }
+      } else {
+        const { data: userRole, error: roleError } = await supabase
+          .from("user_roles")
+          .select("id, role, is_active")
+          .eq("tenant_id", tenantId)
+          .eq("user_id", authenticatedUserId)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (roleError) {
+          console.error("Error validating payment initiator role:", roleError);
+          return jsonResponse({ error: "Failed to validate payment initiator" }, 500);
+        }
+
+        if (!userRole) {
+          return jsonResponse({ error: "Unauthorized" }, 401);
+        }
+      }
+    }
+
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
       .select("id, country, currency")
@@ -71,24 +138,17 @@ Deno.serve(async (req) => {
       .single();
 
     if (tenantError || !tenant) {
-      return new Response(
-        JSON.stringify({ error: "Tenant not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return jsonResponse({ error: "Tenant not found" }, 404);
     }
 
-    // Determine gateway based on user preference or region
-    // User preference takes precedence, otherwise auto-detect
     const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
                         ["NGN", "GHS"].includes(currency.toUpperCase());
     const usePaystack = preferredGateway 
       ? preferredGateway === "paystack" 
       : isPaystackRegion;
 
-    // Generate unique reference
     const reference = `sm_${appointmentId?.substring(0, 8) || Date.now().toString().substring(0, 8)}_${Date.now()}`;
 
-    // Store payment intent in database
     const { data: paymentIntent, error: intentError } = await supabase
       .from("payment_intents")
       .insert({
@@ -118,15 +178,10 @@ Deno.serve(async (req) => {
     let checkoutUrl: string;
 
     if (usePaystack) {
-      // Paystack Integration
       if (!paystackSecretKey) {
-        return new Response(
-          JSON.stringify({ error: "Paystack not configured" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "Paystack not configured" }, 500);
       }
 
-      // Convert amount to minor units (kobo for NGN, pesewas for GHS)
       const amountInMinorUnits = Math.round(amount * 100);
 
       const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -161,13 +216,9 @@ Deno.serve(async (req) => {
 
       if (!paystackResponse.ok || !paystackData.status) {
         console.error("Paystack error:", paystackData);
-        return new Response(
-          JSON.stringify({ error: paystackData.message || "Failed to initialize Paystack transaction" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: paystackData.message || "Failed to initialize Paystack transaction" }, 400);
       }
 
-      // Update payment intent with Paystack access code
       if (paymentIntent?.id) {
         await supabase
           .from("payment_intents")
@@ -180,18 +231,12 @@ Deno.serve(async (req) => {
 
       checkoutUrl = paystackData.data.authorization_url;
     } else {
-      // Stripe Integration
       if (!stripeSecretKey) {
-        return new Response(
-          JSON.stringify({ error: "Stripe not configured" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: "Stripe not configured" }, 500);
       }
 
-      // Convert amount to cents
       const amountInCents = Math.round(amount * 100);
 
-      // Create Stripe Checkout Session
       const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
         method: "POST",
         headers: {
@@ -225,13 +270,9 @@ Deno.serve(async (req) => {
 
       if (!stripeResponse.ok) {
         console.error("Stripe error:", stripeData);
-        return new Response(
-          JSON.stringify({ error: stripeData.error?.message || "Failed to create Stripe session" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return jsonResponse({ error: stripeData.error?.message || "Failed to create Stripe session" }, 400);
       }
 
-      // Update payment intent with Stripe session ID
       if (paymentIntent?.id) {
         await supabase
           .from("payment_intents")
@@ -245,20 +286,15 @@ Deno.serve(async (req) => {
       checkoutUrl = stripeData.url;
     }
 
-    return new Response(
-      JSON.stringify({
-        checkoutUrl,
-        gateway: usePaystack ? "paystack" : "stripe",
-        paymentIntentId: paymentIntent?.id,
-        reference: usePaystack ? reference : undefined,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({
+      checkoutUrl,
+      paymentUrl: checkoutUrl,
+      gateway: usePaystack ? "paystack" : "stripe",
+      paymentIntentId: paymentIntent?.id,
+      reference: usePaystack ? reference : undefined,
+    }, 200);
   } catch (error) {
     console.error("Error creating payment session:", error);
-    return new Response(
-      JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return jsonResponse({ error: "Internal server error" }, 500);
   }
 });

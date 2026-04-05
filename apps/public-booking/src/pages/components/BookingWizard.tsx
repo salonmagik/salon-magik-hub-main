@@ -694,7 +694,7 @@ export function BookingWizard({
         }
 
         const amountToDebit = amountDueNow;
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as never, {
           p_tenant_id: salon.id,
           p_customer_id: customerId,
           p_appointment_id: primaryAppointmentId,

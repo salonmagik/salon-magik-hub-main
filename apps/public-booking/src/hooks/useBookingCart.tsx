@@ -186,14 +186,16 @@ export function BookingCartProvider({
 }) {
   const activeScope = scopeKey || "default";
   const persisted = useMemo(() => getStorage()[activeScope], [activeScope]);
+  const persistedItems = persisted?.items;
+  const persistedMeta = persisted?.meta;
 
-  const [items, setItems] = useState<CartItem[]>(() => (persisted?.items || []).map(normalizeCartItem));
-  const [meta, setMeta] = useState<BookingCartMeta>(persisted?.meta || DEFAULT_META);
+  const [items, setItems] = useState<CartItem[]>(() => (persistedItems || []).map(normalizeCartItem));
+  const [meta, setMeta] = useState<BookingCartMeta>(persistedMeta || DEFAULT_META);
 
   useEffect(() => {
-    setItems((persisted?.items || []).map(normalizeCartItem));
-    setMeta(persisted?.meta || DEFAULT_META);
-  }, [persisted?.expiresAt, activeScope]);
+    setItems((persistedItems || []).map(normalizeCartItem));
+    setMeta(persistedMeta || DEFAULT_META);
+  }, [persisted?.expiresAt, persistedItems, persistedMeta]);
 
   useEffect(() => {
     if (items.length === 0 && meta.giftsBelongToSamePerson === DEFAULT_META.giftsBelongToSamePerson) {
@@ -363,6 +365,8 @@ export function BookingCartProvider({
   );
 }
 
+// This file exports both the provider component and its companion hook by design.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useBookingCart() {
   const context = useContext(BookingCartContext);
   if (!context) {

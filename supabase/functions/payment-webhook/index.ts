@@ -1,5 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import {
+  createTenantNotification,
+  getSalonRecipients,
+  getTenantNotificationSettings,
+  sendResendEmail,
+} from "../_shared/salon-notifications.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -257,23 +262,33 @@ async function processWebhook(
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
                 appointment_id: primaryAppointment.id,
-                type: "payment",
+                type: isDeposit ? "deposit" : "payment",
                 amount,
-                payment_method: "card",
-                gateway: event.gateway,
-                gateway_reference: reference,
+                currency: tenant?.currency || "USD",
+                method: "card",
+                provider: event.gateway,
+                provider_reference: reference,
                 status: "completed",
                 ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
               });
 
-              await supabase.from("notifications").insert({
-                tenant_id: primaryAppointment.tenant_id,
-                type: "payment",
-                title: isDeposit ? "New Deposit Paid" : "New Paid Booking",
-                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant.currency} ${amount} for their booking`,
-                entity_type: "appointment",
-                entity_id: primaryAppointment.id,
-                urgent: true,
+              await sendTransactionAlerts({
+                tenantId: primaryAppointment.tenant_id,
+                tenantName: tenant?.name,
+                currency: tenant?.currency,
+                customerName: customer?.full_name,
+                amount,
+                gateway: event.gateway,
+                title: `${isDeposit ? "Deposit received" : "Payment received"} at ${tenant?.name || "your salon"}`,
+                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking.`,
+                entityId: primaryAppointment.id,
+                htmlContent: `
+                  <h2 style="color: #2563EB; margin-bottom: 16px;">${isDeposit ? "Deposit received" : "Payment received"}</h2>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
+                `,
               });
 
               try {
@@ -426,9 +441,30 @@ async function processWebhook(
           if (customerId && tenantId && amount) {
             const { data: tenant, error: tenantError } = await supabase
               .from("tenants")
-              .select("currency")
+              .select("name, currency")
               .eq("id", tenantId)
               .single();
+            const { data: customer } = await supabase
+              .from("customers")
+              .select("full_name")
+              .eq("id", customerId)
+              .eq("tenant_id", tenantId)
+              .maybeSingle();
+
+            if (tenantError) {
+              console.error("Error fetching tenant for customer purse topup:", tenantError);
+              throw new Error(`Failed to fetch tenant data: ${tenantError.message}`);
+            }
+
+            if (!tenant) {
+              console.error("Tenant not found for customer purse topup:", tenantId);
+              throw new Error(`Tenant not found: ${tenantId}`);
+            }
+
+            if (!tenant.currency) {
+              console.error("Tenant currency is not set:", tenantId);
+              throw new Error(`Tenant currency is not configured for tenant: ${tenantId}`);
+            }
 
             if (tenantError) {
               console.error("Error fetching tenant for customer purse topup:", tenantError);
@@ -458,6 +494,41 @@ async function processWebhook(
               if (creditError) {
                 console.error("Error crediting customer purse:", creditError);
               } else {
+                const { error: transactionError } = await supabase.from("transactions").insert({
+                  tenant_id: tenantId,
+                  customer_id: customerId,
+                  appointment_id: null,
+                  type: "purse_topup",
+                  amount,
+                  currency: tenant?.currency || "USD",
+                  method: "card",
+                  provider: event.gateway,
+                  provider_reference: reference,
+                  status: "completed",
+                  ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
+                });
+
+                if (transactionError) {
+                  console.error("Error recording purse topup transaction:", transactionError);
+                }
+
+                await sendTransactionAlerts({
+                  tenantId,
+                  tenantName: tenant?.name,
+                  currency: tenant?.currency,
+                  customerName: customer?.full_name,
+                  amount,
+                  gateway: event.gateway,
+                  title: `Purse top-up received at ${tenant?.name || "your salon"}`,
+                  description: `${customer?.full_name || "A customer"} added ${tenant?.currency || ""} ${amount} to their purse.`,
+                  htmlContent: `
+                    <h2 style="color: #2563EB; margin-bottom: 16px;">Purse top-up received</h2>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
+                  `,
+                });
+
                 console.log(`Customer purse credited: ${amount} ${tenant.currency} for customer ${customerId}`);
               }
             } catch (purseError) {
