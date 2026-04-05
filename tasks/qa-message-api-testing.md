@@ -12,14 +12,14 @@ This checklist covers manual QA testing for the complete messaging infrastructur
 ## Pre-requisites
 
 ### Environment Setup
-- [ ] Supabase project configured with all migrations deployed
-- [ ] Edge functions deployed to Supabase
-- [ ] Environment variables configured:
-  - [ ] `TERMII_API_KEY` set in Supabase Edge Functions
-  - [ ] `RESEND_API_KEY` set in Supabase Edge Functions
-- [ ] Test tenant created with valid data
-- [ ] Test customers created with:
-  - [ ] Valid email addresses
+- [x] Supabase project configured with all migrations deployed
+- [x] Edge functions deployed to Supabase
+- [x] Environment variables configured:
+  - [x] `TERMII_API_KEY` set in Supabase Edge Functions
+  - [x] `RESEND_API_KEY` set in Supabase Edge Functions
+- [x] Test tenant created with valid data
+- [x] Test customers created with:
+  - [x] Valid email addresses
   - [ ] Valid phone numbers (international format, e.g., 2347880234567)
 - [ ] Salon wallet funded with sufficient balance for testing
 
