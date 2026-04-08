@@ -6,7 +6,7 @@
  * API Documentation: https://developers.termii.com/
  */
 
-const TERMII_API_BASE = "https://api.ng.termii.com/api";
+const TERMII_API_BASE = "https://v3.api.termii.com";
 const TERMII_API_KEY = Deno.env.get("TERMII_API_KEY");
 
 if (!TERMII_API_KEY) {
@@ -78,22 +78,22 @@ export interface TermiiBulkSMSResponse {
 export function validatePhoneNumber(phone: string): string {
   // Remove all non-digit characters except +
   let cleaned = phone.replace(/[^\d+]/g, "");
-  
+
   // Remove + prefix if present (Termii expects no +)
   if (cleaned.startsWith("+")) {
     cleaned = cleaned.substring(1);
   }
-  
+
   // Validate: should be 10-15 digits
   if (cleaned.length < 10 || cleaned.length > 15) {
     throw new Error(`Invalid phone number format: ${phone}. Expected international format without + (e.g., 2347880234567)`);
   }
-  
+
   // Validate: should start with country code (first digit 1-9)
   if (!/^[1-9]/.test(cleaned)) {
     throw new Error(`Invalid phone number: ${phone}. Must start with country code (e.g., 234 for Nigeria)`);
   }
-  
+
   return cleaned;
 }
 
@@ -103,11 +103,11 @@ export function validatePhoneNumber(phone: string): string {
  */
 export function validateSMSContent(message: string, type: "plain" | "unicode"): void {
   const maxLength = type === "plain" ? 160 : 70;
-  
+
   if (message.length > maxLength) {
     throw new Error(`SMS message too long. ${type} messages are limited to ${maxLength} characters (current: ${message.length})`);
   }
-  
+
   if (message.trim().length === 0) {
     throw new Error("SMS message cannot be empty");
   }
@@ -128,7 +128,7 @@ export function detectMessageType(message: string): "plain" | "unicode" {
 async function handleTermiiError(response: Response, operation: string): Promise<never> {
   const status = response.status;
   let errorMessage = `Termii API error during ${operation}`;
-  
+
   try {
     const errorData = await response.json();
     errorMessage = errorData.message || errorData.error || errorMessage;
@@ -136,7 +136,7 @@ async function handleTermiiError(response: Response, operation: string): Promise
     // If JSON parsing fails, use generic error
     errorMessage = `${errorMessage}: ${response.statusText}`;
   }
-  
+
   switch (status) {
     case 400:
       throw new Error(`Bad Request: ${errorMessage}. Check phone number format and request parameters.`);
@@ -185,20 +185,20 @@ export async function sendTermiiSMS(
   options: Omit<TermiiSMSRequest, "api_key"> & { api_key?: string }
 ): Promise<TermiiResponse> {
   const apiKey = options.api_key || TERMII_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error("TERMII_API_KEY not configured. Set TERMII_API_KEY environment variable.");
   }
-  
+
   // Validate phone number
   const phoneNumber = validatePhoneNumber(options.to);
-  
+
   // Auto-detect message type if not specified
   const messageType = options.type || detectMessageType(options.sms);
-  
+
   // Validate SMS content length
   validateSMSContent(options.sms, messageType);
-  
+
   // Build request body
   const requestBody: TermiiSMSRequest = {
     to: phoneNumber,
@@ -208,7 +208,7 @@ export async function sendTermiiSMS(
     channel: options.channel || "generic",
     api_key: apiKey,
   };
-  
+
   // Add optional media fields
   if (options.media_url) {
     requestBody.media_url = options.media_url;
@@ -216,7 +216,7 @@ export async function sendTermiiSMS(
   if (options.media_caption) {
     requestBody.media_caption = options.media_caption;
   }
-  
+
   // Send request to Termii API
   const response = await fetch(`${TERMII_API_BASE}/sms/send`, {
     method: "POST",
@@ -225,18 +225,18 @@ export async function sendTermiiSMS(
     },
     body: JSON.stringify(requestBody),
   });
-  
+
   if (!response.ok) {
     await handleTermiiError(response, "sendTermiiSMS");
   }
-  
+
   const data: TermiiResponse = await response.json();
-  
+
   // Check for API-level errors (Termii returns 200 even for some errors)
   if (data.error || (data.code && data.code !== "ok")) {
     throw new Error(`Termii API error: ${data.error || data.message}`);
   }
-  
+
   return data;
 }
 
@@ -271,23 +271,23 @@ export async function sendTermiiWhatsAppTemplate(
   options: Omit<TermiiWhatsAppTemplateRequest, "api_key"> & { api_key?: string }
 ): Promise<TermiiResponse> {
   const apiKey = options.api_key || TERMII_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error("TERMII_API_KEY not configured. Set TERMII_API_KEY environment variable.");
   }
-  
+
   // Validate required fields
   if (!options.device_id) {
     throw new Error("device_id is required for WhatsApp messages. Configure Termii device ID in tenant settings.");
   }
-  
+
   if (!options.template_id) {
     throw new Error("template_id is required for WhatsApp messages. WhatsApp requires pre-approved templates.");
   }
-  
+
   // Validate phone number
   const phoneNumber = validatePhoneNumber(options.phone_number);
-  
+
   // Build request body
   const requestBody: TermiiWhatsAppTemplateRequest = {
     api_key: apiKey,
@@ -296,12 +296,12 @@ export async function sendTermiiWhatsAppTemplate(
     template_id: options.template_id,
     data: options.data || {},
   };
-  
+
   // Add optional media
   if (options.media) {
     requestBody.media = options.media;
   }
-  
+
   // Send request to Termii WhatsApp API
   const response = await fetch(`${TERMII_API_BASE}/send/template`, {
     method: "POST",
@@ -310,13 +310,13 @@ export async function sendTermiiWhatsAppTemplate(
     },
     body: JSON.stringify(requestBody),
   });
-  
+
   if (!response.ok) {
     await handleTermiiError(response, "sendTermiiWhatsAppTemplate");
   }
-  
+
   const data: TermiiResponse = await response.json();
-  
+
   // Check for API-level errors
   if (data.error) {
     // Provide helpful error messages for common WhatsApp errors
@@ -328,7 +328,7 @@ export async function sendTermiiWhatsAppTemplate(
     }
     throw new Error(`Termii WhatsApp error: ${data.error}`);
   }
-  
+
   return data;
 }
 
@@ -358,20 +358,20 @@ export async function sendTermiiBulkSMS(
   options: Omit<TermiiBulkSMSRequest, "api_key"> & { api_key?: string }
 ): Promise<TermiiBulkSMSResponse> {
   const apiKey = options.api_key || TERMII_API_KEY;
-  
+
   if (!apiKey) {
     throw new Error("TERMII_API_KEY not configured. Set TERMII_API_KEY environment variable.");
   }
-  
+
   // Validate recipient count (Termii max: 100)
   if (!options.to || options.to.length === 0) {
     throw new Error("Recipient list cannot be empty");
   }
-  
+
   if (options.to.length > 100) {
     throw new Error(`Too many recipients: ${options.to.length}. Termii bulk SMS supports max 100 recipients per request. Split into smaller batches.`);
   }
-  
+
   // Validate and format all phone numbers
   const phoneNumbers = options.to.map(phone => {
     try {
@@ -380,13 +380,13 @@ export async function sendTermiiBulkSMS(
       throw new Error(`Invalid phone number in bulk list: ${phone}. ${error instanceof Error ? error.message : ""}`);
     }
   });
-  
+
   // Auto-detect message type if not specified
   const messageType = options.type || detectMessageType(options.sms);
-  
+
   // Validate SMS content length
   validateSMSContent(options.sms, messageType);
-  
+
   // Build request body
   const requestBody: TermiiBulkSMSRequest = {
     to: phoneNumbers,
@@ -396,7 +396,7 @@ export async function sendTermiiBulkSMS(
     channel: options.channel || "generic",
     api_key: apiKey,
   };
-  
+
   // Send request to Termii Bulk SMS API
   const response = await fetch(`${TERMII_API_BASE}/sms/send/bulk`, {
     method: "POST",
@@ -405,17 +405,17 @@ export async function sendTermiiBulkSMS(
     },
     body: JSON.stringify(requestBody),
   });
-  
+
   if (!response.ok) {
     await handleTermiiError(response, "sendTermiiBulkSMS");
   }
-  
+
   const data: TermiiBulkSMSResponse = await response.json();
-  
+
   // Check for API-level errors
   if (data.code !== "ok") {
     throw new Error(`Termii bulk SMS error: ${data.message || "Unknown error"}`);
   }
-  
+
   return data;
 }

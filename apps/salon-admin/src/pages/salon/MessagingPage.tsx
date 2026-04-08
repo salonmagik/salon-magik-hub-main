@@ -5,6 +5,7 @@ import { Badge } from "@ui/badge";
 import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Skeleton } from "@ui/skeleton";
+import { Switch } from "@ui/switch";
 import {
   MessageSquare,
   Mail,
@@ -16,10 +17,15 @@ import {
   Clock,
   TrendingUp,
   Plus,
+  Users,
+  Edit,
 } from "lucide-react";
 import { useMessagingCredits } from "@/hooks/useMessagingCredits";
 import { useEmailTemplates, templateTypeLabels, type TemplateType } from "@/hooks/useEmailTemplates";
+import { useSMSTemplates, smsTemplateTypeLabels, type SMSTemplateType } from "@/hooks/useSMSTemplates";
 import { EditTemplateDialog } from "@/components/dialogs/EditTemplateDialog";
+import { EditSMSTemplateDialog } from "@/components/messaging/EditSMSTemplateDialog";
+import { BulkSendSMSDialog } from "@/components/messaging/BulkSendSMSDialog";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
 
@@ -33,8 +39,11 @@ const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
 export default function MessagingPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [editingTemplate, setEditingTemplate] = useState<TemplateType | null>(null);
+  const [editingSMSTemplate, setEditingSMSTemplate] = useState<SMSTemplateType | null>(null);
+  const [bulkSendDialogOpen, setBulkSendDialogOpen] = useState(false);
   const { credits, messageLogs, stats, isLoading } = useMessagingCredits();
   const { templates, isLoading: templatesLoading, refetch: refetchTemplates } = useEmailTemplates();
+  const { templates: smsTemplates, isLoading: smsTemplatesLoading, refetch: refetchSMSTemplates, upsertTemplate: upsertSMSTemplate } = useSMSTemplates();
 
   return (
     <SalonSidebar>
@@ -170,14 +179,98 @@ export default function MessagingPage() {
             {/* SMS Templates Tab */}
             <TabsContent value="sms-templates" className="mt-0">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">SMS Templates</CardTitle>
-                  <CardDescription>
-                    Customize the SMS messages sent to your customers
-                  </CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">SMS Templates</CardTitle>
+                    <CardDescription>
+                      Manage SMS templates with auto-send triggers and bulk sending
+                    </CardDescription>
+                  </div>
+                  <Button onClick={() => setBulkSendDialogOpen(true)} className="gap-2">
+                    <Users className="w-4 h-4" />
+                    Bulk Send Custom SMS
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  *TODO: Add template*
+                  {smsTemplatesLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                          <Skeleton className="h-5 w-40" />
+                          <Skeleton className="h-8 w-16" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(Object.keys(smsTemplateTypeLabels) as SMSTemplateType[]).map((type) => {
+                        const template = smsTemplates.find((t) => t.template_type === type);
+                        return (
+                          <div
+                            key={type}
+                            className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <Phone className="w-4 h-4 text-purple-500" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium">{smsTemplateTypeLabels[type]}</p>
+                                {template && (
+                                  <p className="text-sm text-muted-foreground truncate max-w-[400px]">
+                                    {template.message}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {template ? (
+                                <>
+                                  {template.auto_send_enabled && (
+                                    <Badge variant="secondary" className="text-xs bg-success/10 text-success">
+                                      Auto-send ON
+                                    </Badge>
+                                  )}
+                                  {template.is_active ? (
+                                    <Badge variant="secondary" className="text-xs bg-primary/10 text-primary">
+                                      Active
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Inactive
+                                    </Badge>
+                                  )}
+                                </>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">
+                                  Default
+                                </Badge>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingSMSTemplate(type)}
+                                className="gap-2"
+                              >
+                                <Edit className="w-3 h-3" />
+                                Edit
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  // TODO: Open manual send dialog with this template
+                                  setBulkSendDialogOpen(true);
+                                }}
+                                className="gap-2"
+                              >
+                                <Send className="w-3 h-3" />
+                                Bulk Send
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -352,6 +445,24 @@ export default function MessagingPage() {
             }
           }}
           templateType={editingTemplate}
+        />
+
+        {/* SMS Template Edit Dialog */}
+        <EditSMSTemplateDialog
+          open={!!editingSMSTemplate}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingSMSTemplate(null);
+              refetchSMSTemplates();
+            }
+          }}
+          templateType={editingSMSTemplate}
+        />
+
+        {/* Bulk Send SMS Dialog */}
+        <BulkSendSMSDialog
+          open={bulkSendDialogOpen}
+          onOpenChange={setBulkSendDialogOpen}
         />
       </div>
     </SalonSidebar>
