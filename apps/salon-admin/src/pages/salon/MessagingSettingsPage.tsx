@@ -64,14 +64,14 @@ export default function MessagingSettingsPage() {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [deviceId, setDeviceId] = useState("");
   const [senderId, setSenderId] = useState("");
-  
+
   const [creditBalance, setCreditBalance] = useState(0);
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
   const [creditPurchases, setCreditPurchases] = useState<CreditPurchase[]>([]);
   const [isLoadingPurchases, setIsLoadingPurchases] = useState(true);
   const [recentMessages, setRecentMessages] = useState<MessageLog[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
-  
+
   const [creditPurchaseDialogOpen, setCreditPurchaseDialogOpen] = useState(false);
 
   const currency = currentTenant?.currency || "USD";
@@ -79,7 +79,7 @@ export default function MessagingSettingsPage() {
   // Fetch Termii configuration
   useEffect(() => {
     if (!currentTenant?.id) return;
-    
+
     const fetchConfig = async () => {
       try {
         const { data, error } = await supabase
@@ -111,7 +111,7 @@ export default function MessagingSettingsPage() {
   // Fetch credit balance
   useEffect(() => {
     if (!currentTenant?.id) return;
-    
+
     const fetchBalance = async () => {
       try {
         const { data, error } = await supabase
@@ -121,7 +121,7 @@ export default function MessagingSettingsPage() {
           .single();
 
         if (error && error.code !== "PGRST116") throw error; // PGRST116 = no rows
-        
+
         setCreditBalance((data as CreditBalance)?.balance || 0);
       } catch (err) {
         console.error("Error fetching credit balance:", err);
@@ -136,7 +136,7 @@ export default function MessagingSettingsPage() {
   // Fetch recent credit purchases
   useEffect(() => {
     if (!currentTenant?.id) return;
-    
+
     const fetchPurchases = async () => {
       try {
         const { data, error } = await supabase
@@ -147,7 +147,7 @@ export default function MessagingSettingsPage() {
           .limit(10);
 
         if (error) throw error;
-        
+
         setCreditPurchases(data as CreditPurchase[]);
       } catch (err) {
         console.error("Error fetching credit purchases:", err);
@@ -162,7 +162,7 @@ export default function MessagingSettingsPage() {
   // Fetch recent message logs
   useEffect(() => {
     if (!currentTenant?.id) return;
-    
+
     const fetchMessages = async () => {
       try {
         const { data, error } = await supabase
@@ -174,7 +174,7 @@ export default function MessagingSettingsPage() {
           .limit(20);
 
         if (error) throw error;
-        
+
         setRecentMessages(data as MessageLog[]);
       } catch (err) {
         console.error("Error fetching recent messages:", err);
@@ -264,8 +264,8 @@ export default function MessagingSettingsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SalonSidebar />
-      
+      {/* <SalonSidebar /> */}
+
       <div className="lg:pl-64">
         <div className="p-4 lg:p-8">
           {/* Breadcrumb */}

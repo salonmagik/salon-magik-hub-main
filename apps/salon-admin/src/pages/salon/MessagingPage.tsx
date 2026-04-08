@@ -116,7 +116,9 @@ export default function MessagingPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="templates">Templates</TabsTrigger>
+            <TabsTrigger value="sms-templates">SMS Templates</TabsTrigger>
+            <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
+            <TabsTrigger value="whatsapp-templates">Whatsapp Templates</TabsTrigger>
             <TabsTrigger value="history">Delivery History</TabsTrigger>
           </TabsList>
 
@@ -165,8 +167,23 @@ export default function MessagingPage() {
               </Card>
             </TabsContent>
 
-            {/* Templates Tab */}
-            <TabsContent value="templates" className="mt-0">
+            {/* SMS Templates Tab */}
+            <TabsContent value="sms-templates" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">SMS Templates</CardTitle>
+                  <CardDescription>
+                    Customize the SMS messages sent to your customers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  *TODO: Add template*
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Email Templates Tab */}
+            <TabsContent value="email-templates" className="mt-0">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Email Templates</CardTitle>
@@ -223,6 +240,21 @@ export default function MessagingPage() {
                       })}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Whatsapp Templates Tab */}
+            <TabsContent value="whatsapp-templates" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Whatsapp Templates</CardTitle>
+                  <CardDescription>
+                    Customize the Whatsapp messages sent to your customers
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  *TODO: Add template*
                 </CardContent>
               </Card>
             </TabsContent>
