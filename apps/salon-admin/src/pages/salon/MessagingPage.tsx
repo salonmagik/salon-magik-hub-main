@@ -26,10 +26,14 @@ import {
 import { useMessagingCredits } from "@/hooks/useMessagingCredits";
 import { useEmailTemplates, templateTypeLabels, type TemplateType } from "@/hooks/useEmailTemplates";
 import { useSMSTemplates, smsTemplateTypeLabels, type SMSTemplateType } from "@/hooks/useSMSTemplates";
+import { useWhatsAppTemplates, whatsappTemplateTypeLabels, type WhatsAppTemplateType } from "@/hooks/useWhatsAppTemplates";
 import { EditTemplateDialog } from "@/components/dialogs/EditTemplateDialog";
 import { EditSMSTemplateDialog } from "@/components/messaging/EditSMSTemplateDialog";
+import { EditWhatsAppTemplateDialog } from "@/components/messaging/EditWhatsAppTemplateDialog";
 import { BulkSendSMSDialog } from "@/components/messaging/BulkSendSMSDialog";
+import { BulkSendWhatsAppDialog } from "@/components/messaging/BulkSendWhatsAppDialog";
 import { SetSenderNameDialog } from "@/components/messaging/SetSenderNameDialog";
+import { ConfigureWhatsAppDialog } from "@/components/messaging/ConfigureWhatsAppDialog";
 import { CreditPurchaseDialog } from "@/components/billing/CreditPurchaseDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -49,16 +53,21 @@ export default function MessagingPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [editingTemplate, setEditingTemplate] = useState<TemplateType | null>(null);
   const [editingSMSTemplate, setEditingSMSTemplate] = useState<SMSTemplateType | null>(null);
+  const [editingWhatsAppTemplate, setEditingWhatsAppTemplate] = useState<WhatsAppTemplateType | null>(null);
   const [bulkSendDialogOpen, setBulkSendDialogOpen] = useState(false);
+  const [bulkSendWhatsAppDialogOpen, setBulkSendWhatsAppDialogOpen] = useState(false);
   const [senderNameDialogOpen, setSenderNameDialogOpen] = useState(false);
+  const [whatsappDeviceConfigOpen, setWhatsappDeviceConfigOpen] = useState(false);
   const [creditPurchaseDialogOpen, setCreditPurchaseDialogOpen] = useState(false);
   const [senderIdStatus, setSenderIdStatus] = useState<"not_set" | "pending" | "approved" | "rejected">("not_set");
   const [senderId, setSenderId] = useState<string | null>(null);
+  const [whatsappDeviceId, setWhatsappDeviceId] = useState<string | null>(null);
   const [isLoadingSenderConfig, setIsLoadingSenderConfig] = useState(true);
   
   const { credits, messageLogs, stats, isLoading, refetch: refetchCredits } = useMessagingCredits();
   const { templates, isLoading: templatesLoading, refetch: refetchTemplates } = useEmailTemplates();
   const { templates: smsTemplates, isLoading: smsTemplatesLoading, refetch: refetchSMSTemplates, upsertTemplate: upsertSMSTemplate } = useSMSTemplates();
+  const { templates: whatsappTemplates, isLoading: whatsappTemplatesLoading, refetch: refetchWhatsAppTemplates } = useWhatsAppTemplates();
 
   // Handle URL params for payment success/failure
   useEffect(() => {
@@ -91,7 +100,7 @@ export default function MessagingPage() {
       try {
         const { data, error } = await supabase
           .from("tenants")
-          .select("termii_sender_id, termii_sender_id_status")
+          .select("termii_sender_id, termii_sender_id_status, termii_device_id")
           .eq("id", currentTenant.id)
           .single();
 
@@ -99,6 +108,7 @@ export default function MessagingPage() {
 
         setSenderId(data.termii_sender_id);
         setSenderIdStatus(data.termii_sender_id_status || "not_set");
+        setWhatsappDeviceId(data.termii_device_id || null);
       } catch (err) {
         console.error("Error fetching sender config:", err);
       } finally {
@@ -116,7 +126,7 @@ export default function MessagingPage() {
     try {
       const { data, error } = await supabase
         .from("tenants")
-        .select("termii_sender_id, termii_sender_id_status")
+        .select("termii_sender_id, termii_sender_id_status, termii_device_id")
         .eq("id", currentTenant.id)
         .single();
 
@@ -124,6 +134,7 @@ export default function MessagingPage() {
 
       setSenderId(data.termii_sender_id);
       setSenderIdStatus(data.termii_sender_id_status || "not_set");
+      setWhatsappDeviceId(data.termii_device_id || null);
     } catch (err) {
       console.error("Error refetching sender config:", err);
     }
@@ -514,14 +525,140 @@ export default function MessagingPage() {
             {/* Whatsapp Templates Tab */}
             <TabsContent value="whatsapp-templates" className="mt-0">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Whatsapp Templates</CardTitle>
-                  <CardDescription>
-                    Customize the Whatsapp messages sent to your customers
-                  </CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">WhatsApp Templates</CardTitle>
+                    <CardDescription>
+                      Manage WhatsApp templates with auto-send triggers and bulk sending
+                    </CardDescription>
+                    {/* Device ID Display */}
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">WhatsApp Device:</span>
+                      <Badge variant={whatsappDeviceId ? "default" : "secondary"} className="text-xs">
+                        {whatsappDeviceId || "Not configured"}
+                      </Badge>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={() => setWhatsappDeviceConfigOpen(true)}
+                      >
+                        {whatsappDeviceId ? "Change" : "Configure"}
+                      </Button>
+                    </div>
+                  </div>
+                  <Button 
+                    onClick={() => setBulkSendWhatsAppDialogOpen(true)} 
+                    className="gap-2"
+                    disabled={!whatsappDeviceId}
+                  >
+                    <Users className="w-4 h-4" />
+                    Bulk Send WhatsApp
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  *TODO: Add template*
+                  {/* Device ID Alert */}
+                  {!whatsappDeviceId && (
+                    <Alert className="mb-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <div className="flex items-center justify-between">
+                          <span>
+                            Configure your WhatsApp device to enable messaging.
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setWhatsappDeviceConfigOpen(true)}
+                            className="ml-4"
+                          >
+                            Configure Now
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Templates List */}
+                  {whatsappTemplatesLoading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                          <Skeleton className="h-5 w-40" />
+                          <Skeleton className="h-8 w-16" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(Object.keys(whatsappTemplateTypeLabels) as WhatsAppTemplateType[]).map((type) => {
+                        const template = whatsappTemplates.find((t) => t.template_name === type);
+                        return (
+                          <div
+                            key={type}
+                            className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <MessageSquare className="w-4 h-4 text-green-500" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium">{whatsappTemplateTypeLabels[type]}</p>
+                                {template && template.template_content && (
+                                  <p className="text-sm text-muted-foreground truncate max-w-[400px]">
+                                    {template.template_content}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {template ? (
+                                <>
+                                  {template.status === "approved" ? (
+                                    <Badge variant="secondary" className="text-xs bg-success/10 text-success">
+                                      Approved
+                                    </Badge>
+                                  ) : template.status === "pending" ? (
+                                    <Badge variant="secondary" className="text-xs bg-warning-bg text-warning-foreground">
+                                      Pending
+                                    </Badge>
+                                  ) : template.status === "rejected" ? (
+                                    <Badge variant="destructive" className="text-xs">
+                                      Rejected
+                                    </Badge>
+                                  ) : null}
+                                </>
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">
+                                  Default
+                                </Badge>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingWhatsAppTemplate(type)}
+                                className="gap-2"
+                                disabled={!whatsappDeviceId}
+                              >
+                                <Edit className="w-3 h-3" />
+                                Edit
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => {
+                                  setBulkSendWhatsAppDialogOpen(true);
+                                }}
+                                className="gap-2"
+                                disabled={!whatsappDeviceId || template?.status !== "approved"}
+                              >
+                                <Send className="w-3 h-3" />
+                                Bulk Send
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -633,10 +770,28 @@ export default function MessagingPage() {
           templateType={editingSMSTemplate}
         />
 
+        {/* WhatsApp Template Edit Dialog */}
+        <EditWhatsAppTemplateDialog
+          open={!!editingWhatsAppTemplate}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingWhatsAppTemplate(null);
+              refetchWhatsAppTemplates();
+            }
+          }}
+          templateType={editingWhatsAppTemplate}
+        />
+
         {/* Bulk Send SMS Dialog */}
         <BulkSendSMSDialog
           open={bulkSendDialogOpen}
           onOpenChange={setBulkSendDialogOpen}
+        />
+
+        {/* Bulk Send WhatsApp Dialog */}
+        <BulkSendWhatsAppDialog
+          open={bulkSendWhatsAppDialogOpen}
+          onOpenChange={setBulkSendWhatsAppDialogOpen}
         />
 
         {/* Set Sender Name Dialog */}
@@ -646,6 +801,14 @@ export default function MessagingPage() {
           currentSenderId={senderId}
           currentStatus={senderIdStatus}
           onStatusChange={handleSenderConfigChange}
+        />
+
+        {/* Configure WhatsApp Dialog */}
+        <ConfigureWhatsAppDialog
+          open={whatsappDeviceConfigOpen}
+          onOpenChange={setWhatsappDeviceConfigOpen}
+          currentDeviceId={whatsappDeviceId}
+          onDeviceIdChange={handleSenderConfigChange}
         />
 
         {/* Credit Purchase Dialog */}
