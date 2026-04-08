@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
         p_tenant_id: tenantId,
         p_entry_type: "salon_purse_debit_credit_purchase",
         p_reference_type: "credit_purchase",
-        p_reference_id: purchase.id.toString(),
+        p_reference_id: purchase.id,
         p_amount: amount,
         p_currency: wallet.currency,
         p_idempotency_key: idempotencyKey,
@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        credits: creditPackage.credits,
+        credits,
         newBalance,
         amountDebited: amount,
         currency: wallet.currency,
