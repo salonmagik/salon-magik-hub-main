@@ -8,7 +8,8 @@ const TERMII_API_KEY = Deno.env.get("TERMII_API_KEY");
 const TERMII_API_BASE = Deno.env.get("TERMII_API_BASE");
 
 // Default sample message for all Termii sender ID requests
-const DEFAULT_SAMPLE_MESSAGE = "Your appointment is confirmed. We look forward to seeing you!";
+// const DEFAULT_SAMPLE_MESSAGE = "Your appointment is confirmed. We look forward to seeing you!";
+const DEFAULT_SAMPLE_MESSAGE = "Hi Ambrose, your appointment at Salon Magik Beauty Spot is confirmed for 9th April at 11:45AM. See you soon!"
 
 // Country code to country name mapping for Termii
 const COUNTRY_MAPPING: Record<string, string> = {
