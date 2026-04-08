@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -6,6 +6,7 @@ import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Skeleton } from "@ui/skeleton";
 import { Switch } from "@ui/switch";
+import { Alert, AlertDescription } from "@ui/alert";
 import {
   MessageSquare,
   Mail,
@@ -19,6 +20,8 @@ import {
   Plus,
   Users,
   Edit,
+  Settings,
+  AlertCircle,
 } from "lucide-react";
 import { useMessagingCredits } from "@/hooks/useMessagingCredits";
 import { useEmailTemplates, templateTypeLabels, type TemplateType } from "@/hooks/useEmailTemplates";
@@ -26,6 +29,9 @@ import { useSMSTemplates, smsTemplateTypeLabels, type SMSTemplateType } from "@/
 import { EditTemplateDialog } from "@/components/dialogs/EditTemplateDialog";
 import { EditSMSTemplateDialog } from "@/components/messaging/EditSMSTemplateDialog";
 import { BulkSendSMSDialog } from "@/components/messaging/BulkSendSMSDialog";
+import { SetSenderNameDialog } from "@/components/messaging/SetSenderNameDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
 
@@ -37,13 +43,92 @@ const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
 };
 
 export default function MessagingPage() {
+  const { currentTenant } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [editingTemplate, setEditingTemplate] = useState<TemplateType | null>(null);
   const [editingSMSTemplate, setEditingSMSTemplate] = useState<SMSTemplateType | null>(null);
   const [bulkSendDialogOpen, setBulkSendDialogOpen] = useState(false);
+  const [senderNameDialogOpen, setSenderNameDialogOpen] = useState(false);
+  const [senderIdStatus, setSenderIdStatus] = useState<"not_set" | "pending" | "approved" | "rejected">("not_set");
+  const [senderId, setSenderId] = useState<string | null>(null);
+  const [isLoadingSenderConfig, setIsLoadingSenderConfig] = useState(true);
+  
   const { credits, messageLogs, stats, isLoading } = useMessagingCredits();
   const { templates, isLoading: templatesLoading, refetch: refetchTemplates } = useEmailTemplates();
   const { templates: smsTemplates, isLoading: smsTemplatesLoading, refetch: refetchSMSTemplates, upsertTemplate: upsertSMSTemplate } = useSMSTemplates();
+
+  // Fetch sender ID configuration
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+
+    const fetchSenderConfig = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("tenants")
+          .select("termii_sender_id, termii_sender_id_status")
+          .eq("id", currentTenant.id)
+          .single();
+
+        if (error) throw error;
+
+        setSenderId(data.termii_sender_id);
+        setSenderIdStatus(data.termii_sender_id_status || "not_set");
+      } catch (err) {
+        console.error("Error fetching sender config:", err);
+      } finally {
+        setIsLoadingSenderConfig(false);
+      }
+    };
+
+    fetchSenderConfig();
+  }, [currentTenant?.id]);
+
+  const handleSenderConfigChange = async () => {
+    // Refetch sender config after changes
+    if (!currentTenant?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("termii_sender_id, termii_sender_id_status")
+        .eq("id", currentTenant.id)
+        .single();
+
+      if (error) throw error;
+
+      setSenderId(data.termii_sender_id);
+      setSenderIdStatus(data.termii_sender_id_status || "not_set");
+    } catch (err) {
+      console.error("Error refetching sender config:", err);
+    }
+  };
+
+  const getSenderButtonText = () => {
+    if (isLoadingSenderConfig) return "Loading...";
+    switch (senderIdStatus) {
+      case "approved":
+        return "Sender Name (Approved)";
+      case "pending":
+        return "Sender Name (Pending)";
+      case "rejected":
+        return "Sender Name (Rejected)";
+      default:
+        return "Configure Sender Name";
+    }
+  };
+
+  const getSenderButtonVariant = () => {
+    switch (senderIdStatus) {
+      case "approved":
+        return "default" as const;
+      case "pending":
+        return "secondary" as const;
+      case "rejected":
+        return "destructive" as const;
+      default:
+        return "outline" as const;
+    }
+  };
 
   return (
     <SalonSidebar>
@@ -56,11 +141,44 @@ export default function MessagingPage() {
               Manage communication credits, templates, and delivery history.
             </p>
           </div>
-          <Button className="gap-2">
-            <Plus className="w-4 h-4" />
-            Buy Credits
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={getSenderButtonVariant()}
+              onClick={() => setSenderNameDialogOpen(true)}
+              className="gap-2"
+              disabled={isLoadingSenderConfig}
+            >
+              <Settings className="w-4 h-4" />
+              {getSenderButtonText()}
+            </Button>
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              Buy Credits
+            </Button>
+          </div>
         </div>
+
+        {/* Sender ID Alert */}
+        {!isLoadingSenderConfig && senderIdStatus === "not_set" && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <div className="flex items-center justify-between">
+                <span>
+                  Configure your SMS Sender Name to personalize your messages. Messages will use the default "SalonMagik" sender until configured.
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSenderNameDialogOpen(true)}
+                  className="ml-4"
+                >
+                  Configure Now
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Credits Overview */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -185,6 +303,36 @@ export default function MessagingPage() {
                     <CardDescription>
                       Manage SMS templates with auto-send triggers and bulk sending
                     </CardDescription>
+                    {/* Sender Name Display */}
+                    {!isLoadingSenderConfig && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">SMS from:</span>
+                        <Badge
+                          variant={senderIdStatus === "approved" ? "default" : "secondary"}
+                          className={cn(
+                            "text-xs",
+                            senderIdStatus === "approved" && "bg-success/10 text-success",
+                            senderIdStatus === "pending" && "bg-warning-bg text-warning-foreground",
+                            senderIdStatus === "rejected" && "bg-destructive/10 text-destructive"
+                          )}
+                        >
+                          {senderId || "SalonMagik"} {senderIdStatus === "not_set" && "(Default)"}
+                          {senderIdStatus === "pending" && " (Pending)"}
+                          {senderIdStatus === "approved" && " (Approved)"}
+                          {senderIdStatus === "rejected" && " (Rejected)"}
+                        </Badge>
+                        {senderIdStatus !== "approved" && (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => setSenderNameDialogOpen(true)}
+                          >
+                            Configure
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <Button onClick={() => setBulkSendDialogOpen(true)} className="gap-2">
                     <Users className="w-4 h-4" />
@@ -463,6 +611,15 @@ export default function MessagingPage() {
         <BulkSendSMSDialog
           open={bulkSendDialogOpen}
           onOpenChange={setBulkSendDialogOpen}
+        />
+
+        {/* Set Sender Name Dialog */}
+        <SetSenderNameDialog
+          open={senderNameDialogOpen}
+          onOpenChange={setSenderNameDialogOpen}
+          currentSenderId={senderId}
+          currentStatus={senderIdStatus}
+          onStatusChange={handleSenderConfigChange}
         />
       </div>
     </SalonSidebar>

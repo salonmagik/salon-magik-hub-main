@@ -6,7 +6,7 @@
  * API Documentation: https://developers.termii.com/
  */
 
-const TERMII_API_BASE = "https://v3.api.termii.com";
+const TERMII_API_BASE = Deno.env.get("TERMII_API_BASE");
 const TERMII_API_KEY = Deno.env.get("TERMII_API_KEY");
 
 if (!TERMII_API_KEY) {
