@@ -96,9 +96,9 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    if (channel === "whatsapp" && !templateId) {
+    if (channel === "whatsapp" && !templateId && !message) {
       return new Response(
-        JSON.stringify({ error: "templateId is required for whatsapp channel" }),
+        JSON.stringify({ error: "Either templateId or message is required for whatsapp channel" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -275,7 +275,8 @@ const handler = async (req: Request): Promise<Response> => {
         supabase,
         customers,
         createdMessages,
-        template!,
+        message,
+        template,
         templateVariables,
         tenant,
         creditsPerMessage,
@@ -595,7 +596,8 @@ async function processBulkWhatsApp(
   supabase: any,
   customers: any[],
   createdMessages: any[],
-  template: any,
+  message: string | null,
+  template: any | null,
   templateVariables: Record<string, string> | undefined,
   tenant: any,
   creditsPerMessage: number,
@@ -629,7 +631,7 @@ async function processBulkWhatsApp(
     return;
   }
 
-  // Convert template variables to numeric keys
+  // Convert template variables to numeric keys (for template mode)
   const templateData: Record<string, string> = {};
   if (templateVariables && typeof templateVariables === "object") {
     Object.keys(templateVariables).forEach((key, index) => {
@@ -651,13 +653,29 @@ async function processBulkWhatsApp(
           throw new Error("Customer has no phone number");
         }
 
-        // Send WhatsApp message via Termii
-        const whatsappResponse = await sendTermiiWhatsAppTemplate({
-          device_id: deviceId,
-          phone_number: customer.phone,
-          template_id: template.template_id,
-          data: templateData,
-        });
+        let whatsappResponse;
+
+        // Choose sending method based on whether template or custom message
+        if (template && template.template_id) {
+          // TEMPLATE MODE: Use pre-approved template
+          whatsappResponse = await sendTermiiWhatsAppTemplate({
+            device_id: deviceId,
+            phone_number: customer.phone,
+            template_id: template.template_id,
+            data: templateData,
+          });
+        } else if (message) {
+          // CONVERSATIONAL MODE: Send custom message using SMS endpoint with channel="whatsapp"
+          whatsappResponse = await sendTermiiSMS({
+            to: customer.phone,
+            from: deviceId, // Use device_id as "from" for WhatsApp
+            sms: message,
+            type: "plain",
+            channel: "whatsapp",
+          });
+        } else {
+          throw new Error("Either template or message is required for WhatsApp");
+        }
 
         // Success - deduct credits
         result.sent++;

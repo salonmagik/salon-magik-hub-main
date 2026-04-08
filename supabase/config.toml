@@ -108,3 +108,15 @@ verify_jwt = false
 
 [functions.send-daily-digest]
 verify_jwt = false
+
+[functions.manage-termii-sender-id]
+verify_jwt = false
+
+[functions.send-bulk-message]
+verify_jwt = false
+
+[functions.purchase-credits-from-purse]
+verify_jwt = false
+
+[functions.manage-whatsapp-templates]
+verify_jwt = false
