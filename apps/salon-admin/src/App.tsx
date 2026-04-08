@@ -38,6 +38,7 @@ const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
 const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
 const SalonsOverviewPage = lazy(() => import("./pages/salon/SalonsOverviewPage"));
+const InvoicePaymentLinkDemo = lazy(() => import("./pages/salon/InvoicePaymentLinkDemo"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // BackOffice (separate app; routes removed here)
@@ -163,17 +164,17 @@ const App = () => (
               }
             />
 
-            {/* Protected Salon Platform Routes */}
-            <Route
-              path="/salon"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="dashboard">
-                    <SalonDashboard />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
+              {/* Invoice Payment Link Demo */}
+              <Route
+                path="/salon/invoice-payment-demo"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="dashboard">
+                      <InvoicePaymentLinkDemo />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
             <Route
               path="/salon/appointments"
               element={
