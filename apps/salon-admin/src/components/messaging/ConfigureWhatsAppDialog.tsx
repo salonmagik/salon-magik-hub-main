@@ -54,10 +54,15 @@ export function ConfigureWhatsAppDialog({
 
     setIsSubmitting(true);
     try {
+      if (!currentTenant?.id) {
+        toast({ title: "Error", description: "No active tenant", variant: "destructive" });
+        return;
+      }
+
       const { error } = await supabase
         .from("tenants")
-        .update({ termii_device_id: deviceId.trim() })
-        .eq("id", currentTenant?.id!);
+        .update({ contact_phone: deviceId.trim() })
+        .eq("id", currentTenant.id);
 
       if (error) {
         console.error("Error updating device ID:", error);

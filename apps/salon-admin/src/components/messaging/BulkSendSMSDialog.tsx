@@ -29,7 +29,7 @@ import {
   Filter,
   X,
 } from "lucide-react";
-import { useCustomers, type CustomerWithVisitSummary } from "@/hooks/useCustomers";
+import { useCustomers } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
@@ -43,6 +43,14 @@ interface BulkSendSMSDialogProps {
 }
 
 type FilterType = "all" | "has_phone" | "no_recent_visit" | "vip";
+type CustomerListItem = {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  last_visit_at: string | null;
+  visit_count: number;
+  visitedLocations: { locationId: string; locationName: string; visitCount: number }[];
+};
 
 export function BulkSendSMSDialog({
   open,
@@ -50,7 +58,8 @@ export function BulkSendSMSDialog({
   preSelectedCustomers,
 }: BulkSendSMSDialogProps) {
   const { currentTenant, user } = useAuth();
-  const { customers, isLoading: loadingCustomers } = useCustomers();
+  const { customers: rawCustomers, isLoading: loadingCustomers } = useCustomers();
+  const customers = rawCustomers as CustomerListItem[];
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
@@ -74,20 +83,19 @@ export function BulkSendSMSDialog({
       case "has_phone":
         // Already filtered above
         break;
-      case "no_recent_visit":
+      case "no_recent_visit": {
         const daysAgo = parseInt(daysSinceVisit) || 30;
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysAgo);
         filtered = filtered.filter((c) => {
-          if (!c.last_visit) return true; // Never visited
-          return new Date(c.last_visit) < cutoffDate;
+          if (!c.last_visit_at) return true; // Never visited
+          return new Date(c.last_visit_at) < cutoffDate;
         });
         break;
+      }
       case "vip":
         // VIP customers (has tags or frequent visitors)
-        filtered = filtered.filter(
-          (c) => c.tags?.includes("VIP") || c.visitedLocations.length > 5
-        );
+        filtered = filtered.filter((c) => c.visit_count >= 5 || c.visitedLocations.length > 5);
         break;
     }
 
@@ -314,7 +322,7 @@ export function BulkSendSMSDialog({
                       <p className="font-medium text-sm truncate">{customer.full_name}</p>
                       <p className="text-xs text-muted-foreground">{customer.phone}</p>
                     </div>
-                    {customer.tags?.includes("VIP") && (
+                    {(customer.visit_count >= 5 || customer.visitedLocations.length > 5) && (
                       <Badge variant="secondary" className="text-xs">
                         VIP
                       </Badge>
