@@ -16,6 +16,7 @@ import { Badge } from "@ui/badge";
 import { Alert, AlertDescription } from "@ui/alert";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import { Label } from "@ui/label";
+import { Input } from "@ui/input";
 import { Check, MessageSquare, Loader2, Wallet, CreditCard, AlertCircle } from "lucide-react";
 import { cn } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
@@ -28,20 +29,46 @@ interface CreditPurchaseDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const MIN_CUSTOM_CREDITS = 10;
+const MAX_CUSTOM_CREDITS = 1000;
+
 export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialogProps) {
   const { currentTenant } = useAuth();
-  const { packages, getPackagePrice, currency } = useCreditPurchase();
+  const { packages, getPackagePrice, getCustomCreditPrice, currency } = useCreditPurchase();
   const { wallet, isLoading: walletLoading } = useSalonWallet(currentTenant?.id);
   const [selectedPackage, setSelectedPackage] = useState<string | null>(null);
+  const [isCustom, setIsCustom] = useState(false);
+  const [customCredits, setCustomCredits] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wallet");
   const [isProcessing, setIsProcessing] = useState(false);
 
   const selectedPkg = packages.find((p) => p.id === selectedPackage);
-  const selectedPrice = selectedPkg ? getPackagePrice(selectedPkg, currency) : 0;
+  
+  // Calculate price based on selection type
+  const customCreditsNum = parseInt(customCredits) || 0;
+  const selectedPrice = isCustom 
+    ? getCustomCreditPrice(customCreditsNum, currency)
+    : (selectedPkg ? getPackagePrice(selectedPkg, currency) : 0);
+  const selectedCredits = isCustom ? customCreditsNum : (selectedPkg?.credits || 0);
+  
   const hasInsufficientBalance = wallet && wallet.balance < selectedPrice;
+  
+  // Validation for custom credits
+  const customCreditsError = isCustom && customCredits !== "" && (
+    customCreditsNum < MIN_CUSTOM_CREDITS 
+      ? `Minimum ${MIN_CUSTOM_CREDITS} credits`
+      : customCreditsNum > MAX_CUSTOM_CREDITS 
+      ? `Maximum ${MAX_CUSTOM_CREDITS} credits`
+      : null
+  );
+  
+  const isPurchaseDisabled = isCustom 
+    ? !customCredits || customCreditsNum < MIN_CUSTOM_CREDITS || customCreditsNum > MAX_CUSTOM_CREDITS
+    : !selectedPackage;
 
   const handlePurchase = async () => {
-    if (!selectedPackage || !currentTenant?.id || !selectedPkg) return;
+    if (!currentTenant?.id) return;
+    if (isPurchaseDisabled) return;
 
     setIsProcessing(true);
 
@@ -51,14 +78,17 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
         const { data, error } = await supabase.functions.invoke("purchase-credits-from-purse", {
           body: {
             tenantId: currentTenant.id,
-            packageId: selectedPackage,
+            packageId: isCustom ? undefined : selectedPackage,
+            customCredits: isCustom ? selectedCredits : undefined,
+            customAmount: isCustom ? selectedPrice : undefined,
           },
         });
 
         if (error) throw error;
 
         toast({
-          title: `Successfully purchased ${data.credits} credits from your wallet.`,
+          title: `Successfully purchased ${data.credits} credits!`,
+          description: `${formatCurrency(data.amountDebited, currency)} was deducted from your wallet. New balance: ${data.newBalance} credits.`,
         });
 
         // Close dialog and refresh (parent component should handle refresh)
@@ -71,23 +101,29 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
             amount: selectedPrice,
             currency: currency,
             customerEmail: currentTenant.email || "",
+            customerName: currentTenant.name || "",
+            description: `Purchase ${selectedCredits} messaging credits`,
             intentType: "messaging_credit_purchase",
-            credits: selectedPkg.credits,
+            credits: selectedCredits,
+            successUrl: `${window.location.origin}/salon/messaging?purchase=success`,
+            cancelUrl: `${window.location.origin}/salon/messaging?purchase=cancelled`,
           },
         });
 
         if (error) throw error;
 
-        if (data?.paymentUrl) {
-          window.location.href = data.paymentUrl;
+        if (data?.paymentUrl || data?.checkoutUrl) {
+          window.location.href = data.paymentUrl || data.checkoutUrl;
         } else {
           throw new Error("No payment URL returned");
         }
       }
     } catch (err) {
       console.error("Error purchasing credits:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to purchase credits. Please try again.";
       toast({
-        title: "Failed to purchase credits. Please try again.",
+        title: "Purchase failed",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -125,15 +161,86 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
                 package={pkg}
                 price={getPackagePrice(pkg, currency)}
                 currency={currency}
-                isSelected={selectedPackage === pkg.id}
+                isSelected={!isCustom && selectedPackage === pkg.id}
                 isPopular={pkg.id === getPopularPackage()}
-                onSelect={() => setSelectedPackage(pkg.id)}
+                onSelect={() => {
+                  setIsCustom(false);
+                  setSelectedPackage(pkg.id);
+                }}
               />
             ))}
+            
+            {/* Custom Amount Option */}
+            <Card
+              className={cn(
+                "cursor-pointer transition-all hover:border-primary/50",
+                isCustom && "border-primary ring-1 ring-primary"
+              )}
+              onClick={() => {
+                setIsCustom(true);
+                setSelectedPackage(null);
+              }}
+            >
+              <CardContent className="p-4">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                        isCustom
+                          ? "border-primary bg-primary"
+                          : "border-muted-foreground/30"
+                      )}
+                    >
+                      {isCustom && <Check className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <div className="flex-1">
+                      <span className="font-semibold">Custom Amount</span>
+                      <p className="text-sm text-muted-foreground">
+                        Choose your own credit amount
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {isCustom && (
+                    <div className="pl-8 space-y-2">
+                      <div className="flex items-end gap-3">
+                        <div className="flex-1">
+                          <Label htmlFor="custom-credits" className="text-sm">
+                            Number of credits ({MIN_CUSTOM_CREDITS}-{MAX_CUSTOM_CREDITS})
+                          </Label>
+                          <Input
+                            id="custom-credits"
+                            type="number"
+                            min={MIN_CUSTOM_CREDITS}
+                            max={MAX_CUSTOM_CREDITS}
+                            value={customCredits}
+                            onChange={(e) => setCustomCredits(e.target.value)}
+                            placeholder={`Enter ${MIN_CUSTOM_CREDITS}-${MAX_CUSTOM_CREDITS}`}
+                            className="mt-1"
+                          />
+                        </div>
+                        {customCredits && !customCreditsError && (
+                          <div className="text-right pb-2">
+                            <p className="font-bold text-lg">{formatCurrency(selectedPrice, currency)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(selectedPrice / customCreditsNum, currency)}/credit
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      {customCreditsError && (
+                        <p className="text-sm text-destructive">{customCreditsError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Payment Method Selection */}
-          {selectedPackage && (
+          {(selectedPackage || (isCustom && customCredits && !customCreditsError)) && (
             <div className="space-y-3">
               <Label>Payment Method</Label>
               <RadioGroup value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as PaymentMethod)}>
@@ -185,7 +292,7 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
           </Button>
           <Button
             onClick={handlePurchase}
-            disabled={!selectedPackage || isProcessing || isWalletPaymentDisabled}
+            disabled={isPurchaseDisabled || isProcessing || isWalletPaymentDisabled}
           >
             {isProcessing ? (
               <>

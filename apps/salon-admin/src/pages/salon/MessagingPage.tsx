@@ -30,10 +30,12 @@ import { EditTemplateDialog } from "@/components/dialogs/EditTemplateDialog";
 import { EditSMSTemplateDialog } from "@/components/messaging/EditSMSTemplateDialog";
 import { BulkSendSMSDialog } from "@/components/messaging/BulkSendSMSDialog";
 import { SetSenderNameDialog } from "@/components/messaging/SetSenderNameDialog";
+import { CreditPurchaseDialog } from "@/components/billing/CreditPurchaseDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
+import { toast } from "@ui/ui/use-toast";
 
 const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
   delivered: { bg: "bg-success/10", text: "text-success", icon: CheckCircle },
@@ -49,13 +51,37 @@ export default function MessagingPage() {
   const [editingSMSTemplate, setEditingSMSTemplate] = useState<SMSTemplateType | null>(null);
   const [bulkSendDialogOpen, setBulkSendDialogOpen] = useState(false);
   const [senderNameDialogOpen, setSenderNameDialogOpen] = useState(false);
+  const [creditPurchaseDialogOpen, setCreditPurchaseDialogOpen] = useState(false);
   const [senderIdStatus, setSenderIdStatus] = useState<"not_set" | "pending" | "approved" | "rejected">("not_set");
   const [senderId, setSenderId] = useState<string | null>(null);
   const [isLoadingSenderConfig, setIsLoadingSenderConfig] = useState(true);
   
-  const { credits, messageLogs, stats, isLoading } = useMessagingCredits();
+  const { credits, messageLogs, stats, isLoading, refetch: refetchCredits } = useMessagingCredits();
   const { templates, isLoading: templatesLoading, refetch: refetchTemplates } = useEmailTemplates();
   const { templates: smsTemplates, isLoading: smsTemplatesLoading, refetch: refetchSMSTemplates, upsertTemplate: upsertSMSTemplate } = useSMSTemplates();
+
+  // Handle URL params for payment success/failure
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const purchaseStatus = params.get('purchase');
+    
+    if (purchaseStatus === 'success') {
+      toast({
+        title: "Credits purchased successfully!",
+        description: "Your credits have been added to your balance.",
+      });
+      // Clean URL and refetch credits
+      window.history.replaceState({}, '', '/salon/messaging');
+      refetchCredits();
+    } else if (purchaseStatus === 'cancelled') {
+      toast({
+        title: "Purchase cancelled",
+        description: "Your credit purchase was cancelled.",
+        variant: "destructive",
+      });
+      window.history.replaceState({}, '', '/salon/messaging');
+    }
+  }, [refetchCredits]);
 
   // Fetch sender ID configuration
   useEffect(() => {
@@ -151,7 +177,7 @@ export default function MessagingPage() {
               <Settings className="w-4 h-4" />
               {getSenderButtonText()}
             </Button>
-            <Button className="gap-2">
+            <Button onClick={() => setCreditPurchaseDialogOpen(true)} className="gap-2">
               <Plus className="w-4 h-4" />
               Buy Credits
             </Button>
@@ -620,6 +646,18 @@ export default function MessagingPage() {
           currentSenderId={senderId}
           currentStatus={senderIdStatus}
           onStatusChange={handleSenderConfigChange}
+        />
+
+        {/* Credit Purchase Dialog */}
+        <CreditPurchaseDialog
+          open={creditPurchaseDialogOpen}
+          onOpenChange={(open) => {
+            setCreditPurchaseDialogOpen(open);
+            if (!open) {
+              // Refetch credits when dialog closes
+              refetchCredits();
+            }
+          }}
         />
       </div>
     </SalonSidebar>
