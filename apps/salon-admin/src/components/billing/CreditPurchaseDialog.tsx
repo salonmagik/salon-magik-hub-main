@@ -95,13 +95,21 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
         onOpenChange(false);
       } else {
         // Purchase credits with Paystack
+        // Get authenticated user's email
+        const { data: { user } } = await supabase.auth.getUser();
+        const customerEmail = user?.email || "";
+        
+        if (!customerEmail) {
+          throw new Error("Unable to retrieve your email address. Please try again.");
+        }
+
         const { data, error } = await supabase.functions.invoke("create-payment-session", {
           body: {
             tenantId: currentTenant.id,
             amount: selectedPrice,
             currency: currency,
-            customerEmail: currentTenant.email || "",
-            customerName: currentTenant.name || "",
+            customerEmail,
+            customerName: currentTenant.name || "Salon Owner",
             description: `Purchase ${selectedCredits} messaging credits`,
             intentType: "messaging_credit_purchase",
             credits: selectedCredits,
