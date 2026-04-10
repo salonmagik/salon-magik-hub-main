@@ -704,6 +704,19 @@ export function BookingWizard({
         }
       }
 
+      // For purse-only payment, trigger backend processing (mimics webhook for security)
+      // This handles both cases:
+      // 1. User explicitly selects purse mode in Payment step (paymentMode === "purse")
+      // 2. User applies purse in Review step that covers full amount (purseAmount > 0 && afterPurse === 0)
+      const isPurseOnlyPayment = (paymentMode === "purse" && amountDueNow > 0) || 
+                                  (purseAmount > 0 && afterPurse === 0 && !includePaymentSession);
+      
+      if (isPurseOnlyPayment && customerId) {
+        requestBody.processPursePayment = true;
+        requestBody.pursePaymentCustomerId = customerId;
+        requestBody.paymentAmount = purseAmount; // Use purseAmount, not amountDueNow which is 0
+      }
+
       const { data, error } = await supabase.functions.invoke("create-public-booking", {
         body: requestBody,
       });
@@ -748,41 +761,9 @@ export function BookingWizard({
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
     try {
-      // For purse-only payment, create booking without payment session
+      // For purse-only payment, backend handles everything (debit, credit salon, transactions, notifications)
       if (paymentMode === "purse") {
         const booking = await handleCreateBooking(false);
-        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
-        const primaryAppointmentId = appointmentIds[0];
-
-        if (!customerId || !primaryAppointmentId) {
-          throw new Error("Customer not found");
-        }
-
-        const amountToDebit = amountDueNow;
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as never, {
-          p_tenant_id: salon.id,
-          p_customer_id: customerId,
-          p_appointment_id: primaryAppointmentId,
-          p_amount: amountToDebit,
-          p_currency: salon.currency,
-          p_idempotency_key: `booking_purse_${primaryAppointmentId}_${Date.now()}`,
-        });
-
-        if (debitError) {
-          console.error("Purse debit failed:", debitError);
-          throw new Error("Failed to debit purse balance: " + debitError.message);
-        }
-
-        if (appointmentIds.length > 0) {
-          await supabase
-            .from("appointments")
-            .update({
-              payment_status: "fully_paid",
-              amount_paid: amountToDebit,
-            })
-            .in("id", appointmentIds);
-        }
-
         setBookingReference(booking.reference || "CONFIRMED");
         setStep("confirmation");
         clearCart();
@@ -830,7 +811,13 @@ export function BookingWizard({
   const handleSubmitBooking = async () => {
     setIsSubmitting(true);
     try {
-      const booking = await handleCreateBooking();
+      // Check if purse is being used to pay the full amount
+      const isPursePayment = purseAmount > 0 && afterPurse === 0 && customerId;
+      
+      const booking = await handleCreateBooking(false);
+      
+      // If paying with purse, the backend handles everything
+      // Otherwise, it's a pay-at-salon booking
       setBookingReference(booking.reference || "CONFIRMED");
       setStep("confirmation");
       clearCart();
