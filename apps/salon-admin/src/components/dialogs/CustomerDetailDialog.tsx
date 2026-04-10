@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -59,16 +58,6 @@ type CustomerAppointment = Tables<"appointments"> & {
     name: string;
   } | null;
 };
-type CustomerTransaction = Tables<"transactions">;
-type CustomerPurse = Tables<"customer_purses">;
-type WalletLedgerEntry = Tables<"wallet_ledger_entries">;
-type CustomerAppointment = Tables<"appointments"> & {
-  location?: {
-    id: string;
-    name: string;
-  } | null;
-};
-
 interface AppointmentNote {
   appointmentId: string;
   appointmentDate: string | null;
@@ -150,150 +139,72 @@ export function CustomerDetailDialog({
       if (!currentTenant?.id || !customerId) return null;
 
       const { data: appointmentsData, error: appointmentsError } = await supabase
-      const customerId = customer?.id;
-      const currency = currentTenant?.currency || "USD";
-      const { data: customerDetail, isLoading: customerDetailLoading } = useQuery({
-        queryKey: ["customer-detail-dialog", currentTenant?.id, customerId, open],
-        queryFn: async () => {
-          if (!currentTenant?.id || !customerId) return null;
-
-          const { data: appointmentsData, error: appointmentsError } = await supabase
-            .from("appointments")
-            .select(`
+        .from("appointments")
+        .select(`
           *,
           location:locations(id, name)
         `)
-            .select(`
-          *,
-          location:locations(id, name)
-        `)
-            .eq("tenant_id", currentTenant.id)
-            .eq("customer_id", customerId)
-            .eq("customer_id", customerId)
-            .order("scheduled_start", { ascending: false });
+        .eq("tenant_id", currentTenant.id)
+        .eq("customer_id", customerId)
+        .order("scheduled_start", { ascending: false });
 
-          if (appointmentsError) throw appointmentsError;
+      if (appointmentsError) throw appointmentsError;
 
-          const customerAppointments = (appointmentsData as CustomerAppointment[] | null) || [];
-          const appointmentIds = customerAppointments.map((appointment) => appointment.id);
+      const customerAppointments = (appointmentsData as CustomerAppointment[] | null) || [];
+      const appointmentIds = customerAppointments.map((appointment) => appointment.id);
 
-          const [
-            transactionsResult,
-            purseResult,
-            attachmentsResult,
-          ] = await Promise.all([
-            supabase
-              .from("transactions")
+      const [transactionsResult, purseResult, attachmentsResult] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*")
+          .eq("tenant_id", currentTenant.id)
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("customer_purses")
+          .select("*")
+          .eq("tenant_id", currentTenant.id)
+          .eq("customer_id", customerId)
+          .maybeSingle(),
+        appointmentIds.length > 0
+          ? supabase
+              .from("appointment_attachments")
               .select("*")
-              .eq("tenant_id", currentTenant.id)
-              .eq("customer_id", customerId)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("customer_purses")
-              .select("*")
-              .eq("tenant_id", currentTenant.id)
-              .eq("customer_id", customerId)
-              .maybeSingle(),
-            appointmentIds.length > 0
-              ? supabase
-                .from("appointment_attachments")
-                .select("*")
-                .in("appointment_id", appointmentIds)
-                .order("created_at", { ascending: false })
-              : Promise.resolve({ data: [], error: null }),
-          ]);
+              .in("appointment_id", appointmentIds)
+              .order("created_at", { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
+      ]);
 
-          if (transactionsResult.error) throw transactionsResult.error;
-          if (purseResult.error) throw purseResult.error;
-          if (attachmentsResult.error) throw attachmentsResult.error;
+      if (transactionsResult.error) throw transactionsResult.error;
+      if (purseResult.error) throw purseResult.error;
+      if (attachmentsResult.error) throw attachmentsResult.error;
 
-          const transactions = (transactionsResult.data as CustomerTransaction[] | null) || [];
-          const purse = (purseResult.data as CustomerPurse | null) || null;
-          const attachments = (attachmentsResult.data as AppointmentAttachment[] | null) || [];
+      const transactions = (transactionsResult.data as CustomerTransaction[] | null) || [];
+      const purse = (purseResult.data as CustomerPurse | null) || null;
+      const attachments = (attachmentsResult.data as AppointmentAttachment[] | null) || [];
 
-          let purseLedgerEntries: WalletLedgerEntry[] = [];
-          if (purse?.id) {
-            const { data: ledgerData, error: ledgerError } = await supabase
-              .from("wallet_ledger_entries")
-              .select("*")
-              .eq("wallet_type", "customer")
-              .eq("wallet_id", purse.id)
-              .order("created_at", { ascending: false });
+      let purseLedgerEntries: WalletLedgerEntry[] = [];
+      if (purse?.id) {
+        const { data: ledgerData, error: ledgerError } = await supabase
+          .from("wallet_ledger_entries")
+          .select("*")
+          .eq("wallet_type", "customer")
+          .eq("wallet_id", purse.id)
+          .order("created_at", { ascending: false });
 
-            if (ledgerError) throw ledgerError;
-            purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
-          }
-
-          const appointmentNotes: AppointmentNote[] = customerAppointments
-            .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
-            .map((appointment) => ({
-              appointmentId: appointment.id,
-              appointmentDate: appointment.scheduled_start,
-              note: appointment.notes,
-              attachments: attachments.filter((item) => item.appointment_id === appointment.id),
-              if(ledgerError) throw ledgerError;
-              purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
-            }
+        if (ledgerError) throw ledgerError;
+        purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
+      }
 
       const appointmentNotes: AppointmentNote[] = customerAppointments
-            .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
-            .map((appointment) => ({
-              appointmentId: appointment.id,
-              appointmentDate: appointment.scheduled_start,
-              note: appointment.notes,
-              attachments: attachments.filter((item) => item.appointment_id === appointment.id),
-            }));
+        .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
+        .map((appointment) => ({
+          appointmentId: appointment.id,
+          appointmentDate: appointment.scheduled_start,
+          note: appointment.notes,
+          attachments: attachments.filter((item) => item.appointment_id === appointment.id),
+        }));
 
-          const visitsByLocation = new Map<string, CustomerVisitedLocation>();
-          for (const appointment of customerAppointments) {
-            const countsAsVisit =
-              Boolean(appointment.actual_start) || ["started", "paused", "completed"].includes(appointment.status);
-
-            if (!countsAsVisit || !appointment.location_id) continue;
-
-            const existing = visitsByLocation.get(appointment.location_id);
-            if (existing) {
-              existing.visitCount += 1;
-              continue;
-            }
-
-            visitsByLocation.set(appointment.location_id, {
-              locationId: appointment.location_id,
-              locationName: appointment.location?.name || "Unknown branch",
-              visitCount: 1,
-            });
-          }
-
-          const visitedLocations = Array.from(visitsByLocation.values()).sort(
-            (a, b) => b.visitCount - a.visitCount || a.locationName.localeCompare(b.locationName),
-          );
-
-          const outstandingBalance = customerAppointments.reduce((sum, appointment) => {
-            const paymentStatus = appointment.payment_status || "unpaid";
-            const countsAsOutstanding =
-              appointment.status !== "cancelled" &&
-              !["fully_paid", "refunded_full"].includes(paymentStatus);
-
-            if (!countsAsOutstanding) return sum;
-
-            const due = Math.max(Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0), 0);
-            return sum + due;
-          }, 0);
-
-          return {
-            appointments: customerAppointments,
-            transactions,
-            purse,
-            purseLedgerEntries,
-            appointmentNotes,
-            visitedLocations,
-            visitCount: visitedLocations.reduce((sum, location) => sum + location.visitCount, 0),
-            outstandingBalance,
-            lastTransactionAt: transactions[0]?.created_at ?? null,
-          };
-        },
-        enabled: Boolean(currentTenant?.id && customerId && open),
-      });
       const visitsByLocation = new Map<string, CustomerVisitedLocation>();
       for (const appointment of customerAppointments) {
         const countsAsVisit =
@@ -352,112 +263,106 @@ export function CustomerDetailDialog({
     const matchesEndDate = !txEndDate || createdAt <= txEndDate;
 
     if (!matchesStartDate || !matchesEndDate) return false;
-    const filteredTransactions = (customerDetail?.transactions || []).filter((tx) => {
-      const createdAt = new Date(tx.created_at);
-      const matchesStartDate = !txStartDate || createdAt >= txStartDate;
-      const matchesEndDate = !txEndDate || createdAt <= txEndDate;
-
-      if (!matchesStartDate || !matchesEndDate) return false;
-      if (!txSearchQuery) return true;
-      const query = txSearchQuery.toLowerCase();
-      return (
-        tx.type.toLowerCase().includes(query) ||
-        tx.method.toLowerCase().includes(query) ||
-        tx.status.toLowerCase().includes(query) ||
-        tx.appointment_id?.toLowerCase().includes(query) ||
-        tx.amount.toString().includes(query)
-      );
-    });
-
-    const { data: engagementSummary } = useQuery({
-      queryKey: ["customer-engagement-summary", currentTenant?.id, customerId],
-      queryFn: async () => {
-        if (!currentTenant?.id || !customerId) return null;
-        const { data, error } = await (supabase.rpc as any)("get_customer_engagement_summary", {
-          p_tenant_id: currentTenant.id,
-          p_customer_id: customerId,
-        });
-        if (error) throw error;
-        return Array.isArray(data) ? (data[0] ?? null) : data;
-      },
-      enabled: Boolean(currentTenant?.id && customerId && open),
-    });
-
-    if (!customer) return null;
-
-    const customerAppointments = customerDetail?.appointments || [];
-    const visitedLocations: CustomerVisitedLocation[] = customerDetail?.visitedLocations || customer.visitedLocations || [];
-    const visitCount = customerDetail?.visitCount ?? customer.visit_count ?? 0;
-    const outstandingBalance = customerDetail?.outstandingBalance ?? Number(customer.outstanding_balance ?? 0);
-    const appointmentNotes = customerDetail?.appointmentNotes || [];
-    const purse = customerDetail?.purse || null;
-    const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
-    const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
-
-    // Filter invoices for this customer
-    const customerInvoices = invoices.filter((inv) => inv.customer_id === customer.id);
-
-    const canSendMessage = Boolean(customer.email || customer.phone);
-    const sendMessageTooltip = canSendMessage
-      ? "Send Email, SMS, or WhatsApp"
-      : "Customer has no email or phone number";
-
-    function clearFilters(): void {
-      setTxStartDate(undefined);
-      setTxEndDate(undefined);
-      setTxSearchQuery("");
-    }
-
+    if (!txSearchQuery) return true;
+    const query = txSearchQuery.toLowerCase();
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogDescription className="sr-only">
-              Customer profile, engagement summary, appointments, notes, and transaction history.
-            </DialogDescription>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
-                  {getInitials(customer.full_name)}
-                </div>
-                <div>
-                  <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge
-                      variant="secondary"
-                      className={getCustomerStatusBadgeClass(customer.status)}
-                    >
-                      {customer.status}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {customer.visit_count} visits
-                    </span>
-                  </div>
+      tx.type.toLowerCase().includes(query) ||
+      tx.method.toLowerCase().includes(query) ||
+      tx.status.toLowerCase().includes(query) ||
+      tx.appointment_id?.toLowerCase().includes(query) ||
+      tx.amount.toString().includes(query)
+    );
+  });
+
+  const { data: engagementSummary } = useQuery({
+    queryKey: ["customer-engagement-summary", currentTenant?.id, customerId],
+    queryFn: async () => {
+      if (!currentTenant?.id || !customerId) return null;
+      const { data, error } = await (supabase.rpc as any)("get_customer_engagement_summary", {
+        p_tenant_id: currentTenant.id,
+        p_customer_id: customerId,
+      });
+      if (error) throw error;
+      return Array.isArray(data) ? (data[0] ?? null) : data;
+    },
+    enabled: Boolean(currentTenant?.id && customerId && open),
+  });
+
+  if (!customer) return null;
+
+  const customerAppointments = customerDetail?.appointments || [];
+  const visitedLocations: CustomerVisitedLocation[] = customerDetail?.visitedLocations || customer.visitedLocations || [];
+  const visitCount = customerDetail?.visitCount ?? customer.visit_count ?? 0;
+  const outstandingBalance = customerDetail?.outstandingBalance ?? Number(customer.outstanding_balance ?? 0);
+  const appointmentNotes = customerDetail?.appointmentNotes || [];
+  const purse = customerDetail?.purse || null;
+  const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
+  const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
+
+  // Filter invoices for this customer
+  const customerInvoices = invoices.filter((inv) => inv.customer_id === customer.id);
+
+  const canSendMessage = Boolean(customer.email || customer.phone);
+  const sendMessageTooltip = canSendMessage
+    ? "Send Email, SMS, or WhatsApp"
+    : "Customer has no email or phone number";
+
+  function clearFilters(): void {
+    setTxStartDate(undefined);
+    setTxEndDate(undefined);
+    setTxSearchQuery("");
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogDescription className="sr-only">
+            Customer profile, engagement summary, appointments, notes, and transaction history.
+          </DialogDescription>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
+                {getInitials(customer.full_name)}
+              </div>
+              <div>
+                <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge
+                    variant="secondary"
+                    className={getCustomerStatusBadgeClass(customer.status)}
+                  >
+                    {customer.status}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {customer.visit_count} visits
+                  </span>
                 </div>
               </div>
-
-              {/* Send Message Button */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSendMessageDialogOpen(true)}
-                      disabled={!canSendMessage}
-                      className="flex-shrink-0"
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      Send Message
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>{sendMessageTooltip}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </div>
-          </DialogHeader>
+
+            {/* Send Message Button */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSendMessageDialogOpen(true)}
+                    disabled={!canSendMessage}
+                    className="flex-shrink-0"
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2" />
+                    Send Message
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{sendMessageTooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </DialogHeader>
 
           <Tabs defaultValue="overview" className="mt-4">
             <TabsList className="grid w-full grid-cols-7">
@@ -749,42 +654,27 @@ export function CustomerDetailDialog({
                   ))}
                 </div>
               ) : appointmentNotes.length === 0 && !customer.notes ? (
-              ): appointmentNotes.length === 0 && !customer.notes ? (
-              <div className="text-center py-8">
-                <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No notes recorded yet</p>
-                <p className="text-muted-foreground">No notes recorded yet</p>
-              </div>
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                  <p className="text-muted-foreground">No notes recorded yet</p>
+                </div>
               ) : (
-              <ScrollArea className="h-[300px]">
-                <div className="space-y-4 pr-4">
-                  {customer.notes && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex gap-2">
-                          <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs text-muted-foreground font-medium mb-1">Customer profile note</p>
-                            <p className="text-sm">{customer.notes}</p>
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-4 pr-4">
+                    {customer.notes && (
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="flex gap-2">
+                            <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium mb-1">Customer profile note</p>
+                              <p className="text-sm">{customer.notes}</p>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {customer.notes && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex gap-2">
-                          <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-xs text-muted-foreground font-medium mb-1">Customer profile note</p>
-                            <p className="text-sm">{customer.notes}</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                  {appointmentNotes.map((note) => (
+                        </CardContent>
+                      </Card>
+                    )}
+                    {appointmentNotes.map((note) => (
                     <Card key={note.appointmentId}>
                       <CardContent className="p-4">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
@@ -831,9 +721,9 @@ export function CustomerDetailDialog({
                       </CardContent>
                     </Card>
                   ))}
-                </div>
-              </ScrollArea>
-            )}
+                  </div>
+                </ScrollArea>
+              )}
             </TabsContent>
 
             <TabsContent value="messages" className="mt-4">
