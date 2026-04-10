@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from "date-fns";
+import { supabase } from "@/lib/supabase";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -63,6 +64,7 @@ import { WalkInDialog } from "@/components/dialogs/WalkInDialog";
 import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentActionsDialog";
 import { AppointmentDetailsDialog } from "@/components/dialogs/AppointmentDetailsDialog";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
+import { InvoiceManagementDialog } from "@/components/dialogs/InvoiceManagementDialog";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
 import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useAuth } from "@/hooks/useAuth";
@@ -96,6 +98,8 @@ export default function AppointmentsPage() {
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | "schedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<"scheduled" | "unscheduled">("scheduled");
 
@@ -237,6 +241,38 @@ export default function AppointmentsPage() {
   // Check if user can perform certain actions (Staff has limited permissions)
   const canCancelReschedule = userRole && userRole !== "staff";
   const canViewCustomerProfile = userRole && userRole !== "staff";
+
+  const [appointmentInvoices, setAppointmentInvoices] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const fetchAppointmentInvoices = async () => {
+      if (!currentTenant?.id || appointments.length === 0) return;
+
+      try {
+        const appointmentIds = appointments.map(apt => apt.id);
+        const { data, error } = await supabase
+          .from("invoices")
+          .select("id, appointment_id")
+          .eq("tenant_id", currentTenant.id)
+          .in("appointment_id", appointmentIds)
+          .not("appointment_id", "is", null);
+
+        if (error) throw error;
+
+        const invoiceMap: Record<string, string> = {};
+        (data || []).forEach((inv: { id: string; appointment_id: string }) => {
+          if (inv.appointment_id) {
+            invoiceMap[inv.appointment_id] = inv.id;
+          }
+        });
+        setAppointmentInvoices(invoiceMap);
+      } catch (err) {
+        console.error("Error fetching appointment invoices:", err);
+      }
+    };
+
+    fetchAppointmentInvoices();
+  }, [appointments, currentTenant?.id]);
 
   const handleRefetch = () => {
     refetch();
@@ -860,11 +896,19 @@ export default function AppointmentsPage() {
                           </TableCell>
                         )}
                         <TableCell>
-                          {apt.notes ? (
-                            <span className="text-sm truncate max-w-[120px] block">{apt.notes}</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {apt.notes ? (
+                              <span className="text-sm truncate max-w-[100px] block">{apt.notes}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                            {appointmentInvoices[apt.id] && (
+                              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-700 border-green-500/20">
+                                <FileText className="w-3 h-3 mr-1" />
+                                Invoice
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           {(actions.length > 0 || canViewCustomerProfile) && (
@@ -937,14 +981,31 @@ export default function AppointmentsPage() {
                                       <User className="w-4 h-4 mr-2" />
                                       View Customer Profile
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      onClick={async () => {
-                                        await createFromAppointment(apt.id);
-                                      }}
-                                    >
-                                      <FileText className="w-4 h-4 mr-2" />
-                                      Create Invoice
-                                    </DropdownMenuItem>
+                                    {appointmentInvoices[apt.id] ? (
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedInvoiceId(appointmentInvoices[apt.id]);
+                                          setInvoiceDialogOpen(true);
+                                        }}
+                                      >
+                                        <FileText className="w-4 h-4 mr-2" />
+                                        View Invoice
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem
+                                        onClick={async () => {
+                                          const invoice = await createFromAppointment(apt.id);
+                                          if (invoice) {
+                                            setSelectedInvoiceId(invoice.id);
+                                            setInvoiceDialogOpen(true);
+                                            handleRefetch();
+                                          }
+                                        }}
+                                      >
+                                        <FileText className="w-4 h-4 mr-2" />
+                                        Create Invoice
+                                      </DropdownMenuItem>
+                                    )}
                                   </>
                                 )}
                                 {(actions.includes("schedule") || actions.includes("reschedule") || actions.includes("cancel")) && (
@@ -1020,6 +1081,14 @@ export default function AppointmentsPage() {
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
         customer={selectedCustomer}
+      />
+
+      {/* Invoice Management Dialog */}
+      <InvoiceManagementDialog
+        open={invoiceDialogOpen}
+        onOpenChange={setInvoiceDialogOpen}
+        invoiceId={selectedInvoiceId}
+        onSuccess={handleRefetch}
       />
     </SalonSidebar>
   );
