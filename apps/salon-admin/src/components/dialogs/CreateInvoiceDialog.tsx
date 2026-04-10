@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
@@ -6,7 +6,8 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { DatePicker } from "@ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { Plus, Trash2, FileText } from "lucide-react";
+import { Plus, Trash2, FileText, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@ui/alert";
 import { useInvoices } from "@/hooks/useInvoices";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -47,11 +48,18 @@ export function CreateInvoiceDialog({
     { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 },
   ]);
   const [itemType, setItemType] = useState<"custom" | "service" | "product">("custom");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const currency = currentTenant?.currency || "USD";
 
+  // Reset line items when item type changes
+  useEffect(() => {
+    setLineItems([{ id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 }]);
+    setErrorMessage("");
+  }, [itemType]);
+
   // Fetch services for dropdown
-  const { data: services = [] } = useQuery({
+  const { data: services = [], isLoading: servicesLoading } = useQuery({
     queryKey: ["services", currentTenant?.id],
     queryFn: async () => {
       if (!currentTenant?.id) return [];
@@ -60,14 +68,18 @@ export function CreateInvoiceDialog({
         .select("*")
         .eq("tenant_id", currentTenant.id)
         .order("name");
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching services:", error);
+        throw error;
+      }
+      console.log("Fetched services:", data);
       return (data as Service[]) || [];
     },
     enabled: Boolean(currentTenant?.id && open),
   });
 
   // Fetch products for dropdown
-  const { data: products = [] } = useQuery({
+  const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["products", currentTenant?.id],
     queryFn: async () => {
       if (!currentTenant?.id) return [];
@@ -76,7 +88,11 @@ export function CreateInvoiceDialog({
         .select("*")
         .eq("tenant_id", currentTenant.id)
         .order("name");
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching products:", error);
+        throw error;
+      }
+      console.log("Fetched products:", data);
       return (data as Product[]) || [];
     },
     enabled: Boolean(currentTenant?.id && open),
@@ -87,11 +103,13 @@ export function CreateInvoiceDialog({
       ...lineItems,
       { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 },
     ]);
+    setErrorMessage("");
   };
 
   const removeLineItem = (id: string) => {
     if (lineItems.length === 1) return;
     setLineItems(lineItems.filter((item) => item.id !== id));
+    setErrorMessage("");
   };
 
   const updateLineItem = (id: string, field: keyof LineItem, value: string | number) => {
@@ -100,23 +118,41 @@ export function CreateInvoiceDialog({
         item.id === id ? { ...item, [field]: value } : item
       )
     );
+    setErrorMessage("");
+  };
+
+  const updateMultipleFields = (id: string, updates: Partial<LineItem>) => {
+    setLineItems(
+      lineItems.map((item) =>
+        item.id === id ? { ...item, ...updates } : item
+      )
+    );
+    setErrorMessage("");
   };
 
   const handleServiceSelect = (itemId: string, serviceId: string) => {
+    console.log("Service selected:", serviceId, "for item:", itemId);
     const service = services.find((s) => s.id === serviceId);
+    console.log("Found service:", service);
     if (service) {
-      updateLineItem(itemId, "serviceId", serviceId);
-      updateLineItem(itemId, "description", service.name);
-      updateLineItem(itemId, "unitPrice", Number(service.price));
+      updateMultipleFields(itemId, {
+        serviceId,
+        description: service.name,
+        unitPrice: Number(service.price),
+      });
     }
   };
 
   const handleProductSelect = (itemId: string, productId: string) => {
+    console.log("Product selected:", productId, "for item:", itemId);
     const product = products.find((p) => p.id === productId);
+    console.log("Found product:", product);
     if (product) {
-      updateLineItem(itemId, "productId", productId);
-      updateLineItem(itemId, "description", product.name);
-      updateLineItem(itemId, "unitPrice", Number(product.price));
+      updateMultipleFields(itemId, {
+        productId,
+        description: product.name,
+        unitPrice: Number(product.price),
+      });
     }
   };
 
@@ -126,6 +162,7 @@ export function CreateInvoiceDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage("");
     setIsSubmitting(true);
 
     try {
@@ -134,7 +171,15 @@ export function CreateInvoiceDialog({
       );
 
       if (validItems.length === 0) {
-        throw new Error("Please add at least one valid line item");
+        if (itemType === "service") {
+          setErrorMessage("Please select at least one service");
+        } else if (itemType === "product") {
+          setErrorMessage("Please select at least one product");
+        } else {
+          setErrorMessage("Please add at least one item with a description and price");
+        }
+        setIsSubmitting(false);
+        return;
       }
 
       await createInvoice({
@@ -155,10 +200,12 @@ export function CreateInvoiceDialog({
       setNotes("");
       setDueDate(undefined);
       setItemType("custom");
+      setErrorMessage("");
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
       console.error("Error creating invoice:", err);
+      setErrorMessage("Failed to create invoice. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -177,6 +224,14 @@ export function CreateInvoiceDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Error Message */}
+          {errorMessage && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Item Type Selector */}
           <div className="space-y-2">
             <Label>Item Type</Label>
@@ -186,8 +241,12 @@ export function CreateInvoiceDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="custom">Custom Items</SelectItem>
-                <SelectItem value="service">Services</SelectItem>
-                <SelectItem value="product">Products</SelectItem>
+                <SelectItem value="service">
+                  Services {services.length > 0 && `(${services.length})`}
+                </SelectItem>
+                <SelectItem value="product">
+                  Products {products.length > 0 && `(${products.length})`}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -230,11 +289,17 @@ export function CreateInvoiceDialog({
                           <SelectValue placeholder="Select a service" />
                         </SelectTrigger>
                         <SelectContent>
-                          {services.map((service) => (
-                            <SelectItem key={service.id} value={service.id}>
-                              {service.name} - {currency} {Number(service.price).toFixed(2)}
-                            </SelectItem>
-                          ))}
+                          {services.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              No services available. Create services first.
+                            </div>
+                          ) : (
+                            services.map((service) => (
+                              <SelectItem key={service.id} value={service.id}>
+                                {service.name} - {currency} {Number(service.price).toFixed(2)}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -249,11 +314,17 @@ export function CreateInvoiceDialog({
                           <SelectValue placeholder="Select a product" />
                         </SelectTrigger>
                         <SelectContent>
-                          {products.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              {product.name} - {currency} {Number(product.price).toFixed(2)}
-                            </SelectItem>
-                          ))}
+                          {products.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              No products available. Create products first.
+                            </div>
+                          ) : (
+                            products.map((product) => (
+                              <SelectItem key={product.id} value={product.id}>
+                                {product.name} - {currency} {Number(product.price).toFixed(2)}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
