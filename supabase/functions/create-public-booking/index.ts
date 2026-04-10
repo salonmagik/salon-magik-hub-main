@@ -78,6 +78,9 @@ interface BookingRequest {
   paymentSuccessUrl?: string;
   paymentCancelUrl?: string;
   preferredPaymentGateway?: "stripe" | "paystack";
+  // Split payment fields
+  splitPurseAmount?: number;
+  splitCustomerId?: string;
 }
 
 function normalizeEmail(email?: string | null) {
@@ -161,6 +164,8 @@ serve(async (req) => {
       paymentSuccessUrl,
       paymentCancelUrl,
       preferredPaymentGateway,
+      splitPurseAmount,
+      splitCustomerId,
     } = body;
 
     console.log("Payment session params:", { 
@@ -624,6 +629,10 @@ serve(async (req) => {
               is_deposit: paymentIsDeposit,
               customer_name: `${customer.firstName} ${customer.lastName}`,
               intent_type: "appointment_payment",
+              ...(splitPurseAmount && splitCustomerId ? {
+                split_purse_amount: splitPurseAmount.toString(),
+                split_customer_id: splitCustomerId,
+              } : {}),
             },
           }),
         });
@@ -689,6 +698,10 @@ serve(async (req) => {
             "metadata[tenant_id]": tenantId,
             "metadata[is_deposit]": paymentIsDeposit ? "true" : "false",
             "metadata[intent_type]": "appointment_payment",
+            ...(splitPurseAmount && splitCustomerId ? {
+              "metadata[split_purse_amount]": splitPurseAmount.toString(),
+              "metadata[split_customer_id]": splitCustomerId,
+            } : {}),
           }),
         });
 

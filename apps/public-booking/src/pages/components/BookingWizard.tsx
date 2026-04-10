@@ -665,7 +665,7 @@ export function BookingWizard({
 
   const handleCreateBooking = async (includePaymentSession = false, customPaymentAmount?: number) => {
     try {
-      // For split payment mode, purse is handled separately in frontend
+      // For split payment mode, purse is handled in webhook after payment success
       // so we don't send purseAmount to backend to avoid double deduction
       const purseAmountForBackend = paymentMode === "split" || paymentMode === "purse" ? 0 : purseAmount;
       
@@ -696,6 +696,12 @@ export function BookingWizard({
         requestBody.paymentSuccessUrl = window.location.href;
         requestBody.paymentCancelUrl = window.location.href;
         requestBody.preferredPaymentGateway = selectedGateway;
+        
+        // For split payment, pass purse info to be handled in webhook
+        if (paymentMode === "split" && splitPurseAmount > 0 && customerId) {
+          requestBody.splitPurseAmount = splitPurseAmount;
+          requestBody.splitCustomerId = customerId;
+        }
       }
 
       const { data, error } = await supabase.functions.invoke("create-public-booking", {
@@ -783,30 +789,10 @@ export function BookingWizard({
         return;
       }
 
-      // For split payment, debit purse first, then create booking with payment session for remaining amount
+      // For split payment, create booking with payment session for card amount
+      // Purse will be debited in webhook after payment success
       if (paymentMode === "split") {
         const booking = await handleCreateBooking(true, splitCardAmount);
-        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
-        const primaryAppointmentId = appointmentIds[0];
-
-        if (!customerId || !primaryAppointmentId) {
-          throw new Error("Customer not found");
-        }
-
-        // Debit purse amount
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
-          p_tenant_id: salon.id,
-          p_customer_id: customerId,
-          p_appointment_id: primaryAppointmentId,
-          p_amount: splitPurseAmount,
-          p_currency: salon.currency,
-          p_idempotency_key: `booking_split_purse_${primaryAppointmentId}_${Date.now()}`,
-        });
-
-        if (debitError) {
-          console.error("Purse debit failed:", debitError);
-          throw new Error("Failed to debit purse balance: " + debitError.message);
-        }
 
         // Redirect to payment gateway for card portion
         if (booking.checkoutUrl) {

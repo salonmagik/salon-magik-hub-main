@@ -29,6 +29,8 @@ interface WebhookEvent {
     status?: string;
     reference?: string;
     isDeposit?: boolean;
+    splitPurseAmount?: number;
+    splitCustomerId?: string;
   };
 }
 
@@ -272,7 +274,7 @@ async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId } = event.data;
 
       let intentType = "appointment_payment";
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
@@ -358,6 +360,45 @@ async function processWebhook(
                 .single();
 
               const tenant = await validateTenant(supabase, primaryAppointment.tenant_id, "appointment payment");
+
+              // Handle split payment purse deduction if metadata is present
+              if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId) {
+                console.log(`Processing split payment purse deduction: ${splitPurseAmount} for customer ${splitCustomerId}`);
+                try {
+                  const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
+                    p_tenant_id: appointments[0].tenant_id,
+                    p_customer_id: splitCustomerId,
+                    p_appointment_id: appointments[0].id,
+                    p_amount: splitPurseAmount,
+                    p_currency: tenant?.currency || "USD",
+                    p_idempotency_key: `split_purse_${reference}_${appointments[0].id}`,
+                  });
+
+                  if (debitError) {
+                    console.error("Error debiting customer purse for split payment:", debitError);
+                  } else {
+                    console.log(`Successfully debited ${splitPurseAmount} from customer purse for split payment`);
+                    
+                    // Update appointment amount_paid to include purse amount
+                    for (const appointment of appointments) {
+                      const currentPaid = allocatedAmounts[appointments.indexOf(appointment)];
+                      const proportionalPurse = appointments.length === 1 
+                        ? splitPurseAmount 
+                        : Number((splitPurseAmount / appointments.length).toFixed(2));
+                      
+                      await supabase
+                        .from("appointments")
+                        .update({
+                          amount_paid: currentPaid + proportionalPurse,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq("id", appointment.id);
+                    }
+                  }
+                } catch (purseError) {
+                  console.error("Exception while debiting customer purse:", purseError);
+                }
+              }
 
               await supabase.from("transactions").insert({
                 tenant_id: primaryAppointment.tenant_id,
@@ -957,6 +998,8 @@ Deno.serve(async (req) => {
           status: object.status,
           reference: object.id,
           isDeposit: metadata?.is_deposit === "true",
+          splitPurseAmount: metadata?.split_purse_amount ? parseFloat(metadata.split_purse_amount) : undefined,
+          splitCustomerId: metadata?.split_customer_id,
         },
       };
     } else if (paystackSignature) {
@@ -993,6 +1036,8 @@ Deno.serve(async (req) => {
             invoice_id?: string;
             credits?: string;
             is_deposit?: boolean | string;
+            split_purse_amount?: string | number;
+            split_customer_id?: string;
           };
         };
       };
@@ -1015,6 +1060,8 @@ Deno.serve(async (req) => {
           status: data.status,
           reference: data.reference,
           isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
+          splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
+          splitCustomerId: metadata?.split_customer_id,
         },
       };
     } else {
