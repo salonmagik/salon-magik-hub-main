@@ -163,6 +163,18 @@ const App = () => (
                 }
               />
 
+              {/* Protected Salon Platform Routes */}
+              <Route
+                path="/salon"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="dashboard">
+                      <SalonDashboard />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Invoice Payment Link Demo */}
               <Route
                 path="/salon/invoice-payment-demo"
@@ -290,16 +302,6 @@ const App = () => (
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="settings">
                       <BranchSettingsPage />
-                    </ModuleProtectedRoute>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/salon/settings/messaging"
-                element={
-                  <ProtectedRoute>
-                    <ModuleProtectedRoute module="settings">
-                      <MessagingSettingsPage />
                     </ModuleProtectedRoute>
                   </ProtectedRoute>
                 }

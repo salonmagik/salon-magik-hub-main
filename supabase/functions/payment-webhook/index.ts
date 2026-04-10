@@ -29,6 +29,8 @@ interface WebhookEvent {
     status?: string;
     reference?: string;
     isDeposit?: boolean;
+    splitPurseAmount?: number;
+    splitCustomerId?: string;
   };
 }
 
@@ -272,7 +274,7 @@ async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId } = event.data;
 
       let intentType = "appointment_payment";
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
@@ -359,6 +361,74 @@ async function processWebhook(
 
               const tenant = await validateTenant(supabase, primaryAppointment.tenant_id, "appointment payment");
 
+              console.log("Split payment metadata check:", {
+                splitPurseAmount,
+                splitCustomerId,
+                hasMetadata: !!(splitPurseAmount && splitPurseAmount > 0 && splitCustomerId)
+              });
+
+              // Generate payment group ID for split payments
+              const paymentGroupId = splitPurseAmount && splitPurseAmount > 0 && splitCustomerId 
+                ? crypto.randomUUID() 
+                : null;
+
+              // Handle split payment purse deduction if metadata is present
+              if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId && paymentGroupId) {
+                console.log(`Processing split payment purse deduction: ${splitPurseAmount} for customer ${splitCustomerId}`);
+                try {
+                  const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
+                    p_tenant_id: appointments[0].tenant_id,
+                    p_customer_id: splitCustomerId,
+                    p_appointment_id: appointments[0].id,
+                    p_amount: splitPurseAmount,
+                    p_currency: tenant?.currency || "USD",
+                    p_idempotency_key: `split_purse_${reference}_${appointments[0].id}`,
+                  });
+
+                  if (debitError) {
+                    console.error("Error debiting customer purse for split payment:", debitError);
+                  } else {
+                    console.log(`Successfully debited ${splitPurseAmount} from customer purse for split payment`);
+                    
+                    // Update appointment amount_paid to include purse amount
+                    for (const appointment of appointments) {
+                      const currentPaid = allocatedAmounts[appointments.indexOf(appointment)];
+                      const proportionalPurse = appointments.length === 1 
+                        ? splitPurseAmount 
+                        : Number((splitPurseAmount / appointments.length).toFixed(2));
+                      
+                      await supabase
+                        .from("appointments")
+                        .update({
+                          amount_paid: currentPaid + proportionalPurse,
+                          updated_at: new Date().toISOString(),
+                        })
+                        .eq("id", appointment.id);
+                    }
+
+                    // Create transaction record for purse portion (grouped with card transaction)
+                    await supabase.from("transactions").insert({
+                      tenant_id: primaryAppointment.tenant_id,
+                      customer_id: splitCustomerId,
+                      appointment_id: primaryAppointment.id,
+                      type: "payment",
+                      amount: splitPurseAmount,
+                      currency: tenant?.currency || "USD",
+                      method: "purse",
+                      provider: "internal",
+                      provider_reference: `split_purse_${reference}`,
+                      status: "completed",
+                      ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
+                    });
+
+                    console.log(`Created purse transaction record for ${splitPurseAmount} with payment_group_id: ${paymentGroupId}`);
+                  }
+                } catch (purseError) {
+                  console.error("Exception while debiting customer purse:", purseError);
+                }
+              }
+
+              // Create transaction record for card payment (grouped with purse if split payment)
               await supabase.from("transactions").insert({
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
@@ -371,22 +441,38 @@ async function processWebhook(
                 provider_reference: reference,
                 status: "completed",
                 ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
+                ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
               });
+
+              // Calculate total payment including purse for notifications
+              const totalPaymentAmount = splitPurseAmount && splitPurseAmount > 0 
+                ? amount + splitPurseAmount 
+                : amount;
+              const paymentDescription = splitPurseAmount && splitPurseAmount > 0
+                ? `${tenant?.currency || ""} ${amount} (card) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
+                : `${tenant?.currency || ""} ${amount}`;
 
               await sendTransactionAlerts({
                 tenantId: primaryAppointment.tenant_id,
                 tenantName: tenant?.name,
                 currency: tenant?.currency,
                 customerName: customer?.full_name,
-                amount,
+                amount: totalPaymentAmount,
                 gateway: event.gateway,
                 title: `${isDeposit ? "Deposit received" : "Payment received"} at ${tenant?.name || "your salon"}`,
-                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking.`,
+                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${paymentDescription} for their booking.`,
                 entityId: primaryAppointment.id,
                 htmlContent: `
                   <h2 style="color: #2563EB; margin-bottom: 16px;">${isDeposit ? "Deposit received" : "Payment received"}</h2>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
-                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total Amount:</strong> ${tenant?.currency || "USD"} ${totalPaymentAmount}</p>
+                  ${splitPurseAmount && splitPurseAmount > 0 ? `
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Payment Breakdown:</strong></p>
+                    <ul style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+                      <li>Card payment: ${tenant?.currency || "USD"} ${amount}</li>
+                      <li>Store credit: ${tenant?.currency || "USD"} ${splitPurseAmount}</li>
+                    </ul>
+                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>`}
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
                 `,
@@ -482,8 +568,8 @@ async function processWebhook(
                     appointment_id: primaryAppointment.id,
                     invoice_number: invoiceNumber,
                     currency: tenant.currency,
-                    subtotal: amount,
-                    total: amount,
+                    subtotal: totalPaymentAmount,
+                    total: totalPaymentAmount,
                     status: isDeposit ? "sent" : "paid",
                     paid_at: new Date().toISOString(),
                   })
@@ -508,12 +594,19 @@ async function processWebhook(
                 // Validate salon wallet currency matches tenant currency
                 await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
+                // For split payments, salon receives full amount (card + purse)
+                const totalAmountForSalon = splitPurseAmount && splitPurseAmount > 0 
+                  ? amount + splitPurseAmount 
+                  : amount;
+
+                console.log(`Crediting salon purse: card=${amount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}`);
+
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
                   p_entry_type: "salon_purse_credit_booking",
                   p_reference_type: "appointment",
                   p_reference_id: primaryAppointment.id,
-                  p_amount: amount,
+                  p_amount: totalAmountForSalon,
                   p_currency: tenant.currency,
                   p_idempotency_key: `booking_${reference}`,
                   p_gateway_reference: reference,
@@ -957,6 +1050,8 @@ Deno.serve(async (req) => {
           status: object.status,
           reference: object.id,
           isDeposit: metadata?.is_deposit === "true",
+          splitPurseAmount: metadata?.split_purse_amount ? parseFloat(metadata.split_purse_amount) : undefined,
+          splitCustomerId: metadata?.split_customer_id,
         },
       };
     } else if (paystackSignature) {
@@ -993,6 +1088,8 @@ Deno.serve(async (req) => {
             invoice_id?: string;
             credits?: string;
             is_deposit?: boolean | string;
+            split_purse_amount?: string | number;
+            split_customer_id?: string;
           };
         };
       };
@@ -1015,6 +1112,8 @@ Deno.serve(async (req) => {
           status: data.status,
           reference: data.reference,
           isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
+          splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
+          splitCustomerId: metadata?.split_customer_id,
         },
       };
     } else {

@@ -7,14 +7,27 @@ import type { Tables } from "@supabase-client";
 type Invoice = Tables<"invoices">;
 type InvoiceLineItem = Tables<"invoice_line_items">;
 
-interface InvoiceWithItems extends Invoice {
+export interface InvoiceWithItems extends Invoice {
   invoice_line_items?: InvoiceLineItem[];
 }
 
-interface CreateInvoiceData {
+export interface CreateInvoiceData {
   customerId: string;
   appointmentId?: string;
   items: {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    serviceId?: string;
+    productId?: string;
+  }[];
+  notes?: string;
+  dueDate?: string;
+}
+
+export interface UpdateInvoiceData {
+  items: {
+    id?: string; // existing line item id
     description: string;
     quantity: number;
     unitPrice: number;
@@ -133,7 +146,11 @@ export function useInvoices() {
         if (itemsError) throw itemsError;
       }
 
-      toast({ title: "Invoice created", description: `Invoice ${invoiceNumber} created` });
+      toast({ 
+        title: "Invoice created", 
+        description: `Invoice ${invoiceNumber} created successfully` 
+      });
+
       fetchInvoices();
       return invoice;
     } catch (err) {
@@ -206,6 +223,27 @@ export function useInvoices() {
   // Send invoice via email
   const sendInvoice = async (invoiceId: string): Promise<boolean> => {
     try {
+      // Generate payment link first
+      try {
+        const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
+          "create-invoice-payment-session",
+          { body: { invoiceId } }
+        );
+
+        if (paymentError) {
+          console.error("Error generating payment link:", paymentError);
+          toast({
+            title: "Warning",
+            description: "Payment link generation failed. Invoice will be sent without payment link.",
+            variant: "destructive",
+          });
+        }
+      } catch (paymentErr) {
+        console.error("Error generating payment link:", paymentErr);
+        // Continue with sending even if payment link fails
+      }
+
+      // Send invoice via email
       const { error } = await supabase.functions.invoke("send-invoice", {
         body: { invoiceId },
       });
@@ -218,7 +256,7 @@ export function useInvoices() {
         .update({ status: "sent", sent_at: new Date().toISOString() })
         .eq("id", invoiceId);
 
-      toast({ title: "Invoice sent", description: "Invoice has been emailed to the customer" });
+      toast({ title: "Invoice sent", description: "Invoice has been emailed to the customer with payment link" });
       fetchInvoices();
       return true;
     } catch (err) {
@@ -300,6 +338,102 @@ export function useInvoices() {
     }
   };
 
+  // Fetch single invoice with line items
+  const fetchInvoice = async (invoiceId: string): Promise<InvoiceWithItems | null> => {
+    if (!currentTenant?.id) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select(`
+          *,
+          invoice_line_items (*)
+        `)
+        .eq("id", invoiceId)
+        .eq("tenant_id", currentTenant.id)
+        .single();
+
+      if (error) throw error;
+      return data as InvoiceWithItems;
+    } catch (err) {
+      console.error("Error fetching invoice:", err);
+      toast({
+        title: "Error",
+        description: "Failed to fetch invoice",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  // Update an existing invoice
+  const updateInvoice = async (invoiceId: string, data: UpdateInvoiceData): Promise<boolean> => {
+    if (!currentTenant?.id) return false;
+
+    try {
+      // Calculate totals
+      const subtotal = data.items.reduce(
+        (sum, item) => sum + item.quantity * item.unitPrice,
+        0
+      );
+      const total = subtotal;
+
+      // Update invoice
+      const { error: invoiceError } = await supabase
+        .from("invoices")
+        .update({
+          subtotal,
+          total,
+          notes: data.notes || null,
+          due_date: data.dueDate || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invoiceId)
+        .eq("tenant_id", currentTenant.id);
+
+      if (invoiceError) throw invoiceError;
+
+      // Delete existing line items
+      const { error: deleteError } = await supabase
+        .from("invoice_line_items")
+        .delete()
+        .eq("invoice_id", invoiceId);
+
+      if (deleteError) throw deleteError;
+
+      // Create new line items
+      if (data.items.length > 0) {
+        const lineItems = data.items.map((item) => ({
+          invoice_id: invoiceId,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total_price: item.quantity * item.unitPrice,
+          service_id: item.serviceId || null,
+          product_id: item.productId || null,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from("invoice_line_items")
+          .insert(lineItems);
+
+        if (itemsError) throw itemsError;
+      }
+
+      toast({ title: "Invoice updated", description: "Invoice has been updated successfully" });
+      fetchInvoices();
+      return true;
+    } catch (err) {
+      console.error("Error updating invoice:", err);
+      toast({
+        title: "Error",
+        description: "Failed to update invoice",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   return {
     invoices,
     isLoading,
@@ -310,6 +444,8 @@ export function useInvoices() {
     markAsPaid,
     voidInvoice,
     generatePaymentLink,
+    fetchInvoice,
+    updateInvoice,
     refetch: fetchInvoices,
   };
 }

@@ -665,6 +665,10 @@ export function BookingWizard({
 
   const handleCreateBooking = async (includePaymentSession = false, customPaymentAmount?: number) => {
     try {
+      // For split payment mode, purse is handled in webhook after payment success
+      // so we don't send purseAmount to backend to avoid double deduction
+      const purseAmountForBackend = paymentMode === "split" || paymentMode === "purse" ? 0 : purseAmount;
+      
       const requestBody: any = {
         tenantId: salon.id,
         customer: bookerInfo,
@@ -672,7 +676,7 @@ export function BookingWizard({
         payAtSalon: paymentOption === "pay_at_salon",
         voucherCode: appliedVoucher?.code || null,
         voucherDiscount,
-        purseAmount,
+        purseAmount: purseAmountForBackend,
         depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
         giftsBelongToSamePerson: meta.giftsBelongToSamePerson,
       };
@@ -692,6 +696,49 @@ export function BookingWizard({
         requestBody.paymentSuccessUrl = window.location.href;
         requestBody.paymentCancelUrl = window.location.href;
         requestBody.preferredPaymentGateway = selectedGateway;
+        
+        // For split payment, pass purse info to be handled in webhook
+        // This handles two scenarios:
+        // 1. User explicitly selected split mode in Payment step
+        // 2. User applied purse in Review step and is paying remainder via card
+        const hasPurseApplied = purseAmount > 0 && afterVoucher > purseAmount;
+        const isSplitScenario = (paymentMode === "split" && splitPurseAmount > 0) || 
+                                (hasPurseApplied && includePaymentSession);
+        
+        console.log("Split payment check:", {
+          paymentMode,
+          splitPurseAmount,
+          purseAmount,
+          customerId,
+          hasPurseApplied,
+          isSplitScenario,
+          afterVoucher,
+          includePaymentSession
+        });
+        
+        if (isSplitScenario && customerId) {
+          // Use splitPurseAmount if available (from Payment step), otherwise use purseAmount (from Review step)
+          const purseAmountToUse = paymentMode === "split" ? splitPurseAmount : purseAmount;
+          requestBody.splitPurseAmount = purseAmountToUse;
+          requestBody.splitCustomerId = customerId;
+          console.log("Added split payment metadata to request:", {
+            splitPurseAmount: requestBody.splitPurseAmount,
+            splitCustomerId: requestBody.splitCustomerId
+          });
+        }
+      }
+
+      // For purse-only payment, trigger backend processing (mimics webhook for security)
+      // This handles both cases:
+      // 1. User explicitly selects purse mode in Payment step (paymentMode === "purse")
+      // 2. User applies purse in Review step that covers full amount (purseAmount > 0 && afterPurse === 0)
+      const isPurseOnlyPayment = (paymentMode === "purse" && amountDueNow > 0) || 
+                                  (purseAmount > 0 && afterPurse === 0 && !includePaymentSession);
+      
+      if (isPurseOnlyPayment && customerId) {
+        requestBody.processPursePayment = true;
+        requestBody.pursePaymentCustomerId = customerId;
+        requestBody.paymentAmount = purseAmount; // Use purseAmount, not amountDueNow which is 0
       }
 
       const { data, error } = await supabase.functions.invoke("create-public-booking", {
@@ -730,6 +777,7 @@ export function BookingWizard({
   };
 
   const handlePaymentModeChange = (mode: PaymentMode, purseAmt: number, cardAmt: number) => {
+    console.log("Payment mode changed:", { mode, purseAmt, cardAmt });
     setPaymentMode(mode);
     setSplitPurseAmount(purseAmt);
     setSplitCardAmount(cardAmt);
@@ -737,72 +785,27 @@ export function BookingWizard({
 
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
+    console.log("Payment submit - current state:", {
+      paymentMode,
+      splitPurseAmount,
+      splitCardAmount,
+      customerId,
+      amountDueNow
+    });
     try {
-      // For purse-only payment, create booking without payment session
+      // For purse-only payment, backend handles everything (debit, credit salon, transactions, notifications)
       if (paymentMode === "purse") {
         const booking = await handleCreateBooking(false);
-        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
-        const primaryAppointmentId = appointmentIds[0];
-
-        if (!customerId || !primaryAppointmentId) {
-          throw new Error("Customer not found");
-        }
-
-        const amountToDebit = amountDueNow;
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as never, {
-          p_tenant_id: salon.id,
-          p_customer_id: customerId,
-          p_appointment_id: primaryAppointmentId,
-          p_amount: amountToDebit,
-          p_currency: salon.currency,
-          p_idempotency_key: `booking_purse_${primaryAppointmentId}_${Date.now()}`,
-        });
-
-        if (debitError) {
-          console.error("Purse debit failed:", debitError);
-          throw new Error("Failed to debit purse balance: " + debitError.message);
-        }
-
-        if (appointmentIds.length > 0) {
-          await supabase
-            .from("appointments")
-            .update({
-              payment_status: "fully_paid",
-              amount_paid: amountToDebit,
-            })
-            .in("id", appointmentIds);
-        }
-
         setBookingReference(booking.reference || "CONFIRMED");
         setStep("confirmation");
         clearCart();
         return;
       }
 
-      // For split payment, debit purse first, then create booking with payment session for remaining amount
+      // For split payment, create booking with payment session for card amount
+      // Purse will be debited in webhook after payment success
       if (paymentMode === "split") {
         const booking = await handleCreateBooking(true, splitCardAmount);
-        const appointmentIds = booking.appointmentIds || (booking.appointmentId ? [booking.appointmentId] : []);
-        const primaryAppointmentId = appointmentIds[0];
-
-        if (!customerId || !primaryAppointmentId) {
-          throw new Error("Customer not found");
-        }
-
-        // Debit purse amount
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking" as any, {
-          p_tenant_id: salon.id,
-          p_customer_id: customerId,
-          p_appointment_id: primaryAppointmentId,
-          p_amount: splitPurseAmount,
-          p_currency: salon.currency,
-          p_idempotency_key: `booking_split_purse_${primaryAppointmentId}_${Date.now()}`,
-        });
-
-        if (debitError) {
-          console.error("Purse debit failed:", debitError);
-          throw new Error("Failed to debit purse balance: " + debitError.message);
-        }
 
         // Redirect to payment gateway for card portion
         if (booking.checkoutUrl) {
@@ -840,7 +843,13 @@ export function BookingWizard({
   const handleSubmitBooking = async () => {
     setIsSubmitting(true);
     try {
-      const booking = await handleCreateBooking();
+      // Check if purse is being used to pay the full amount
+      const isPursePayment = purseAmount > 0 && afterPurse === 0 && customerId;
+      
+      const booking = await handleCreateBooking(false);
+      
+      // If paying with purse, the backend handles everything
+      // Otherwise, it's a pay-at-salon booking
       setBookingReference(booking.reference || "CONFIRMED");
       setStep("confirmation");
       clearCart();
@@ -1013,6 +1022,7 @@ export function BookingWizard({
             {step === "payment" && (
               <PaymentStep
                 amountDue={amountDueNow}
+                totalBeforePurse={afterVoucher}
                 currency={salon.currency}
                 country={selectedCountryCode || salon.country || "US"}
                 onGatewaySelect={setSelectedGateway}

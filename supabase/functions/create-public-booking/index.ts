@@ -78,6 +78,12 @@ interface BookingRequest {
   paymentSuccessUrl?: string;
   paymentCancelUrl?: string;
   preferredPaymentGateway?: "stripe" | "paystack";
+  // Split payment fields
+  splitPurseAmount?: number;
+  splitCustomerId?: string;
+  // Purse-only payment fields
+  processPursePayment?: boolean;
+  pursePaymentCustomerId?: string;
 }
 
 function normalizeEmail(email?: string | null) {
@@ -161,6 +167,10 @@ serve(async (req) => {
       paymentSuccessUrl,
       paymentCancelUrl,
       preferredPaymentGateway,
+      splitPurseAmount,
+      splitCustomerId,
+      processPursePayment = false,
+      pursePaymentCustomerId,
     } = body;
 
     console.log("Payment session params:", { 
@@ -604,6 +614,13 @@ serve(async (req) => {
       if (usePaystack && paystackSecretKey) {
         // Create Paystack transaction
         const amountInMinorUnits = Math.round(paymentAmount * 100);
+        
+        console.log("Creating Paystack transaction with split payment metadata:", {
+          splitPurseAmount,
+          splitCustomerId,
+          hasMetadata: !!(splitPurseAmount && splitCustomerId)
+        });
+        
         const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
           method: "POST",
           headers: {
@@ -624,6 +641,10 @@ serve(async (req) => {
               is_deposit: paymentIsDeposit,
               customer_name: `${customer.firstName} ${customer.lastName}`,
               intent_type: "appointment_payment",
+              ...(splitPurseAmount && splitCustomerId ? {
+                split_purse_amount: splitPurseAmount.toString(),
+                split_customer_id: splitCustomerId,
+              } : {}),
             },
           }),
         });
@@ -689,6 +710,10 @@ serve(async (req) => {
             "metadata[tenant_id]": tenantId,
             "metadata[is_deposit]": paymentIsDeposit ? "true" : "false",
             "metadata[intent_type]": "appointment_payment",
+            ...(splitPurseAmount && splitCustomerId ? {
+              "metadata[split_purse_amount]": splitPurseAmount.toString(),
+              "metadata[split_customer_id]": splitCustomerId,
+            } : {}),
           }),
         });
 
@@ -731,6 +756,104 @@ serve(async (req) => {
           }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+    }
+
+    // Process purse-only payment if requested (mimics webhook behavior for security and idempotency)
+    if (processPursePayment && pursePaymentCustomerId && paymentAmount && paymentAmount > 0) {
+      console.log(`Processing purse-only payment: ${paymentAmount} for customer ${pursePaymentCustomerId}`);
+      
+      try {
+        const primaryAppointmentId = createdAppointmentIds[0];
+        const idempotencyKey = `purse_only_${primaryAppointmentId}_${Date.now()}`;
+        
+        // Debit customer purse
+        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
+          p_tenant_id: tenantId,
+          p_customer_id: pursePaymentCustomerId,
+          p_appointment_id: primaryAppointmentId,
+          p_amount: paymentAmount,
+          p_currency: tenant.currency,
+          p_idempotency_key: idempotencyKey,
+        });
+
+        if (debitError) {
+          console.error("Error debiting customer purse:", debitError);
+          throw new Error(`Failed to debit purse balance: ${debitError.message}`);
+        }
+
+        console.log(`Successfully debited ${paymentAmount} from customer purse`);
+
+        // Update appointments to fully_paid status
+        const { error: updateError } = await supabase
+          .from("appointments")
+          .update({
+            payment_status: "fully_paid",
+            amount_paid: paymentAmount / createdAppointmentIds.length, // Split evenly if multiple appointments
+            updated_at: new Date().toISOString(),
+          })
+          .in("id", createdAppointmentIds);
+
+        if (updateError) {
+          console.error("Error updating appointment payment status:", updateError);
+        }
+
+        // Create transaction record
+        const { error: transactionError } = await supabase.from("transactions").insert({
+          tenant_id: tenantId,
+          customer_id: pursePaymentCustomerId,
+          appointment_id: primaryAppointmentId,
+          type: "payment",
+          amount: paymentAmount,
+          currency: tenant.currency,
+          method: "purse",
+          provider: "internal",
+          provider_reference: idempotencyKey,
+          status: "completed",
+        });
+
+        if (transactionError) {
+          console.error("Error creating transaction record:", transactionError);
+        }
+
+        // Credit salon purse (same as webhook does)
+        const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+          p_tenant_id: tenantId,
+          p_entry_type: "salon_purse_credit_booking",
+          p_reference_type: "appointment",
+          p_reference_id: primaryAppointmentId,
+          p_amount: paymentAmount,
+          p_currency: tenant.currency,
+          p_idempotency_key: `salon_${idempotencyKey}`,
+          p_gateway_reference: idempotencyKey,
+        });
+
+        if (creditError) {
+          console.error("Error crediting salon purse:", creditError);
+        } else {
+          console.log(`Salon purse credited: ${paymentAmount} ${tenant.currency}`);
+        }
+
+        // Send appointment notification (same as webhook does)
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/send-appointment-notification`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${supabaseServiceKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              appointmentId: primaryAppointmentId,
+              action: "scheduled",
+            }),
+          });
+        } catch (emailError) {
+          console.error("Error sending appointment notification:", emailError);
+        }
+
+      } catch (purseError) {
+        console.error("Exception processing purse payment:", purseError);
+        throw purseError; // Re-throw to return error to client
       }
     }
 
