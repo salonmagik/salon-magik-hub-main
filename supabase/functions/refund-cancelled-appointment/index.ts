@@ -113,25 +113,72 @@ serve(async (req) => {
     }
 
     if (appointment.payment_status === "refunded_full") {
-      return new Response(JSON.stringify({ error: "This appointment has already been refunded" }), {
+      return new Response(JSON.stringify({ error: "This appointment has already been fully refunded" }), {
         status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Check for existing completed/approved refund requests for this appointment
+    const { data: existingRefundRequests } = await admin
+      .from("refund_requests")
+      .select("amount, status")
+      .eq("tenant_id", appointment.tenant_id)
+      .or(`transaction_id.in.(${[appointmentId, transactionId].filter(Boolean).join(",")})`)
+      .in("status", ["completed", "approved", "pending"]);
+
+    if (existingRefundRequests && existingRefundRequests.length > 0) {
+      const totalRequestedRefund = existingRefundRequests.reduce(
+        (sum, req) => sum + Number(req.amount),
+        0
+      );
+      
+      if (totalRequestedRefund >= refundAmount) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Refund already requested or processed for this appointment",
+            details: {
+              totalRefunded: totalRequestedRefund,
+              appointmentAmount: refundAmount
+            }
+          }), 
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    // Check for existing completed refund transactions for this appointment
     const { data: existingRefund } = await admin
       .from("transactions")
-      .select("id")
+      .select("amount")
       .eq("appointment_id", appointment.id)
       .eq("type", "refund")
-      .eq("status", "completed")
-      .maybeSingle();
+      .eq("status", "completed");
 
-    if (existingRefund) {
-      return new Response(JSON.stringify({ error: "Refund already processed for this appointment" }), {
-        status: 409,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (existingRefund && existingRefund.length > 0) {
+      const totalRefunded = existingRefund.reduce(
+        (sum, txn) => sum + Number(txn.amount),
+        0
+      );
+      
+      if (totalRefunded >= refundAmount) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Refund already processed for this appointment",
+            details: {
+              totalRefunded,
+              appointmentAmount: refundAmount
+            }
+          }), 
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
     const { data: tenant, error: tenantError } = await admin

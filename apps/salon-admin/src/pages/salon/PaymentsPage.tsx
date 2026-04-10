@@ -78,10 +78,11 @@ export default function PaymentsPage() {
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [transactionRefundStatus, setTransactionRefundStatus] = useState<Map<string, boolean>>(new Map());
   
   const { currentTenant } = useAuth();
   const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
-  const { pendingRefunds, approvedRefunds, rejectedRefunds, isLoading: refundsLoading, refetch: refetchRefunds, approveRefund, rejectRefund } = useRefunds();
+  const { refunds, pendingRefunds, approvedRefunds, rejectedRefunds, isLoading: refundsLoading, refetch: refetchRefunds, approveRefund, rejectRefund } = useRefunds();
 
   const currency = currentTenant?.currency || "USD";
 
@@ -405,13 +406,25 @@ export default function PaymentsPage() {
                       const style = statusStyles[txn.status] || statusStyles.pending;
                       const StatusIcon = style.icon;
                       const isIncoming = txn.type === "payment" || txn.type === "purse_topup";
+                      const isRefundType = txn.type === "refund";
+                      
+                      // Check if this payment transaction has been fully refunded
+                      const hasBeenRefunded = txn.type === "payment" && refunds.some(
+                        (refund) => refund.transaction_id === txn.id && 
+                        (refund.status === "completed" || refund.status === "approved")
+                      );
+                      
+                      const isClickable = txn.type === "payment" && txn.customer_id && !hasBeenRefunded && !isRefundType;
 
                       return (
                         <div
                           key={txn.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-surface hover:bg-muted/50 transition-colors cursor-pointer"
+                          className={cn(
+                            "flex items-center justify-between p-3 rounded-lg bg-surface transition-colors",
+                            isClickable ? "hover:bg-muted/50 cursor-pointer" : "opacity-60 cursor-not-allowed"
+                          )}
                           onClick={() => {
-                            if (txn.type === "payment" && txn.customer_id) {
+                            if (isClickable) {
                               setSelectedTransaction(txn);
                               setRefundDialogOpen(true);
                             }

@@ -67,13 +67,47 @@ export function useRefunds() {
       // Fetch the refund request details
       const { data: refundRequest, error: fetchError } = await supabase
         .from("refund_requests")
-        .select("*, transaction:transactions(id, appointment_id)")
+        .select("*, transaction:transactions(id, appointment_id, amount)")
         .eq("id", refundId)
         .eq("tenant_id", currentTenant.id)
         .single();
 
       if (fetchError || !refundRequest) {
         throw new Error("Refund request not found");
+      }
+
+      // Validate refund hasn't already been approved/completed
+      if (refundRequest.status === "completed" || refundRequest.status === "approved") {
+        throw new Error("This refund has already been processed");
+      }
+
+      // Check if there are other approved/completed refunds for the same transaction
+      const { data: otherRefunds, error: otherRefundsError } = await supabase
+        .from("refund_requests")
+        .select("amount, status")
+        .eq("transaction_id", refundRequest.transaction_id)
+        .eq("tenant_id", currentTenant.id)
+        .in("status", ["completed", "approved"])
+        .neq("id", refundId);
+
+      if (otherRefundsError) {
+        console.error("Error checking other refunds:", otherRefundsError);
+      }
+
+      // Calculate total refunded amount
+      const totalOtherRefunds = otherRefunds?.reduce(
+        (sum, r) => sum + Number(r.amount),
+        0
+      ) || 0;
+
+      const originalAmount = Number(refundRequest.transaction?.amount || 0);
+      const requestedAmount = Number(refundRequest.amount);
+      const maxRefundable = originalAmount - totalOtherRefunds;
+
+      if (requestedAmount > maxRefundable) {
+        throw new Error(
+          `Cannot approve refund. Maximum refundable amount is ${maxRefundable.toFixed(2)} (original: ${originalAmount.toFixed(2)}, already refunded: ${totalOtherRefunds.toFixed(2)})`
+        );
       }
 
       // If refund_type is "store_credit", process wallet transactions
