@@ -55,7 +55,8 @@ export function usePayoutDestinations(tenantId?: string) {
     if (tenantId) {
       fetchDestinations();
     }
-  }, [tenantId, fetchDestinations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
 
   const createDestination = async (
     data: CreateDestinationData

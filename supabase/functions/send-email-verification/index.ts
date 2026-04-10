@@ -252,6 +252,18 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Verification email sent successfully");
 
+    // Log the message (no tenant_id/customer_id for email verifications)
+    await supabase.from("message_logs").insert({
+      channel: "email",
+      recipient: email,
+      template_type: "email_verification",
+      status: "sent",
+      provider: "resend",
+      initiated_by: "system",
+      credits_used: 0,
+      sent_at: new Date().toISOString(),
+    });
+
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }

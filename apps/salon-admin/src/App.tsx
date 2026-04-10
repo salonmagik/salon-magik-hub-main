@@ -37,10 +37,11 @@ const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
 const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
 const SalonsOverviewPage = lazy(() => import("./pages/salon/SalonsOverviewPage"));
+const InvoicePaymentLinkDemo = lazy(() => import("./pages/salon/InvoicePaymentLinkDemo"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // BackOffice (separate app; routes removed here)
- 
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -92,7 +93,7 @@ function RootRoute() {
   }, [getFirstAllowedRoute, hasCompletedOnboarding, isAssignmentPending, isAuthenticated, isLoading]);
 
   if (isLoading) return null;
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
@@ -119,247 +120,259 @@ const App = () => (
         <AuthProvider>
           <Suspense fallback={<RouteLoading />}>
             <Routes>
-            {/* Root - smart redirect based on auth */}
-            <Route path="/" element={<RootRoute />} />
+              {/* Root - smart redirect based on auth */}
+              <Route path="/" element={<RootRoute />} />
 
-            {/* Public Auth Routes - redirect if already logged in */}
-            <Route
-              path="/login"
-              element={
-                <PublicOnlyRoute>
-                  <LoginPage />
-                </PublicOnlyRoute>
-              }
-            />
-            <Route
-              path="/signup"
-              element={
-                <PublicOnlyRoute>
-                  <SignupPage />
-                </PublicOnlyRoute>
-              }
-            />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/invitation-expired" element={<InvitationExpiredPage />} />
-            <Route path="/verify-email" element={<VerifyEmailPage />} />
-            <Route
-              path="/complete-signup"
-              element={
-                <ProtectedRoute requireOnboarding={false}>
-                  <CompleteSignupPage />
-                </ProtectedRoute>
-              }
-            />
+              {/* Public Auth Routes - redirect if already logged in */}
+              <Route
+                path="/login"
+                element={
+                  <PublicOnlyRoute>
+                    <LoginPage />
+                  </PublicOnlyRoute>
+                }
+              />
+              <Route
+                path="/signup"
+                element={
+                  <PublicOnlyRoute>
+                    <SignupPage />
+                  </PublicOnlyRoute>
+                }
+              />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/invitation-expired" element={<InvitationExpiredPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route
+                path="/complete-signup"
+                element={
+                  <ProtectedRoute requireOnboarding={false}>
+                    <CompleteSignupPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Onboarding - requires auth but NOT onboarding completion */}
-            <Route
-              path="/onboarding"
-              element={
-                <OnboardingRoute>
-                  <OnboardingPage />
-                </OnboardingRoute>
-              }
-            />
+              {/* Onboarding - requires auth but NOT onboarding completion */}
+              <Route
+                path="/onboarding"
+                element={
+                  <OnboardingRoute>
+                    <OnboardingPage />
+                  </OnboardingRoute>
+                }
+              />
 
-            {/* Protected Salon Platform Routes */}
-            <Route
-              path="/salon"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="dashboard">
-                    <SalonDashboard />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/appointments"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="appointments">
-                    <AppointmentsPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/customers"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="customers">
-                    <CustomersPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/services"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="services">
-                    <ServicesPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/payments"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="payments">
-                    <PaymentsPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/reports"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="reports">
-                    <ReportsPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/messaging"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="messaging">
-                    <MessagingPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/journal"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="journal">
-                    <JournalPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/staff"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="staff">
-                    <StaffPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/calendar"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="calendar">
-                    <CalendarPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/settings"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="settings">
-                    <SettingsPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/business-settings"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="settings">
-                    <BusinessSettingsPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/branch-settings"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="settings">
-                    <BranchSettingsPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/access-denied"
-              element={
-                <ProtectedRoute>
-                  <AccessDeniedPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/assignment-pending"
-              element={
-                <ProtectedRoute>
-                  <AssignmentPendingPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/email-templates"
-              element={
-                <ProtectedRoute>
-                  <EmailTemplatesPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/help"
-              element={
-                <ProtectedRoute>
-                  <HelpPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/audit-log"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="audit_log">
-                    <AuditLogPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/overview"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="salons_overview">
-                    <SalonsOverviewPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/salon/overview/staff"
-              element={
-                <ProtectedRoute>
-                  <ModuleProtectedRoute module="staff">
-                    <StaffPage />
-                  </ModuleProtectedRoute>
-                </ProtectedRoute>
-              }
-            />
+              {/* Protected Salon Platform Routes */}
+              <Route
+                path="/salon"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="dashboard">
+                      <SalonDashboard />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* (Client portal, public booking, and backoffice live in their own apps) */}
+              {/* Invoice Payment Link Demo */}
+              <Route
+                path="/salon/invoice-payment-demo"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="dashboard">
+                      <InvoicePaymentLinkDemo />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/appointments"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="appointments">
+                      <AppointmentsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/customers"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="customers">
+                      <CustomersPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/services"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="services">
+                      <ServicesPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/payments"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="payments">
+                      <PaymentsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/reports"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="reports">
+                      <ReportsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/messaging"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="messaging">
+                      <MessagingPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/journal"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="journal">
+                      <JournalPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/staff"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="staff">
+                      <StaffPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/calendar"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="calendar">
+                      <CalendarPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/settings"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="settings">
+                      <SettingsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/business-settings"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="settings">
+                      <BusinessSettingsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/branch-settings"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="settings">
+                      <BranchSettingsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/access-denied"
+                element={
+                  <ProtectedRoute>
+                    <AccessDeniedPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/assignment-pending"
+                element={
+                  <ProtectedRoute>
+                    <AssignmentPendingPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/email-templates"
+                element={
+                  <ProtectedRoute>
+                    <EmailTemplatesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/help"
+                element={
+                  <ProtectedRoute>
+                    <HelpPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/audit-log"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="audit_log">
+                      <AuditLogPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/overview"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="salons_overview">
+                      <SalonsOverviewPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/overview/staff"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="staff">
+                      <StaffPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* 404 */}
-            <Route path="*" element={<NotFound />} />
+              {/* (Client portal, public booking, and backoffice live in their own apps) */}
+
+              {/* 404 */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </AuthProvider>

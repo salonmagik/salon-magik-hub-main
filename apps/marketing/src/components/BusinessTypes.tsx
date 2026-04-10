@@ -1,9 +1,8 @@
 import { AspectRatio } from "@ui/aspect-ratio";
-
-const salonImage = "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=900&q=80";
-const barberImage = "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=900&q=80";
-const nailsImage = "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=900&q=80";
-const spaImage = "https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=900&q=80";
+import barberImage from "@/assets/barbershop-black-man.jpg";
+import nailsImage from "@/assets/nail-salon.jpg";
+import salonImage from "@/assets/hairsalon.jpg";
+import spaImage from "@/assets/spa-pic.jpg";
 
 const businessTypes = [
   {
@@ -13,16 +12,16 @@ const businessTypes = [
     bgColor: "bg-amber-100/80", // brown/warm pastel
   },
   {
-    name: "Barbershop",
-    description: "Fades, cuts & grooming services",
-    image: barberImage,
-    bgColor: "bg-sky-100/80", // blue pastel
-  },
-  {
     name: "Nail Studio",
     description: "Manicures, pedicures & nail art",
     image: nailsImage,
     bgColor: "bg-pink-100/80", // pink pastel
+  },
+  {
+    name: "Barbershop",
+    description: "Fades, cuts & grooming services",
+    image: barberImage,
+    bgColor: "bg-sky-100/80", // blue pastel
   },
   {
     name: "Spa & Wellness",
@@ -54,7 +53,7 @@ export function BusinessTypes({ isWaitlistMode, onWaitlistClick }: BusinessTypes
             Built for every beauty business
           </h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Whether you're a solo braider or managing multiple locations, 
+            Whether you're a solo braider or managing multiple locations,
             Salon Magik adapts to how you work.
           </p>
         </div>

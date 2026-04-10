@@ -7,7 +7,9 @@ const corsHeaders = {
 
 interface PurchaseRequest {
   tenantId: string;
-  packageId: string;
+  packageId?: string;
+  customCredits?: number;
+  customAmount?: number;
 }
 
 interface CreditPackage {
@@ -22,6 +24,31 @@ const CREDIT_PACKAGES: Record<string, CreditPackage> = {
   pack_250: { credits: 250, priceNGN: 15000, priceGHS: 240 },
   pack_500: { credits: 500, priceNGN: 27000, priceGHS: 420 },
 };
+
+const MIN_CUSTOM_CREDITS = 10;
+const MAX_CUSTOM_CREDITS = 1000;
+
+// Tier-based pricing for custom credits (based on PRD pricing structure)
+function calculateCustomCreditPrice(credits: number, currency: string): number {
+  let ratePerCredit: number;
+  
+  // Determine rate based on tier
+  if (credits <= 50) {
+    // Pack 50 rate: NGN 70/credit, GHS 1.20/credit
+    ratePerCredit = currency === 'NGN' ? 70 : currency === 'GHS' ? 1.20 : 0.10;
+  } else if (credits <= 100) {
+    // Pack 100 rate: NGN 65/credit, GHS 1.08/credit
+    ratePerCredit = currency === 'NGN' ? 65 : currency === 'GHS' ? 1.08 : 0.09;
+  } else if (credits <= 250) {
+    // Pack 250 rate: NGN 60/credit, GHS 0.96/credit
+    ratePerCredit = currency === 'NGN' ? 60 : currency === 'GHS' ? 0.96 : 0.08;
+  } else {
+    // Pack 500+ rate: NGN 54/credit, GHS 0.84/credit
+    ratePerCredit = currency === 'NGN' ? 54 : currency === 'GHS' ? 0.84 : 0.07;
+  }
+  
+  return Math.round(credits * ratePerCredit);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -57,45 +84,72 @@ Deno.serve(async (req) => {
     }
 
     const body: PurchaseRequest = await req.json();
-    const { tenantId, packageId } = body;
+    const { tenantId, packageId, customCredits, customAmount } = body;
 
     // Validate required fields
-    if (!tenantId || !packageId) {
+    if (!tenantId) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: tenantId, packageId" }),
+        JSON.stringify({ error: "Missing required field: tenantId" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Validate packageId
-    const creditPackage = CREDIT_PACKAGES[packageId];
-    if (!creditPackage) {
+    // Must provide either packageId OR customCredits+customAmount
+    if (!packageId && (!customCredits || !customAmount)) {
       return new Response(
-        JSON.stringify({ error: `Invalid packageId. Valid options: ${Object.keys(CREDIT_PACKAGES).join(", ")}` }),
+        JSON.stringify({ error: "Must provide either packageId or customCredits with customAmount" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    let credits: number;
+    let amount: number;
+    let wallet;
 
     // Use service role for database operations
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch salon_wallet
-    const { data: wallet, error: walletError } = await serviceSupabase
+    // Fetch salon_wallet first
+    const { data: walletData, error: walletError } = await serviceSupabase
       .from("salon_wallets")
       .select("*")
       .eq("tenant_id", tenantId)
       .single();
 
-    if (walletError || !wallet) {
+    if (walletError || !walletData) {
       console.error("Error fetching salon wallet:", walletError);
       return new Response(
         JSON.stringify({ error: "Salon wallet not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    wallet = walletData;
 
-    // Determine price based on wallet currency
-    const amount = wallet.currency === "GHS" ? creditPackage.priceGHS : creditPackage.priceNGN;
+    if (packageId) {
+      // Validate packageId
+      const creditPackage = CREDIT_PACKAGES[packageId];
+      if (!creditPackage) {
+        return new Response(
+          JSON.stringify({ error: `Invalid packageId. Valid options: ${Object.keys(CREDIT_PACKAGES).join(", ")}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      credits = creditPackage.credits;
+      amount = wallet.currency === "GHS" ? creditPackage.priceGHS : creditPackage.priceNGN;
+    } else {
+      // Custom credits
+      if (customCredits < MIN_CUSTOM_CREDITS || customCredits > MAX_CUSTOM_CREDITS) {
+        return new Response(
+          JSON.stringify({ error: `Custom credits must be between ${MIN_CUSTOM_CREDITS} and ${MAX_CUSTOM_CREDITS}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      credits = customCredits;
+      amount = customAmount;
+    }
 
     // Check if wallet has sufficient balance
     if (wallet.balance < amount) {
@@ -112,7 +166,7 @@ Deno.serve(async (req) => {
       .from("messaging_credit_purchases")
       .insert({
         tenant_id: tenantId,
-        credits: creditPackage.credits,
+        credits: credits,
         currency: wallet.currency,
         amount,
         paid_via: "salon_purse",
@@ -177,7 +231,7 @@ Deno.serve(async (req) => {
       const { error: updateError } = await serviceSupabase
         .from("communication_credits")
         .update({
-          balance: existingCredits.balance + creditPackage.credits,
+          balance: existingCredits.balance + credits,
         })
         .eq("tenant_id", tenantId);
 
@@ -194,7 +248,7 @@ Deno.serve(async (req) => {
         .from("communication_credits")
         .insert({
           tenant_id: tenantId,
-          balance: creditPackage.credits,
+          balance: credits,
         });
 
       if (insertError) {
@@ -213,14 +267,14 @@ Deno.serve(async (req) => {
       .eq("tenant_id", tenantId)
       .single();
 
-    const newBalance = updatedCredits?.balance || creditPackage.credits;
+    const newBalance = updatedCredits?.balance || credits;
 
-    console.log(`Credit purchase ${purchase.id} completed: ${creditPackage.credits} credits added`);
+    console.log(`Credit purchase ${purchase.id} completed: ${credits} credits added`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        credits: creditPackage.credits,
+        credits,
         newBalance,
         amountDebited: amount,
         currency: wallet.currency,

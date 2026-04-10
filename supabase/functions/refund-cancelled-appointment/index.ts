@@ -113,44 +113,120 @@ serve(async (req) => {
     }
 
     if (appointment.payment_status === "refunded_full") {
-      return new Response(JSON.stringify({ error: "This appointment has already been refunded" }), {
+      return new Response(JSON.stringify({ error: "This appointment has already been fully refunded" }), {
         status: 409,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Check for existing completed/approved refund requests for this appointment
+    const { data: existingRefundRequests } = await admin
+      .from("refund_requests")
+      .select("amount, status")
+      .eq("tenant_id", appointment.tenant_id)
+      .or(`transaction_id.in.(${[appointmentId, transactionId].filter(Boolean).join(",")})`)
+      .in("status", ["completed", "approved", "pending"]);
+
+    if (existingRefundRequests && existingRefundRequests.length > 0) {
+      const totalRequestedRefund = existingRefundRequests.reduce(
+        (sum, req) => sum + Number(req.amount),
+        0
+      );
+      
+      if (totalRequestedRefund >= refundAmount) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Refund already requested or processed for this appointment",
+            details: {
+              totalRefunded: totalRequestedRefund,
+              appointmentAmount: refundAmount
+            }
+          }), 
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    // Check for existing completed refund transactions for this appointment
     const { data: existingRefund } = await admin
       .from("transactions")
-      .select("id")
+      .select("amount")
       .eq("appointment_id", appointment.id)
       .eq("type", "refund")
-      .eq("status", "completed")
-      .maybeSingle();
+      .eq("status", "completed");
 
-    if (existingRefund) {
-      return new Response(JSON.stringify({ error: "Refund already processed for this appointment" }), {
-        status: 409,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (existingRefund && existingRefund.length > 0) {
+      const totalRefunded = existingRefund.reduce(
+        (sum, txn) => sum + Number(txn.amount),
+        0
+      );
+      
+      if (totalRefunded >= refundAmount) {
+        return new Response(
+          JSON.stringify({ 
+            error: "Refund already processed for this appointment",
+            details: {
+              totalRefunded,
+              appointmentAmount: refundAmount
+            }
+          }), 
+          {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
-    const { data: tenant } = await admin
+    const { data: tenant, error: tenantError } = await admin
       .from("tenants")
       .select("currency")
       .eq("id", appointment.tenant_id)
       .single();
 
-    const idempotencyKey = `cancelled_appointment_refund_${appointment.id}`;
+    if (tenantError || !tenant?.currency) {
+      return new Response(
+        JSON.stringify({ error: "Tenant or tenant currency not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Step 1: Debit the salon wallet first
+    const salonDebitIdempotencyKey = `refund_salon_debit_${appointment.id}`;
+    const { data: salonDebitEntryId, error: salonDebitError } = await admin.rpc("debit_salon_purse" as never, {
+      p_tenant_id: appointment.tenant_id,
+      p_entry_type: "salon_purse_debit_refund",
+      p_reference_type: "appointment",
+      p_reference_id: appointment.id,
+      p_amount: refundAmount,
+      p_currency: tenant.currency,
+      p_idempotency_key: salonDebitIdempotencyKey,
+    } as never);
+
+    if (salonDebitError) {
+      console.error("Error debiting salon purse for refund:", salonDebitError);
+      return new Response(
+        JSON.stringify({ error: salonDebitError.message || "Failed to debit salon purse" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Step 2: Credit the customer purse
+    const customerCreditIdempotencyKey = `cancelled_appointment_refund_${appointment.id}`;
     const { data: creditEntryId, error: creditError } = await admin.rpc("credit_customer_purse" as never, {
       p_tenant_id: appointment.tenant_id,
       p_customer_id: appointment.customer_id,
       p_amount: refundAmount,
-      p_currency: tenant?.currency || "USD",
-      p_idempotency_key: idempotencyKey,
+      p_currency: tenant.currency,
+      p_idempotency_key: customerCreditIdempotencyKey,
       p_gateway_reference: appointment.booking_reference || appointment.id,
     } as never);
 
     if (creditError) {
+      console.error("Error crediting customer purse for refund:", creditError);
       return new Response(JSON.stringify({ error: creditError.message || "Failed to credit customer purse" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -176,10 +252,10 @@ serve(async (req) => {
         amount: refundAmount,
         type: "refund",
         method: "purse",
-        currency: tenant?.currency || "USD",
+        currency: tenant.currency,
         status: "completed",
         provider: "customer_purse",
-        provider_reference: typeof creditEntryId === "string" ? creditEntryId : null,
+        provider_reference: typeof salonDebitEntryId === "string" ? salonDebitEntryId : null,
         created_by_id: user.id,
       })
       .select("id")

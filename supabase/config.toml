@@ -94,5 +94,35 @@ verify_jwt = false
 [functions.public-booking-prefill]
 verify_jwt = false
 
+[functions.payment-webhook]
+verify_jwt = false
+
+[functions.get-banks-and-momo-providers]
+verify_jwt = false
+
+[functions.create-payout-destination]
+verify_jwt = false
+
+[functions.process-salon-withdrawal]
+verify_jwt = false
+
 [functions.send-daily-digest]
+verify_jwt = false
+
+[functions.manage-termii-sender-id]
+verify_jwt = false
+
+[functions.send-bulk-message]
+verify_jwt = false
+
+[functions.purchase-credits-from-purse]
+verify_jwt = false
+
+[functions.manage-whatsapp-templates]
+verify_jwt = false
+
+[functions.create-invoice-payment]
+verify_jwt = false
+
+[functions.send-invoice]
 verify_jwt = false

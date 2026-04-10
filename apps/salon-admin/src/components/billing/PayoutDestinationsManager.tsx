@@ -15,7 +15,7 @@ import { cn } from "@shared/utils";
 export function PayoutDestinationsManager() {
   const { currentTenant } = useAuth();
   const { destinations, isLoading, createDestination, deleteDestination } = usePayoutDestinations(currentTenant?.id);
-  
+
   const [showForm, setShowForm] = useState(false);
   const [country, setCountry] = useState<"NG" | "GH">("NG");
   const [destinationType, setDestinationType] = useState<"bank" | "mobile_money">("bank");
@@ -27,9 +27,9 @@ export function PayoutDestinationsManager() {
 
   const { banks, isLoading: banksLoading } = useBankList(
     country,
-    destinationType === "mobile_money" ? "mobile_money" : undefined
+    destinationType === "bank" ? "bank" : "mobile_money"
   );
-  
+
   const { verify, reset, isVerifying, result } = useAccountVerification();
 
   const currency = currentTenant?.currency || "NGN";
@@ -78,21 +78,21 @@ export function PayoutDestinationsManager() {
       currency,
       ...(destinationType === "bank"
         ? {
-            bankCode: selectedBankData.code,
-            bankName: selectedBankData.name,
-            accountNumber,
-            accountName,
-          }
+          bankCode: selectedBankData.code,
+          bankName: selectedBankData.name,
+          accountNumber,
+          accountName,
+        }
         : {
-            momoProvider: selectedBankData.code,
-            momoNumber: accountNumber,
-            accountName,
-          }),
+          momoProvider: selectedBankData.code,
+          momoNumber: accountNumber,
+          accountName,
+        }),
       isDefault,
     };
 
     const created = await createDestination(destinationData);
-    
+
     setIsSaving(false);
 
     if (created) {
@@ -123,7 +123,10 @@ export function PayoutDestinationsManager() {
   };
 
   const canVerify = destinationType === "bank" && selectedBank && isAccountNumberValid();
-  const canSave = result?.verified && accountName && selectedBank && isAccountNumberValid();
+  const canSave = 
+    destinationType === "mobile_money"
+      ? accountName && selectedBank && isAccountNumberValid()
+      : result?.verified && accountName && selectedBank && isAccountNumberValid();
 
   return (
     <div className="space-y-6">
@@ -203,11 +206,13 @@ export function PayoutDestinationsManager() {
                           <SelectValue placeholder={banksLoading ? "Loading..." : "Select..."} />
                         </SelectTrigger>
                         <SelectContent>
-                          {banks.map((bank) => (
+                          {banks.length > 0 ? banks.map((bank) => (
                             <SelectItem key={bank.code} value={bank.code}>
                               {bank.name}
                             </SelectItem>
-                          ))}
+                          )) : (
+                            <SelectItem value="null" disabled>No banks/providers available</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

@@ -117,7 +117,12 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       }
     } catch (err) {
       console.error("Error processing withdrawal:", err);
-      setError(err instanceof Error ? err.message : "Failed to process withdrawal");
+      // Error is already displayed via toast in the hook, but we keep it in state for inline display
+      setError(
+        err instanceof Error 
+          ? err.message 
+          : "We're unable to process your withdrawal at this time. Please contact support for assistance."
+      );
     } finally {
       setIsSubmitting(false);
     }

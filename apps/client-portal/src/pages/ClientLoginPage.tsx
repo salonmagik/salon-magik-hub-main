@@ -184,7 +184,10 @@ export default function ClientLoginPage() {
       });
 
       if (emailOtpError || data?.error) {
-        setError(data?.error || emailOtpError?.message || "Failed to send verification email.");
+        console.error("Email OTP send failed:", { emailOtpError, dataError: data?.error });
+        setError(
+          "We're having trouble sending your verification email. Please try again in a moment or contact support if this continues."
+        );
         return false;
       }
 

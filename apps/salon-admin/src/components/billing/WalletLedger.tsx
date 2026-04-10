@@ -36,7 +36,7 @@ const ENTRY_TYPE_LABELS: Record<string, string> = {
   salon_purse_debit_credit_purchase: "Credit Purchase",
 };
 
-export function WalletLedger({ walletType, walletId, currency = "NGN" }: WalletLedgerProps) {
+export function WalletLedger({ walletType, walletId, currency = "n/a" }: WalletLedgerProps) {
   const [page, setPage] = useState(0);
   const limit = 50;
 
