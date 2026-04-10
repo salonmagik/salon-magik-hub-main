@@ -16,6 +16,7 @@ export interface RefundWithDetails extends RefundRequest {
     amount: number;
     method: string;
   } | null;
+  status: "pending" | "approved" | "rejected" | "completed";
 }
 
 export function useRefunds() {

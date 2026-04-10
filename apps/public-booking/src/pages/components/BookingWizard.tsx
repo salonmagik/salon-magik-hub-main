@@ -665,6 +665,10 @@ export function BookingWizard({
 
   const handleCreateBooking = async (includePaymentSession = false, customPaymentAmount?: number) => {
     try {
+      // For split payment mode, purse is handled separately in frontend
+      // so we don't send purseAmount to backend to avoid double deduction
+      const purseAmountForBackend = paymentMode === "split" || paymentMode === "purse" ? 0 : purseAmount;
+      
       const requestBody: any = {
         tenantId: salon.id,
         customer: bookerInfo,
@@ -672,7 +676,7 @@ export function BookingWizard({
         payAtSalon: paymentOption === "pay_at_salon",
         voucherCode: appliedVoucher?.code || null,
         voucherDiscount,
-        purseAmount,
+        purseAmount: purseAmountForBackend,
         depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
         giftsBelongToSamePerson: meta.giftsBelongToSamePerson,
       };
@@ -1013,6 +1017,7 @@ export function BookingWizard({
             {step === "payment" && (
               <PaymentStep
                 amountDue={amountDueNow}
+                totalBeforePurse={afterVoucher}
                 currency={salon.currency}
                 country={selectedCountryCode || salon.country || "US"}
                 onGatewaySelect={setSelectedGateway}

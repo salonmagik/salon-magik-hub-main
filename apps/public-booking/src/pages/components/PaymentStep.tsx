@@ -18,6 +18,7 @@ interface PaymentMethod {
 
 interface PaymentStepProps {
   amountDue: number;
+  totalBeforePurse: number;
   currency: string;
   country: string;
   onGatewaySelect: (gateway: PaymentGateway) => void;
@@ -40,6 +41,7 @@ const PAYSTACK_METHODS: PaymentMethod[] = [
 
 export function PaymentStep({
   amountDue,
+  totalBeforePurse,
   currency,
   onGatewaySelect,
   onSubmit,
@@ -51,11 +53,11 @@ export function PaymentStep({
   const [selectedGateway] = useState<PaymentGateway>("paystack");
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode>(
-    purseBalance >= amountDue ? "purse" : purseBalance > 0 ? "split" : "card"
+    purseBalance >= totalBeforePurse ? "purse" : purseBalance > 0 ? "split" : "card"
   );
 
   // For split payment, start with 50% purse if available, otherwise max purse
-  const initialPurseAmount = Math.min(purseBalance, amountDue / 2);
+  const initialPurseAmount = Math.min(purseBalance, totalBeforePurse / 2);
   const [purseAmount, setPurseAmount] = useState(initialPurseAmount);
 
   useEffect(() => {
@@ -65,14 +67,14 @@ export function PaymentStep({
   const handlePaymentModeChange = (mode: PaymentMode) => {
     setPaymentMode(mode);
     let purseAmt = 0;
-    let cardAmt = amountDue;
+    let cardAmt = totalBeforePurse;
 
     if (mode === "purse") {
-      purseAmt = Math.min(purseBalance, amountDue);
+      purseAmt = Math.min(purseBalance, totalBeforePurse);
       cardAmt = 0;
     } else if (mode === "split") {
       purseAmt = purseAmount;
-      cardAmt = amountDue - purseAmt;
+      cardAmt = totalBeforePurse - purseAmt;
     }
 
     if (onPaymentModeChange) {
@@ -83,13 +85,13 @@ export function PaymentStep({
     const newPurseAmount = values[0];
     setPurseAmount(newPurseAmount);
     if (onPaymentModeChange) {
-      onPaymentModeChange("split", newPurseAmount, amountDue - newPurseAmount);
+      onPaymentModeChange("split", newPurseAmount, totalBeforePurse - newPurseAmount);
     }
   };
 
   const methods = PAYSTACK_METHODS;
 
-  const cardAmount = paymentMode === "purse" ? 0 : paymentMode === "split" ? amountDue - purseAmount : amountDue;
+  const cardAmount = paymentMode === "purse" ? 0 : paymentMode === "split" ? totalBeforePurse - purseAmount : totalBeforePurse;
   const showGatewaySelection = paymentMode !== "purse";
   const showPaymentMethods = paymentMode !== "purse";
 
@@ -105,7 +107,7 @@ export function PaymentStep({
           <Label className="text-sm font-medium">Payment Options</Label>
           <div className="space-y-2">
             {/* Pay with Purse */}
-            {purseBalance >= amountDue && (
+            {purseBalance >= totalBeforePurse && (
               <button
                 onClick={() => handlePaymentModeChange("purse")}
                 className={cn(
@@ -163,7 +165,7 @@ export function PaymentStep({
             </button>
 
             {/* Split Payment */}
-            {purseBalance < amountDue && purseBalance > 0 && (
+            {purseBalance < totalBeforePurse && purseBalance > 0 && (
               <button
                 onClick={() => handlePaymentModeChange("split")}
                 className={cn(
@@ -205,7 +207,7 @@ export function PaymentStep({
             <Slider
               value={[purseAmount]}
               onValueChange={handleSliderChange}
-              max={Math.min(purseBalance, amountDue)}
+              max={Math.min(purseBalance, totalBeforePurse)}
               min={0}
               step={0.01}
               className="w-full"
@@ -271,7 +273,7 @@ export function PaymentStep({
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Paid from Store Credit</span>
             <span className="text-2xl font-bold text-primary">
-              {formatCurrency(amountDue, currency)}
+              {formatCurrency(totalBeforePurse, currency)}
             </span>
           </div>
         ) : paymentMode === "split" ? (
@@ -293,7 +295,7 @@ export function PaymentStep({
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Amount Due</span>
             <span className="text-2xl font-bold">
-              {formatCurrency(amountDue, currency)}
+              {formatCurrency(totalBeforePurse, currency)}
             </span>
           </div>
         )}
@@ -320,10 +322,10 @@ export function PaymentStep({
         {isSubmitting
           ? "Processing..."
           : paymentMode === "purse"
-          ? `Pay ${formatCurrency(amountDue, currency)}`
+          ? `Pay ${formatCurrency(totalBeforePurse, currency)}`
           : paymentMode === "split"
           ? `Pay ${formatCurrency(cardAmount, currency)}`
-          : `Pay ${formatCurrency(amountDue, currency)}`}
+          : `Pay ${formatCurrency(totalBeforePurse, currency)}`}
       </Button>
 
       {paymentMode !== "purse" && (
