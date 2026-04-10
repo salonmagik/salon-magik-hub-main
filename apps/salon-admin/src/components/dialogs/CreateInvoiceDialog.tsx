@@ -59,7 +59,7 @@ export function CreateInvoiceDialog({
   }, [itemType]);
 
   // Fetch services for dropdown
-  const { data: services = [], isLoading: servicesLoading } = useQuery({
+  const { data: servicesData, isLoading: servicesLoading } = useQuery({
     queryKey: ["services", currentTenant?.id],
     queryFn: async () => {
       if (!currentTenant?.id) return [];
@@ -79,7 +79,7 @@ export function CreateInvoiceDialog({
   });
 
   // Fetch products for dropdown
-  const { data: products = [], isLoading: productsLoading } = useQuery({
+  const { data: productsData, isLoading: productsLoading } = useQuery({
     queryKey: ["products", currentTenant?.id],
     queryFn: async () => {
       if (!currentTenant?.id) return [];
@@ -97,6 +97,9 @@ export function CreateInvoiceDialog({
     },
     enabled: Boolean(currentTenant?.id && open),
   });
+
+  const services = servicesData ?? [];
+  const products = productsData ?? [];
 
   const addLineItem = () => {
     setLineItems([
