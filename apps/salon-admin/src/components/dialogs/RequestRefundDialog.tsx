@@ -10,13 +10,6 @@ import { Button } from "@ui/button";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Input } from "@ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@ui/select";
 import { ArrowDownLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,7 +45,7 @@ export function RequestRefundDialog({
   const [formData, setFormData] = useState({
     amount: "",
     reason: "",
-    refundType: "original_method" as "original_method" | "store_credit" | "offline",
+    refundType: "store_credit" as "original_method" | "store_credit" | "offline",
   });
 
   const isCancelledAppointmentRefundReady =
@@ -133,7 +126,7 @@ export function RequestRefundDialog({
       });
 
       toast({ title: "Refund requested", description: "Your refund request has been submitted for approval" });
-      setFormData({ amount: "", reason: "", refundType: "original_method" });
+      setFormData({ amount: "", reason: "", refundType: "store_credit" });
       onOpenChange(false);
       onSuccess?.();
     } catch (err) {
@@ -158,7 +151,7 @@ export function RequestRefundDialog({
           <div>
             <DialogTitle>Request Refund</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Submit a refund request for approval
+              Refund will be credited to customer's store credit (purse)
             </p>
           </div>
         </DialogHeader>
@@ -214,23 +207,6 @@ export function RequestRefundDialog({
               onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
               required
             />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Refund Type <span className="text-destructive">*</span></Label>
-            <Select
-              value={formData.refundType}
-              onValueChange={(v) => setFormData((prev) => ({ ...prev, refundType: v as typeof formData.refundType }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="original_method">Original Payment Method</SelectItem>
-                <SelectItem value="store_credit">Store Credit (Purse)</SelectItem>
-                <SelectItem value="offline">Offline Refund</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="space-y-2">
