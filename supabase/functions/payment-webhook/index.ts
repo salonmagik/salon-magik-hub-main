@@ -367,8 +367,13 @@ async function processWebhook(
                 hasMetadata: !!(splitPurseAmount && splitPurseAmount > 0 && splitCustomerId)
               });
 
+              // Generate payment group ID for split payments
+              const paymentGroupId = splitPurseAmount && splitPurseAmount > 0 && splitCustomerId 
+                ? crypto.randomUUID() 
+                : null;
+
               // Handle split payment purse deduction if metadata is present
-              if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId) {
+              if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId && paymentGroupId) {
                 console.log(`Processing split payment purse deduction: ${splitPurseAmount} for customer ${splitCustomerId}`);
                 try {
                   const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
@@ -401,7 +406,7 @@ async function processWebhook(
                         .eq("id", appointment.id);
                     }
 
-                    // Create transaction record for purse portion
+                    // Create transaction record for purse portion (grouped with card transaction)
                     await supabase.from("transactions").insert({
                       tenant_id: primaryAppointment.tenant_id,
                       customer_id: splitCustomerId,
@@ -413,15 +418,17 @@ async function processWebhook(
                       provider: "internal",
                       provider_reference: `split_purse_${reference}`,
                       status: "completed",
+                      ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
                     });
 
-                    console.log(`Created purse transaction record for ${splitPurseAmount}`);
+                    console.log(`Created purse transaction record for ${splitPurseAmount} with payment_group_id: ${paymentGroupId}`);
                   }
                 } catch (purseError) {
                   console.error("Exception while debiting customer purse:", purseError);
                 }
               }
 
+              // Create transaction record for card payment (grouped with purse if split payment)
               await supabase.from("transactions").insert({
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
@@ -434,6 +441,7 @@ async function processWebhook(
                 provider_reference: reference,
                 status: "completed",
                 ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
+                ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
               });
 
               // Calculate total payment including purse for notifications

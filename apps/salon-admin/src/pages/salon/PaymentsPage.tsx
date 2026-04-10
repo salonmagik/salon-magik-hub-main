@@ -448,7 +448,17 @@ export default function PaymentsPage() {
                                 {txn.customer?.full_name || "Guest"}
                               </p>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <span>{methodLabels[txn.method] || txn.method}</span>
+                                {txn.is_split_payment ? (
+                                  <>
+                                    <span>Card + Purse</span>
+                                    <span>•</span>
+                                    <span className="text-xs">
+                                      {formatCurrency(txn.split_card_amount || 0)} card, {formatCurrency(txn.split_purse_amount || 0)} purse
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span>{methodLabels[txn.method] || txn.method}</span>
+                                )}
                                 <span>•</span>
                                 <span>{format(new Date(txn.created_at), "MMM d, h:mm a")}</span>
                               </div>
