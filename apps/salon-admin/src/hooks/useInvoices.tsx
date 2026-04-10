@@ -133,7 +133,36 @@ export function useInvoices() {
         if (itemsError) throw itemsError;
       }
 
-      toast({ title: "Invoice created", description: `Invoice ${invoiceNumber} created` });
+      // Automatically generate payment link
+      try {
+        const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
+          "create-invoice-payment-session",
+          { body: { invoiceId: invoice.id } }
+        );
+
+        if (paymentError) {
+          console.error("Error generating payment link:", paymentError);
+          toast({
+            title: "Invoice created",
+            description: `Invoice ${invoiceNumber} created, but payment link generation failed`,
+            variant: "destructive",
+          });
+        } else {
+          toast({ 
+            title: "Invoice created", 
+            description: `Invoice ${invoiceNumber} created with payment link` 
+          });
+        }
+      } catch (paymentErr) {
+        console.error("Error generating payment link:", paymentErr);
+        // Don't fail the whole operation if payment link generation fails
+        toast({
+          title: "Invoice created",
+          description: `Invoice ${invoiceNumber} created, but payment link generation failed`,
+          variant: "destructive",
+        });
+      }
+
       fetchInvoices();
       return invoice;
     } catch (err) {

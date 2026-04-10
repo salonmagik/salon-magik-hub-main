@@ -121,7 +121,7 @@ export function CustomerDetailDialog({
   customer,
 }: CustomerDetailDialogProps) {
   const { currentTenant } = useAuth();
-  const { invoices, isLoading: invoicesLoading, sendInvoice, generatePaymentLink, refetch: refetchInvoices } = useInvoices();
+  const { invoices, isLoading: invoicesLoading, sendInvoice, refetch: refetchInvoices } = useInvoices();
 
   const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
   const [createInvoiceDialogOpen, setCreateInvoiceDialogOpen] = useState(false);
@@ -614,20 +614,7 @@ export function CustomerDetailDialog({
                               }}
                             >
                               <Send className="w-3 h-3 mr-1" />
-                              Send
-                            </Button>
-                          )}
-                          {(invoice.status === "draft" || invoice.status === "sent") && !invoice.payment_link && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                await generatePaymentLink(invoice.id);
-                                refetchInvoices();
-                              }}
-                            >
-                              <LinkIcon className="w-3 h-3 mr-1" />
-                              Generate Payment Link
+                              Send to Customer
                             </Button>
                           )}
                           {invoice.payment_link && invoice.status !== "paid" && (
