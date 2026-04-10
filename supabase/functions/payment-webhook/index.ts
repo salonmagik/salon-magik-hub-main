@@ -41,7 +41,7 @@ function isValidUUID(value: string): boolean {
 
 function parseAppointmentIds(raw: string | string[] | undefined, fallback?: string): string[] {
   let values: string[] = [];
-  
+
   if (typeof raw === "string") {
     try {
       const parsed = JSON.parse(raw);
@@ -59,13 +59,13 @@ function parseAppointmentIds(raw: string | string[] | undefined, fallback?: stri
 }
 
 function isPaymentSuccessEvent(eventType: string): boolean {
-  return eventType === "checkout.session.completed" 
-    || eventType === "payment_intent.succeeded" 
+  return eventType === "checkout.session.completed"
+    || eventType === "payment_intent.succeeded"
     || eventType === "charge.success";
 }
 
 function isPaymentFailureEvent(eventType: string): boolean {
-  return eventType === "payment_intent.payment_failed" 
+  return eventType === "payment_intent.payment_failed"
     || eventType === "charge.failed";
 }
 
@@ -328,7 +328,7 @@ async function processWebhook(
                     }, 0);
                   return Number((amount - previousTotal).toFixed(2));
                 }
-                
+
                 return calculateProportionalAmount(
                   Number(entry.total_amount || 0),
                   totalAppointmentAmount,
@@ -368,8 +368,8 @@ async function processWebhook(
               });
 
               // Generate payment group ID for split payments
-              const paymentGroupId = splitPurseAmount && splitPurseAmount > 0 && splitCustomerId 
-                ? crypto.randomUUID() 
+              const paymentGroupId = splitPurseAmount && splitPurseAmount > 0 && splitCustomerId
+                ? crypto.randomUUID()
                 : null;
 
               // Handle split payment purse deduction if metadata is present
@@ -389,14 +389,14 @@ async function processWebhook(
                     console.error("Error debiting customer purse for split payment:", debitError);
                   } else {
                     console.log(`Successfully debited ${splitPurseAmount} from customer purse for split payment`);
-                    
+
                     // Update appointment amount_paid to include purse amount
                     for (const appointment of appointments) {
                       const currentPaid = allocatedAmounts[appointments.indexOf(appointment)];
-                      const proportionalPurse = appointments.length === 1 
-                        ? splitPurseAmount 
+                      const proportionalPurse = appointments.length === 1
+                        ? splitPurseAmount
                         : Number((splitPurseAmount / appointments.length).toFixed(2));
-                      
+
                       await supabase
                         .from("appointments")
                         .update({
@@ -439,14 +439,18 @@ async function processWebhook(
                 method: "card",
                 provider: event.gateway,
                 provider_reference: reference,
+                currency: tenant?.currency || "USD",
+                method: "card",
+                provider: event.gateway,
+                provider_reference: reference,
                 status: "completed",
                 ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
                 ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
               });
 
               // Calculate total payment including purse for notifications
-              const totalPaymentAmount = splitPurseAmount && splitPurseAmount > 0 
-                ? amount + splitPurseAmount 
+              const totalPaymentAmount = splitPurseAmount && splitPurseAmount > 0
+                ? amount + splitPurseAmount
                 : amount;
               const paymentDescription = splitPurseAmount && splitPurseAmount > 0
                 ? `${tenant?.currency || ""} ${amount} (card) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
@@ -508,7 +512,7 @@ async function processWebhook(
                   for (const owner of owners) {
                     try {
                       const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(owner.user_id);
-                      
+
                       if (authError) {
                         console.error("Error fetching auth user:", authError);
                         continue;
@@ -595,8 +599,8 @@ async function processWebhook(
                 await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
                 // For split payments, salon receives full amount (card + purse)
-                const totalAmountForSalon = splitPurseAmount && splitPurseAmount > 0 
-                  ? amount + splitPurseAmount 
+                const totalAmountForSalon = splitPurseAmount && splitPurseAmount > 0
+                  ? amount + splitPurseAmount
                   : amount;
 
                 console.log(`Crediting salon purse: card=${amount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}`);
@@ -851,7 +855,7 @@ async function processWebhook(
                   for (const owner of owners) {
                     try {
                       const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(owner.user_id);
-                      
+
                       if (authError) {
                         console.error("Error fetching auth user:", authError);
                         continue;

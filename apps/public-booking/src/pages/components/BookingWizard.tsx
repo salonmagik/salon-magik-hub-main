@@ -111,7 +111,7 @@ function formatErrorMessage(message: string, statusCode?: number): string {
       ? "Invalid request. Please check your information and try again."
       : "Something went wrong. Please try again.";
   }
-  
+
   const capitalized = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   return capitalized.endsWith('.') ? capitalized : `${capitalized}.`;
 }
@@ -125,7 +125,7 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string> {
       if (payload && typeof payload === "object" && "error" in payload && typeof payload.error === "string") {
         return formatErrorMessage(payload.error, statusCode);
       }
-      
+
       // If no error message in payload, use status code to generate message
       if (statusCode) {
         return formatErrorMessage("", statusCode);
@@ -668,7 +668,7 @@ export function BookingWizard({
       // For split payment mode, purse is handled in webhook after payment success
       // so we don't send purseAmount to backend to avoid double deduction
       const purseAmountForBackend = paymentMode === "split" || paymentMode === "purse" ? 0 : purseAmount;
-      
+
       const requestBody: any = {
         tenantId: salon.id,
         customer: bookerInfo,
@@ -696,15 +696,15 @@ export function BookingWizard({
         requestBody.paymentSuccessUrl = window.location.href;
         requestBody.paymentCancelUrl = window.location.href;
         requestBody.preferredPaymentGateway = selectedGateway;
-        
+
         // For split payment, pass purse info to be handled in webhook
         // This handles two scenarios:
         // 1. User explicitly selected split mode in Payment step
         // 2. User applied purse in Review step and is paying remainder via card
         const hasPurseApplied = purseAmount > 0 && afterVoucher > purseAmount;
-        const isSplitScenario = (paymentMode === "split" && splitPurseAmount > 0) || 
-                                (hasPurseApplied && includePaymentSession);
-        
+        const isSplitScenario = (paymentMode === "split" && splitPurseAmount > 0) ||
+          (hasPurseApplied && includePaymentSession);
+
         console.log("Split payment check:", {
           paymentMode,
           splitPurseAmount,
@@ -715,7 +715,7 @@ export function BookingWizard({
           afterVoucher,
           includePaymentSession
         });
-        
+
         if (isSplitScenario && customerId) {
           // Use splitPurseAmount if available (from Payment step), otherwise use purseAmount (from Review step)
           const purseAmountToUse = paymentMode === "split" ? splitPurseAmount : purseAmount;
@@ -732,9 +732,9 @@ export function BookingWizard({
       // This handles both cases:
       // 1. User explicitly selects purse mode in Payment step (paymentMode === "purse")
       // 2. User applies purse in Review step that covers full amount (purseAmount > 0 && afterPurse === 0)
-      const isPurseOnlyPayment = (paymentMode === "purse" && amountDueNow > 0) || 
-                                  (purseAmount > 0 && afterPurse === 0 && !includePaymentSession);
-      
+      const isPurseOnlyPayment = (paymentMode === "purse" && amountDueNow > 0) ||
+        (purseAmount > 0 && afterPurse === 0 && !includePaymentSession);
+
       if (isPurseOnlyPayment && customerId) {
         requestBody.processPursePayment = true;
         requestBody.pursePaymentCustomerId = customerId;
@@ -845,9 +845,9 @@ export function BookingWizard({
     try {
       // Check if purse is being used to pay the full amount
       const isPursePayment = purseAmount > 0 && afterPurse === 0 && customerId;
-      
+
       const booking = await handleCreateBooking(false);
-      
+
       // If paying with purse, the backend handles everything
       // Otherwise, it's a pay-at-salon booking
       setBookingReference(booking.reference || "CONFIRMED");

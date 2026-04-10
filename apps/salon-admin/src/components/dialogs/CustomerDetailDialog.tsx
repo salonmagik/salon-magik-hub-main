@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -49,6 +50,15 @@ import type { Tables } from "@supabase-client";
 
 type Customer = Partial<CustomerWithVisitSummary> & Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
+type CustomerTransaction = Tables<"transactions">;
+type CustomerPurse = Tables<"customer_purses">;
+type WalletLedgerEntry = Tables<"wallet_ledger_entries">;
+type CustomerAppointment = Tables<"appointments"> & {
+  location?: {
+    id: string;
+    name: string;
+  } | null;
+};
 type CustomerTransaction = Tables<"transactions">;
 type CustomerPurse = Tables<"customer_purses">;
 type WalletLedgerEntry = Tables<"wallet_ledger_entries">;
@@ -140,76 +150,150 @@ export function CustomerDetailDialog({
       if (!currentTenant?.id || !customerId) return null;
 
       const { data: appointmentsData, error: appointmentsError } = await supabase
-        .from("appointments")
-        .select(`
+      const customerId = customer?.id;
+      const currency = currentTenant?.currency || "USD";
+      const { data: customerDetail, isLoading: customerDetailLoading } = useQuery({
+        queryKey: ["customer-detail-dialog", currentTenant?.id, customerId, open],
+        queryFn: async () => {
+          if (!currentTenant?.id || !customerId) return null;
+
+          const { data: appointmentsData, error: appointmentsError } = await supabase
+            .from("appointments")
+            .select(`
           *,
           location:locations(id, name)
         `)
-        .eq("tenant_id", currentTenant.id)
-        .eq("customer_id", customerId)
-        .order("scheduled_start", { ascending: false });
+            .select(`
+          *,
+          location:locations(id, name)
+        `)
+            .eq("tenant_id", currentTenant.id)
+            .eq("customer_id", customerId)
+            .eq("customer_id", customerId)
+            .order("scheduled_start", { ascending: false });
 
-      if (appointmentsError) throw appointmentsError;
+          if (appointmentsError) throw appointmentsError;
 
-      const customerAppointments = (appointmentsData as CustomerAppointment[] | null) || [];
-      const appointmentIds = customerAppointments.map((appointment) => appointment.id);
+          const customerAppointments = (appointmentsData as CustomerAppointment[] | null) || [];
+          const appointmentIds = customerAppointments.map((appointment) => appointment.id);
 
-      const [
-        transactionsResult,
-        purseResult,
-        attachmentsResult,
-      ] = await Promise.all([
-        supabase
-          .from("transactions")
-          .select("*")
-          .eq("tenant_id", currentTenant.id)
-          .eq("customer_id", customerId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("customer_purses")
-          .select("*")
-          .eq("tenant_id", currentTenant.id)
-          .eq("customer_id", customerId)
-          .maybeSingle(),
-        appointmentIds.length > 0
-          ? supabase
-            .from("appointment_attachments")
-            .select("*")
-            .in("appointment_id", appointmentIds)
-            .order("created_at", { ascending: false })
-          : Promise.resolve({ data: [], error: null }),
-      ]);
+          const [
+            transactionsResult,
+            purseResult,
+            attachmentsResult,
+          ] = await Promise.all([
+            supabase
+              .from("transactions")
+              .select("*")
+              .eq("tenant_id", currentTenant.id)
+              .eq("customer_id", customerId)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("customer_purses")
+              .select("*")
+              .eq("tenant_id", currentTenant.id)
+              .eq("customer_id", customerId)
+              .maybeSingle(),
+            appointmentIds.length > 0
+              ? supabase
+                .from("appointment_attachments")
+                .select("*")
+                .in("appointment_id", appointmentIds)
+                .order("created_at", { ascending: false })
+              : Promise.resolve({ data: [], error: null }),
+          ]);
 
-      if (transactionsResult.error) throw transactionsResult.error;
-      if (purseResult.error) throw purseResult.error;
-      if (attachmentsResult.error) throw attachmentsResult.error;
+          if (transactionsResult.error) throw transactionsResult.error;
+          if (purseResult.error) throw purseResult.error;
+          if (attachmentsResult.error) throw attachmentsResult.error;
 
-      const transactions = (transactionsResult.data as CustomerTransaction[] | null) || [];
-      const purse = (purseResult.data as CustomerPurse | null) || null;
-      const attachments = (attachmentsResult.data as AppointmentAttachment[] | null) || [];
+          const transactions = (transactionsResult.data as CustomerTransaction[] | null) || [];
+          const purse = (purseResult.data as CustomerPurse | null) || null;
+          const attachments = (attachmentsResult.data as AppointmentAttachment[] | null) || [];
 
-      let purseLedgerEntries: WalletLedgerEntry[] = [];
-      if (purse?.id) {
-        const { data: ledgerData, error: ledgerError } = await supabase
-          .from("wallet_ledger_entries")
-          .select("*")
-          .eq("wallet_type", "customer")
-          .eq("wallet_id", purse.id)
-          .order("created_at", { ascending: false });
+          let purseLedgerEntries: WalletLedgerEntry[] = [];
+          if (purse?.id) {
+            const { data: ledgerData, error: ledgerError } = await supabase
+              .from("wallet_ledger_entries")
+              .select("*")
+              .eq("wallet_type", "customer")
+              .eq("wallet_id", purse.id)
+              .order("created_at", { ascending: false });
 
-        if (ledgerError) throw ledgerError;
-        purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
-      }
+            if (ledgerError) throw ledgerError;
+            purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
+          }
+
+          const appointmentNotes: AppointmentNote[] = customerAppointments
+            .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
+            .map((appointment) => ({
+              appointmentId: appointment.id,
+              appointmentDate: appointment.scheduled_start,
+              note: appointment.notes,
+              attachments: attachments.filter((item) => item.appointment_id === appointment.id),
+              if(ledgerError) throw ledgerError;
+              purseLedgerEntries = (ledgerData as WalletLedgerEntry[] | null) || [];
+            }
 
       const appointmentNotes: AppointmentNote[] = customerAppointments
-        .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
-        .map((appointment) => ({
-          appointmentId: appointment.id,
-          appointmentDate: appointment.scheduled_start,
-          note: appointment.notes,
-          attachments: attachments.filter((item) => item.appointment_id === appointment.id),
-        }));
+            .filter((appointment) => appointment.notes || attachments.some((item) => item.appointment_id === appointment.id))
+            .map((appointment) => ({
+              appointmentId: appointment.id,
+              appointmentDate: appointment.scheduled_start,
+              note: appointment.notes,
+              attachments: attachments.filter((item) => item.appointment_id === appointment.id),
+            }));
 
+          const visitsByLocation = new Map<string, CustomerVisitedLocation>();
+          for (const appointment of customerAppointments) {
+            const countsAsVisit =
+              Boolean(appointment.actual_start) || ["started", "paused", "completed"].includes(appointment.status);
+
+            if (!countsAsVisit || !appointment.location_id) continue;
+
+            const existing = visitsByLocation.get(appointment.location_id);
+            if (existing) {
+              existing.visitCount += 1;
+              continue;
+            }
+
+            visitsByLocation.set(appointment.location_id, {
+              locationId: appointment.location_id,
+              locationName: appointment.location?.name || "Unknown branch",
+              visitCount: 1,
+            });
+          }
+
+          const visitedLocations = Array.from(visitsByLocation.values()).sort(
+            (a, b) => b.visitCount - a.visitCount || a.locationName.localeCompare(b.locationName),
+          );
+
+          const outstandingBalance = customerAppointments.reduce((sum, appointment) => {
+            const paymentStatus = appointment.payment_status || "unpaid";
+            const countsAsOutstanding =
+              appointment.status !== "cancelled" &&
+              !["fully_paid", "refunded_full"].includes(paymentStatus);
+
+            if (!countsAsOutstanding) return sum;
+
+            const due = Math.max(Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0), 0);
+            return sum + due;
+          }, 0);
+
+          return {
+            appointments: customerAppointments,
+            transactions,
+            purse,
+            purseLedgerEntries,
+            appointmentNotes,
+            visitedLocations,
+            visitCount: visitedLocations.reduce((sum, location) => sum + location.visitCount, 0),
+            outstandingBalance,
+            lastTransactionAt: transactions[0]?.created_at ?? null,
+          };
+        },
+        enabled: Boolean(currentTenant?.id && customerId && open),
+      });
       const visitsByLocation = new Map<string, CustomerVisitedLocation>();
       for (const appointment of customerAppointments) {
         const countsAsVisit =
@@ -268,403 +352,425 @@ export function CustomerDetailDialog({
     const matchesEndDate = !txEndDate || createdAt <= txEndDate;
 
     if (!matchesStartDate || !matchesEndDate) return false;
-    if (!txSearchQuery) return true;
-    const query = txSearchQuery.toLowerCase();
+    const filteredTransactions = (customerDetail?.transactions || []).filter((tx) => {
+      const createdAt = new Date(tx.created_at);
+      const matchesStartDate = !txStartDate || createdAt >= txStartDate;
+      const matchesEndDate = !txEndDate || createdAt <= txEndDate;
+
+      if (!matchesStartDate || !matchesEndDate) return false;
+      if (!txSearchQuery) return true;
+      const query = txSearchQuery.toLowerCase();
+      return (
+        tx.type.toLowerCase().includes(query) ||
+        tx.method.toLowerCase().includes(query) ||
+        tx.status.toLowerCase().includes(query) ||
+        tx.appointment_id?.toLowerCase().includes(query) ||
+        tx.amount.toString().includes(query)
+      );
+    });
+
+    const { data: engagementSummary } = useQuery({
+      queryKey: ["customer-engagement-summary", currentTenant?.id, customerId],
+      queryFn: async () => {
+        if (!currentTenant?.id || !customerId) return null;
+        const { data, error } = await (supabase.rpc as any)("get_customer_engagement_summary", {
+          p_tenant_id: currentTenant.id,
+          p_customer_id: customerId,
+        });
+        if (error) throw error;
+        return Array.isArray(data) ? (data[0] ?? null) : data;
+      },
+      enabled: Boolean(currentTenant?.id && customerId && open),
+    });
+
+    if (!customer) return null;
+
+    const customerAppointments = customerDetail?.appointments || [];
+    const visitedLocations: CustomerVisitedLocation[] = customerDetail?.visitedLocations || customer.visitedLocations || [];
+    const visitCount = customerDetail?.visitCount ?? customer.visit_count ?? 0;
+    const outstandingBalance = customerDetail?.outstandingBalance ?? Number(customer.outstanding_balance ?? 0);
+    const appointmentNotes = customerDetail?.appointmentNotes || [];
+    const purse = customerDetail?.purse || null;
+    const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
+    const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
+
+    // Filter invoices for this customer
+    const customerInvoices = invoices.filter((inv) => inv.customer_id === customer.id);
+
+    const canSendMessage = Boolean(customer.email || customer.phone);
+    const sendMessageTooltip = canSendMessage
+      ? "Send Email, SMS, or WhatsApp"
+      : "Customer has no email or phone number";
+
+    function clearFilters(): void {
+      setTxStartDate(undefined);
+      setTxEndDate(undefined);
+      setTxSearchQuery("");
+    }
+
     return (
-      tx.type.toLowerCase().includes(query) ||
-      tx.method.toLowerCase().includes(query) ||
-      tx.status.toLowerCase().includes(query) ||
-      tx.appointment_id?.toLowerCase().includes(query) ||
-      tx.amount.toString().includes(query)
-    );
-  });
-
-  const { data: engagementSummary } = useQuery({
-    queryKey: ["customer-engagement-summary", currentTenant?.id, customerId],
-    queryFn: async () => {
-      if (!currentTenant?.id || !customerId) return null;
-      const { data, error } = await (supabase.rpc as any)("get_customer_engagement_summary", {
-        p_tenant_id: currentTenant.id,
-        p_customer_id: customerId,
-      });
-      if (error) throw error;
-      return Array.isArray(data) ? (data[0] ?? null) : data;
-    },
-    enabled: Boolean(currentTenant?.id && customerId && open),
-  });
-
-  if (!customer) return null;
-
-  const customerAppointments = customerDetail?.appointments || [];
-  const visitedLocations: CustomerVisitedLocation[] = customerDetail?.visitedLocations || customer.visitedLocations || [];
-  const visitCount = customerDetail?.visitCount ?? customer.visit_count ?? 0;
-  const outstandingBalance = customerDetail?.outstandingBalance ?? Number(customer.outstanding_balance ?? 0);
-  const appointmentNotes = customerDetail?.appointmentNotes || [];
-  const purse = customerDetail?.purse || null;
-  const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
-  const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
-
-  // Filter invoices for this customer
-  const customerInvoices = invoices.filter((inv) => inv.customer_id === customer.id);
-
-  const canSendMessage = Boolean(customer.email || customer.phone);
-  const sendMessageTooltip = canSendMessage
-    ? "Send Email, SMS, or WhatsApp"
-    : "Customer has no email or phone number";
-
-  function clearFilters(): void {
-    setTxStartDate(undefined);
-    setTxEndDate(undefined);
-    setTxSearchQuery("");
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogDescription className="sr-only">
-            Customer profile, engagement summary, appointments, notes, and transaction history.
-          </DialogDescription>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
-                {getInitials(customer.full_name)}
-              </div>
-              <div>
-                <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge
-                    variant="secondary"
-                    className={getCustomerStatusBadgeClass(customer.status)}
-                  >
-                    {customer.status}
-                  </Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {customer.visit_count} visits
-                  </span>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogDescription className="sr-only">
+              Customer profile, engagement summary, appointments, notes, and transaction history.
+            </DialogDescription>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
+                  {getInitials(customer.full_name)}
                 </div>
-              </div>
-            </div>
-
-            {/* Send Message Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSendMessageDialogOpen(true)}
-                    disabled={!canSendMessage}
-                    className="flex-shrink-0"
-                  >
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Send Message
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{sendMessageTooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </DialogHeader>
-
-        <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="appointments">Appointments</TabsTrigger>
-            <TabsTrigger value="invoices">Invoices</TabsTrigger>
-            <TabsTrigger value="notes">Notes</TabsTrigger>
-            <TabsTrigger value="messages">Messages</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
-            <TabsTrigger value="purse">Purse</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="mt-4 space-y-4">
-            {/* Contact Info */}
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <h4 className="font-medium text-sm text-muted-foreground">Contact Information</h4>
-
-                {customer.email && (
-                  <div className="flex items-center gap-3">
-                    <Mail className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{customer.email}</span>
-                  </div>
-                )}
-
-                {customer.phone && (
-                  <div className="flex items-center gap-3">
-                    <Phone className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">{customer.phone}</span>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    Customer since {format(new Date(customer.created_at), "MMM d, yyyy")}
-                  </span>
-                </div>
-
-                {customer.last_visit_at && (
-                  <div className="flex items-center gap-3">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm">
-                      Last visit: {format(new Date(customer.last_visit_at), "MMM d, yyyy")}
+                <div>
+                  <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge
+                      variant="secondary"
+                      className={getCustomerStatusBadgeClass(customer.status)}
+                    >
+                      {customer.status}
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {customer.visit_count} visits
                     </span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              </div>
 
-            {/* Notes */}
-            {customer.notes && (
-              <Card>
-                <CardContent className="p-4">
-                  <h4 className="font-medium text-sm text-muted-foreground mb-2">Notes</h4>
-                  <p className="text-sm">{customer.notes}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">Purse Balance</p>
-                  <p className="text-xl font-semibold">
-                    {currency} {Number(purse?.balance || 0).toFixed(2)}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-sm text-muted-foreground">Outstanding</p>
-                  <p className="text-xl font-semibold">
-                    {currency} {outstandingBalance.toFixed(2)}
-                  </p>
-                </CardContent>
-              </Card>
+              {/* Send Message Button */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSendMessageDialogOpen(true)}
+                      disabled={!canSendMessage}
+                      className="flex-shrink-0"
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      Send Message
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{sendMessageTooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
+          </DialogHeader>
 
-            <Card>
-              <CardContent className="p-4">
-                <h4 className="font-medium text-sm text-muted-foreground mb-3">Branches Visited</h4>
-                {visitedLocations.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No branch visits recorded yet. This customer will appear here once an appointment is created.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {visitedLocations.map((location) => (
-                      <div
-                        key={location.locationId}
-                        className="flex items-center justify-between rounded-lg border p-3"
-                      >
-                        <span className="text-sm font-medium">{location.locationName}</span>
-                        <Badge variant="secondary">
-                          {location.visitCount} {location.visitCount === 1 ? "visit" : "visits"}
-                        </Badge>
-                      </div>
-                    ))}
+          <Tabs defaultValue="overview" className="mt-4">
+            <TabsList className="grid w-full grid-cols-7">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="appointments">Appointments</TabsTrigger>
+              <TabsTrigger value="invoices">Invoices</TabsTrigger>
+              <TabsTrigger value="notes">Notes</TabsTrigger>
+              <TabsTrigger value="messages">Messages</TabsTrigger>
+              <TabsTrigger value="transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="purse">Purse</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="mt-4 space-y-4">
+              {/* Contact Info */}
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <h4 className="font-medium text-sm text-muted-foreground">Contact Information</h4>
+
+                  {customer.email && (
+                    <div className="flex items-center gap-3">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm">{customer.email}</span>
+                    </div>
+                  )}
+
+                  {customer.phone && (
+                    <div className="flex items-center gap-3">
+                      <Phone className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm">{customer.phone}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm">
+                      Customer since {format(new Date(customer.created_at), "MMM d, yyyy")}
+                    </span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
 
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <h4 className="font-medium text-sm text-muted-foreground">Customer Summary</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <p>Most ordered service: <span className="font-medium">{engagementSummary?.most_ordered_service || "—"}</span></p>
-                  <p>Most ordered product: <span className="font-medium">{engagementSummary?.most_ordered_product || "—"}</span></p>
-                  <p>Refunds count: <span className="font-medium">{engagementSummary?.refunds_count ?? 0}</span></p>
-                  <p>Last transaction date: <span className="font-medium">{lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "—"}</span></p>
-                  <p>Services completed: <span className="font-medium">{engagementSummary?.services_completed ?? 0}</span></p>
-                  <p>Products fulfilled: <span className="font-medium">{engagementSummary?.products_fulfilled ?? 0}</span></p>
-                  <p>Services cancelled: <span className="font-medium">{engagementSummary?.services_cancelled ?? 0}</span></p>
-                  <p>Services rescheduled: <span className="font-medium">{engagementSummary?.services_rescheduled ?? 0}</span></p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  {customer.last_visit_at && (
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm">
+                        Last visit: {format(new Date(customer.last_visit_at), "MMM d, yyyy")}
+                      </span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-          <TabsContent value="appointments" className="mt-4">
-            {customerDetailLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
-              </div>
-            ) : customerAppointments.length === 0 ? (
-              <div className="text-center py-8">
-                <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No appointments yet</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {customerAppointments.slice(0, 10).map((apt) => (
-                  <Card key={apt.id}>
-                    <CardContent className="p-3 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-sm">
-                          {apt.scheduled_start
-                            ? format(new Date(apt.scheduled_start), "MMM d, yyyy 'at' h:mm a")
-                            : "Unscheduled"}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {currency} {Number(apt.total_amount).toFixed(2)}
-                        </p>
-                      </div>
-                      <Badge
-                        className={`${statusStyles[apt.status]?.bg || "bg-muted"} ${statusStyles[apt.status]?.text || "text-muted-foreground"}`}
-                      >
-                        {apt.status}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+              {/* Notes */}
+              {customer.notes && (
+                <Card>
+                  <CardContent className="p-4">
+                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Notes</h4>
+                    <p className="text-sm">{customer.notes}</p>
+                  </CardContent>
+                </Card>
+              )}
 
-          <TabsContent value="invoices" className="mt-4">
-            <div className="space-y-4">
-              {/* Create Invoice Button */}
-              <div className="flex justify-end">
-                <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Invoice
-                </Button>
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">Purse Balance</p>
+                    <p className="text-xl font-semibold">
+                      {currency} {Number(purse?.balance || 0).toFixed(2)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">Outstanding</p>
+                    <p className="text-xl font-semibold">
+                      {currency} {outstandingBalance.toFixed(2)}
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
 
-              {/* Invoices List */}
-              {invoicesLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : customerInvoices.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                  <p className="text-muted-foreground mb-4">No invoices yet</p>
-                  <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create First Invoice
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {customerInvoices.map((invoice) => (
-                    <Card key={invoice.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <p className="font-medium text-sm">{invoice.invoice_number}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(invoice.created_at), "MMM d, yyyy 'at' h:mm a")}
-                            </p>
-                          </div>
-                          <Badge
-                            className={
-                              invoice.status === "paid"
-                                ? "bg-success/10 text-success"
-                                : invoice.status === "sent"
-                                  ? "bg-primary/10 text-primary"
-                                  : invoice.status === "void"
-                                    ? "bg-destructive/10 text-destructive"
-                                    : "bg-muted text-muted-foreground"
-                            }
-                          >
-                            {invoice.status}
+              <Card>
+                <CardContent className="p-4">
+                  <h4 className="font-medium text-sm text-muted-foreground mb-3">Branches Visited</h4>
+                  {visitedLocations.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No branch visits recorded yet. This customer will appear here once an appointment is created.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {visitedLocations.map((location) => (
+                        <div
+                          key={location.locationId}
+                          className="flex items-center justify-between rounded-lg border p-3"
+                        >
+                          <span className="text-sm font-medium">{location.locationName}</span>
+                          <Badge variant="secondary">
+                            {location.visitCount} {location.visitCount === 1 ? "visit" : "visits"}
                           </Badge>
                         </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-sm text-muted-foreground">Total:</span>
-                          <span className="font-semibold">
-                            {currency} {Number(invoice.total).toFixed(2)}
-                          </span>
-                        </div>
+              <Card>
+                <CardContent className="p-4 space-y-3">
+                  <h4 className="font-medium text-sm text-muted-foreground">Customer Summary</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <p>Most ordered service: <span className="font-medium">{engagementSummary?.most_ordered_service || "—"}</span></p>
+                    <p>Most ordered product: <span className="font-medium">{engagementSummary?.most_ordered_product || "—"}</span></p>
+                    <p>Refunds count: <span className="font-medium">{engagementSummary?.refunds_count ?? 0}</span></p>
+                    <p>Last transaction date: <span className="font-medium">{lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "—"}</span></p>
+                    <p>Last transaction date: <span className="font-medium">{lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "—"}</span></p>
+                    <p>Services completed: <span className="font-medium">{engagementSummary?.services_completed ?? 0}</span></p>
+                    <p>Products fulfilled: <span className="font-medium">{engagementSummary?.products_fulfilled ?? 0}</span></p>
+                    <p>Services cancelled: <span className="font-medium">{engagementSummary?.services_cancelled ?? 0}</span></p>
+                    <p>Services rescheduled: <span className="font-medium">{engagementSummary?.services_rescheduled ?? 0}</span></p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                        {invoice.due_date && (
-                          <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
-                            <span>Due date:</span>
-                            <span>{format(new Date(invoice.due_date), "MMM d, yyyy")}</span>
-                          </div>
-                        )}
-
-                        {invoice.notes && (
-                          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                            {invoice.notes}
+            <TabsContent value="appointments" className="mt-4">
+              {customerDetailLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : customerAppointments.length === 0 ? (
+                <div className="text-center py-8">
+                  <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                  <p className="text-muted-foreground">No appointments yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {customerAppointments.slice(0, 10).map((apt) => (
+                    <Card key={apt.id}>
+                      <CardContent className="p-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">
+                            {apt.scheduled_start
+                              ? format(new Date(apt.scheduled_start), "MMM d, yyyy 'at' h:mm a")
+                              : "Unscheduled"}
                           </p>
-                        )}
-
-                        {/* Actions */}
-                        <div className="flex gap-2 flex-wrap">
-                          {invoice.status === "draft" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                await sendInvoice(invoice.id);
-                                refetchInvoices();
-                              }}
-                            >
-                              <Send className="w-3 h-3 mr-1" />
-                              Send to Customer
-                            </Button>
-                          )}
-                          {invoice.payment_link && invoice.status !== "paid" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                window.open(invoice.payment_link!, "_blank");
-                              }}
-                            >
-                              <LinkIcon className="w-3 h-3 mr-1" />
-                              View Payment Link
-                            </Button>
-                          )}
-                          {invoice.status === "paid" && (
-                            <div className="flex items-center text-sm text-success">
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Paid {invoice.paid_at && `on ${format(new Date(invoice.paid_at), "MMM d, yyyy")}`}
-                            </div>
-                          )}
-                          {invoice.status === "void" && (
-                            <div className="flex items-center text-sm text-destructive">
-                              <XCircle className="w-4 h-4 mr-1" />
-                              Voided
-                            </div>
-                          )}
+                          <p className="text-sm text-muted-foreground">
+                            {currency} {Number(apt.total_amount).toFixed(2)}
+                          </p>
                         </div>
+                        <Badge
+                          className={`${statusStyles[apt.status]?.bg || "bg-muted"} ${statusStyles[apt.status]?.text || "text-muted-foreground"}`}
+                        >
+                          {apt.status}
+                        </Badge>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               )}
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="notes" className="mt-4">
-            {customerDetailLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-20 w-full" />
-                ))}
+            <TabsContent value="invoices" className="mt-4">
+              <div className="space-y-4">
+                {/* Create Invoice Button */}
+                <div className="flex justify-end">
+                  <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Invoice
+                  </Button>
+                </div>
+
+                {/* Invoices List */}
+                {invoicesLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full" />
+                    ))}
+                  </div>
+                ) : customerInvoices.length === 0 ? (
+                  <div className="text-center py-8">
+                    <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                    <p className="text-muted-foreground mb-4">No invoices yet</p>
+                    <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Invoice
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {customerInvoices.map((invoice) => (
+                      <Card key={invoice.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <p className="font-medium text-sm">{invoice.invoice_number}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(invoice.created_at), "MMM d, yyyy 'at' h:mm a")}
+                              </p>
+                            </div>
+                            <Badge
+                              className={
+                                invoice.status === "paid"
+                                  ? "bg-success/10 text-success"
+                                  : invoice.status === "sent"
+                                    ? "bg-primary/10 text-primary"
+                                    : invoice.status === "void"
+                                      ? "bg-destructive/10 text-destructive"
+                                      : "bg-muted text-muted-foreground"
+                              }
+                            >
+                              {invoice.status}
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-sm text-muted-foreground">Total:</span>
+                            <span className="font-semibold">
+                              {currency} {Number(invoice.total).toFixed(2)}
+                            </span>
+                          </div>
+
+                          {invoice.due_date && (
+                            <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+                              <span>Due date:</span>
+                              <span>{format(new Date(invoice.due_date), "MMM d, yyyy")}</span>
+                            </div>
+                          )}
+
+                          {invoice.notes && (
+                            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                              {invoice.notes}
+                            </p>
+                          )}
+
+                          {/* Actions */}
+                          <div className="flex gap-2 flex-wrap">
+                            {invoice.status === "draft" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  await sendInvoice(invoice.id);
+                                  refetchInvoices();
+                                }}
+                              >
+                                <Send className="w-3 h-3 mr-1" />
+                                Send to Customer
+                              </Button>
+                            )}
+                            {invoice.payment_link && invoice.status !== "paid" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  window.open(invoice.payment_link!, "_blank");
+                                }}
+                              >
+                                <LinkIcon className="w-3 h-3 mr-1" />
+                                View Payment Link
+                              </Button>
+                            )}
+                            {invoice.status === "paid" && (
+                              <div className="flex items-center text-sm text-success">
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Paid {invoice.paid_at && `on ${format(new Date(invoice.paid_at), "MMM d, yyyy")}`}
+                              </div>
+                            )}
+                            {invoice.status === "void" && (
+                              <div className="flex items-center text-sm text-destructive">
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Voided
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
-            ) : appointmentNotes.length === 0 && !customer.notes ? (
+            </TabsContent>
+
+            <TabsContent value="notes" className="mt-4">
+              {customerDetailLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              ) : appointmentNotes.length === 0 && !customer.notes ? (
+              ): appointmentNotes.length === 0 && !customer.notes ? (
               <div className="text-center py-8">
                 <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
                 <p className="text-muted-foreground">No notes recorded yet</p>
+                <p className="text-muted-foreground">No notes recorded yet</p>
               </div>
-            ) : (
+              ) : (
               <ScrollArea className="h-[300px]">
                 <div className="space-y-4 pr-4">
+                  {customer.notes && (
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex gap-2">
+                          <Pencil className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium mb-1">Customer profile note</p>
+                            <p className="text-sm">{customer.notes}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {customer.notes && (
                     <Card>
                       <CardContent className="p-4">
@@ -728,222 +834,222 @@ export function CustomerDetailDialog({
                 </div>
               </ScrollArea>
             )}
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="messages" className="mt-4">
-            <MessageHistory customerId={customer.id} />
-          </TabsContent>
+            <TabsContent value="messages" className="mt-4">
+              <MessageHistory customerId={customer.id} />
+            </TabsContent>
 
-          <TabsContent value="transactions" className="mt-4">
-            {/* Search and Filters */}
-            <div className="space-y-3 mb-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by type, method, status..."
-                    value={txSearchQuery}
-                    onChange={(e) => setTxSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
+            <TabsContent value="transactions" className="mt-4">
+              {/* Search and Filters */}
+              <div className="space-y-3 mb-4">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by type, method, status..."
+                      value={txSearchQuery}
+                      onChange={(e) => setTxSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={showFilters ? "bg-muted" : ""}
+                  >
+                    <Filter className="w-4 h-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={showFilters ? "bg-muted" : ""}
-                >
-                  <Filter className="w-4 h-4" />
-                </Button>
-              </div>
 
-              {showFilters && (
-                <Card>
-                  <CardContent className="p-3 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Start Date</Label>
-                        <DatePicker
-                          value={txStartDate}
-                          onChange={setTxStartDate}
-                          placeholder="From"
-                        />
+                {showFilters && (
+                  <Card>
+                    <CardContent className="p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Start Date</Label>
+                          <DatePicker
+                            value={txStartDate}
+                            onChange={setTxStartDate}
+                            placeholder="From"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">End Date</Label>
+                          <DatePicker
+                            value={txEndDate}
+                            onChange={setTxEndDate}
+                            placeholder="To"
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">End Date</Label>
-                        <DatePicker
-                          value={txEndDate}
-                          onChange={setTxEndDate}
-                          placeholder="To"
-                        />
+                      <div className="flex justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearFilters}
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Clear Filters
+                        </Button>
                       </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearFilters}
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Clear Filters
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {customerDetailLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
-            ) : filteredTransactions.length === 0 ? (
-              <div className="text-center py-8">
-                <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">
-                  {txSearchQuery || txStartDate || txEndDate
-                    ? "No matching transactions found"
-                    : "No transactions yet"}
-                </p>
-              </div>
-            ) : (
-              <ScrollArea className="h-[300px]">
-                <div className="space-y-2 pr-4">
-                  {filteredTransactions.map((tx) => {
-                    const isCredit = isTransactionCredit(tx.type);
-                    const iconBgClass = isCredit ? "bg-success/10" : "bg-primary/10";
-                    const iconColorClass = isCredit ? "text-success" : "text-primary";
 
-                    return (
-                      <Card key={tx.id}>
-                        <CardContent className="p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${iconBgClass}`}>
-                                <Receipt className={`w-4 h-4 ${iconColorClass}`} />
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm capitalize">
-                                  {tx.type.replace(/_/g, " ")}
-                                </p>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>{format(new Date(tx.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
-                                  <span>•</span>
-                                  <span className="capitalize">{tx.method.replace(/_/g, " ")}</span>
+              {customerDetailLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : filteredTransactions.length === 0 ? (
+                <div className="text-center py-8">
+                  <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                  <p className="text-muted-foreground">
+                    {txSearchQuery || txStartDate || txEndDate
+                      ? "No matching transactions found"
+                      : "No transactions yet"}
+                  </p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[300px]">
+                  <div className="space-y-2 pr-4">
+                    {filteredTransactions.map((tx) => {
+                      const isCredit = isTransactionCredit(tx.type);
+                      const iconBgClass = isCredit ? "bg-success/10" : "bg-primary/10";
+                      const iconColorClass = isCredit ? "text-success" : "text-primary";
+
+                      return (
+                        <Card key={tx.id}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-lg ${iconBgClass}`}>
+                                  <Receipt className={`w-4 h-4 ${iconColorClass}`} />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-sm capitalize">
+                                    {tx.type.replace(/_/g, " ")}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>{format(new Date(tx.created_at), "MMM d, yyyy 'at' h:mm a")}</span>
+                                    <span>•</span>
+                                    <span className="capitalize">{tx.method.replace(/_/g, " ")}</span>
+                                  </div>
                                 </div>
                               </div>
+                              <div className="text-right">
+                                <p className="font-semibold">
+                                  {currency} {Number(tx.amount).toFixed(2)}
+                                </p>
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-xs ${getTransactionStatusBadgeClass(tx.status)}`}
+                                >
+                                  {tx.status}
+                                </Badge>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <p className="font-semibold">
-                                {currency} {Number(tx.amount).toFixed(2)}
+                            {tx.appointment_id && (
+                              <div className="mt-2 text-xs text-muted-foreground">
+                                <span className="font-medium">Booking: </span>
+                                <span className="font-mono">{tx.appointment_id.slice(0, 8)}...</span>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </TabsContent>
+
+            <TabsContent value="purse" className="mt-4">
+              <Card className="mb-4">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Current Balance</p>
+                    <p className="text-2xl font-semibold">
+                      {currency} {Number(purse?.balance || 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <Button size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Top Up
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {customerDetailLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : purseLedgerEntries.length === 0 ? (
+                <div className="text-center py-8">
+                  <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                  <p className="text-muted-foreground">No purse transactions yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {purseLedgerEntries.map((entry) => {
+                    const isCredit = isPurseEntryCredit(entry.entry_type);
+                    const entryLabel = entry.entry_type
+                      .replace(/^customer_purse_/, "")
+                      .replace(/_/g, " ");
+                    const iconBgClass = isCredit ? "bg-success/10" : "bg-destructive/10";
+                    const iconColorClass = isCredit ? "text-success" : "text-destructive";
+                    const amountColorClass = isCredit ? "text-success" : "text-destructive";
+
+                    return (
+                      <Card key={entry.id}>
+                        <CardContent className="p-3 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${iconBgClass}`}>
+                              <CreditCard className={`w-4 h-4 ${iconColorClass}`} />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm capitalize">{entryLabel}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(entry.created_at), "MMM d, yyyy")}
                               </p>
-                              <Badge
-                                variant="secondary"
-                                className={`text-xs ${getTransactionStatusBadgeClass(tx.status)}`}
-                              >
-                                {tx.status}
-                              </Badge>
                             </div>
                           </div>
-                          {tx.appointment_id && (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              <span className="font-medium">Booking: </span>
-                              <span className="font-mono">{tx.appointment_id.slice(0, 8)}...</span>
-                            </div>
-                          )}
+                          <p className={`font-semibold ${amountColorClass}`}>
+                            {isCredit ? "+" : "-"}
+                            {currency} {Number(entry.amount).toFixed(2)}
+                          </p>
                         </CardContent>
                       </Card>
                     );
                   })}
                 </div>
-              </ScrollArea>
-            )}
-          </TabsContent>
+              )}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
 
-          <TabsContent value="purse" className="mt-4">
-            <Card className="mb-4">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Current Balance</p>
-                  <p className="text-2xl font-semibold">
-                    {currency} {Number(purse?.balance || 0).toFixed(2)}
-                  </p>
-                </div>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Top Up
-                </Button>
-              </CardContent>
-            </Card>
+        {/* Send Message Dialog */}
+        <SendMessageDialog
+          open={sendMessageDialogOpen}
+          onOpenChange={setSendMessageDialogOpen}
+          customerId={customer.id}
+        />
 
-            {customerDetailLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))}
-              </div>
-            ) : purseLedgerEntries.length === 0 ? (
-              <div className="text-center py-8">
-                <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No purse transactions yet</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {purseLedgerEntries.map((entry) => {
-                  const isCredit = isPurseEntryCredit(entry.entry_type);
-                  const entryLabel = entry.entry_type
-                    .replace(/^customer_purse_/, "")
-                    .replace(/_/g, " ");
-                  const iconBgClass = isCredit ? "bg-success/10" : "bg-destructive/10";
-                  const iconColorClass = isCredit ? "text-success" : "text-destructive";
-                  const amountColorClass = isCredit ? "text-success" : "text-destructive";
-
-                  return (
-                    <Card key={entry.id}>
-                      <CardContent className="p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-lg ${iconBgClass}`}>
-                            <CreditCard className={`w-4 h-4 ${iconColorClass}`} />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm capitalize">{entryLabel}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(entry.created_at), "MMM d, yyyy")}
-                            </p>
-                          </div>
-                        </div>
-                        <p className={`font-semibold ${amountColorClass}`}>
-                          {isCredit ? "+" : "-"}
-                          {currency} {Number(entry.amount).toFixed(2)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-
-      {/* Send Message Dialog */}
-      <SendMessageDialog
-        open={sendMessageDialogOpen}
-        onOpenChange={setSendMessageDialogOpen}
-        customerId={customer.id}
-      />
-
-      {/* Create Invoice Dialog */}
-      <CreateInvoiceDialog
-        open={createInvoiceDialogOpen}
-        onOpenChange={setCreateInvoiceDialogOpen}
-        customerId={customer.id}
-        onSuccess={() => {
-          refetchInvoices();
-        }}
-      />
-    </Dialog>
-  );
-}
+        {/* Create Invoice Dialog */}
+        <CreateInvoiceDialog
+          open={createInvoiceDialogOpen}
+          onOpenChange={setCreateInvoiceDialogOpen}
+          customerId={customer.id}
+          onSuccess={() => {
+            refetchInvoices();
+          }}
+        />
+      </Dialog>
+    );
+  }
