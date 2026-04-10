@@ -698,9 +698,33 @@ export function BookingWizard({
         requestBody.preferredPaymentGateway = selectedGateway;
         
         // For split payment, pass purse info to be handled in webhook
-        if (paymentMode === "split" && splitPurseAmount > 0 && customerId) {
-          requestBody.splitPurseAmount = splitPurseAmount;
+        // This handles two scenarios:
+        // 1. User explicitly selected split mode in Payment step
+        // 2. User applied purse in Review step and is paying remainder via card
+        const hasPurseApplied = purseAmount > 0 && afterVoucher > purseAmount;
+        const isSplitScenario = (paymentMode === "split" && splitPurseAmount > 0) || 
+                                (hasPurseApplied && includePaymentSession);
+        
+        console.log("Split payment check:", {
+          paymentMode,
+          splitPurseAmount,
+          purseAmount,
+          customerId,
+          hasPurseApplied,
+          isSplitScenario,
+          afterVoucher,
+          includePaymentSession
+        });
+        
+        if (isSplitScenario && customerId) {
+          // Use splitPurseAmount if available (from Payment step), otherwise use purseAmount (from Review step)
+          const purseAmountToUse = paymentMode === "split" ? splitPurseAmount : purseAmount;
+          requestBody.splitPurseAmount = purseAmountToUse;
           requestBody.splitCustomerId = customerId;
+          console.log("Added split payment metadata to request:", {
+            splitPurseAmount: requestBody.splitPurseAmount,
+            splitCustomerId: requestBody.splitCustomerId
+          });
         }
       }
 
@@ -753,6 +777,7 @@ export function BookingWizard({
   };
 
   const handlePaymentModeChange = (mode: PaymentMode, purseAmt: number, cardAmt: number) => {
+    console.log("Payment mode changed:", { mode, purseAmt, cardAmt });
     setPaymentMode(mode);
     setSplitPurseAmount(purseAmt);
     setSplitCardAmount(cardAmt);
@@ -760,6 +785,13 @@ export function BookingWizard({
 
   const handlePaymentSubmit = async () => {
     setIsSubmitting(true);
+    console.log("Payment submit - current state:", {
+      paymentMode,
+      splitPurseAmount,
+      splitCardAmount,
+      customerId,
+      amountDueNow
+    });
     try {
       // For purse-only payment, backend handles everything (debit, credit salon, transactions, notifications)
       if (paymentMode === "purse") {

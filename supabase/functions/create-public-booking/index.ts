@@ -614,6 +614,13 @@ serve(async (req) => {
       if (usePaystack && paystackSecretKey) {
         // Create Paystack transaction
         const amountInMinorUnits = Math.round(paymentAmount * 100);
+        
+        console.log("Creating Paystack transaction with split payment metadata:", {
+          splitPurseAmount,
+          splitCustomerId,
+          hasMetadata: !!(splitPurseAmount && splitCustomerId)
+        });
+        
         const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
           method: "POST",
           headers: {

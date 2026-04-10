@@ -361,6 +361,12 @@ async function processWebhook(
 
               const tenant = await validateTenant(supabase, primaryAppointment.tenant_id, "appointment payment");
 
+              console.log("Split payment metadata check:", {
+                splitPurseAmount,
+                splitCustomerId,
+                hasMetadata: !!(splitPurseAmount && splitPurseAmount > 0 && splitCustomerId)
+              });
+
               // Handle split payment purse deduction if metadata is present
               if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId) {
                 console.log(`Processing split payment purse deduction: ${splitPurseAmount} for customer ${splitCustomerId}`);
@@ -394,6 +400,22 @@ async function processWebhook(
                         })
                         .eq("id", appointment.id);
                     }
+
+                    // Create transaction record for purse portion
+                    await supabase.from("transactions").insert({
+                      tenant_id: primaryAppointment.tenant_id,
+                      customer_id: splitCustomerId,
+                      appointment_id: primaryAppointment.id,
+                      type: "payment",
+                      amount: splitPurseAmount,
+                      currency: tenant?.currency || "USD",
+                      method: "purse",
+                      provider: "internal",
+                      provider_reference: `split_purse_${reference}`,
+                      status: "completed",
+                    });
+
+                    console.log(`Created purse transaction record for ${splitPurseAmount}`);
                   }
                 } catch (purseError) {
                   console.error("Exception while debiting customer purse:", purseError);
@@ -414,20 +436,35 @@ async function processWebhook(
                 ...(event.gateway === "paystack" && reference ? { paystack_reference: reference } : {}),
               });
 
+              // Calculate total payment including purse for notifications
+              const totalPaymentAmount = splitPurseAmount && splitPurseAmount > 0 
+                ? amount + splitPurseAmount 
+                : amount;
+              const paymentDescription = splitPurseAmount && splitPurseAmount > 0
+                ? `${tenant?.currency || ""} ${amount} (card) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
+                : `${tenant?.currency || ""} ${amount}`;
+
               await sendTransactionAlerts({
                 tenantId: primaryAppointment.tenant_id,
                 tenantName: tenant?.name,
                 currency: tenant?.currency,
                 customerName: customer?.full_name,
-                amount,
+                amount: totalPaymentAmount,
                 gateway: event.gateway,
                 title: `${isDeposit ? "Deposit received" : "Payment received"} at ${tenant?.name || "your salon"}`,
-                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${tenant?.currency || ""} ${amount} for their booking.`,
+                description: `${customer?.full_name || "A customer"} completed ${isDeposit ? "a deposit" : "payment"} of ${paymentDescription} for their booking.`,
                 entityId: primaryAppointment.id,
                 htmlContent: `
                   <h2 style="color: #2563EB; margin-bottom: 16px;">${isDeposit ? "Deposit received" : "Payment received"}</h2>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
-                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total Amount:</strong> ${tenant?.currency || "USD"} ${totalPaymentAmount}</p>
+                  ${splitPurseAmount && splitPurseAmount > 0 ? `
+                    <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Payment Breakdown:</strong></p>
+                    <ul style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+                      <li>Card payment: ${tenant?.currency || "USD"} ${amount}</li>
+                      <li>Store credit: ${tenant?.currency || "USD"} ${splitPurseAmount}</li>
+                    </ul>
+                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>`}
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
                 `,
@@ -523,8 +560,8 @@ async function processWebhook(
                     appointment_id: primaryAppointment.id,
                     invoice_number: invoiceNumber,
                     currency: tenant.currency,
-                    subtotal: amount,
-                    total: amount,
+                    subtotal: totalPaymentAmount,
+                    total: totalPaymentAmount,
                     status: isDeposit ? "sent" : "paid",
                     paid_at: new Date().toISOString(),
                   })
@@ -549,12 +586,19 @@ async function processWebhook(
                 // Validate salon wallet currency matches tenant currency
                 await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
+                // For split payments, salon receives full amount (card + purse)
+                const totalAmountForSalon = splitPurseAmount && splitPurseAmount > 0 
+                  ? amount + splitPurseAmount 
+                  : amount;
+
+                console.log(`Crediting salon purse: card=${amount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}`);
+
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
                   p_entry_type: "salon_purse_credit_booking",
                   p_reference_type: "appointment",
                   p_reference_id: primaryAppointment.id,
-                  p_amount: amount,
+                  p_amount: totalAmountForSalon,
                   p_currency: tenant.currency,
                   p_idempotency_key: `booking_${reference}`,
                   p_gateway_reference: reference,
