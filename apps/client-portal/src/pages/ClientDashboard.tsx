@@ -2,7 +2,7 @@ import { useClientAuth, useClientBookings, useClientPurse, useClientNotification
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
-import { Calendar, Clock, CreditCard, Bell, Gift, ArrowRight, MapPin } from "lucide-react";
+import { Calendar, CreditCard, Bell, Gift } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@ui/skeleton";
 import { format } from "date-fns";
@@ -25,128 +25,82 @@ export default function ClientDashboard() {
   return (
     <ClientSidebar>
       <div className="space-y-6">
-        {/* Header */}
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            Welcome back, {customerName}!
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your bookings and account across {customers.length} salon{customers.length !== 1 ? "s" : ""}
+          <h1>Welcome back, {customerName}</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage your bookings, track payments, and stay updated across all your salons
           </p>
         </div>
 
-        {/* Quick Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {/* Next Appointment */}
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
                 Next Appointment
               </CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-8 w-32" />
+                <Skeleton className="h-8 w-full" />
               ) : nextAppointment ? (
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold">
-                    {nextAppointment.scheduled_start
-                      ? format(new Date(nextAppointment.scheduled_start), "MMM d, h:mm a")
-                      : "Time TBD"}
+                <>
+                  <p className="text-2xl font-bold">
+                    {format(new Date(nextAppointment.scheduled_start!), "MMM d")}
                   </p>
                   <p className="text-sm text-muted-foreground">
+                    {format(new Date(nextAppointment.scheduled_start!), "h:mm a")} at{" "}
                     {nextAppointment.tenant?.name || "Salon"}
                   </p>
-                  <Button variant="link" className="p-0 h-auto" asChild>
-                    <Link to="/client/bookings">
-                      View details
-                      <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
+                </>
               ) : (
                 <>
-                  <p className="text-muted-foreground text-sm">
-                    No upcoming appointments
-                  </p>
-                  <Button variant="link" className="p-0 h-auto mt-2" asChild>
-                    <Link to="/client/bookings">
-                      View all bookings
-                      <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
+                  <p className="text-sm text-muted-foreground">No upcoming appointments</p>
                 </>
               )}
             </CardContent>
           </Card>
 
-          {/* Outstanding Fees */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
                 Outstanding Fees
               </CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <Skeleton className="h-8 w-24" />
-              ) : totalOutstanding > 0 ? (
-                <>
-                  <div className="text-2xl font-bold text-destructive">
-                    {formatCurrency(totalOutstanding, customers[0]?.tenant?.currency || "USD")}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Outstanding balance
-                  </p>
-                </>
               ) : (
-                <>
-                  <div className="text-2xl font-bold text-green-600">$0.00</div>
-                  <p className="text-xs text-muted-foreground">
-                    No outstanding fees
-                  </p>
-                </>
+                <p className="text-2xl font-bold">
+                  {formatCurrency(totalOutstanding, customers[0]?.tenant?.currency || "USD")}
+                </p>
               )}
+              <p className="text-sm text-muted-foreground mt-1">
+                Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
+              </p>
             </CardContent>
           </Card>
 
-          {/* Notifications */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Bell className="h-4 w-4" />
                 Notifications
               </CardTitle>
-              <Bell className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-16" />
-              ) : (
-                <>
-                  <div className="text-2xl font-bold">{unreadCount}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Unread messages
-                  </p>
-                  {unreadCount > 0 && (
-                    <Button variant="link" className="p-0 h-auto mt-1" asChild>
-                      <Link to="/client/notifications">
-                        View all
-                        <ArrowRight className="ml-1 h-3 w-3" />
-                      </Link>
-                    </Button>
-                  )}
-                </>
-              )}
+              {isLoading ? <Skeleton className="h-8 w-16" /> : <p className="text-2xl font-bold">{unreadCount}</p>}
+              <p className="text-sm text-muted-foreground mt-1">
+                Unread updates
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Purse Balances per Salon */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Store Credits</CardTitle>
+            <CardTitle>Store Credits</CardTitle>
             <CardDescription>
               Your purse balance at each salon
             </CardDescription>
@@ -166,35 +120,25 @@ export default function ClientDashboard() {
                 {customers.map((customer) => {
                   const purse = purses.find((p) => p.customer_id === customer.id);
                   const balance = purse?.balance || 0;
-                  
+
                   return (
                     <div
                       key={customer.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                      className="flex items-center justify-between p-3 rounded-lg border"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary">
-                            {customer.tenant.name.charAt(0)}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium">{customer.tenant.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">
-                          {formatCurrency(balance, customer.tenant.currency)}
+                      <div>
+                        <p className="font-medium">{customer.tenant.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
                         </p>
-                        <p className="text-xs text-muted-foreground">Balance</p>
                       </div>
+                      <p className="font-semibold">
+                        {formatCurrency(balance, customer.tenant.currency)}
+                      </p>
                     </div>
                   );
                 })}
-                
+
                 {totalBalance > 0 && (
                   <div className="pt-3 border-t flex justify-between items-center">
                     <span className="font-medium">Total Balance</span>
@@ -208,27 +152,24 @@ export default function ClientDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-            <Link to="/client/bookings">
-              <Calendar className="h-5 w-5" />
-              <span>View Bookings</span>
-            </Link>
-          </Button>
-          <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-            <Link to="/client/history">
-              <Clock className="h-5 w-5" />
-              <span>View History</span>
-            </Link>
-          </Button>
-          <Button variant="outline" className="h-auto py-4 flex-col gap-2" asChild>
-            <Link to="/client/refunds">
-              <Gift className="h-5 w-5" />
-              <span>Refunds & Credits</span>
-            </Link>
-          </Button>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-3">
+              <Button variant="outline" asChild>
+                <Link to="/bookings">View All Bookings</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/history">Transaction History</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/notifications">Check Notifications</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </ClientSidebar>
   );

@@ -8,6 +8,7 @@ import ClientRefundsPage from "@/pages/ClientRefundsPage";
 import ClientNotificationsPage from "@/pages/ClientNotificationsPage";
 import ClientProfilePage from "@/pages/ClientProfilePage";
 import ClientHelpPage from "@/pages/ClientHelpPage";
+import ClientCompleteAccountPage from "@/pages/ClientCompleteAccountPage";
 import { ClientAuthProvider } from "@/hooks";
 import { ClientProtectedRoute, ClientPublicOnlyRoute } from "@/components/ClientProtectedRoute";
 
@@ -22,6 +23,14 @@ function App() {
               <ClientPublicOnlyRoute>
                 <ClientLoginPage />
               </ClientPublicOnlyRoute>
+            }
+          />
+          <Route
+            path="/complete-account"
+            element={
+              <ClientProtectedRoute>
+                <ClientCompleteAccountPage />
+              </ClientProtectedRoute>
             }
           />
           <Route

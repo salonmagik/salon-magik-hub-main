@@ -1,6 +1,6 @@
 import { Button } from "@ui/button";
 import { ArrowRight, Play } from "lucide-react";
-const heroImage = "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=1600&q=80";
+import heroImage from "@/assets/salon-hero-pic.jpg";
 
 interface LandingHeroProps {
   isWaitlistMode: boolean;
@@ -22,7 +22,7 @@ export function LandingHero({
       <div className="absolute inset-0">
         <img
           src={heroImage}
-          alt="Professional hairstylist working in a modern salon"
+          alt="Modern salon interior with styling chairs and large mirrors"
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-background via-background/95 to-background/60" />

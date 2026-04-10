@@ -126,6 +126,18 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Password reset email sent successfully");
 
+    // Log the message (no tenant_id/customer_id for password resets)
+    await supabase.from("message_logs").insert({
+      channel: "email",
+      recipient: email,
+      template_type: "password_reset",
+      status: "sent",
+      provider: "resend",
+      initiated_by: "system",
+      credits_used: 0,
+      sent_at: new Date().toISOString(),
+    });
+
     return new Response(
       JSON.stringify({ success: true }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }

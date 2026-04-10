@@ -1,4 +1,4 @@
-project_id = "yueagxbvttykybkioywa"
+project_id = "yqahjtsizbqwxdbjzsli"
 
 [functions.send-staff-invitation]
 verify_jwt = false
@@ -33,6 +33,9 @@ verify_jwt = false
 [functions.create-public-booking]
 verify_jwt = false
 
+[functions.create-payment-session]
+verify_jwt = false
+
 [functions.verify-email]
 verify_jwt = false
 
@@ -45,6 +48,10 @@ verify_jwt = false
 [functions.complete-password-change]
 verify_jwt = false
 
+[db.seed]
+enabled = true
+sql_paths = ['./seeds/*.sql']
+
 [functions.bulk-import-catalog]
 verify_jwt = false
 
@@ -55,4 +62,67 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.resolve-booking-country-context]
+verify_jwt = false
+
+[functions.auth-resolve-identifier]
+verify_jwt = false
+
+[functions.auth-check-otp-rate-limit]
+verify_jwt = false
+
+[functions.send-client-login-otp]
+verify_jwt = false
+
+[functions.auth-set-client-password]
+verify_jwt = false
+
+[functions.update-client-account]
+verify_jwt = true
+
+[functions.submit-support-ticket]
+verify_jwt = true
+
+[functions.client-cancel-booking]
+verify_jwt = true
+
+[functions.refund-cancelled-appointment]
+verify_jwt = true
+
+[functions.public-booking-email-lookup]
+verify_jwt = false
+
+[functions.public-booking-prefill]
+verify_jwt = false
+
+[functions.payment-webhook]
+verify_jwt = false
+
+[functions.get-banks-and-momo-providers]
+verify_jwt = false
+
+[functions.create-payout-destination]
+verify_jwt = false
+
+[functions.process-salon-withdrawal]
+verify_jwt = false
+
+[functions.send-daily-digest]
+verify_jwt = false
+
+[functions.manage-termii-sender-id]
+verify_jwt = false
+
+[functions.send-bulk-message]
+verify_jwt = false
+
+[functions.purchase-credits-from-purse]
+verify_jwt = false
+
+[functions.manage-whatsapp-templates]
+verify_jwt = false
+
+[functions.create-invoice-payment]
+verify_jwt = false
+
+[functions.send-invoice]
 verify_jwt = false

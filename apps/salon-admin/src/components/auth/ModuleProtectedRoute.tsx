@@ -43,6 +43,9 @@ export function ModuleProtectedRoute({
   const ownerBypass = currentRole === "owner";
   const isAllowed = ownerBypass || (hasModuleAccess && (!requiresStrictContext || isContextAllowed));
 
+  const isChainAuditLogBlocked =
+    module === "audit_log" && currentTenant?.plan === "chain" && activeContextType !== "owner_hub";
+
   useEffect(() => {
     if (
       isLoading ||
@@ -51,7 +54,8 @@ export function ModuleProtectedRoute({
       isAllowed ||
       hasModuleAccess ||
       !currentTenant?.id ||
-      !user?.id
+      !user?.id ||
+      isChainAuditLogBlocked
     )
       return;
     (async () => {
@@ -67,7 +71,7 @@ export function ModuleProtectedRoute({
         },
       });
     })();
-  }, [activeContextType, currentTenant?.id, hasModuleAccess, isAllowed, isAssignmentPending, isGuardBootstrapping, isLoading, module, user?.id]);
+  }, [activeContextType, currentTenant?.id, hasModuleAccess, isAllowed, isAssignmentPending, isChainAuditLogBlocked, isGuardBootstrapping, isLoading, module, user?.id]);
 
   if (isLoading || isGuardBootstrapping) {
     return (
@@ -79,6 +83,10 @@ export function ModuleProtectedRoute({
 
   if (isAssignmentPending) {
     return <Navigate to="/salon/assignment-pending" replace />;
+  }
+
+  if (isChainAuditLogBlocked) {
+    return <Navigate to="/salon/overview" replace />;
   }
 
   if (!ownerBypass && !isContextAllowed && requiresStrictContext) {

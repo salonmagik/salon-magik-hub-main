@@ -8,10 +8,10 @@ import {
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
-import { AspectRatio } from "@ui/aspect-ratio";
 import { Clock, Edit, Archive, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ImageCarousel } from "@/components/catalog/ImageCarousel";
 
 interface ServiceDetailDialogProps {
   open: boolean;
@@ -77,13 +77,7 @@ export function ServiceDetailDialog({
         <div className="space-y-4">
           {/* Image */}
           {service.image_urls && service.image_urls.length > 0 && (
-            <AspectRatio ratio={16 / 9} className="bg-muted rounded-lg overflow-hidden">
-              <img
-                src={service.image_urls[0]}
-                alt={service.name}
-                className="object-cover w-full h-full"
-              />
-            </AspectRatio>
+            <ImageCarousel images={service.image_urls} alt={service.name} />
           )}
 
           {/* Details */}

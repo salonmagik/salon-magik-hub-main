@@ -1,5 +1,4 @@
-import { format } from "date-fns";
-import { Calendar, Clock, User, Wallet, Gift, Package, Truck } from "lucide-react";
+import { Calendar, Clock, User, Wallet, Gift, Package, Truck, MapPin } from "lucide-react";
 import { Separator } from "@ui/separator";
 import { Badge } from "@ui/badge";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
@@ -8,27 +7,14 @@ import { VoucherInput, type AppliedVoucher } from "@/components/VoucherInput";
 import { CustomerPurseToggle } from "@/components/CustomerPurseToggle";
 import { formatCurrency } from "@shared/currency";
 import type { CartItem, GiftRecipient } from "@/hooks/useBookingCart";
-import type { PublicLocation } from "@/hooks";
 import type { BookerInfo } from "./BookerInfoStep";
 
 export type PaymentOption = "pay_now" | "pay_deposit" | "pay_at_salon";
 
 interface ReviewStepProps {
-  // Appointment details
-  selectedDate?: Date;
-  selectedTime?: string;
-  selectedLocation?: PublicLocation;
-  selectedCountryCode?: string | null;
-  leaveUnscheduled: boolean;
-  
-  // Customer info
   bookerInfo: BookerInfo;
-  
-  // Cart items
   items: CartItem[];
   giftRecipients: Record<string, GiftRecipient>;
-  
-  // Salon config
   salon: {
     id: string;
     currency: string;
@@ -36,16 +22,13 @@ interface ReviewStepProps {
     deposits_enabled?: boolean;
     default_deposit_percentage?: number;
   };
-  
-  // Payment state
   paymentOption: PaymentOption;
   onPaymentOptionChange: (option: PaymentOption) => void;
   appliedVoucher: AppliedVoucher | null;
   onVoucherApplied: (voucher: AppliedVoucher | null) => void;
   purseAmount: number;
   onPurseApplied: (amount: number) => void;
-  
-  // Calculated amounts
+  selectedCountryCode?: string | null;
   subtotal: number;
   voucherDiscount: number;
   afterVoucher: number;
@@ -56,11 +39,6 @@ interface ReviewStepProps {
 }
 
 export function ReviewStep({
-  selectedDate,
-  selectedTime,
-  selectedLocation,
-  selectedCountryCode,
-  leaveUnscheduled,
   bookerInfo,
   items,
   giftRecipients,
@@ -71,6 +49,7 @@ export function ReviewStep({
   onVoucherApplied,
   purseAmount,
   onPurseApplied,
+  selectedCountryCode,
   subtotal,
   voucherDiscount,
   afterVoucher,
@@ -79,43 +58,87 @@ export function ReviewStep({
   amountDueNow,
   amountDueAtSalon,
 }: ReviewStepProps) {
-  const giftItems = items.filter((item) => item.isGift);
   const depositRequired = salon.deposits_enabled && depositAmount > 0;
 
   return (
     <div className="space-y-6">
-      {/* Booking Details */}
-      {!leaveUnscheduled && selectedDate && selectedTime && (
-        <div className="p-4 border rounded-lg space-y-2">
-          <h3 className="font-semibold flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Appointment Details
-          </h3>
-          <div className="text-sm text-muted-foreground">
-            <p>{format(selectedDate, "EEEE, MMMM d, yyyy")}</p>
-            <p className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {selectedTime}
-            </p>
-            {selectedLocation && (
-              <p>
-                {selectedLocation.name}, {selectedLocation.city}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="space-y-3">
+        <h3 className="font-semibold">Order Summary</h3>
+        {items.map((item) => {
+          const recipient = item.isGift ? giftRecipients[item.id] : undefined;
+          return (
+            <div key={item.id} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-medium">{item.name}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span className="uppercase">{item.type}</span>
+                    {item.branchName && (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {item.branchName}
+                      </span>
+                    )}
+                    {item.scheduleMode === "leave_unscheduled" && (
+                      <Badge variant="outline">Leave unscheduled</Badge>
+                    )}
+                    {item.scheduleMode === "schedule_now" && item.scheduledDate && item.scheduledTime && (
+                      <Badge variant="secondary">
+                        {item.scheduledDate} at {item.scheduledTime}
+                      </Badge>
+                    )}
+                    {item.isGift && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Gift className="h-3 w-3" />
+                        Gift
+                      </Badge>
+                    )}
+                    {item.type === "product" && item.fulfillmentType && (
+                      <Badge variant="outline" className="gap-1">
+                        {item.fulfillmentType === "pickup" ? (
+                          <>
+                            <Package className="h-3 w-3" />
+                            Pickup
+                          </>
+                        ) : (
+                          <>
+                            <Truck className="h-3 w-3" />
+                            Delivery
+                          </>
+                        )}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <span className="font-semibold">
+                  {formatCurrency(item.price * item.quantity, salon.currency)}
+                </span>
+              </div>
 
-      {leaveUnscheduled && (
-        <div className="p-4 border rounded-lg bg-muted/30">
-          <p className="text-sm text-muted-foreground">
-            📅 Unscheduled booking - you'll schedule your appointment after checkout
-          </p>
-        </div>
-      )}
+              {item.scheduleMode === "schedule_now" && item.scheduledDate && item.scheduledTime && (
+                <div className="text-sm text-muted-foreground flex flex-wrap gap-3">
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    {item.scheduledDate}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {item.scheduledTime}
+                  </span>
+                </div>
+              )}
 
-      {/* Customer Info */}
-      <div className="p-4 border rounded-lg space-y-2">
+              {recipient && (
+                <div className="text-sm text-muted-foreground">
+                  Gift for {recipient.firstName} {recipient.lastName}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="rounded-lg border p-4 space-y-2">
         <h3 className="font-semibold flex items-center gap-2">
           <User className="h-4 w-4" />
           Your Information
@@ -126,96 +149,26 @@ export function ReviewStep({
           </p>
           <p>{bookerInfo.email}</p>
           {bookerInfo.phone && <p>{bookerInfo.phone}</p>}
+          {bookerInfo.deliveryAddress.line1 && (
+            <p className="pt-2">
+              Delivery: {bookerInfo.deliveryAddress.line1}, {bookerInfo.deliveryAddress.city}, {bookerInfo.deliveryAddress.country}
+            </p>
+          )}
         </div>
-      </div>
-
-      {/* Gift Recipients Summary */}
-      {giftItems.length > 0 && (
-        <div className="p-4 border rounded-lg space-y-3">
-          <h3 className="font-semibold flex items-center gap-2">
-            <Gift className="h-4 w-4" />
-            Gift Recipients
-          </h3>
-          {giftItems.map((item) => {
-            const recipient = giftRecipients[item.id];
-            return (
-              <div key={item.id} className="text-sm">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {item.name}
-                  </Badge>
-                  <span className="text-muted-foreground">→</span>
-                  <span>
-                    {recipient?.firstName} {recipient?.lastName}
-                  </span>
-                  {recipient?.hideSender && (
-                    <Badge variant="outline" className="text-xs">
-                      Anonymous
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Items */}
-      <div className="space-y-3">
-        <h3 className="font-semibold">Order Summary</h3>
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center justify-between p-3 border rounded-lg"
-          >
-            <div>
-              <p className="font-medium">{item.name}</p>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Qty: {item.quantity}</span>
-                {item.isGift && (
-                  <Badge variant="secondary" className="text-xs gap-1">
-                    <Gift className="h-3 w-3" />
-                    Gift
-                  </Badge>
-                )}
-                {item.type === "product" && item.fulfillmentType && (
-                  <Badge variant="outline" className="text-xs gap-1">
-                    {item.fulfillmentType === "pickup" ? (
-                      <>
-                        <Package className="h-3 w-3" />
-                        Pickup
-                      </>
-                    ) : (
-                      <>
-                        <Truck className="h-3 w-3" />
-                        Delivery
-                      </>
-                    )}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <span className="font-semibold">
-              {formatCurrency(item.price * item.quantity, salon.currency)}
-            </span>
-          </div>
-        ))}
       </div>
 
       <Separator />
 
-      {/* Voucher Input */}
       <VoucherInput
         tenantId={salon.id}
         currency={salon.currency}
         subtotal={subtotal}
-        selectedLocationId={selectedLocation?.id}
+        selectedLocationId={items[0]?.branchId}
         selectedCountryCode={selectedCountryCode}
         onVoucherApplied={onVoucherApplied}
         appliedVoucher={appliedVoucher}
       />
 
-      {/* Customer Purse Toggle */}
       {bookerInfo.email && (
         <CustomerPurseToggle
           tenantId={salon.id}
@@ -226,7 +179,6 @@ export function ReviewStep({
         />
       )}
 
-      {/* Payment Options */}
       {afterPurse > 0 && (
         <div className="space-y-3">
           <h3 className="font-semibold flex items-center gap-2">
@@ -239,93 +191,61 @@ export function ReviewStep({
             onValueChange={(value) => onPaymentOptionChange(value as PaymentOption)}
             className="space-y-2"
           >
-            {salon.pay_at_salon_enabled && (
-              <div className="flex items-center space-x-3 p-3 border rounded-lg">
-                <RadioGroupItem value="pay_at_salon" id="pay_at_salon" />
-                <Label htmlFor="pay_at_salon" className="flex-1 cursor-pointer">
-                  <span className="font-medium">Pay at Salon</span>
-                  <p className="text-xs text-muted-foreground">
-                    Pay when you arrive for your appointment
-                  </p>
-                </Label>
-              </div>
-            )}
+            <div className="flex items-center space-x-2 rounded-lg border p-3">
+              <RadioGroupItem value="pay_now" id="pay-now" />
+              <Label htmlFor="pay-now" className="flex-1 cursor-pointer">
+                Pay now
+              </Label>
+              <span className="font-medium">{formatCurrency(afterPurse, salon.currency)}</span>
+            </div>
 
             {depositRequired && (
-              <div className="flex items-center space-x-3 p-3 border rounded-lg">
-                <RadioGroupItem value="pay_deposit" id="pay_deposit" />
-                <Label htmlFor="pay_deposit" className="flex-1 cursor-pointer">
-                  <span className="font-medium">
-                    Pay Deposit ({formatCurrency(depositAmount, salon.currency)})
-                  </span>
-                  <p className="text-xs text-muted-foreground">
-                    Secure your booking with a deposit
-                  </p>
+              <div className="flex items-center space-x-2 rounded-lg border p-3">
+                <RadioGroupItem value="pay_deposit" id="pay-deposit" />
+                <Label htmlFor="pay-deposit" className="flex-1 cursor-pointer">
+                  Pay deposit now
                 </Label>
+                <span className="font-medium">{formatCurrency(depositAmount, salon.currency)}</span>
               </div>
             )}
 
-            <div className="flex items-center space-x-3 p-3 border rounded-lg">
-              <RadioGroupItem value="pay_now" id="pay_now" />
-              <Label htmlFor="pay_now" className="flex-1 cursor-pointer">
-                <span className="font-medium">
-                  Pay in Full ({formatCurrency(afterPurse, salon.currency)})
-                </span>
-                <p className="text-xs text-muted-foreground">Complete payment now</p>
-              </Label>
-            </div>
+            {salon.pay_at_salon_enabled && (
+              <div className="flex items-center space-x-2 rounded-lg border p-3">
+                <RadioGroupItem value="pay_at_salon" id="pay-at-salon" />
+                <Label htmlFor="pay-at-salon" className="flex-1 cursor-pointer">
+                  Pay at salon
+                </Label>
+                <span className="font-medium">{formatCurrency(amountDueAtSalon, salon.currency)}</span>
+              </div>
+            )}
           </RadioGroup>
-        </div>
-      )}
-
-      {/* Purse fully covers - no payment options needed */}
-      {afterPurse === 0 && purseAmount > 0 && (
-        <div className="p-4 border rounded-lg bg-primary/5 text-center">
-          <p className="text-sm font-medium text-primary">
-            ✓ Your store credit covers the full amount
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            No additional payment required
-          </p>
         </div>
       )}
 
       <Separator />
 
-      {/* Price Breakdown */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span>Subtotal</span>
+      <div className="space-y-2 rounded-lg border p-4">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Subtotal</span>
           <span>{formatCurrency(subtotal, salon.currency)}</span>
         </div>
-
         {voucherDiscount > 0 && (
-          <div className="flex items-center justify-between text-sm text-primary">
-            <span>Voucher Discount</span>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Voucher Discount</span>
             <span>-{formatCurrency(voucherDiscount, salon.currency)}</span>
           </div>
         )}
-
         {purseAmount > 0 && (
-          <div className="flex items-center justify-between text-sm text-primary">
-            <span>Store Credit</span>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Store Credit</span>
             <span>-{formatCurrency(purseAmount, salon.currency)}</span>
           </div>
         )}
-
         <Separator />
-
-        <div className="flex items-center justify-between font-semibold">
-          <span>Due Now</span>
+        <div className="flex justify-between font-semibold">
+          <span>Amount Due Now</span>
           <span>{formatCurrency(amountDueNow, salon.currency)}</span>
         </div>
-
-        {amountDueAtSalon > 0 && (
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
-            <span>Due at Salon</span>
-            <span>{formatCurrency(amountDueAtSalon, salon.currency)}</span>
-          </div>
-        )}
       </div>
     </div>
   );

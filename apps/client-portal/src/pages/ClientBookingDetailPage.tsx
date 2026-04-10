@@ -19,10 +19,13 @@ import {
   User,
   CreditCard,
   FileText,
-  Package
+  Package,
+  Gift,
+  Truck
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { startClientBookingPayment } from "@/lib/bookingPayments";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   scheduled: { label: "Scheduled", className: "bg-blue-100 text-blue-800" },
@@ -48,13 +51,36 @@ type AppointmentProduct = {
   total_price: number;
 };
 
+type BookingLineMetadata = {
+  line_item?: {
+    type?: string | null;
+    fulfillment_type?: string | null;
+    schedule_mode?: string | null;
+  } | null;
+  gift?: {
+    recipient?: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    } | null;
+    shared_recipient?: boolean;
+  } | null;
+  delivery_address?: {
+    line1?: string;
+    city?: string;
+    country?: string;
+  } | null;
+} | null;
+
 export default function ClientBookingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { customers, isAuthenticated } = useClientAuth();
   const [booking, setBooking] = useState<ClientAppointmentWithDetails | null>(null);
+  const [relatedBookings, setRelatedBookings] = useState<Array<{ id: string; status: string; scheduled_start: string | null; total_amount: number | null; amount_paid: number | null; payment_status: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
 
   const customerIds = customers.map((c) => c.id);
 
@@ -80,7 +106,23 @@ export default function ClientBookingDetailPage() {
           .single();
 
         if (fetchError) throw fetchError;
-        setBooking(data as ClientAppointmentWithDetails);
+        const nextBooking = data as ClientAppointmentWithDetails;
+        setBooking(nextBooking);
+
+        const bookingReference = (nextBooking as ClientAppointmentWithDetails & { booking_reference?: string | null }).booking_reference;
+        if (bookingReference) {
+          const { data: siblings } = await supabase
+            .from("appointments")
+            .select("id, status, scheduled_start, total_amount, amount_paid, payment_status")
+            .eq("booking_reference", bookingReference)
+            .in("customer_id", customerIds)
+            .neq("id", id)
+            .order("scheduled_start", { ascending: true, nullsFirst: false });
+
+          setRelatedBookings((siblings as typeof relatedBookings) || []);
+        } else {
+          setRelatedBookings([]);
+        }
       } catch (err) {
         console.error("Error fetching booking:", err);
         setError("Booking not found or access denied");
@@ -131,7 +173,7 @@ export default function ClientBookingDetailPage() {
     return (
       <ClientSidebar>
         <div className="space-y-6">
-          <Button variant="ghost" onClick={() => navigate("/client/bookings")}>
+          <Button variant="ghost" onClick={() => navigate("/bookings")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Bookings
           </Button>
@@ -152,13 +194,66 @@ export default function ClientBookingDetailPage() {
   const services = booking.services || [];
   const products = (booking as { products?: AppointmentProduct[] }).products || [];
   const servicesTotalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
+  const bookingReference = (booking as ClientAppointmentWithDetails & { booking_reference?: string | null }).booking_reference || null;
+  const bookingMetadata = ((booking as ClientAppointmentWithDetails & { booking_metadata?: BookingLineMetadata }).booking_metadata || null) as BookingLineMetadata;
+  const giftRecipient = bookingMetadata?.gift?.recipient;
+  const deliveryAddress = bookingMetadata?.delivery_address;
+  const customerRecord = customers.find((item) => item.id === booking.customer_id) || null;
+  const payableBookings = [
+    {
+      id: booking.id,
+      total_amount: booking.total_amount,
+      amount_paid: booking.amount_paid,
+      payment_status: booking.payment_status,
+      status: booking.status,
+    },
+    ...relatedBookings,
+  ].filter((item) => {
+    if (item.status === "cancelled") return false;
+    if (["fully_paid", "refunded_full", "pay_at_salon"].includes(item.payment_status)) return false;
+    return Number(item.total_amount || 0) > Number(item.amount_paid || 0);
+  });
+  const outstandingAmount = payableBookings.reduce((sum, item) => {
+    return sum + Math.max(Number(item.total_amount || 0) - Number(item.amount_paid || 0), 0);
+  }, 0);
+  const canCompletePayment = outstandingAmount > 0 && Boolean(customerRecord?.email);
+
+  const handleCompletePayment = async () => {
+    if (!customerRecord?.email) {
+      setError("Customer email missing for payment");
+      return;
+    }
+
+    setIsStartingPayment(true);
+    try {
+      const bookingIdsToPay = payableBookings.map((item) => item.id);
+      const pageUrl = window.location.href;
+      await startClientBookingPayment({
+        tenantId: booking.tenant_id,
+        appointmentIds: bookingIdsToPay,
+        amount: outstandingAmount,
+        currency,
+        customerEmail: customerRecord.email,
+        customerName: customerRecord.full_name || "Customer",
+        description: bookingReference
+          ? `Complete payment for booking ${bookingReference}`
+          : `Complete payment for booking ${booking.id}`,
+        successUrl: pageUrl,
+        cancelUrl: pageUrl,
+      });
+    } catch (paymentError) {
+      console.error("Error starting booking payment:", paymentError);
+      setError(paymentError instanceof Error ? paymentError.message : "Failed to start payment");
+      setIsStartingPayment(false);
+    }
+  };
 
   return (
     <ClientSidebar>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/client/bookings")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/bookings")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
@@ -174,7 +269,65 @@ export default function ClientBookingDetailPage() {
           <Badge className={status.className}>{status.label}</Badge>
           <Badge className={payment.className}>{payment.label}</Badge>
           {booking.is_walk_in && <Badge variant="outline">Walk-in</Badge>}
+          {bookingReference && <Badge variant="outline">Ref {bookingReference}</Badge>}
         </div>
+
+        {(bookingReference || giftRecipient || deliveryAddress || relatedBookings.length > 0) && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Booking Group</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {bookingReference && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Reference</span>
+                  <span className="font-medium">{bookingReference}</span>
+                </div>
+              )}
+              {bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled" && (
+                <p className="text-muted-foreground">This item was left unscheduled and will be confirmed by the salon.</p>
+              )}
+              {giftRecipient && (
+                <div className="flex items-start gap-2 rounded-lg border p-3">
+                  <Gift className="mt-0.5 h-4 w-4 text-primary" />
+                  <div>
+                    <p className="font-medium">
+                      Gift recipient: {[giftRecipient.firstName, giftRecipient.lastName].filter(Boolean).join(" ")}
+                    </p>
+                    {giftRecipient.email && (
+                      <p className="text-muted-foreground">{giftRecipient.email}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {deliveryAddress && (
+                <div className="flex items-start gap-2 rounded-lg border p-3">
+                  <Truck className="mt-0.5 h-4 w-4 text-primary" />
+                  <div>
+                    <p className="font-medium">Delivery address</p>
+                    <p className="text-muted-foreground">
+                      {[deliveryAddress.line1, deliveryAddress.city, deliveryAddress.country].filter(Boolean).join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {relatedBookings.length > 0 && (
+                <div className="space-y-2">
+                  <p className="font-medium">Other items from this checkout</p>
+                  {relatedBookings.map((related) => (
+                    <div key={related.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                      <div>
+                        <p className="font-medium">{related.scheduled_start ? format(new Date(related.scheduled_start), "EEE, MMM d · h:mm a") : "Unscheduled item"}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{related.status}</p>
+                      </div>
+                      <span className="text-sm font-medium">{formatCurrency(Number(related.total_amount || 0), currency)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Booking Actions */}
         {["scheduled", "started", "paused"].includes(booking.status) && (
@@ -335,9 +488,25 @@ export default function ClientBookingDetailPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Balance Due</span>
                 <span className="font-medium text-destructive">
-                  {formatCurrency(booking.total_amount - booking.amount_paid, currency)}
+                  {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
                 </span>
               </div>
+            )}
+
+            {canCompletePayment && (
+              <Button
+                className="w-full"
+                onClick={handleCompletePayment}
+                disabled={isStartingPayment}
+              >
+                {isStartingPayment ? "Opening payment..." : "Complete Payment"}
+              </Button>
+            )}
+
+            {!canCompletePayment && booking.amount_paid < booking.total_amount && booking.payment_status !== "pay_at_salon" && (
+              <p className="text-sm text-muted-foreground">
+                Payment can be completed here once a valid customer email is available.
+              </p>
             )}
           </CardContent>
         </Card>

@@ -401,7 +401,9 @@ const handler = async (req: Request): Promise<Response> => {
       recipient: recipientEmail,
       template_type: "staff_invitation",
       status: "sent",
-      credits_used: 1,
+      provider: "resend",
+      initiated_by: "system",
+      credits_used: 0,
       sent_at: new Date().toISOString(),
     });
 

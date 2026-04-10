@@ -7,6 +7,11 @@ export interface PublicBranch {
   name: string;
   city: string | null;
   country_code: string;
+  address?: string | null;
+  opening_time?: string | null;
+  closing_time?: string | null;
+  opening_days?: string[] | null;
+  availability?: string | null;
 }
 
 export type PublicService = Pick<
@@ -30,6 +35,8 @@ export type PublicPackage = Pick<
   Tables<"packages">,
   "id" | "name" | "description" | "price" | "original_price" | "image_urls"
 > & {
+  duration_minutes?: number | null;
+  service_ids?: string[];
   branches?: PublicBranch[];
   location_ids?: string[];
 };
@@ -76,7 +83,7 @@ export function usePublicCatalog(
         };
       }
 
-      const { data, error } = await (supabase.rpc as any)("get_public_catalog_payload", {
+      const { data, error } = await supabase.rpc("get_public_catalog_payload" as never, {
         p_tenant_id: tenantId,
         p_mode: mode,
         p_country_code: isChainCountryScoped ? countryCode || null : null,
