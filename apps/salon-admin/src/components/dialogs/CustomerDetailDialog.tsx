@@ -33,11 +33,17 @@ import {
   Filter,
   X,
   MessageSquare,
+  Send,
+  Link as LinkIcon,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { SendMessageDialog } from "@/components/messaging/SendMessageDialog";
 import { MessageHistory } from "@/components/messaging/MessageHistory";
+import { CreateInvoiceDialog } from "@/components/dialogs/CreateInvoiceDialog";
+import { useInvoices } from "@/hooks/useInvoices";
 import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import type { Tables } from "@supabase-client";
 
@@ -115,8 +121,10 @@ export function CustomerDetailDialog({
   customer,
 }: CustomerDetailDialogProps) {
   const { currentTenant } = useAuth();
+  const { invoices, isLoading: invoicesLoading, sendInvoice, generatePaymentLink, refetch: refetchInvoices } = useInvoices();
 
   const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
+  const [createInvoiceDialogOpen, setCreateInvoiceDialogOpen] = useState(false);
 
   // Transaction filters
   const [txSearchQuery, setTxSearchQuery] = useState("");
@@ -296,6 +304,9 @@ export function CustomerDetailDialog({
   const purseLedgerEntries = customerDetail?.purseLedgerEntries || [];
   const lastTransactionAt = customerDetail?.lastTransactionAt ?? null;
 
+  // Filter invoices for this customer
+  const customerInvoices = invoices.filter((inv) => inv.customer_id === customer.id);
+
   const canSendMessage = Boolean(customer.email || customer.phone);
   const sendMessageTooltip = canSendMessage
     ? "Send Email, SMS, or WhatsApp"
@@ -359,9 +370,10 @@ export function CustomerDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="overview" className="mt-4">
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
+            <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="messages">Messages</TabsTrigger>
             <TabsTrigger value="transactions">Transactions</TabsTrigger>
@@ -515,6 +527,140 @@ export function CustomerDetailDialog({
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="invoices" className="mt-4">
+            <div className="space-y-4">
+              {/* Create Invoice Button */}
+              <div className="flex justify-end">
+                <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Invoice
+                </Button>
+              </div>
+
+              {/* Invoices List */}
+              {invoicesLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              ) : customerInvoices.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+                  <p className="text-muted-foreground mb-4">No invoices yet</p>
+                  <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create First Invoice
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {customerInvoices.map((invoice) => (
+                    <Card key={invoice.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="font-medium text-sm">{invoice.invoice_number}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(invoice.created_at), "MMM d, yyyy 'at' h:mm a")}
+                            </p>
+                          </div>
+                          <Badge
+                            className={
+                              invoice.status === "paid"
+                                ? "bg-success/10 text-success"
+                                : invoice.status === "sent"
+                                  ? "bg-primary/10 text-primary"
+                                  : invoice.status === "void"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-muted text-muted-foreground"
+                            }
+                          >
+                            {invoice.status}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm text-muted-foreground">Total:</span>
+                          <span className="font-semibold">
+                            {currency} {Number(invoice.total).toFixed(2)}
+                          </span>
+                        </div>
+
+                        {invoice.due_date && (
+                          <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+                            <span>Due date:</span>
+                            <span>{format(new Date(invoice.due_date), "MMM d, yyyy")}</span>
+                          </div>
+                        )}
+
+                        {invoice.notes && (
+                          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+                            {invoice.notes}
+                          </p>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-2 flex-wrap">
+                          {invoice.status === "draft" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                await sendInvoice(invoice.id);
+                                refetchInvoices();
+                              }}
+                            >
+                              <Send className="w-3 h-3 mr-1" />
+                              Send
+                            </Button>
+                          )}
+                          {(invoice.status === "draft" || invoice.status === "sent") && !invoice.payment_link && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                await generatePaymentLink(invoice.id);
+                                refetchInvoices();
+                              }}
+                            >
+                              <LinkIcon className="w-3 h-3 mr-1" />
+                              Generate Payment Link
+                            </Button>
+                          )}
+                          {invoice.payment_link && invoice.status !== "paid" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                window.open(invoice.payment_link!, "_blank");
+                              }}
+                            >
+                              <LinkIcon className="w-3 h-3 mr-1" />
+                              View Payment Link
+                            </Button>
+                          )}
+                          {invoice.status === "paid" && (
+                            <div className="flex items-center text-sm text-success">
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Paid {invoice.paid_at && `on ${format(new Date(invoice.paid_at), "MMM d, yyyy")}`}
+                            </div>
+                          )}
+                          {invoice.status === "void" && (
+                            <div className="flex items-center text-sm text-destructive">
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Voided
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="notes" className="mt-4">
@@ -800,6 +946,16 @@ export function CustomerDetailDialog({
         open={sendMessageDialogOpen}
         onOpenChange={setSendMessageDialogOpen}
         customerId={customer.id}
+      />
+
+      {/* Create Invoice Dialog */}
+      <CreateInvoiceDialog
+        open={createInvoiceDialogOpen}
+        onOpenChange={setCreateInvoiceDialogOpen}
+        customerId={customer.id}
+        onSuccess={() => {
+          refetchInvoices();
+        }}
       />
     </Dialog>
   );

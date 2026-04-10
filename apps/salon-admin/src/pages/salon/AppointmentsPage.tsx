@@ -48,6 +48,7 @@ import {
   Bell,
   ChevronDown,
   Coins,
+  FileText,
 } from "lucide-react";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -65,6 +66,7 @@ import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog"
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
 import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useAuth } from "@/hooks/useAuth";
+import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency } from "@shared/currency";
 import type { Enums, Tables } from "@supabase-client";
 import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
@@ -85,6 +87,7 @@ const statusBadgeStyles: Record<string, { bg: string; text: string }> = {
 
 export default function AppointmentsPage() {
   const { roles, currentTenant } = useAuth();
+  const { createFromAppointment } = useInvoices();
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
@@ -933,6 +936,14 @@ export default function AppointmentsPage() {
                                     >
                                       <User className="w-4 h-4 mr-2" />
                                       View Customer Profile
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        await createFromAppointment(apt.id);
+                                      }}
+                                    >
+                                      <FileText className="w-4 h-4 mr-2" />
+                                      Create Invoice
                                     </DropdownMenuItem>
                                   </>
                                 )}
