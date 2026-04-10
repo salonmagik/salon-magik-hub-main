@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useClientAuth } from "./useClientAuth";
-import type { Tables, Enums } from "@/lib/supabase";
+import type { Tables } from "@/lib/supabase";
 
 type Appointment = Tables<"appointments">;
 type AppointmentService = Tables<"appointment_services">;
 type Tenant = Tables<"tenants">;
 type Location = Tables<"locations">;
-type AppointmentStatus = Enums<"appointment_status">;
 
 export interface ClientAppointmentWithDetails extends Appointment {
   services: AppointmentService[];
@@ -89,23 +88,18 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
 }
 
 export function useClientBookingActions() {
-  const { customers } = useClientAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const customerIds = customers.map((c) => c.id);
 
   // Customer can update their own appointments (via RLS policy)
   const cancelBooking = async (appointmentId: string, reason: string) => {
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from("appointments")
-        .update({
-          status: "cancelled" as AppointmentStatus,
-          cancellation_reason: reason,
-        })
-        .eq("id", appointmentId)
-        .in("customer_id", customerIds);
+      const { error } = await supabase.functions.invoke("client-cancel-booking", {
+        body: {
+          appointmentId,
+          reason,
+        },
+      });
 
       if (error) throw error;
       return true;

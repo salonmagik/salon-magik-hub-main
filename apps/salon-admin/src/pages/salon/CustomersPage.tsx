@@ -5,6 +5,7 @@ import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Input } from "@ui/input";
 import { Badge } from "@ui/badge";
+import { Checkbox } from "@ui/checkbox";
 import { Skeleton } from "@ui/skeleton";
 import {
   DropdownMenu,
@@ -40,13 +41,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Textarea } from "@ui/textarea";
 import { useCustomers } from "@/hooks/useCustomers";
+import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
 
-type Customer = Tables<"customers">;
+type Customer = CustomerWithVisitSummary;
 type ReactivationChannel = "email" | "sms" | "whatsapp";
 
 interface InactiveCustomerRow {
@@ -76,14 +78,27 @@ export default function CustomersPage() {
   );
   const [reactivationSubject, setReactivationSubject] = useState("We miss you at {{salon_name}}");
   const [selectedInactiveCustomerIds, setSelectedInactiveCustomerIds] = useState<string[]>([]);
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   
   // Action dialogs
   const [flagDialogCustomer, setFlagDialogCustomer] = useState<Customer | null>(null);
   const [deleteDialogCustomer, setDeleteDialogCustomer] = useState<Customer | null>(null);
+  const [bulkFlagDialogOpen, setBulkFlagDialogOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
-  const { currentTenant } = useAuth();
+  const { currentTenant, currentRole } = useAuth();
   const queryClient = useQueryClient();
-  const { customers, isLoading, refetch, updateCustomerStatus, flagCustomer, deleteCustomer } = useCustomers();
+  const {
+    customers,
+    isLoading,
+    refetch,
+    updateCustomerStatus,
+    bulkUpdateCustomerStatus,
+    flagCustomer,
+    bulkFlagCustomers,
+    deleteCustomer,
+    bulkDeleteCustomers,
+  } = useCustomers();
   const { hasPermission } = usePermissions();
 
   const currency = currentTenant?.currency || "USD";
@@ -169,15 +184,29 @@ export default function CustomersPage() {
   });
 
   // Permission checks
-  const canMakeVIP = hasPermission("customers:vip");
-  const canFlag = hasPermission("customers:flag");
-  const canDelete = hasPermission("customers:delete");
+  const canMakeVIP =
+    currentRole === "owner" ||
+    currentRole === "manager" ||
+    currentRole === "supervisor" ||
+    currentRole === "receptionist" ||
+    hasPermission("customers:vip");
+  const canFlag =
+    currentRole === "owner" ||
+    currentRole === "manager" ||
+    currentRole === "supervisor" ||
+    currentRole === "receptionist" ||
+    hasPermission("customers:flag");
+  const canDelete =
+    currentRole === "owner" ||
+    currentRole === "manager" ||
+    hasPermission("customers:delete");
 
   // Calculate stats
   const stats = useMemo(() => {
-    const total = customers.length;
-    const vip = customers.filter((c) => c.status === "vip").length;
-    const thisMonth = customers.filter((c) => {
+    const activeCustomers = customers.filter((customer) => customer.status !== "deleted");
+    const total = activeCustomers.length;
+    const vip = activeCustomers.filter((c) => c.status === "vip").length;
+    const thisMonth = activeCustomers.filter((c) => {
       const created = new Date(c.created_at);
       const now = new Date();
       return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
@@ -208,6 +237,18 @@ export default function CustomersPage() {
     return name.slice(0, 2).toUpperCase();
   };
 
+  const getBranchChipSummary = (customer: Customer) => {
+    if (customer.visitedLocations.length === 0) {
+      return null;
+    }
+
+    const [primaryLocation, ...remainingLocations] = customer.visitedLocations;
+    return {
+      primaryLabel: primaryLocation.locationName,
+      overflowCount: remainingLocations.length,
+    };
+  };
+
   const filteredCustomers = useMemo(() => {
     return customers.filter((customer) => {
       // Exclude deleted customers
@@ -223,6 +264,10 @@ export default function CustomersPage() {
       return matchesSearch && matchesFilter;
     });
   }, [customers, searchQuery, activeFilter]);
+
+  const allVisibleSelected =
+    filteredCustomers.length > 0 &&
+    filteredCustomers.every((customer) => selectedCustomerIds.includes(customer.id));
 
   const handleMakeVIP = async (customer: Customer) => {
     await updateCustomerStatus(customer.id, "vip");
@@ -246,6 +291,42 @@ export default function CustomersPage() {
     if (!deleteDialogCustomer) return;
     await deleteCustomer(deleteDialogCustomer.id);
     setDeleteDialogCustomer(null);
+  };
+
+  const toggleCustomerSelection = (customerId: string) => {
+    setSelectedCustomerIds((current) =>
+      current.includes(customerId)
+        ? current.filter((id) => id !== customerId)
+        : [...current, customerId],
+    );
+  };
+
+  const clearSelection = () => {
+    setSelectedCustomerIds([]);
+  };
+
+  const handleSelectAllVisible = (checked: boolean, ids: string[]) => {
+    if (!checked) {
+      clearSelection();
+      return;
+    }
+    setSelectedCustomerIds(ids);
+  };
+
+  const handleBulkMakeVIP = async () => {
+    const success = await bulkUpdateCustomerStatus(selectedCustomerIds, "vip");
+    if (success) clearSelection();
+  };
+
+  const handleBulkFlagSelectedCustomers = async (reason: string) => {
+    const success = await bulkFlagCustomers(selectedCustomerIds, reason);
+    if (success) clearSelection();
+  };
+
+  const handleBulkDeleteCustomers = async () => {
+    const success = await bulkDeleteCustomers(selectedCustomerIds);
+    if (success) clearSelection();
+    setBulkDeleteDialogOpen(false);
   };
 
   const CUSTOMER_TEMPLATE: TemplateColumn[] = [
@@ -324,6 +405,18 @@ export default function CustomersPage() {
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {filteredCustomers.length > 0 && (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  onCheckedChange={(checked) =>
+                    handleSelectAllVisible(Boolean(checked), filteredCustomers.map((customer) => customer.id))
+                  }
+                  aria-label="Select all visible customers"
+                />
+                <span className="text-sm text-muted-foreground">Select all visible</span>
+              </div>
+            )}
             {statusFilters.map((filter) => (
               <Button
                 key={filter}
@@ -336,6 +429,42 @@ export default function CustomersPage() {
             ))}
           </div>
         </div>
+
+        {selectedCustomerIds.length > 0 && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">
+                  {selectedCustomerIds.length} customer{selectedCustomerIds.length === 1 ? "" : "s"} selected
+                </p>
+                <p className="text-sm text-muted-foreground">Run actions on the selected customers.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {canMakeVIP && (
+                  <Button variant="outline" onClick={handleBulkMakeVIP}>
+                    <Star className="mr-2 h-4 w-4" />
+                    Make VIP
+                  </Button>
+                )}
+                {canFlag && (
+                  <Button variant="outline" onClick={() => setBulkFlagDialogOpen(true)}>
+                    <Flag className="mr-2 h-4 w-4" />
+                    Flag
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button variant="destructive" onClick={() => setBulkDeleteDialogOpen(true)}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={clearSelection}>
+                  Clear
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Customers Grid */}
         {isLoading ? (
@@ -373,6 +502,16 @@ export default function CustomersPage() {
               >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-4">
+                    <div
+                      className="pt-1"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={selectedCustomerIds.includes(customer.id)}
+                        onCheckedChange={() => toggleCustomerSelection(customer.id)}
+                        aria-label={`Select ${customer.full_name}`}
+                      />
+                    </div>
                     {/* Avatar */}
                     <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center text-lg font-semibold flex-shrink-0">
                       {getInitials(customer.full_name)}
@@ -426,6 +565,26 @@ export default function CustomersPage() {
                           <span className="text-muted-foreground">{customer.visit_count} visits</span>
                         </div>
                       </div>
+
+                      {customer.visitedLocations.length > 0 && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {(() => {
+                            const branchSummary = getBranchChipSummary(customer);
+                            if (!branchSummary) return null;
+
+                            return (
+                              <>
+                                <Badge variant="outline" className="max-w-full truncate">
+                                  {branchSummary.primaryLabel}
+                                </Badge>
+                                {branchSummary.overflowCount > 0 && (
+                                  <Badge variant="secondary">+{branchSummary.overflowCount}</Badge>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
 
                     {/* Dropdown Menu */}
@@ -541,6 +700,13 @@ export default function CustomersPage() {
         onConfirm={handleFlagCustomer}
       />
 
+      <FlagCustomerDialog
+        open={bulkFlagDialogOpen}
+        onOpenChange={setBulkFlagDialogOpen}
+        customerName={`${selectedCustomerIds.length} selected customer${selectedCustomerIds.length === 1 ? "" : "s"}`}
+        onConfirm={handleBulkFlagSelectedCustomers}
+      />
+
       {/* Delete Confirmation Dialog */}
       <ConfirmActionDialog
         open={!!deleteDialogCustomer}
@@ -550,6 +716,16 @@ export default function CustomersPage() {
         confirmLabel="Delete"
         variant="destructive"
         onConfirm={handleDeleteCustomer}
+      />
+
+      <ConfirmActionDialog
+        open={bulkDeleteDialogOpen}
+        onOpenChange={setBulkDeleteDialogOpen}
+        title="Delete Selected Customers"
+        description={`Are you sure you want to delete ${selectedCustomerIds.length} selected customer${selectedCustomerIds.length === 1 ? "" : "s"}? This action cannot be undone.`}
+        confirmLabel="Delete Selected"
+        variant="destructive"
+        onConfirm={handleBulkDeleteCustomers}
       />
 
       {/* Import Dialog */}

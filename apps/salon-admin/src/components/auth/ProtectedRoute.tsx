@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -65,6 +66,10 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
     return <Navigate to="/login" replace />;
   }
 
+  if (needsGoogleProfileCompletion(user) && location.pathname !== "/complete-signup") {
+    return <Navigate to="/complete-signup" replace />;
+  }
+
   // Check if user needs to reset password (invited staff with temp password)
   // Legacy check for requires_password_reset metadata
   const requiresPasswordReset = user?.user_metadata?.requires_password_reset === true;
@@ -101,7 +106,7 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
 
 // For routes that should NOT be accessible after login (login, signup, etc.)
 export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending } = useAuth();
+  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -110,6 +115,9 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
 
   // Only redirect if authenticated AND has a profile (not a BackOffice-only user)
   if (isAuthenticated && profile) {
+    if (needsGoogleProfileCompletion(user)) {
+      return <Navigate to="/complete-signup" replace />;
+    }
     const defaultRoute = hasCompletedOnboarding
       ? isAssignmentPending
         ? "/salon/assignment-pending"
@@ -130,7 +138,7 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
 
 // For the onboarding route specifically
 export function OnboardingRoute({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending } = useAuth();
+  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -143,6 +151,10 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
   // BackOffice users should not access onboarding - they have no profile
   if (!profile) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (needsGoogleProfileCompletion(user)) {
+    return <Navigate to="/complete-signup" replace />;
   }
 
   // If onboarding is already completed, go to salon

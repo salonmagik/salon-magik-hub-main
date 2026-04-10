@@ -11,6 +11,18 @@ export interface TransactionWithDetails extends Transaction {
     id: string;
     full_name: string;
   } | null;
+  appointment?: {
+    id: string;
+    status: string;
+    payment_status: string;
+    amount_paid: number;
+    total_amount: number;
+  } | null;
+  // For grouped split payments
+  is_split_payment?: boolean;
+  split_card_amount?: number;
+  split_purse_amount?: number;
+  split_transactions?: TransactionWithDetails[];
 }
 
 export function useTransactions(filters?: {
@@ -43,7 +55,8 @@ export function useTransactions(filters?: {
         .from("transactions")
         .select(`
           *,
-          customer:customers(id, full_name)
+          customer:customers(id, full_name),
+          appointment:appointments(id, status, payment_status, amount_paid, total_amount)
         `)
         .eq("tenant_id", currentTenant.id)
         .order("created_at", { ascending: false });
@@ -64,12 +77,55 @@ export function useTransactions(filters?: {
 
       if (fetchError) throw fetchError;
 
-      setTransactions((data as TransactionWithDetails[]) || []);
+      // Group split payments by payment_group_id
+      const groupedTransactions: TransactionWithDetails[] = [];
+      const processedGroupIds = new Set<string>();
 
-      // Calculate today's revenue
+      (data as TransactionWithDetails[] || []).forEach((txn) => {
+        // If this transaction has a payment_group_id and we haven't processed it yet
+        if (txn.payment_group_id && !processedGroupIds.has(txn.payment_group_id)) {
+          processedGroupIds.add(txn.payment_group_id);
+          
+          // Find all transactions in this group
+          const groupTransactions = (data as TransactionWithDetails[] || []).filter(
+            t => t.payment_group_id === txn.payment_group_id
+          );
+
+          // If there are multiple transactions in the group, it's a split payment
+          if (groupTransactions.length > 1) {
+            const cardTxn = groupTransactions.find(t => t.method === 'card');
+            const purseTxn = groupTransactions.find(t => t.method === 'purse');
+
+            if (cardTxn && purseTxn) {
+              // Create a grouped transaction entry
+              const groupedTxn: TransactionWithDetails = {
+                ...cardTxn, // Use card transaction as base
+                amount: Number(cardTxn.amount) + Number(purseTxn.amount), // Total amount
+                is_split_payment: true,
+                split_card_amount: Number(cardTxn.amount),
+                split_purse_amount: Number(purseTxn.amount),
+                split_transactions: groupTransactions,
+              };
+              groupedTransactions.push(groupedTxn);
+              return;
+            }
+          }
+          
+          // If only one transaction in group, add it normally
+          groupedTransactions.push(txn);
+        } else if (!txn.payment_group_id) {
+          // No group ID, add transaction normally
+          groupedTransactions.push(txn);
+        }
+        // Skip if this transaction's group was already processed
+      });
+
+      setTransactions(groupedTransactions);
+
+      // Calculate today's revenue (use grouped amounts)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const todayRevenue = (data || [])
+      const todayRevenue = groupedTransactions
         .filter((t) => new Date(t.created_at) >= today && t.type === "payment" && t.status === "completed")
         .reduce((sum, t) => sum + Number(t.amount), 0);
 

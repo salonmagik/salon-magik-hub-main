@@ -18,6 +18,28 @@ export const CREDIT_PACKAGES: CreditPackage[] = [
   { id: "pack_500", credits: 500, priceUSD: 35, priceNGN: 27000, priceGHS: 420 },
 ];
 
+// Tier-based pricing for custom credits (based on PRD pricing structure)
+function calculateCustomCreditPrice(credits: number, currency: string): number {
+  let ratePerCredit: number;
+  
+  // Determine rate based on tier
+  if (credits <= 50) {
+    // Pack 50 rate: NGN 70/credit, GHS 1.20/credit
+    ratePerCredit = currency === 'NGN' ? 70 : currency === 'GHS' ? 1.20 : 0.10;
+  } else if (credits <= 100) {
+    // Pack 100 rate: NGN 65/credit, GHS 1.08/credit
+    ratePerCredit = currency === 'NGN' ? 65 : currency === 'GHS' ? 1.08 : 0.09;
+  } else if (credits <= 250) {
+    // Pack 250 rate: NGN 60/credit, GHS 0.96/credit
+    ratePerCredit = currency === 'NGN' ? 60 : currency === 'GHS' ? 0.96 : 0.08;
+  } else {
+    // Pack 500+ rate: NGN 54/credit, GHS 0.84/credit
+    ratePerCredit = currency === 'NGN' ? 54 : currency === 'GHS' ? 0.84 : 0.07;
+  }
+  
+  return Math.round(credits * ratePerCredit);
+}
+
 export function useCreditPurchase() {
   const { currentTenant } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +53,10 @@ export function useCreditPurchase() {
       default:
         return pkg.priceUSD;
     }
+  }, []);
+
+  const getCustomCreditPrice = useCallback((credits: number, currency: string): number => {
+    return calculateCustomCreditPrice(credits, currency);
   }, []);
 
   const purchaseCredits = useCallback(async (packageId: string): Promise<{ success: boolean; checkoutUrl: string | null }> => {
@@ -96,6 +122,7 @@ export function useCreditPurchase() {
     packages: CREDIT_PACKAGES,
     purchaseCredits,
     getPackagePrice,
+    getCustomCreditPrice,
     isLoading,
     currency: currentTenant?.currency || "USD",
   };

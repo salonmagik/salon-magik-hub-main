@@ -24,15 +24,52 @@ export function useAvailableSlots(
   serviceDurationMinutes: number = 0,
   bufferMinutes: number = 0
 ) {
+  const formattedDate = date ? format(date, "yyyy-MM-dd") : undefined;
+  const isEnabled = !!tenantId && !!location && !!date;
+
+  console.log("[public-booking] useAvailableSlots state", {
+    tenantId: tenantId ?? null,
+    locationId: location?.id ?? null,
+    date: formattedDate ?? null,
+    slotCapacity,
+    slotDurationMinutes,
+    serviceDurationMinutes,
+    bufferMinutes,
+    enabled: isEnabled,
+  });
+
   return useQuery({
-    queryKey: ["available-slots", tenantId, location?.id, date ? format(date, "yyyy-MM-dd") : undefined, slotCapacity, serviceDurationMinutes],
+    queryKey: [
+      "available-slots",
+      tenantId,
+      location?.id,
+      formattedDate,
+      slotCapacity,
+      slotDurationMinutes,
+      serviceDurationMinutes,
+      bufferMinutes,
+    ],
     queryFn: async (): Promise<SlotInfo[]> => {
       if (!tenantId || !location || !date) return [];
 
+      console.log("[public-booking] Fetching available slots", {
+        tenantId,
+        locationId: location.id,
+        date: formattedDate,
+      });
+
+      const baseDate = format(date, "yyyy-MM-dd");
       const dayOfWeek = format(date, "EEEE").toLowerCase();
       
       // Check if location is open on this day
       if (!location.opening_days.includes(dayOfWeek)) {
+        console.debug("[public-booking] No slots: location is closed on selected day", {
+          tenantId,
+          locationId: location.id,
+          date: baseDate,
+          dayOfWeek,
+          openingDays: location.opening_days,
+        });
         return [];
       }
 
@@ -44,7 +81,6 @@ export function useAvailableSlots(
       const closingTime = rawClosingTime.substring(0, 5);
 
       // Parse times
-      const baseDate = format(date, "yyyy-MM-dd");
       const openingDateTime = parse(`${baseDate} ${openingTime}`, "yyyy-MM-dd HH:mm", new Date());
       const closingDateTime = parse(`${baseDate} ${closingTime}`, "yyyy-MM-dd HH:mm", new Date());
 
@@ -61,8 +97,8 @@ export function useAvailableSlots(
           .gte("scheduled_start", dayStart)
           .lte("scheduled_start", dayEnd)
           .in("status", ["scheduled", "started", "paused"]),
-        (supabase as any)
-          .from("branch_unavailability_windows")
+        supabase
+          .from("branch_unavailability_windows" as never)
           .select("starts_at, ends_at, ended_at")
           .eq("tenant_id", tenantId)
           .eq("location_id", location.id)
@@ -75,6 +111,9 @@ export function useAvailableSlots(
         console.error("Error fetching appointments for slots:", appointmentsResult.error);
         // Don't throw - return all slots as available if we can't fetch appointments
         // This provides better UX than showing "no times available"
+      }
+      if (windowsResult.error) {
+        console.error("Error fetching branch unavailability windows:", windowsResult.error);
       }
       const appointments = appointmentsResult.data || [];
       const windows = (windowsResult.data || []) as UnavailabilityWindow[];
@@ -125,8 +164,47 @@ export function useAvailableSlots(
         currentSlot = addMinutes(currentSlot, slotDurationMinutes);
       }
 
+      const availableCount = slots.filter((slot) => slot.available).length;
+      if (availableCount === 0) {
+        console.debug("[public-booking] No selectable times for date", {
+          tenantId,
+          locationId: location.id,
+          date: baseDate,
+          openingTime,
+          closingTime,
+          slotCapacity,
+          slotDurationMinutes,
+          serviceDurationMinutes,
+          bufferMinutes,
+          totalBookingDuration,
+          appointmentCount: appointments.length,
+          activeWindowCount: windows.length,
+          blockedByClosing: slots.filter((slot) => {
+            const slotStart = parse(`${baseDate} ${slot.time}`, "yyyy-MM-dd HH:mm", new Date());
+            const bookingEndTime = addMinutes(slotStart, totalBookingDuration);
+            return isAfter(bookingEndTime, closingDateTime);
+          }).map((slot) => slot.time),
+          blockedByCapacity: slots.filter((slot) => slot.bookedCount >= slotCapacity).map((slot) => ({
+            time: slot.time,
+            bookedCount: slot.bookedCount,
+          })),
+          blockedByBranchWindow: slots.filter((slot) => {
+            const slotStart = parse(`${baseDate} ${slot.time}`, "yyyy-MM-dd HH:mm", new Date());
+            const slotEnd = addMinutes(slotStart, slotDurationMinutes);
+            return windows.some((window) => {
+              const windowStart = new Date(window.starts_at);
+              const windowEnd = window.ends_at ? new Date(window.ends_at) : null;
+              if (!windowEnd) {
+                return windowStart < slotEnd;
+              }
+              return windowStart < slotEnd && windowEnd > slotStart;
+            });
+          }).map((slot) => slot.time),
+        });
+      }
+
       return slots;
     },
-    enabled: !!tenantId && !!location && !!date,
+    enabled: isEnabled,
   });
 }

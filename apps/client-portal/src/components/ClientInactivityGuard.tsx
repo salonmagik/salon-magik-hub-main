@@ -49,7 +49,7 @@ export function ClientInactivityGuard({ children }: ClientInactivityGuardProps) 
 
   const handleLogout = useCallback(async () => {
     await supabase.auth.signOut();
-    navigate("/client/login", { replace: true });
+    navigate("/login", { replace: true });
   }, [navigate]);
 
   // Handle user activity - only update ref, no state changes

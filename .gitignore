@@ -31,5 +31,16 @@ supabase/supabase/.temp
 supabase/**/.temp
 .env
 
+# Agents
+AGENTS.md
+daemon
+# ralph
+
+.turbo
+
+ralph.sh
+
+# supabase
+.branches
 # Local destructive reset scripts
 supabase/scripts/reset*.sql
