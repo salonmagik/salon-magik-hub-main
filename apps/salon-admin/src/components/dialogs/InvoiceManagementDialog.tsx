@@ -42,7 +42,6 @@ export function InvoiceManagementDialog({
     sendInvoice,
     markAsPaid,
     voidInvoice,
-    generatePaymentLink,
   } = useInvoices();
 
   const [invoice, setInvoice] = useState<InvoiceWithItems | null>(null);
@@ -205,20 +204,6 @@ export function InvoiceManagementDialog({
       if (success) {
         await loadInvoice();
         onSuccess?.();
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleGeneratePaymentLink = async () => {
-    if (!invoiceId) return;
-
-    setIsSubmitting(true);
-    try {
-      const paymentUrl = await generatePaymentLink(invoiceId);
-      if (paymentUrl) {
-        await loadInvoice();
       }
     } finally {
       setIsSubmitting(false);
@@ -483,16 +468,6 @@ export function InvoiceManagementDialog({
                     disabled={isSubmitting}
                   >
                     Edit
-                  </Button>
-                )}
-                {!invoice?.pdf_url && (
-                  <Button
-                    variant="outline"
-                    onClick={handleGeneratePaymentLink}
-                    disabled={isSubmitting}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Generate Link
                   </Button>
                 )}
               </div>

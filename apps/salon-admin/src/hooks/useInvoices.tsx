@@ -146,35 +146,10 @@ export function useInvoices() {
         if (itemsError) throw itemsError;
       }
 
-      // Automatically generate payment link
-      try {
-        const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
-          "create-invoice-payment-session",
-          { body: { invoiceId: invoice.id } }
-        );
-
-        if (paymentError) {
-          console.error("Error generating payment link:", paymentError);
-          toast({
-            title: "Invoice created",
-            description: `Invoice ${invoiceNumber} created, but payment link generation failed`,
-            variant: "destructive",
-          });
-        } else {
-          toast({ 
-            title: "Invoice created", 
-            description: `Invoice ${invoiceNumber} created with payment link` 
-          });
-        }
-      } catch (paymentErr) {
-        console.error("Error generating payment link:", paymentErr);
-        // Don't fail the whole operation if payment link generation fails
-        toast({
-          title: "Invoice created",
-          description: `Invoice ${invoiceNumber} created, but payment link generation failed`,
-          variant: "destructive",
-        });
-      }
+      toast({ 
+        title: "Invoice created", 
+        description: `Invoice ${invoiceNumber} created successfully` 
+      });
 
       fetchInvoices();
       return invoice;
@@ -248,6 +223,27 @@ export function useInvoices() {
   // Send invoice via email
   const sendInvoice = async (invoiceId: string): Promise<boolean> => {
     try {
+      // Generate payment link first
+      try {
+        const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
+          "create-invoice-payment-session",
+          { body: { invoiceId } }
+        );
+
+        if (paymentError) {
+          console.error("Error generating payment link:", paymentError);
+          toast({
+            title: "Warning",
+            description: "Payment link generation failed. Invoice will be sent without payment link.",
+            variant: "destructive",
+          });
+        }
+      } catch (paymentErr) {
+        console.error("Error generating payment link:", paymentErr);
+        // Continue with sending even if payment link fails
+      }
+
+      // Send invoice via email
       const { error } = await supabase.functions.invoke("send-invoice", {
         body: { invoiceId },
       });
@@ -260,7 +256,7 @@ export function useInvoices() {
         .update({ status: "sent", sent_at: new Date().toISOString() })
         .eq("id", invoiceId);
 
-      toast({ title: "Invoice sent", description: "Invoice has been emailed to the customer" });
+      toast({ title: "Invoice sent", description: "Invoice has been emailed to the customer with payment link" });
       fetchInvoices();
       return true;
     } catch (err) {
