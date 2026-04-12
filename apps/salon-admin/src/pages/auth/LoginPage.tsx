@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
@@ -11,6 +12,22 @@ import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@ui/alert-dialog";
+import {
+  clearGoogleOAuthIntent,
+  readGoogleOAuthIntent,
+  saveGoogleOAuthIntent,
+} from "@/lib/googleOAuthFlow";
+import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
 
 type LoginMode = "email" | "phone";
 type PhoneStep = "phone" | "otp";
@@ -29,8 +46,11 @@ function persistRememberMePreference(value: boolean) {
 export default function LoginPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAuthenticated, isLoading: authLoading, hasCompletedOnboarding, profile, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loginMode, setLoginMode] = useState<LoginMode>("email");
+  const [showGoogleSignupPrompt, setShowGoogleSignupPrompt] = useState(false);
+  const googleOAuthIntent = readGoogleOAuthIntent();
   
   // Email login state
   const [email, setEmail] = useState("");
@@ -46,6 +66,32 @@ export default function LoginPage() {
   useEffect(() => {
     setRememberMe(readRememberMePreference());
   }, []);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isAuthenticated || !profile || hasCompletedOnboarding) {
+      setShowGoogleSignupPrompt(false);
+      return;
+    }
+
+    if (googleOAuthIntent?.source === "login") {
+      const userCreatedAt = user && "created_at" in user ? new Date((user as { created_at?: string }).created_at || 0).getTime() : 0;
+      const isLikelyNewGoogleUser =
+        userCreatedAt > 0 && Date.now() - userCreatedAt < 5 * 60 * 1000;
+
+      if (isLikelyNewGoogleUser) {
+        setShowGoogleSignupPrompt(true);
+        return;
+      }
+
+      clearGoogleOAuthIntent();
+      if (needsGoogleProfileCompletion(user)) {
+        navigate("/complete-signup", { replace: true });
+        return;
+      }
+      navigate("/onboarding", { replace: true });
+    }
+  }, [authLoading, googleOAuthIntent?.source, hasCompletedOnboarding, isAuthenticated, navigate, profile, user]);
 
   const validateEmailForm = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -236,12 +282,19 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       persistRememberMePreference(rememberMe);
+      saveGoogleOAuthIntent({
+        source: "login",
+        inviteToken: null,
+        pendingAction: "resolve",
+        createdAt: new Date().toISOString(),
+      });
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin },
+        options: { redirectTo: `${window.location.origin}/login` },
       });
       
       if (error) {
+        clearGoogleOAuthIntent();
         toast({
           title: "Google sign-in failed",
           description: error.message,
@@ -249,6 +302,7 @@ export default function LoginPage() {
         });
       }
     } catch (error) {
+      clearGoogleOAuthIntent();
       toast({
         title: "Error",
         description: "An unexpected error occurred. Please try again.",
@@ -257,6 +311,36 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleContinueGoogleSignup = async () => {
+    if (!user) return;
+
+    saveGoogleOAuthIntent({
+      source: "signup",
+      inviteToken: null,
+      pendingAction: "continue_signup",
+      createdAt: new Date().toISOString(),
+    });
+    setShowGoogleSignupPrompt(false);
+
+    if (needsGoogleProfileCompletion(user)) {
+      navigate("/complete-signup", { replace: true });
+      return;
+    }
+
+    navigate("/onboarding", { replace: true });
+  };
+
+  const handleCancelGoogleSignup = async () => {
+    setShowGoogleSignupPrompt(false);
+    clearGoogleOAuthIntent();
+    await supabase.auth.signOut();
+    toast({
+      title: "Google sign-in cancelled",
+      description: "You can sign up from the signup page whenever you're ready.",
+    });
+    navigate("/login", { replace: true });
   };
 
   const resetPhoneFlow = () => {
@@ -270,6 +354,26 @@ export default function LoginPage() {
       title="Welcome back"
       subtitle="Sign in to your salon management dashboard"
     >
+      <AlertDialog open={showGoogleSignupPrompt}>
+        <AlertDialogContent
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Continue to create your account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It seems you don&apos;t have an account yet. Would you like to proceed to create one with your Google account?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelGoogleSignup}>Not now</AlertDialogCancel>
+            <AlertDialogAction onClick={handleContinueGoogleSignup}>
+              Continue to signup
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Google Sign In */}
       <AuthButton
         variant="outline"

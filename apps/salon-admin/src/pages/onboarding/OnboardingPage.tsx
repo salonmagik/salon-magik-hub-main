@@ -22,6 +22,7 @@ import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
 import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
+import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
@@ -82,6 +83,7 @@ export default function OnboardingPage() {
   const lastName = user?.user_metadata?.last_name || "";
   const email = user?.email || "";
   const phone = user?.user_metadata?.phone || "";
+  const googleOAuthIntent = readGoogleOAuthIntent();
 
   // Determine step flow based on role and plan
   const isOwner = selectedRole === "owner";
@@ -369,7 +371,23 @@ export default function OnboardingPage() {
         }
       }
 
+      if (googleOAuthIntent?.source === "signup" && googleOAuthIntent.inviteToken) {
+        const { error: waitlistUpdateError } = await supabase
+          .from("waitlist_leads")
+          .update({
+            status: "converted",
+            converted_tenant_id: tenantId,
+            converted_at: new Date().toISOString(),
+          })
+          .eq("invitation_token", googleOAuthIntent.inviteToken);
+
+        if (waitlistUpdateError) {
+          console.error("Waitlist conversion update error:", waitlistUpdateError);
+        }
+      }
+
       await refreshTenants();
+      clearGoogleOAuthIntent();
 
       setStep("complete");
       
