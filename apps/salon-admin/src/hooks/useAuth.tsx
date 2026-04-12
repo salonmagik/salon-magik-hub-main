@@ -42,6 +42,12 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LAST_AUTH_METHOD_KEY = "auth:last_method";
+
+const persistLastAuthMethod = (method: "google") => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_AUTH_METHOD_KEY, method);
+};
 
 const isAssignmentPendingState = (
   role: UserRole["role"] | null,
@@ -489,6 +495,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (session?.user) {
+            if (session.user.app_metadata?.provider === "google") {
+              persistLastAuthMethod("google");
+            }
             const hydrationKey = buildSessionHydrationKey(session);
             if (lastHydratedSessionRef.current === hydrationKey) {
               return;
@@ -582,6 +591,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
+        if (session.user.app_metadata?.provider === "google") {
+          persistLastAuthMethod("google");
+        }
         const hydrationKey = buildSessionHydrationKey(session);
         if (lastHydratedSessionRef.current === hydrationKey) {
           return () => {

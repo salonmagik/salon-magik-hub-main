@@ -26,6 +26,13 @@ interface WaitlistLead {
   phone: string | null;
 }
 
+const LAST_AUTH_METHOD_KEY = "auth:last_method";
+
+function persistLastAuthMethod(method: "google") {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_AUTH_METHOD_KEY, method);
+}
+
 export default function SignupPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -129,6 +136,8 @@ export default function SignupPage() {
     }
 
     const continueGoogleSignup = async () => {
+      persistLastAuthMethod("google");
+
       if (waitlistLead && normalizeEmail(waitlistLead.email) !== normalizeEmail(user?.email)) {
         clearGoogleOAuthIntent();
         await supabase.auth.signOut();
