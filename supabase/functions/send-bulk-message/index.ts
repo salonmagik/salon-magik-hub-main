@@ -63,7 +63,7 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     const { data: { user }, error: userError } = await userSupabase.auth.getUser();
-    
+
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
@@ -176,8 +176,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (creditBalance.balance < totalCreditsRequired) {
       return new Response(
-        JSON.stringify({ 
-          error: `Insufficient credits. Required: ${totalCreditsRequired} (${creditsPerMessage} per message × ${customers.length} customers), Available: ${creditBalance.balance}. Please purchase more credits.` 
+        JSON.stringify({
+          error: `Insufficient credits. Required: ${totalCreditsRequired} (${creditsPerMessage} per message × ${customers.length} customers), Available: ${creditBalance.balance}. Please purchase more credits.`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -349,7 +349,7 @@ async function processBulkSMS(
       for (let j = 0; j < batch.length; j++) {
         const customer = batch[j];
         const messageRecord = batchMessages[j];
-        
+
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
@@ -446,12 +446,12 @@ async function processBulkSMS(
       }
     } catch (error: any) {
       console.error("Bulk SMS batch failed:", error);
-      
+
       // Mark all in batch as failed
       for (let j = 0; j < batch.length; j++) {
         const customer = batch[j];
         const messageRecord = batchMessages[j];
-        
+
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
@@ -565,7 +565,7 @@ async function processBulkEmail(
         });
       } catch (error: any) {
         console.error(`Failed to send email to ${customer.full_name}:`, error);
-        
+
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
@@ -611,7 +611,7 @@ async function processBulkWhatsApp(
     for (let i = 0; i < customers.length; i++) {
       const customer = customers[i];
       const messageRecord = createdMessages[i];
-      
+
       result.failed++;
       result.failedMessages.push({
         customerId: customer.id,
@@ -717,7 +717,7 @@ async function processBulkWhatsApp(
         });
       } catch (error: any) {
         console.error(`Failed to send WhatsApp to ${customer.full_name}:`, error);
-        
+
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
