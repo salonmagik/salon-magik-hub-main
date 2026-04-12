@@ -5,6 +5,7 @@ import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
+import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -108,6 +109,7 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
 export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
   const location = useLocation();
+  const googleOAuthIntent = readGoogleOAuthIntent();
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -117,6 +119,16 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   if (isAuthenticated && profile) {
     if (needsGoogleProfileCompletion(user)) {
       return <Navigate to="/complete-signup" replace />;
+    }
+    const allowGoogleReturnHandling =
+      !hasCompletedOnboarding &&
+      ((location.pathname === "/login" && googleOAuthIntent?.source === "login") ||
+        (location.pathname === "/signup" && googleOAuthIntent?.source === "signup"));
+    if (allowGoogleReturnHandling) {
+      return <>{children}</>;
+    }
+    if (googleOAuthIntent) {
+      clearGoogleOAuthIntent();
     }
     const defaultRoute = hasCompletedOnboarding
       ? isAssignmentPending

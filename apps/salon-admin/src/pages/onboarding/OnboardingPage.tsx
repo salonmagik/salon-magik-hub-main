@@ -22,6 +22,8 @@ import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
 import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
+import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
+import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
@@ -77,11 +79,13 @@ export default function OnboardingPage() {
     locations: [],
   });
 
-  // Get user info from auth metadata (collected during signup)
-  const firstName = user?.user_metadata?.first_name || "";
-  const lastName = user?.user_metadata?.last_name || "";
+  // Get user info from auth metadata (collected during signup or Google OAuth)
+  const googleProfile = getGoogleProfileFields(user);
+  const firstName = googleProfile.firstName;
+  const lastName = googleProfile.lastName;
   const email = user?.email || "";
-  const phone = user?.user_metadata?.phone || "";
+  const phone = googleProfile.phone;
+  const googleOAuthIntent = readGoogleOAuthIntent();
 
   // Determine step flow based on role and plan
   const isOwner = selectedRole === "owner";
@@ -369,7 +373,23 @@ export default function OnboardingPage() {
         }
       }
 
+      if (googleOAuthIntent?.source === "signup" && googleOAuthIntent.inviteToken) {
+        const { error: waitlistUpdateError } = await supabase
+          .from("waitlist_leads")
+          .update({
+            status: "converted",
+            converted_tenant_id: tenantId,
+            converted_at: new Date().toISOString(),
+          })
+          .eq("invitation_token", googleOAuthIntent.inviteToken);
+
+        if (waitlistUpdateError) {
+          console.error("Waitlist conversion update error:", waitlistUpdateError);
+        }
+      }
+
       await refreshTenants();
+      clearGoogleOAuthIntent();
 
       setStep("complete");
       

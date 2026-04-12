@@ -8,14 +8,16 @@ import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@ui/use-toast";
+import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 export default function CompleteSignupPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user, refreshProfile } = useAuth();
-  const [firstName, setFirstName] = useState((user?.user_metadata?.first_name as string | undefined) || "");
-  const [lastName, setLastName] = useState((user?.user_metadata?.last_name as string | undefined) || "");
-  const [phone, setPhone] = useState((user?.user_metadata?.phone as string | undefined) || "");
+  const { user, refreshAuthUser, refreshProfile } = useAuth();
+  const googleProfile = getGoogleProfileFields(user);
+  const [firstName, setFirstName] = useState(googleProfile.firstName);
+  const [lastName, setLastName] = useState(googleProfile.lastName);
+  const [phone, setPhone] = useState(googleProfile.phone);
   const [isSaving, setIsSaving] = useState(false);
 
   const email = useMemo(() => user?.email || "", [user?.email]);
@@ -45,14 +47,21 @@ export default function CompleteSignupPage() {
       if (authError) throw authError;
 
       if (user?.id) {
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          user_id: user.id,
-          full_name: fullName,
-          phone: phone.trim(),
-        });
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              user_id: user.id,
+              full_name: fullName,
+              phone: phone.trim(),
+            },
+            { onConflict: "user_id" },
+          );
         if (profileError) throw profileError;
       }
 
+      await supabase.auth.refreshSession();
+      await refreshAuthUser();
       await refreshProfile();
       toast({
         title: "Profile completed",
