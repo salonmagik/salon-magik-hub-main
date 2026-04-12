@@ -35,12 +35,19 @@ interface AuthContextType extends AuthState {
   getFirstAllowedRoute: (contextType?: ActiveContextType, locationId?: string | null) => Promise<string>;
   refreshProfile: () => Promise<void>;
   refreshTenants: () => Promise<void>;
+  refreshAuthUser: () => Promise<void>;
   clearPasswordChangeFlag: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LAST_AUTH_METHOD_KEY = "auth:last_method";
+
+const persistLastAuthMethod = (method: "google") => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_AUTH_METHOD_KEY, method);
+};
 
 const isAssignmentPendingState = (
   role: UserRole["role"] | null,
@@ -488,6 +495,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           if (session?.user) {
+            if (session.user.app_metadata?.provider === "google") {
+              persistLastAuthMethod("google");
+            }
             const hydrationKey = buildSessionHydrationKey(session);
             if (lastHydratedSessionRef.current === hydrationKey) {
               return;
@@ -581,6 +591,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
+        if (session.user.app_metadata?.provider === "google") {
+          persistLastAuthMethod("google");
+        }
         const hydrationKey = buildSessionHydrationKey(session);
         if (lastHydratedSessionRef.current === hydrationKey) {
           return () => {
@@ -780,6 +793,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, profile }));
   };
 
+  const refreshAuthUser = async () => {
+    const [
+      { data: { session } },
+      { data: { user } },
+    ] = await Promise.all([
+      supabase.auth.getSession(),
+      supabase.auth.getUser(),
+    ]);
+
+    setState((prev) => ({
+      ...prev,
+      session: session ?? prev.session,
+      user: user ?? prev.user,
+      requiresPasswordChange:
+        (user ?? prev.user)?.user_metadata?.requires_password_change === true,
+    }));
+  };
+
   const refreshTenants = async () => {
     if (!state.user) return;
     const { tenants, roles } = await fetchTenantsAndRoles(state.user.id);
@@ -908,6 +939,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getFirstAllowedRoute,
         refreshProfile,
         refreshTenants,
+        refreshAuthUser,
         clearPasswordChangeFlag,
       }}
     >
