@@ -23,6 +23,7 @@ import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
 import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
 import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
+import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
@@ -78,11 +79,12 @@ export default function OnboardingPage() {
     locations: [],
   });
 
-  // Get user info from auth metadata (collected during signup)
-  const firstName = user?.user_metadata?.first_name || "";
-  const lastName = user?.user_metadata?.last_name || "";
+  // Get user info from auth metadata (collected during signup or Google OAuth)
+  const googleProfile = getGoogleProfileFields(user);
+  const firstName = googleProfile.firstName;
+  const lastName = googleProfile.lastName;
   const email = user?.email || "";
-  const phone = user?.user_metadata?.phone || "";
+  const phone = googleProfile.phone;
   const googleOAuthIntent = readGoogleOAuthIntent();
 
   // Determine step flow based on role and plan

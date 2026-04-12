@@ -35,6 +35,7 @@ interface AuthContextType extends AuthState {
   getFirstAllowedRoute: (contextType?: ActiveContextType, locationId?: string | null) => Promise<string>;
   refreshProfile: () => Promise<void>;
   refreshTenants: () => Promise<void>;
+  refreshAuthUser: () => Promise<void>;
   clearPasswordChangeFlag: () => void;
 }
 
@@ -780,6 +781,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, profile }));
   };
 
+  const refreshAuthUser = async () => {
+    const [
+      { data: { session } },
+      { data: { user } },
+    ] = await Promise.all([
+      supabase.auth.getSession(),
+      supabase.auth.getUser(),
+    ]);
+
+    setState((prev) => ({
+      ...prev,
+      session: session ?? prev.session,
+      user: user ?? prev.user,
+      requiresPasswordChange:
+        (user ?? prev.user)?.user_metadata?.requires_password_change === true,
+    }));
+  };
+
   const refreshTenants = async () => {
     if (!state.user) return;
     const { tenants, roles } = await fetchTenantsAndRoles(state.user.id);
@@ -908,6 +927,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         getFirstAllowedRoute,
         refreshProfile,
         refreshTenants,
+        refreshAuthUser,
         clearPasswordChangeFlag,
       }}
     >
