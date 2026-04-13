@@ -24,6 +24,21 @@ interface PaymentRequest {
   credits?: number;
 }
 
+function calculateDiscountedAmount(
+  amount: number,
+  discountType?: string | null,
+  discountValue?: number | null,
+) {
+  const numericValue = Number(discountValue || 0);
+  if (!numericValue || amount <= 0) return amount;
+
+  if (discountType === "fixed") {
+    return Math.max(0, Number((amount - numericValue).toFixed(2)));
+  }
+
+  return Math.max(0, Number((amount - (amount * numericValue) / 100).toFixed(2)));
+}
+
 function jsonResponse(payload: Record<string, unknown>, status: number) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -141,6 +156,34 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Tenant not found" }, 404);
     }
 
+    let payableAmount = amount;
+    let appliedPromo: Record<string, unknown> | null = null;
+
+    if (intentType === "messaging_credit_purchase") {
+      const { data: promoData, error: promoError } = await (supabase.rpc as any)("get_tenant_sales_promo_summary", {
+        p_tenant_id: tenantId,
+        p_surface: "credits",
+      });
+
+      if (promoError) {
+        console.error("Failed to load tenant promo summary:", promoError);
+      } else if (promoData) {
+        payableAmount = calculateDiscountedAmount(
+          amount,
+          promoData.discount_type,
+          Number(promoData.discount_value || 0),
+        );
+        appliedPromo = {
+          promo_code_id: promoData.promo_code_id,
+          redemption_id: promoData.redemption_id,
+          discount_type: promoData.discount_type,
+          discount_value: promoData.discount_value,
+          original_amount: amount,
+          final_amount: payableAmount,
+        };
+      }
+    }
+
     const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
                         ["NGN", "GHS"].includes(currency.toUpperCase());
     const usePaystack = preferredGateway 
@@ -154,7 +197,7 @@ Deno.serve(async (req) => {
       .insert({
         tenant_id: tenantId,
         appointment_id: appointmentId || null,
-        amount: amount,
+        amount: payableAmount,
         currency: currency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
@@ -165,8 +208,8 @@ Deno.serve(async (req) => {
         intent_type: intentType,
         metadata: {
           appointment_ids: body.appointmentIds || [appointmentId],
+          ...(appliedPromo ? { sales_promo: appliedPromo } : {}),
         },
-        intent_type: intentType,
       })
       .select("id")
       .single();
@@ -182,7 +225,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Paystack not configured" }, 500);
       }
 
-      const amountInMinorUnits = Math.round(amount * 100);
+      const amountInMinorUnits = Math.round(payableAmount * 100);
 
       const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
         method: "POST",
@@ -208,6 +251,8 @@ Deno.serve(async (req) => {
             customer_id: customerId || null,
             invoice_id: invoiceId || null,
             credits: credits || null,
+            promo_redemption_id: appliedPromo?.redemption_id || null,
+            promo_code_id: appliedPromo?.promo_code_id || null,
           },
         }),
       });
@@ -235,7 +280,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "Stripe not configured" }, 500);
       }
 
-      const amountInCents = Math.round(amount * 100);
+      const amountInCents = Math.round(payableAmount * 100);
 
       const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
         method: "POST",
@@ -263,6 +308,8 @@ Deno.serve(async (req) => {
           "metadata[customer_id]": customerId || "",
           "metadata[invoice_id]": invoiceId || "",
           "metadata[credits]": credits?.toString() || "",
+          "metadata[promo_redemption_id]": String(appliedPromo?.redemption_id || ""),
+          "metadata[promo_code_id]": String(appliedPromo?.promo_code_id || ""),
         }),
       });
 
@@ -292,6 +339,7 @@ Deno.serve(async (req) => {
       gateway: usePaystack ? "paystack" : "stripe",
       paymentIntentId: paymentIntent?.id,
       reference: usePaystack ? reference : undefined,
+      appliedPromo,
     }, 200);
   } catch (error) {
     console.error("Error creating payment session:", error);

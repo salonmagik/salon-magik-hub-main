@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useCreditPurchase, CreditPackage } from "@/hooks/useCreditPurchase";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useAuth } from "@/hooks/useAuth";
+import { useClaimTenantSalesPromo, useTenantSalesPromo } from "@/hooks/useSalesPromo";
 import { formatCurrency } from "@shared/currency";
 import {
   Dialog,
@@ -17,7 +18,7 @@ import { Alert, AlertDescription } from "@ui/alert";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import { Label } from "@ui/label";
 import { Input } from "@ui/input";
-import { Check, MessageSquare, Loader2, Wallet, CreditCard, AlertCircle } from "lucide-react";
+import { Check, MessageSquare, Loader2, Wallet, CreditCard, AlertCircle, Ticket } from "lucide-react";
 import { cn } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
@@ -41,14 +42,23 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
   const [customCredits, setCustomCredits] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wallet");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const claimPromo = useClaimTenantSalesPromo();
+  const { data: tenantPromo } = useTenantSalesPromo("credits");
 
   const selectedPkg = packages.find((p) => p.id === selectedPackage);
   
   // Calculate price based on selection type
   const customCreditsNum = parseInt(customCredits) || 0;
-  const selectedPrice = isCustom 
+  const basePrice = isCustom 
     ? getCustomCreditPrice(customCreditsNum, currency)
     : (selectedPkg ? getPackagePrice(selectedPkg, currency) : 0);
+  const discountAmount = tenantPromo
+    ? tenantPromo.discount_type === "fixed"
+      ? Math.min(basePrice, Number(tenantPromo.discount_value || 0))
+      : Number(((basePrice * Number(tenantPromo.discount_value || 0)) / 100).toFixed(2))
+    : 0;
+  const selectedPrice = Math.max(0, Number((basePrice - discountAmount).toFixed(2)));
   const selectedCredits = isCustom ? customCreditsNum : (selectedPkg?.credits || 0);
   
   const hasInsufficientBalance = wallet && wallet.balance < selectedPrice;
@@ -80,7 +90,7 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
             tenantId: currentTenant.id,
             packageId: isCustom ? undefined : selectedPackage,
             customCredits: isCustom ? selectedCredits : undefined,
-            customAmount: isCustom ? selectedPrice : undefined,
+            customAmount: isCustom ? basePrice : undefined,
           },
         });
 
@@ -106,7 +116,7 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
         const { data, error } = await supabase.functions.invoke("create-payment-session", {
           body: {
             tenantId: currentTenant.id,
-            amount: selectedPrice,
+            amount: basePrice,
             currency: currency,
             customerEmail,
             customerName: currentTenant.name || "Salon Owner",
@@ -145,6 +155,25 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
 
   const isWalletPaymentDisabled = paymentMethod === "wallet" && (hasInsufficientBalance || walletLoading);
 
+  const handleClaimPromo = async () => {
+    if (!promoCode.trim()) return;
+
+    try {
+      await claimPromo.mutateAsync({ code: promoCode.trim(), surface: "credits" });
+      setPromoCode("");
+      toast({
+        title: "Promo claimed",
+        description: "This promo is now available for messaging credit purchases.",
+      });
+    } catch (error) {
+      toast({
+        title: "Promo unavailable",
+        description: error instanceof Error ? error.message : "Failed to claim promo code.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -160,6 +189,35 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <Ticket className="h-4 w-4" />
+              Sales Promo
+            </Label>
+            {tenantPromo ? (
+              <Alert>
+                <AlertDescription>
+                  {tenantPromo.code} from {tenantPromo.campaign_name} is active for credits with {tenantPromo.remaining_uses} use{tenantPromo.remaining_uses === 1 ? "" : "s"} remaining.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Enter promo code"
+                  value={promoCode}
+                  onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleClaimPromo}
+                  disabled={!promoCode.trim() || claimPromo.isPending}
+                >
+                  {claimPromo.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Package Selection */}
           <div className="space-y-3">
             <Label>Select Package</Label>
@@ -287,6 +345,14 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
                   <AlertDescription>
                     Insufficient wallet balance. You need {formatCurrency(selectedPrice, currency)} but have{" "}
                     {formatCurrency(wallet?.balance || 0, currency)}.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {tenantPromo && selectedPrice > 0 && (
+                <Alert>
+                  <AlertDescription>
+                    Promo applied. Original {formatCurrency(basePrice, currency)}, discounted {formatCurrency(selectedPrice, currency)}.
                   </AlertDescription>
                 </Alert>
               )}

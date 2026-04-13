@@ -118,6 +118,64 @@ serve(async (req) => {
       });
     }
 
+    let appliedPromo: Record<string, unknown> | null = null;
+    let couponId: string | undefined;
+    const normalizedBillingCycle = billingCycle === "annual" ? "annual" : "monthly";
+
+    const { data: promoData, error: promoError } = await (supabase.rpc as any)("get_tenant_sales_promo_summary", {
+      p_tenant_id: tenantId,
+      p_surface: "subscription",
+    });
+
+    if (promoError) {
+      console.error("Failed to load tenant subscription promo summary:", promoError);
+    } else if (promoData) {
+      const remainingUses = Math.max(1, Number(promoData.remaining_uses || 1));
+      const durationMonths = normalizedBillingCycle === "annual" ? remainingUses * 12 : remainingUses;
+      const couponPayload: Record<string, unknown> = {
+        duration: remainingUses > 1 ? "repeating" : "once",
+        metadata: {
+          tenant_id: tenantId,
+          promo_code_id: String(promoData.promo_code_id || ""),
+          redemption_id: String(promoData.redemption_id || ""),
+          billing_surface: "subscription",
+        },
+      };
+
+      if (remainingUses > 1) {
+        couponPayload.duration_in_months = durationMonths;
+      }
+
+      if (promoData.discount_type === "fixed") {
+        couponPayload.currency = "usd";
+        couponPayload.amount_off = 0;
+
+        try {
+          const priceData = await stripe.prices.retrieve(priceId);
+          if (priceData.currency) {
+            couponPayload.currency = priceData.currency;
+          }
+        } catch (priceError) {
+          console.error("Failed to resolve Stripe price currency for promo coupon:", priceError);
+        }
+
+        couponPayload.amount_off = Math.max(0, Math.round(Number(promoData.discount_value || 0) * 100));
+      } else {
+        couponPayload.percent_off = Number(promoData.discount_value || 0);
+      }
+
+      const coupon = await stripe.coupons.create(couponPayload as Stripe.CouponCreateParams);
+      couponId = coupon.id;
+      appliedPromo = {
+        promo_code_id: promoData.promo_code_id,
+        redemption_id: promoData.redemption_id,
+        discount_type: promoData.discount_type,
+        discount_value: promoData.discount_value,
+        remaining_uses: promoData.remaining_uses,
+        coupon_id: coupon.id,
+      };
+    }
+
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
@@ -128,21 +186,27 @@ serve(async (req) => {
           quantity: 1,
         },
       ],
+      ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
         tenant_id: tenantId,
-        billing_cycle: billingCycle || "monthly",
+        billing_cycle: normalizedBillingCycle,
+        promo_redemption_id: String(appliedPromo?.redemption_id || ""),
+        promo_code_id: String(appliedPromo?.promo_code_id || ""),
       },
       subscription_data: {
         metadata: {
           tenant_id: tenantId,
+          billing_cycle: normalizedBillingCycle,
+          promo_redemption_id: String(appliedPromo?.redemption_id || ""),
+          promo_code_id: String(appliedPromo?.promo_code_id || ""),
         },
       },
     });
 
     return new Response(
-      JSON.stringify({ sessionId: session.id, url: session.url }),
+      JSON.stringify({ sessionId: session.id, url: session.url, appliedPromo }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

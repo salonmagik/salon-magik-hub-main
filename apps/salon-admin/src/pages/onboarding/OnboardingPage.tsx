@@ -22,7 +22,12 @@ import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
 import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
-import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
+import {
+  clearGoogleOAuthIntent,
+  clearPendingSalesPromoCode,
+  readGoogleOAuthIntent,
+  readPendingSalesPromoCode,
+} from "@/lib/googleOAuthFlow";
 import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
@@ -78,6 +83,18 @@ export default function OnboardingPage() {
     sameHours: true,
     locations: [],
   });
+  const [promoCode, setPromoCode] = useState(() => readPendingSalesPromoCode() || "");
+  const [promoPreview, setPromoPreview] = useState<{
+    valid: boolean;
+    message?: string;
+    campaignName?: string;
+    discountType?: string;
+    discountValue?: number;
+    maxUsesPerTenant?: number;
+    billingTargets?: string[];
+    campaignEndsAt?: string | null;
+  } | null>(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   // Get user info from auth metadata (collected during signup or Google OAuth)
   const googleProfile = getGoogleProfileFields(user);
@@ -148,6 +165,7 @@ export default function OnboardingPage() {
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
       case "review":
+        if (promoCode.trim() && !promoPreview?.valid) return false;
         if (!isChain) return true;
         return Boolean(configuredChainQuote);
       default:
@@ -188,6 +206,42 @@ export default function OnboardingPage() {
     const currentIndex = stepFlow.indexOf(step);
     if (currentIndex > 0) {
       setStep(stepFlow[currentIndex - 1]);
+    }
+  };
+
+  const handleApplyPromo = async () => {
+    const normalizedCode = promoCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setPromoPreview(null);
+      return;
+    }
+
+    setIsApplyingPromo(true);
+    try {
+      const { data, error } = await (supabase.rpc as any)("validate_sales_promo_code_for_email", {
+        p_code: normalizedCode,
+      });
+
+      if (error) throw error;
+
+      setPromoPreview({
+        valid: Boolean(data?.valid),
+        message: data?.message,
+        campaignName: data?.campaign_name,
+        discountType: data?.discount_type,
+        discountValue: Number(data?.discount_value || 0),
+        maxUsesPerTenant: Number(data?.max_uses_per_tenant || 0),
+        billingTargets: Array.isArray(data?.billing_targets) ? data.billing_targets : [],
+        campaignEndsAt: data?.campaign_ends_at || null,
+      });
+    } catch (error) {
+      console.error("Promo validation error:", error);
+      setPromoPreview({
+        valid: false,
+        message: "Unable to validate this promo code right now.",
+      });
+    } finally {
+      setIsApplyingPromo(false);
     }
   };
 
@@ -388,8 +442,34 @@ export default function OnboardingPage() {
         }
       }
 
+      if (promoCode.trim() && promoPreview?.valid) {
+        const { data: promoClaimData, error: promoClaimError } = await (supabase.rpc as any)("claim_sales_promo_code", {
+          p_code: promoCode.trim().toUpperCase(),
+          p_tenant_id: tenantId,
+          p_surface: null,
+        });
+
+        if (promoClaimError) {
+          console.error("Promo claim error:", promoClaimError);
+          toast({
+            title: "Promo not attached",
+            description: "Your salon was created, but the promo code could not be attached. You can try again later in billing if it is still valid.",
+            variant: "destructive",
+          });
+        } else if (promoClaimData?.success) {
+          clearPendingSalesPromoCode();
+        } else if (promoClaimData?.message) {
+          toast({
+            title: "Promo not attached",
+            description: promoClaimData.message,
+            variant: "destructive",
+          });
+        }
+      }
+
       await refreshTenants();
       clearGoogleOAuthIntent();
+      clearPendingSalesPromoCode();
 
       setStep("complete");
       
@@ -572,6 +652,14 @@ export default function OnboardingPage() {
                   : null
               }
               trialDays={onboardingTrialDays}
+              promoCode={promoCode}
+              onPromoCodeChange={(value) => {
+                setPromoCode(value);
+                setPromoPreview(null);
+              }}
+              onApplyPromo={handleApplyPromo}
+              isApplyingPromo={isApplyingPromo}
+              promoPreview={promoPreview}
             />
           )}
 
