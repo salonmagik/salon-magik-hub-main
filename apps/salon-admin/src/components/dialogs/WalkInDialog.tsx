@@ -51,7 +51,7 @@ interface SelectedService {
 }
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
@@ -72,8 +72,12 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { staff, isLoading: staffLoading } = useStaff();
-  const { defaultLocation } = useLocations();
+  const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  const appointmentLocationId =
+    (activeLocationId && locations.find((location) => location.id === activeLocationId)?.id) ||
+    defaultLocation?.id ||
+    null;
 
   // Reset form when dialog opens, use tenant default buffer
   useEffect(() => {
@@ -116,7 +120,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!defaultLocation?.id) {
+    if (!appointmentLocationId) {
       return;
     }
 
@@ -140,7 +144,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
         price: s.price,
         duration: s.duration,
       })),
-      locationId: defaultLocation.id,
+      locationId: appointmentLocationId,
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
       isWalkIn: true,

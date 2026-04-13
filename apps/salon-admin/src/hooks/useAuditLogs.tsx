@@ -81,6 +81,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS: readonly AuditActionFilterOption[] = [
 export interface AuditLogFilters {
   actionKey?: AuditActionFilterKey;
   branchLocationId?: string;
+  actorUserId?: string;
   startDate?: Date;
   endDate?: Date;
 }
@@ -135,6 +136,10 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
 
         if (filters?.branchLocationId) {
           query = query.eq("branch_location_id", filters.branchLocationId);
+        }
+
+        if (filters?.actorUserId) {
+          query = query.eq("actor_user_id", filters.actorUserId);
         }
 
         if (filters?.startDate && filters?.endDate) {
@@ -220,7 +225,15 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
         setIsLoading(false);
       }
     },
-    [currentTenant?.id, filters, limit]
+    [
+      currentTenant?.id,
+      filters?.actionKey,
+      filters?.branchLocationId,
+      filters?.actorUserId,
+      filters?.startDate?.getTime(),
+      filters?.endDate?.getTime(),
+      limit,
+    ]
   );
 
   useEffect(() => {

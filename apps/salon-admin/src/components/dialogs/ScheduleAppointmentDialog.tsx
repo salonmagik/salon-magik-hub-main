@@ -15,6 +15,7 @@ import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
 import { useLocations } from "@/hooks/useLocations";
 import { useAppointmentActions } from "@/hooks/useAppointments";
+import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
 
 interface ScheduleAppointmentDialogProps {
@@ -31,6 +32,7 @@ interface SelectedService {
 }
 
 export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: ScheduleAppointmentDialogProps) {
+  const { activeLocationId } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<
@@ -54,8 +56,12 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { staff, isLoading: staffLoading } = useStaff();
-  const { defaultLocation } = useLocations();
+  const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  const appointmentLocationId =
+    (activeLocationId && locations.find((location) => location.id === activeLocationId)?.id) ||
+    defaultLocation?.id ||
+    null;
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -98,7 +104,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!defaultLocation?.id || selectedServices.length === 0) {
+    if (!appointmentLocationId || selectedServices.length === 0) {
       return;
     }
 
@@ -117,7 +123,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
       })),
       scheduledStart,
       scheduledEnd,
-      locationId: defaultLocation.id,
+      locationId: appointmentLocationId,
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
       attachments: noteAttachments.length > 0 ? noteAttachments : undefined,

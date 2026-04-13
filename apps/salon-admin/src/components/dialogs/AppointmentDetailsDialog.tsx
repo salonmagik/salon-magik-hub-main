@@ -14,7 +14,6 @@ import { Switch } from "@ui/switch";
 import { Label } from "@ui/label";
 import { Separator } from "@ui/separator";
 import { Skeleton } from "@ui/skeleton";
-import { ScrollArea } from "@ui/scroll-area";
 import {
   Clock,
   User,
@@ -238,8 +237,8 @@ export function AppointmentDetailsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 overflow-hidden">
-          <div className="space-y-5 py-2 pr-4">
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pr-2">
+          <div className="space-y-5 py-2 pr-2">
             {/* Customer Info */}
             <div className="flex items-start gap-3">
               <User className="w-5 h-5 text-muted-foreground mt-0.5" />
@@ -471,7 +470,7 @@ export function AppointmentDetailsDialog({
               />
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2 pt-4 border-t">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
