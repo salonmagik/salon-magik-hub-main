@@ -134,7 +134,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl">Schedule appointment</DialogTitle>
+            <DialogTitle className="text-xl">Book appointments</DialogTitle>
             <p className="text-sm text-muted-foreground">
               Fill in the details below to add a new booking to your calendar.
             </p>

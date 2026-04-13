@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
@@ -52,7 +52,15 @@ export default function OnboardingPage() {
   });
   const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
-  const [expectedChainLocations, setExpectedChainLocations] = useState(1);
+  const [expectedChainLocationsInput, setExpectedChainLocationsInput] = useState("2");
+  const expectedChainLocations = useMemo(() => {
+    const trimmed = expectedChainLocationsInput.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed < 1) return null;
+    return parsed;
+  }, [expectedChainLocationsInput]);
+  const effectiveExpectedChainLocations = expectedChainLocations ?? 2;
 
   // Step data
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
@@ -117,10 +125,10 @@ export default function OnboardingPage() {
   const { data: chainQuote } = useChainPriceQuote(
     isChain ? chainPlan?.id || null : null,
     currency,
-    expectedChainLocations,
+    effectiveExpectedChainLocations,
   );
   const configuredChainLocations = isChain
-    ? Math.max(1, locationsConfig.locations.length || expectedChainLocations)
+    ? Math.max(1, locationsConfig.locations.length || effectiveExpectedChainLocations)
     : 1;
   const { data: configuredChainQuote } = useChainPriceQuote(
     isChain ? chainPlan?.id || null : null,
@@ -159,7 +167,7 @@ export default function OnboardingPage() {
       case "plan":
         if (!selectedPlan) return false;
         if (selectedPlan !== "chain") return true;
-        if (expectedChainLocations < 1) return false;
+        if (expectedChainLocations == null) return false;
         return Boolean(chainQuote);
       case "locations":
         return locationsConfig.locations.length > 0 && 
@@ -179,8 +187,8 @@ export default function OnboardingPage() {
       const next = stepFlow[currentIndex + 1];
       
       // Initialize locations when entering locations step
-      if (next === "locations" && locationsConfig.locations.length !== Math.max(1, expectedChainLocations)) {
-        const totalLocations = Math.max(1, expectedChainLocations);
+      if (next === "locations" && locationsConfig.locations.length !== Math.max(1, effectiveExpectedChainLocations)) {
+        const totalLocations = Math.max(1, effectiveExpectedChainLocations);
         const initialLocations: LocationInfo[] = Array.from({ length: totalLocations }).map((_, index) => ({
           id: crypto.randomUUID(),
           name: locationsConfig.sameName ? businessInfo.name : "",
@@ -290,7 +298,7 @@ export default function OnboardingPage() {
 
       // 4. Create locations
       if (isChain && locationsConfig.locations.length > 0) {
-        const expectedLocations = Math.max(1, expectedChainLocations);
+        const expectedLocations = Math.max(1, effectiveExpectedChainLocations);
         const configuredLocations = Math.max(
           1,
           Math.min(locationsConfig.locations.length, expectedLocations),
@@ -582,10 +590,8 @@ export default function OnboardingPage() {
                       id="expectedLocations"
                       type="number"
                       min={1}
-                      value={expectedChainLocations}
-                      onChange={(event) =>
-                        setExpectedChainLocations(Math.max(1, Number(event.target.value || 1)))
-                      }
+                      value={expectedChainLocationsInput}
+                      onChange={(event) => setExpectedChainLocationsInput(event.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
                       Chain tiers apply to additional branches beyond the first.
@@ -627,7 +633,7 @@ export default function OnboardingPage() {
               defaultOpeningTime={businessInfo.openingTime}
               defaultClosingTime={businessInfo.closingTime}
               defaultOpeningDays={businessInfo.openingDays}
-              maxLocations={Math.max(1, expectedChainLocations)}
+              maxLocations={Math.max(1, effectiveExpectedChainLocations)}
               onChange={setLocationsConfig}
             />
           )}

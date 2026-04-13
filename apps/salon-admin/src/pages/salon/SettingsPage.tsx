@@ -283,6 +283,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     requireStaffSelection: false,
     autoAssignStaff: true,
   });
+  const [cancellationGraceHoursInput, setCancellationGraceHoursInput] = useState("24");
+  const [defaultDepositPercentageInput, setDefaultDepositPercentageInput] = useState("0");
+  const [slotCapacityDefaultInput, setSlotCapacityDefaultInput] = useState("1");
 
   const startSubscriptionCheckout = async () => {
     if (!currentTenant?.id || !currentTenant.plan) {
@@ -424,6 +427,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         autoAssignStaff: (currentTenant as any).auto_assign_staff ?? true,
       };
       setBookingSettings(nextBooking);
+      setCancellationGraceHoursInput(String(nextBooking.cancellationGraceHours));
+      setDefaultDepositPercentageInput(String(nextBooking.defaultDepositPercentage));
+      setSlotCapacityDefaultInput(String(nextBooking.slotCapacityDefault));
       setBookingBaseline(nextBooking);
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
@@ -1751,13 +1757,28 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               <Input
                 type="number"
                 min={0}
-                value={bookingSettings.cancellationGraceHours}
-                onChange={(e) =>
+                value={cancellationGraceHoursInput}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setCancellationGraceHoursInput(nextValue);
+                  if (nextValue === "") return;
+                  const parsed = Number.parseInt(nextValue, 10);
+                  if (!Number.isNaN(parsed) && parsed >= 0) {
+                    setBookingSettings((prev) => ({
+                      ...prev,
+                      cancellationGraceHours: parsed,
+                    }));
+                  }
+                }}
+                onBlur={() => {
+                  const parsed = Number.parseInt(cancellationGraceHoursInput, 10);
+                  const normalized = !Number.isNaN(parsed) && parsed >= 0 ? parsed : bookingSettings.cancellationGraceHours;
+                  setCancellationGraceHoursInput(String(normalized));
                   setBookingSettings((prev) => ({
                     ...prev,
-                    cancellationGraceHours: parseInt(e.target.value) || 0,
-                  }))
-                }
+                    cancellationGraceHours: normalized,
+                  }));
+                }}
               />
               <span className="text-sm text-muted-foreground">hours</span>
             </div>
@@ -1771,13 +1792,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               type="number"
               min={0}
               max={100}
-              value={bookingSettings.defaultDepositPercentage}
-              onChange={(e) =>
+              value={defaultDepositPercentageInput}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setDefaultDepositPercentageInput(nextValue);
+                if (nextValue === "") return;
+                const parsed = Number.parseInt(nextValue, 10);
+                if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                  setBookingSettings((prev) => ({
+                    ...prev,
+                    defaultDepositPercentage: parsed,
+                  }));
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number.parseInt(defaultDepositPercentageInput, 10);
+                const normalized = !Number.isNaN(parsed)
+                  ? Math.min(100, Math.max(0, parsed))
+                  : bookingSettings.defaultDepositPercentage;
+                setDefaultDepositPercentageInput(String(normalized));
                 setBookingSettings((prev) => ({
                   ...prev,
-                  defaultDepositPercentage: parseInt(e.target.value) || 0,
-                }))
-              }
+                  defaultDepositPercentage: normalized,
+                }));
+              }}
               className="w-24"
             />
             <span className="text-sm text-muted-foreground">%</span>
@@ -1792,13 +1830,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               type="number"
               min={1}
               max={100}
-              value={bookingSettings.slotCapacityDefault}
-              onChange={(e) =>
+              value={slotCapacityDefaultInput}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setSlotCapacityDefaultInput(nextValue);
+                if (nextValue === "") return;
+                const parsed = Number.parseInt(nextValue, 10);
+                if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 100) {
+                  setBookingSettings((prev) => ({
+                    ...prev,
+                    slotCapacityDefault: parsed,
+                  }));
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number.parseInt(slotCapacityDefaultInput, 10);
+                const normalized = !Number.isNaN(parsed)
+                  ? Math.min(100, Math.max(1, parsed))
+                  : bookingSettings.slotCapacityDefault;
+                setSlotCapacityDefaultInput(String(normalized));
                 setBookingSettings((prev) => ({
                   ...prev,
-                  slotCapacityDefault: parseInt(e.target.value) || 1,
-                }))
-              }
+                  slotCapacityDefault: normalized,
+                }));
+              }}
               className="w-24"
             />
           </div>

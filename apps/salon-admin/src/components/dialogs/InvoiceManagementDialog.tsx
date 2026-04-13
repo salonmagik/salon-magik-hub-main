@@ -25,8 +25,8 @@ interface InvoiceManagementDialogProps {
 interface LineItem {
   id: string;
   description: string;
-  quantity: number;
-  unitPrice: number;
+  quantity: number | "";
+  unitPrice: number | "";
 }
 
 export function InvoiceManagementDialog({
@@ -125,7 +125,7 @@ export function InvoiceManagementDialog({
   };
 
   const calculateTotal = () => {
-    return lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    return lineItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
   };
 
   const handleUpdate = async () => {
@@ -136,7 +136,7 @@ export function InvoiceManagementDialog({
 
     try {
       const validItems = lineItems.filter(
-        (item) => item.description.trim() && item.quantity > 0 && item.unitPrice >= 0
+        (item) => item.description.trim() && Number(item.quantity) > 0 && Number(item.unitPrice) >= 0
       );
 
       if (validItems.length === 0) {
@@ -146,7 +146,11 @@ export function InvoiceManagementDialog({
       }
 
       const updateData: UpdateInvoiceData = {
-        items: validItems,
+        items: validItems.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+        })),
         notes: notes.trim() || undefined,
         dueDate: dueDate ? dueDate.toISOString() : undefined,
       };
@@ -368,7 +372,13 @@ export function InvoiceManagementDialog({
                                   type="number"
                                   min="1"
                                   value={item.quantity}
-                                  onChange={(e) => updateLineItem(item.id, "quantity", parseInt(e.target.value) || 1)}
+                                  onChange={(e) =>
+                                    updateLineItem(
+                                      item.id,
+                                      "quantity",
+                                      e.target.value === "" ? "" : Number.parseInt(e.target.value, 10) || 1,
+                                    )
+                                  }
                                 />
                               </div>
                               <div className="space-y-2">
@@ -378,14 +388,20 @@ export function InvoiceManagementDialog({
                                   min="0"
                                   step="0.01"
                                   value={item.unitPrice}
-                                  onChange={(e) => updateLineItem(item.id, "unitPrice", parseFloat(e.target.value) || 0)}
+                                  onChange={(e) =>
+                                    updateLineItem(
+                                      item.id,
+                                      "unitPrice",
+                                      e.target.value === "" ? "" : Number.parseFloat(e.target.value) || 0,
+                                    )
+                                  }
                                 />
                               </div>
                               <div className="space-y-2">
                                 <Label>Total ({currency})</Label>
                                 <Input
                                   type="text"
-                                  value={(item.quantity * item.unitPrice).toFixed(2)}
+                                  value={(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toFixed(2)}
                                   disabled
                                 />
                               </div>
@@ -399,12 +415,12 @@ export function InvoiceManagementDialog({
                             </div>
                             <div>
                               <Label className="text-muted-foreground">Qty × Price</Label>
-                              <p>{item.quantity} × {formatCurrency(item.unitPrice, currency)}</p>
+                              <p>{Number(item.quantity || 0)} × {formatCurrency(Number(item.unitPrice || 0), currency)}</p>
                             </div>
                             <div className="text-right">
                               <Label className="text-muted-foreground">Total</Label>
                               <p className="font-medium">
-                                {formatCurrency(item.quantity * item.unitPrice, currency)}
+                                {formatCurrency(Number(item.quantity || 0) * Number(item.unitPrice || 0), currency)}
                               </p>
                             </div>
                           </div>
