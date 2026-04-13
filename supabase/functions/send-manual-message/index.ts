@@ -47,7 +47,7 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     const { data: { user }, error: userError } = await userSupabase.auth.getUser();
-    
+
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
@@ -149,8 +149,8 @@ const handler = async (req: Request): Promise<Response> => {
         .eq("id", messageId);
 
       return new Response(
-        JSON.stringify({ 
-          error: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}. Please purchase more credits.` 
+        JSON.stringify({
+          error: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}. Please purchase more credits.`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -166,7 +166,7 @@ const handler = async (req: Request): Promise<Response> => {
       if (message.channel === "email") {
         // Send via Resend
         provider = "resend";
-        
+
         if (!message.customer?.email) {
           throw new Error("Customer email not found");
         }
@@ -196,7 +196,7 @@ const handler = async (req: Request): Promise<Response> => {
         }
 
         success = true;
-        
+
       } else if (message.channel === "sms") {
         // Send via Termii SMS
         provider = "termii_sms";
@@ -217,7 +217,7 @@ const handler = async (req: Request): Promise<Response> => {
 
         termiiMessageId = smsResponse.message_id;
         success = true;
-        
+
       } else if (message.channel === "whatsapp") {
         // Send via Termii WhatsApp Template
         provider = "termii_whatsapp";
@@ -259,7 +259,7 @@ const handler = async (req: Request): Promise<Response> => {
 
         termiiMessageId = whatsappResponse.message_id;
         success = true;
-        
+
       } else {
         throw new Error(`Unsupported channel: ${message.channel}`);
       }
