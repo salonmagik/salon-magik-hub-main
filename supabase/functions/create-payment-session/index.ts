@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
 
     // Determine effective currency with fallback
     const effectiveCurrency = determineEffectiveCurrency(currency, tenant.currency);
-    
+
     if (!effectiveCurrency) {
       return jsonResponse({ error: "Currency is required" }, 400);
     }
@@ -159,9 +159,9 @@ Deno.serve(async (req) => {
     }
 
     const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
-                        ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
-    const usePaystack = preferredGateway 
-      ? preferredGateway === "paystack" 
+      ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
+    const usePaystack = preferredGateway
+      ? preferredGateway === "paystack"
       : isPaystackRegion;
 
     // Get currency-specific Paystack key
@@ -169,8 +169,8 @@ Deno.serve(async (req) => {
     if (usePaystack) {
       const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
       if (paystackKeyResult.error || !paystackKeyResult.key) {
-        return jsonResponse({ 
-          error: paystackKeyResult.error || "Paystack not configured for this currency" 
+        return jsonResponse({
+          error: paystackKeyResult.error || "Paystack not configured for this currency"
         }, 500);
       }
       paystackSecretKey = paystackKeyResult.key;
