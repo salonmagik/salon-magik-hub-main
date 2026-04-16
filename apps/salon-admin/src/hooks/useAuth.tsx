@@ -856,26 +856,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveStoredContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
       await syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
     }
-    // Use setTimeout to defer state update, preventing UI blocking
-    setTimeout(() => {
-      setState((prev) => ({
-        ...prev,
-        tenants,
-        roles,
-        currentTenant,
-        hasCompletedOnboarding: tenants.length > 0,
-        activeContextType: contextState.activeContextType,
-        activeLocationId: contextState.activeLocationId,
-        assignedLocationIds: contextState.assignedLocationIds,
-        availableContexts: contextState.availableContexts,
-        canUseOwnerHub: contextState.canUseOwnerHub,
-        currentRole: contextState.currentRole,
-        isAssignmentPending: isAssignmentPendingState(
-          contextState.currentRole,
-          contextState.assignedLocationIds
-        ),
-      }));
-    }, 0);
+    setState((prev) => ({
+      ...prev,
+      tenants,
+      roles,
+      currentTenant,
+      hasCompletedOnboarding: tenants.length > 0,
+      activeContextType: contextState.activeContextType,
+      activeLocationId: contextState.activeLocationId,
+      assignedLocationIds: contextState.assignedLocationIds,
+      availableContexts: contextState.availableContexts,
+      canUseOwnerHub: contextState.canUseOwnerHub,
+      currentRole: contextState.currentRole,
+      isAssignmentPending: isAssignmentPendingState(
+        contextState.currentRole,
+        contextState.assignedLocationIds
+      ),
+    }));
   };
 
   useEffect(() => {

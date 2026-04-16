@@ -10,6 +10,7 @@ export interface GoogleOAuthIntent {
 
 const GOOGLE_OAUTH_INTENT_KEY = "salon-admin:google-oauth-intent";
 const PENDING_SALES_PROMO_KEY = "salon-admin:pending-sales-promo";
+const PASSWORD_CHANGE_REDIRECT_KEY = "salon-admin:password-change-redirect";
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -71,4 +72,19 @@ export function readPendingSalesPromoCode() {
 export function clearPendingSalesPromoCode() {
   if (!canUseStorage()) return;
   window.localStorage.removeItem(PENDING_SALES_PROMO_KEY);
+}
+
+export function markPasswordChangeRedirectPending() {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(PASSWORD_CHANGE_REDIRECT_KEY, "1");
+}
+
+export function readPasswordChangeRedirectPending() {
+  if (!canUseStorage()) return false;
+  return window.localStorage.getItem(PASSWORD_CHANGE_REDIRECT_KEY) === "1";
+}
+
+export function clearPasswordChangeRedirectPending() {
+  if (!canUseStorage()) return;
+  window.localStorage.removeItem(PASSWORD_CHANGE_REDIRECT_KEY);
 }

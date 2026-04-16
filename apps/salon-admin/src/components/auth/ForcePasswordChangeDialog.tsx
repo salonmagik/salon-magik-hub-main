@@ -14,6 +14,7 @@ import { Label } from "@ui/label";
 import { useToast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { markPasswordChangeRedirectPending } from "@/lib/googleOAuthFlow";
 import { validatePasswordStrength } from "@shared/validation";
 import { ValidationChecklist } from "@ui/validation-checklist";
 
@@ -65,11 +66,9 @@ export function ForcePasswordChangeDialog({
     setIsLoading(true);
 
     try {
-      const { data: { session: existingSession } } = await supabase.auth.getSession();
       const {
-        data: { session: refreshedSession },
-      } = await supabase.auth.refreshSession();
-      const session = refreshedSession ?? existingSession;
+        data: { session },
+      } = await supabase.auth.getSession();
       
       if (!session?.access_token) {
         toast({
@@ -101,6 +100,7 @@ export function ForcePasswordChangeDialog({
         description: "Your password has been changed successfully.",
       });
 
+      markPasswordChangeRedirectPending();
       await signOut();
       onPasswordChanged();
       navigate("/login", { replace: true });
