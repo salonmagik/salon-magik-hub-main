@@ -1,16 +1,26 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 
 vi.mock("@ui/ui/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    signOut: vi.fn(),
+  }),
+}));
+
+vi.mock("@/lib/googleOAuthFlow", () => ({
+  markPasswordChangeRedirectPending: vi.fn(),
+}));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
       getSession: vi.fn(),
-      refreshSession: vi.fn(),
     },
     functions: {
       invoke: vi.fn(),
@@ -20,7 +30,11 @@ vi.mock("@/lib/supabase", () => ({
 
 describe("ForcePasswordChangeDialog", () => {
   it("keeps submit disabled until passwords are valid and matching", () => {
-    render(<ForcePasswordChangeDialog open onPasswordChanged={vi.fn()} />);
+    render(
+      <MemoryRouter>
+        <ForcePasswordChangeDialog open onPasswordChanged={vi.fn()} />
+      </MemoryRouter>
+    );
 
     const submit = screen.getByRole("button", { name: /set password/i });
     expect(submit).toBeDisabled();
