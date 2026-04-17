@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -80,11 +81,20 @@ function getActionLabel(log: AuditLogEntry) {
 export default function AuditLogPage() {
   const { currentTenant } = useAuth();
   const isChainTenant = currentTenant?.plan === "chain";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const actorUserId = searchParams.get("userId") || undefined;
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<AuditLogFilters>({});
+  const hookFilters = useMemo(
+    () => ({ ...filters, actorUserId }),
+    [actorUserId, filters]
+  );
 
-  const { logs, branches, isLoading, error, hasMore, loadMore, refetch } = useAuditLogs(filters, 50);
+  const { logs, branches, isLoading, error, hasMore, loadMore, refetch } = useAuditLogs(
+    hookFilters,
+    50
+  );
 
   const actionOptions = useMemo(
     () => AUDIT_ACTION_FILTER_OPTIONS.filter((option) => (option.chainOnly ? isChainTenant : true)),
@@ -113,6 +123,26 @@ export default function AuditLogPage() {
             Refresh
           </Button>
         </div>
+
+        {actorUserId ? (
+          <Card>
+            <CardContent className="flex items-center justify-between gap-3 py-4">
+              <div className="text-sm text-muted-foreground">
+                Showing activities for the selected staff member only.
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  searchParams.delete("userId");
+                  setSearchParams(searchParams);
+                }}
+              >
+                Clear Staff Filter
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader className="pb-4">

@@ -31,6 +31,13 @@ interface GiftRecipientsStepProps {
   onSameRecipientChange: (value: boolean) => void;
 }
 
+interface RecipientFormProps {
+  recipient: GiftRecipient;
+  onUpdate: (field: string, value: string | boolean) => void;
+  selectableCountries: { code: string; name: string }[];
+  item?: CartItem;
+}
+
 const emptyRecipient: GiftRecipient = {
   firstName: "",
   lastName: "",
@@ -39,6 +46,189 @@ const emptyRecipient: GiftRecipient = {
   message: "",
   hideSender: false,
 };
+
+function RecipientForm({
+  recipient,
+  onUpdate,
+  selectableCountries,
+  item,
+}: RecipientFormProps) {
+  const needsDeliveryAddress = item?.type === "product" && item.fulfillmentType === "delivery";
+  const inferredCountryCode =
+    item?.eligibleBranches?.find((branch) => branch.id === item.branchId)?.country_code ||
+    (item?.eligibleBranches?.length === 1 ? item.eligibleBranches[0].country_code : null) ||
+    null;
+  const inferredCountryName = inferredCountryCode ? getCountryByCode(inferredCountryCode)?.name || inferredCountryCode : "";
+  const regionOptions = getRegionsForCountry(inferredCountryCode);
+  const cityOptions = getCitiesForCountryRegion(inferredCountryCode, recipient.address?.state);
+
+  return (
+    <div className="space-y-4">
+      {item && (
+        <Badge variant="secondary" className="mb-2">
+          {item.name}
+        </Badge>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">First Name *</Label>
+          <Input
+            value={recipient.firstName}
+            onChange={(e) => onUpdate("firstName", e.target.value)}
+            placeholder="Jane"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Last Name *</Label>
+          <Input
+            value={recipient.lastName}
+            onChange={(e) => onUpdate("lastName", e.target.value)}
+            placeholder="Smith"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Email *</Label>
+        <Input
+          type="email"
+          value={recipient.email}
+          onChange={(e) => onUpdate("email", e.target.value)}
+          placeholder="jane@example.com"
+        />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Phone *</Label>
+        <PhoneInput
+          value={recipient.phone || ""}
+          onChange={(value) => onUpdate("phone", value)}
+          placeholder="Phone number"
+          defaultCountry="NG"
+          allowedCountryCodes={selectableCountries.map((country) => country.code)}
+        />
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">Gift Message</Label>
+        <Textarea
+          value={recipient.message || ""}
+          onChange={(e) => onUpdate("message", e.target.value)}
+          placeholder="A special message for the recipient..."
+          rows={2}
+        />
+      </div>
+
+      {needsDeliveryAddress && (
+        <div className="space-y-3 rounded-lg border p-4">
+          <div>
+            <Label className="font-medium text-sm">Delivery Address</Label>
+            <p className="text-xs text-muted-foreground">
+              This item is being delivered to the gift recipient.
+            </p>
+          </div>
+
+          {inferredCountryName && (
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              Delivery country: <span className="font-medium text-foreground">{inferredCountryName}</span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs">Address Line 1 *</Label>
+            <Input
+              value={recipient.address?.line1 || ""}
+              onChange={(e) => onUpdate("address.line1", e.target.value)}
+              placeholder="Street address"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Address Line 2</Label>
+            <Input
+              value={recipient.address?.line2 || ""}
+              onChange={(e) => onUpdate("address.line2", e.target.value)}
+              placeholder="Apartment, suite, landmark"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">City *</Label>
+              <Select
+                value={recipient.address?.city || ""}
+                onValueChange={(value) => onUpdate("address.city", value)}
+                disabled={!recipient.address?.state || cityOptions.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!recipient.address?.state ? "Select state first" : "Select city"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {cityOptions.map((city) => (
+                    <SelectItem key={city} value={city}>
+                      {city}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">State / Region *</Label>
+              <Select
+                value={recipient.address?.state || ""}
+                onValueChange={(value) => {
+                  onUpdate("address.state", value);
+                  onUpdate("address.city", "");
+                  onUpdate("address.country", inferredCountryName);
+                }}
+                disabled={regionOptions.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select state / region" />
+                </SelectTrigger>
+                <SelectContent>
+                  {regionOptions.map((region) => (
+                    <SelectItem key={region.code} value={region.name}>
+                      {region.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="space-y-1">
+              <Label className="text-xs">Postal Code</Label>
+              <Input
+                value={recipient.address?.postalCode || ""}
+                onChange={(e) => onUpdate("address.postalCode", e.target.value)}
+                placeholder="Postal code"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+        <Checkbox
+          id={`hide-sender-${item?.id || "shared"}`}
+          checked={recipient.hideSender}
+          onCheckedChange={(checked) => onUpdate("hideSender", !!checked)}
+        />
+        <div className="space-y-1">
+          <Label className="cursor-pointer font-medium text-sm">
+            Keep my identity anonymous
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            The recipient will not see your name or contact details.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function GiftRecipientsStep({
   giftItems,
@@ -108,192 +298,6 @@ export function GiftRecipientsStep({
 
   const sharedRecipient = recipients[giftItems[0]?.id] || emptyRecipient;
 
-  const RecipientForm = ({
-    recipient,
-    onUpdate,
-    item,
-  }: {
-    recipient: GiftRecipient;
-    onUpdate: (field: string, value: string | boolean) => void;
-    item?: CartItem;
-  }) => {
-    const needsDeliveryAddress = item?.type === "product" && item.fulfillmentType === "delivery";
-    const inferredCountryCode =
-      item?.eligibleBranches?.find((branch) => branch.id === item.branchId)?.country_code ||
-      (item?.eligibleBranches?.length === 1 ? item.eligibleBranches[0].country_code : null) ||
-      null;
-    const inferredCountryName = inferredCountryCode ? getCountryByCode(inferredCountryCode)?.name || inferredCountryCode : "";
-    const regionOptions = getRegionsForCountry(inferredCountryCode);
-    const cityOptions = getCitiesForCountryRegion(inferredCountryCode, recipient.address?.state);
-
-    return (
-      <div className="space-y-4">
-        {item && (
-          <Badge variant="secondary" className="mb-2">
-            {item.name}
-          </Badge>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">First Name *</Label>
-            <Input
-              value={recipient.firstName}
-              onChange={(e) => onUpdate("firstName", e.target.value)}
-              placeholder="Jane"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Last Name *</Label>
-            <Input
-              value={recipient.lastName}
-              onChange={(e) => onUpdate("lastName", e.target.value)}
-              placeholder="Smith"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-xs">Email *</Label>
-          <Input
-            type="email"
-            value={recipient.email}
-            onChange={(e) => onUpdate("email", e.target.value)}
-            placeholder="jane@example.com"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-xs">Phone *</Label>
-          <PhoneInput
-            value={recipient.phone || ""}
-            onChange={(value) => onUpdate("phone", value)}
-            placeholder="Phone number"
-            defaultCountry="NG"
-            allowedCountryCodes={selectableCountries.map((country) => country.code)}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-xs">Gift Message</Label>
-          <Textarea
-            value={recipient.message || ""}
-            onChange={(e) => onUpdate("message", e.target.value)}
-            placeholder="A special message for the recipient..."
-            rows={2}
-          />
-        </div>
-
-        {needsDeliveryAddress && (
-          <div className="space-y-3 rounded-lg border p-4">
-            <div>
-              <Label className="font-medium text-sm">Delivery Address</Label>
-              <p className="text-xs text-muted-foreground">
-                This item is being delivered to the gift recipient.
-              </p>
-            </div>
-
-            {inferredCountryName && (
-              <div className="rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                Delivery country: <span className="font-medium text-foreground">{inferredCountryName}</span>
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <Label className="text-xs">Address Line 1 *</Label>
-              <Input
-                value={recipient.address?.line1 || ""}
-                onChange={(e) => onUpdate("address.line1", e.target.value)}
-                placeholder="Street address"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Address Line 2</Label>
-              <Input
-                value={recipient.address?.line2 || ""}
-                onChange={(e) => onUpdate("address.line2", e.target.value)}
-                placeholder="Apartment, suite, landmark"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">City *</Label>
-                <Select
-                  value={recipient.address?.city || ""}
-                  onValueChange={(value) => onUpdate("address.city", value)}
-                  disabled={!recipient.address?.state || cityOptions.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={!recipient.address?.state ? "Select state first" : "Select city"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {cityOptions.map((city) => (
-                      <SelectItem key={city} value={city}>
-                        {city}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">State / Region *</Label>
-                <Select
-                  value={recipient.address?.state || ""}
-                  onValueChange={(value) => {
-                    onUpdate("address.state", value);
-                    onUpdate("address.city", "");
-                    onUpdate("address.country", inferredCountryName);
-                  }}
-                  disabled={regionOptions.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select state / region" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {regionOptions.map((region) => (
-                      <SelectItem key={region.code} value={region.name}>
-                        {region.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="space-y-1">
-                <Label className="text-xs">Postal Code</Label>
-                <Input
-                  value={recipient.address?.postalCode || ""}
-                  onChange={(e) => onUpdate("address.postalCode", e.target.value)}
-                  placeholder="Postal code"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
-          <Checkbox
-            id={`hide-sender-${item?.id || "shared"}`}
-            checked={recipient.hideSender}
-            onCheckedChange={(checked) => onUpdate("hideSender", !!checked)}
-          />
-          <div className="space-y-1">
-            <Label className="cursor-pointer font-medium text-sm">
-              Keep my identity anonymous
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              The recipient will not see your name or contact details.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   const renderMultipleRecipients = () => (
     <Accordion type="single" collapsible className="w-full">
       {giftItems.map((item) => (
@@ -303,6 +307,7 @@ export function GiftRecipientsStep({
             <RecipientForm
               recipient={recipients[item.id] || emptyRecipient}
               onUpdate={(field, value) => updateRecipient(item.id, field, value)}
+              selectableCountries={selectableCountries}
               item={item}
             />
           </AccordionContent>
@@ -322,6 +327,7 @@ export function GiftRecipientsStep({
         <RecipientForm
           recipient={recipients[item.id] || emptyRecipient}
           onUpdate={(field, value) => updateRecipient(item.id, field, value)}
+          selectableCountries={selectableCountries}
           item={item}
         />
       </div>
@@ -360,7 +366,12 @@ export function GiftRecipientsStep({
               </Badge>
             ))}
           </div>
-          <RecipientForm recipient={sharedRecipient} onUpdate={applySharedRecipient} item={giftItems[0]} />
+          <RecipientForm
+            recipient={sharedRecipient}
+            onUpdate={applySharedRecipient}
+            selectableCountries={selectableCountries}
+            item={giftItems[0]}
+          />
         </div>
       ) : (
         renderMultipleRecipients()

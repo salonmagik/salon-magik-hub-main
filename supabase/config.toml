@@ -121,7 +121,7 @@ verify_jwt = false
 [functions.manage-whatsapp-templates]
 verify_jwt = false
 
-[functions.create-invoice-payment]
+[functions.create-invoice-payment-session]
 verify_jwt = false
 
 [functions.send-invoice]

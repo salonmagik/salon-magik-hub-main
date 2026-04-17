@@ -204,8 +204,8 @@ export function AddJournalEntryDialog({
     
     // Recalculate total
     if (field === "quantity" || field === "unit_price") {
-      const qty = field === "quantity" ? value : updated[index].quantity || 1;
-      const price = field === "unit_price" ? value : updated[index].unit_price || 0;
+      const qty = Number(field === "quantity" ? value : updated[index].quantity || 0);
+      const price = Number(field === "unit_price" ? value : updated[index].unit_price || 0);
       updated[index].total_price = qty * price;
     }
     
@@ -235,8 +235,8 @@ export function AddJournalEntryDialog({
         line_items: category === "product_sale" ? lineItems.map((item) => ({
           product_id: item.product_id || null,
           product_name: item.product_name || "",
-          quantity: item.quantity || 1,
-          unit_price: item.unit_price || 0,
+          quantity: Number(item.quantity || 0),
+          unit_price: Number(item.unit_price || 0),
           total_price: item.total_price || 0,
         })) : undefined,
       });
@@ -492,8 +492,14 @@ export function AddJournalEntryDialog({
                         <Input
                           type="number"
                           min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateLineItem(index, "quantity", parseInt(e.target.value) || 1)}
+                          value={item.quantity ?? ""}
+                          onChange={(e) =>
+                            updateLineItem(
+                              index,
+                              "quantity",
+                              e.target.value === "" ? "" : Number.parseInt(e.target.value, 10) || 1,
+                            )
+                          }
                         />
                       </div>
                       <div className="w-24 space-y-1">

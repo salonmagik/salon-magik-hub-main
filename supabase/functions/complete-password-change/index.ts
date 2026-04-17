@@ -30,6 +30,7 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
+    const accessToken = authHeader.replace("Bearer ", "").trim();
 
     // Client with user's auth
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -84,6 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
         user_metadata: {
           ...user.user_metadata,
           requires_password_change: false, // Clear the flag
+          requires_password_reset: false,
         },
       }
     );

@@ -42,7 +42,8 @@ const STYLES = {
 function buildEmailWrapper(
   content: string,
   salonName: string,
-  salonLogoUrl?: string
+  salonLogoUrl?: string,
+  locationChipLabel?: string
 ): string {
   // Header with salon branding
   let headerSection = `
@@ -61,6 +62,16 @@ function buildEmailWrapper(
     `;
   }
 
+  const locationChipSection = locationChipLabel
+    ? `
+      <div style="text-align: center; margin: -12px 0 24px;">
+        <span style="display: inline-block; padding: 6px 12px; border-radius: 9999px; border: 1px solid #93c5fd; background-color: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 600; font-family: ${STYLES.fontFamily};">
+          ${locationChipLabel}
+        </span>
+      </div>
+    `
+    : "";
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -77,6 +88,7 @@ function buildEmailWrapper(
       <td align="center" style="padding: 40px 20px;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
           ${headerSection}
+          ${locationChipSection}
           
           <div style="font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};">
             ${content}
@@ -269,7 +281,7 @@ const handler = async (req: Request): Promise<Response> => {
     // Fetch tenant info including logo
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("name, currency, logo_url")
+      .select("name, currency, logo_url, plan")
       .eq("id", appointment.tenant_id)
       .single();
 
@@ -294,6 +306,10 @@ const handler = async (req: Request): Promise<Response> => {
     const locationText = appointment.location 
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
       : "N/A";
+    const locationChipLabel =
+      tenant?.plan === "chain" && appointment.location?.name
+        ? `Branch: ${appointment.location.name}`
+        : undefined;
 
     // Format dates
     let appointmentDate = "TBD";
@@ -343,7 +359,8 @@ const handler = async (req: Request): Promise<Response> => {
     const fullEmailHtml = buildEmailWrapper(
       emailBody,
       tenant?.name || "Salon Magik",
-      tenant?.logo_url || undefined
+      tenant?.logo_url || undefined,
+      locationChipLabel
     );
 
     const fromAddress = buildFromAddress({

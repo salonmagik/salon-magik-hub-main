@@ -7,6 +7,7 @@ import { Input } from "@ui/input";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
+import { Textarea } from "@ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -29,11 +30,19 @@ export default function CampaignsPage() {
   const [newCampaignDiscountValue, setNewCampaignDiscountValue] = useState("10");
   const [newCampaignTrialEnabled, setNewCampaignTrialEnabled] = useState(false);
   const [newCampaignTrialDays, setNewCampaignTrialDays] = useState("0");
+  const [billingTargets, setBillingTargets] = useState<string[]>(["subscription"]);
+  const [maxUsesPerTenant, setMaxUsesPerTenant] = useState("1");
+  const [emailSubjectTemplate, setEmailSubjectTemplate] = useState("Your {{campaign_name}} Salon Magik promo code");
+  const [emailBodyTemplate, setEmailBodyTemplate] = useState(
+    "<p>Hello {{recipient_firstname}},</p><p>Your Salon Magik promo code for {{campaign_name}} is <strong>{{promo_code}}</strong>.</p><p>This code is reserved for {{recipient_email}} and can be used before {{expires_at}}.</p><p><a href=\"{{signup_url}}\">Create your account</a> or <a href=\"{{login_url}}\">log in</a> to continue.</p>",
+  );
 
   const canSubmit =
     Boolean(newCampaignName) &&
     Boolean(newCampaignStartsAt) &&
     Boolean(newCampaignEndsAt) &&
+    billingTargets.length > 0 &&
+    Number(maxUsesPerTenant) >= 1 &&
     !createCampaign.isPending;
 
   return (
@@ -81,6 +90,37 @@ export default function CampaignsPage() {
                   <Input value={newCampaignDiscountValue} onChange={(e) => setNewCampaignDiscountValue(e.target.value)} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
+                  <Label>Billing Targets</Label>
+                  <div className="flex flex-wrap gap-4 rounded-md border p-3">
+                    {["subscription", "credits"].map((target) => (
+                      <label key={target} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={billingTargets.includes(target)}
+                          onChange={(event) => {
+                            setBillingTargets((prev) => {
+                              if (event.target.checked) {
+                                return Array.from(new Set([...prev, target]));
+                              }
+                              return prev.filter((item) => item !== target);
+                            });
+                          }}
+                        />
+                        <span className="capitalize">{target}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Max Uses Per Tenant</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={maxUsesPerTenant}
+                    onChange={(e) => setMaxUsesPerTenant(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
                   <Label>Trial Extension Days</Label>
                   <Input value={newCampaignTrialDays} onChange={(e) => setNewCampaignTrialDays(e.target.value)} disabled={!newCampaignTrialEnabled} />
                 </div>
@@ -88,6 +128,25 @@ export default function CampaignsPage() {
                   <input type="checkbox" checked={newCampaignTrialEnabled} onChange={(event) => setNewCampaignTrialEnabled(event.target.checked)} />
                   Enable trial extension bonus
                 </label>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Email Subject Template</Label>
+                  <Input
+                    value={emailSubjectTemplate}
+                    onChange={(e) => setEmailSubjectTemplate(e.target.value)}
+                    placeholder="Your {{campaign_name}} Salon Magik promo code"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Email Body Template</Label>
+                  <Textarea
+                    value={emailBodyTemplate}
+                    onChange={(e) => setEmailBodyTemplate(e.target.value)}
+                    rows={8}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Available variables: {"{{recipient_firstname}}, {{recipient_email}}, {{promo_code}}, {{campaign_name}}, {{expires_at}}, {{signup_url}}, {{login_url}}, {{discount_value}}, {{billing_targets}}"}
+                  </p>
+                </div>
               </div>
               <DialogFooter>
                 <Button
@@ -102,6 +161,10 @@ export default function CampaignsPage() {
                         discountValue: Number(newCampaignDiscountValue),
                         trialEnabled: newCampaignTrialEnabled,
                         trialDays: Number(newCampaignTrialDays || 0),
+                        billingTargets,
+                        maxUsesPerTenant: Number(maxUsesPerTenant || 1),
+                        emailSubjectTemplate,
+                        emailBodyTemplate,
                       },
                       {
                         onSuccess: () => {
@@ -113,6 +176,10 @@ export default function CampaignsPage() {
                           setNewCampaignDiscountValue("10");
                           setNewCampaignTrialEnabled(false);
                           setNewCampaignTrialDays("0");
+                          setBillingTargets(["subscription"]);
+                          setMaxUsesPerTenant("1");
+                          setEmailSubjectTemplate("Your {{campaign_name}} Salon Magik promo code");
+                          setEmailBodyTemplate("<p>Hello {{recipient_firstname}},</p><p>Your Salon Magik promo code for {{campaign_name}} is <strong>{{promo_code}}</strong>.</p><p>This code is reserved for {{recipient_email}} and can be used before {{expires_at}}.</p><p><a href=\"{{signup_url}}\">Create your account</a> or <a href=\"{{login_url}}\">log in</a> to continue.</p>");
                         },
                       },
                     );
@@ -138,6 +205,9 @@ export default function CampaignsPage() {
                   <p className="text-xs text-muted-foreground">
                     {new Date(campaign.starts_at).toLocaleString()} - {new Date(campaign.ends_at).toLocaleString()}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Targets: {(campaign.billing_targets || []).join(", ")} · Max uses: {campaign.max_uses_per_tenant}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={campaign.is_active ? "default" : "secondary"}>{campaign.is_active ? "Active" : "Inactive"}</Badge>
@@ -154,4 +224,3 @@ export default function CampaignsPage() {
     </BackofficeLayout>
   );
 }
-

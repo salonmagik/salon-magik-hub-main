@@ -50,6 +50,21 @@ function calculateCustomCreditPrice(credits: number, currency: string): number {
   return Math.round(credits * ratePerCredit);
 }
 
+function calculateDiscountedAmount(
+  amount: number,
+  discountType?: string | null,
+  discountValue?: number | null,
+) {
+  const numericValue = Number(discountValue || 0);
+  if (!numericValue || amount <= 0) return amount;
+
+  if (discountType === "fixed") {
+    return Math.max(0, Number((amount - numericValue).toFixed(2)));
+  }
+
+  return Math.max(0, Number((amount - (amount * numericValue) / 100).toFixed(2)));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -105,6 +120,7 @@ Deno.serve(async (req) => {
     let credits: number;
     let amount: number;
     let wallet;
+    let promoSummary: any = null;
 
     // Use service role for database operations
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -149,6 +165,18 @@ Deno.serve(async (req) => {
 
       credits = customCredits;
       amount = customAmount;
+    }
+
+    const { data: promoData, error: promoError } = await (serviceSupabase.rpc as any)("get_tenant_sales_promo_summary", {
+      p_tenant_id: tenantId,
+      p_surface: "credits",
+    });
+
+    if (promoError) {
+      console.error("Error loading tenant promo summary:", promoError);
+    } else if (promoData) {
+      promoSummary = promoData;
+      amount = calculateDiscountedAmount(amount, promoData.discount_type, Number(promoData.discount_value || 0));
     }
 
     // Check if wallet has sufficient balance
@@ -269,6 +297,19 @@ Deno.serve(async (req) => {
 
     const newBalance = updatedCredits?.balance || credits;
 
+    if (promoSummary) {
+      const { error: consumeError } = await (serviceSupabase.rpc as any)("consume_tenant_sales_promo_use", {
+        p_tenant_id: tenantId,
+        p_surface: "credits",
+        p_usage_reference: purchase.id,
+        p_amount: amount,
+      });
+
+      if (consumeError) {
+        console.error("Failed to consume sales promo usage for wallet credit purchase:", consumeError);
+      }
+    }
+
     console.log(`Credit purchase ${purchase.id} completed: ${credits} credits added`);
 
     return new Response(
@@ -278,6 +319,14 @@ Deno.serve(async (req) => {
         newBalance,
         amountDebited: amount,
         currency: wallet.currency,
+        promoApplied: promoSummary
+          ? {
+              code: promoSummary.code,
+              remainingUsesBeforeCharge: promoSummary.remaining_uses,
+              discountType: promoSummary.discount_type,
+              discountValue: promoSummary.discount_value,
+            }
+          : null,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
