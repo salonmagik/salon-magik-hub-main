@@ -94,7 +94,10 @@ verify_jwt = false
 [functions.public-booking-prefill]
 verify_jwt = false
 
-[functions.payment-webhook]
+[functions.payment-webhook-gh]
+verify_jwt = false
+
+[functions.payment-webhook-ng]
 verify_jwt = false
 
 [functions.get-banks-and-momo-providers]
@@ -125,4 +128,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-invoice]
+verify_jwt = false
+
+[functions.verify-bank-account]
 verify_jwt = false
