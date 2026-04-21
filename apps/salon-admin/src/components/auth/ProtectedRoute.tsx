@@ -5,7 +5,12 @@ import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
-import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
+import {
+  clearGoogleOAuthIntent,
+  clearPasswordChangeRedirectPending,
+  readGoogleOAuthIntent,
+  readPasswordChangeRedirectPending,
+} from "@/lib/googleOAuthFlow";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -71,13 +76,6 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
     return <Navigate to="/complete-signup" replace />;
   }
 
-  // Check if user needs to reset password (invited staff with temp password)
-  // Legacy check for requires_password_reset metadata
-  const requiresPasswordReset = user?.user_metadata?.requires_password_reset === true;
-  if (requiresPasswordReset && location.pathname !== "/reset-password") {
-    return <Navigate to="/reset-password?first_login=true" replace />;
-  }
-
   // If onboarding is required but not completed, redirect to onboarding
   if (requireOnboarding && !hasCompletedOnboarding) {
     return <Navigate to="/onboarding" replace />;
@@ -110,9 +108,17 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
   const location = useLocation();
   const googleOAuthIntent = readGoogleOAuthIntent();
+  const passwordChangeRedirectPending = readPasswordChangeRedirectPending();
 
   if (isLoading) {
     return <LoadingScreen />;
+  }
+
+  if (location.pathname === "/login" && passwordChangeRedirectPending) {
+    if (!isAuthenticated) {
+      clearPasswordChangeRedirectPending();
+    }
+    return <>{children}</>;
   }
 
   // Only redirect if authenticated AND has a profile (not a BackOffice-only user)

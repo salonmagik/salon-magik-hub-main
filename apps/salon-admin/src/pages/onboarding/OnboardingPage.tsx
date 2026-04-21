@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
@@ -22,7 +22,12 @@ import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
 import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
-import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
+import {
+  clearGoogleOAuthIntent,
+  clearPendingSalesPromoCode,
+  readGoogleOAuthIntent,
+  readPendingSalesPromoCode,
+} from "@/lib/googleOAuthFlow";
 import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
@@ -47,7 +52,15 @@ export default function OnboardingPage() {
   });
   const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
-  const [expectedChainLocations, setExpectedChainLocations] = useState(1);
+  const [expectedChainLocationsInput, setExpectedChainLocationsInput] = useState("2");
+  const expectedChainLocations = useMemo(() => {
+    const trimmed = expectedChainLocationsInput.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isInteger(parsed) || parsed < 1) return null;
+    return parsed;
+  }, [expectedChainLocationsInput]);
+  const effectiveExpectedChainLocations = expectedChainLocations ?? 2;
 
   // Step data
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
@@ -78,6 +91,18 @@ export default function OnboardingPage() {
     sameHours: true,
     locations: [],
   });
+  const [promoCode, setPromoCode] = useState(() => readPendingSalesPromoCode() || "");
+  const [promoPreview, setPromoPreview] = useState<{
+    valid: boolean;
+    message?: string;
+    campaignName?: string;
+    discountType?: string;
+    discountValue?: number;
+    maxUsesPerTenant?: number;
+    billingTargets?: string[];
+    campaignEndsAt?: string | null;
+  } | null>(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   // Get user info from auth metadata (collected during signup or Google OAuth)
   const googleProfile = getGoogleProfileFields(user);
@@ -100,10 +125,10 @@ export default function OnboardingPage() {
   const { data: chainQuote } = useChainPriceQuote(
     isChain ? chainPlan?.id || null : null,
     currency,
-    expectedChainLocations,
+    effectiveExpectedChainLocations,
   );
   const configuredChainLocations = isChain
-    ? Math.max(1, locationsConfig.locations.length || expectedChainLocations)
+    ? Math.max(1, locationsConfig.locations.length || effectiveExpectedChainLocations)
     : 1;
   const { data: configuredChainQuote } = useChainPriceQuote(
     isChain ? chainPlan?.id || null : null,
@@ -142,12 +167,13 @@ export default function OnboardingPage() {
       case "plan":
         if (!selectedPlan) return false;
         if (selectedPlan !== "chain") return true;
-        if (expectedChainLocations < 1) return false;
+        if (expectedChainLocations == null) return false;
         return Boolean(chainQuote);
       case "locations":
         return locationsConfig.locations.length > 0 && 
                locationsConfig.locations.every((loc) => loc.city.trim() !== "");
       case "review":
+        if (promoCode.trim() && !promoPreview?.valid) return false;
         if (!isChain) return true;
         return Boolean(configuredChainQuote);
       default:
@@ -161,8 +187,8 @@ export default function OnboardingPage() {
       const next = stepFlow[currentIndex + 1];
       
       // Initialize locations when entering locations step
-      if (next === "locations" && locationsConfig.locations.length !== Math.max(1, expectedChainLocations)) {
-        const totalLocations = Math.max(1, expectedChainLocations);
+      if (next === "locations" && locationsConfig.locations.length !== Math.max(1, effectiveExpectedChainLocations)) {
+        const totalLocations = Math.max(1, effectiveExpectedChainLocations);
         const initialLocations: LocationInfo[] = Array.from({ length: totalLocations }).map((_, index) => ({
           id: crypto.randomUUID(),
           name: locationsConfig.sameName ? businessInfo.name : "",
@@ -188,6 +214,42 @@ export default function OnboardingPage() {
     const currentIndex = stepFlow.indexOf(step);
     if (currentIndex > 0) {
       setStep(stepFlow[currentIndex - 1]);
+    }
+  };
+
+  const handleApplyPromo = async () => {
+    const normalizedCode = promoCode.trim().toUpperCase();
+    if (!normalizedCode) {
+      setPromoPreview(null);
+      return;
+    }
+
+    setIsApplyingPromo(true);
+    try {
+      const { data, error } = await (supabase.rpc as any)("validate_sales_promo_code_for_email", {
+        p_code: normalizedCode,
+      });
+
+      if (error) throw error;
+
+      setPromoPreview({
+        valid: Boolean(data?.valid),
+        message: data?.message,
+        campaignName: data?.campaign_name,
+        discountType: data?.discount_type,
+        discountValue: Number(data?.discount_value || 0),
+        maxUsesPerTenant: Number(data?.max_uses_per_tenant || 0),
+        billingTargets: Array.isArray(data?.billing_targets) ? data.billing_targets : [],
+        campaignEndsAt: data?.campaign_ends_at || null,
+      });
+    } catch (error) {
+      console.error("Promo validation error:", error);
+      setPromoPreview({
+        valid: false,
+        message: "Unable to validate this promo code right now.",
+      });
+    } finally {
+      setIsApplyingPromo(false);
     }
   };
 
@@ -236,7 +298,7 @@ export default function OnboardingPage() {
 
       // 4. Create locations
       if (isChain && locationsConfig.locations.length > 0) {
-        const expectedLocations = Math.max(1, expectedChainLocations);
+        const expectedLocations = Math.max(1, effectiveExpectedChainLocations);
         const configuredLocations = Math.max(
           1,
           Math.min(locationsConfig.locations.length, expectedLocations),
@@ -388,8 +450,34 @@ export default function OnboardingPage() {
         }
       }
 
+      if (promoCode.trim() && promoPreview?.valid) {
+        const { data: promoClaimData, error: promoClaimError } = await (supabase.rpc as any)("claim_sales_promo_code", {
+          p_code: promoCode.trim().toUpperCase(),
+          p_tenant_id: tenantId,
+          p_surface: null,
+        });
+
+        if (promoClaimError) {
+          console.error("Promo claim error:", promoClaimError);
+          toast({
+            title: "Promo not attached",
+            description: "Your salon was created, but the promo code could not be attached. You can try again later in billing if it is still valid.",
+            variant: "destructive",
+          });
+        } else if (promoClaimData?.success) {
+          clearPendingSalesPromoCode();
+        } else if (promoClaimData?.message) {
+          toast({
+            title: "Promo not attached",
+            description: promoClaimData.message,
+            variant: "destructive",
+          });
+        }
+      }
+
       await refreshTenants();
       clearGoogleOAuthIntent();
+      clearPendingSalesPromoCode();
 
       setStep("complete");
       
@@ -502,10 +590,8 @@ export default function OnboardingPage() {
                       id="expectedLocations"
                       type="number"
                       min={1}
-                      value={expectedChainLocations}
-                      onChange={(event) =>
-                        setExpectedChainLocations(Math.max(1, Number(event.target.value || 1)))
-                      }
+                      value={expectedChainLocationsInput}
+                      onChange={(event) => setExpectedChainLocationsInput(event.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
                       Chain tiers apply to additional branches beyond the first.
@@ -547,7 +633,7 @@ export default function OnboardingPage() {
               defaultOpeningTime={businessInfo.openingTime}
               defaultClosingTime={businessInfo.closingTime}
               defaultOpeningDays={businessInfo.openingDays}
-              maxLocations={Math.max(1, expectedChainLocations)}
+              maxLocations={Math.max(1, effectiveExpectedChainLocations)}
               onChange={setLocationsConfig}
             />
           )}
@@ -572,6 +658,14 @@ export default function OnboardingPage() {
                   : null
               }
               trialDays={onboardingTrialDays}
+              promoCode={promoCode}
+              onPromoCodeChange={(value) => {
+                setPromoCode(value);
+                setPromoPreview(null);
+              }}
+              onApplyPromo={handleApplyPromo}
+              isApplyingPromo={isApplyingPromo}
+              promoPreview={promoPreview}
             />
           )}
 

@@ -1,12 +1,66 @@
-import { useEffect } from "react";
-import { Link } from "react-router-dom";
-import { AlertTriangle, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { AlertTriangle, ArrowRight, Loader2, LogOut } from "lucide-react";
 import { Button } from "@ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
+import { fallbackFirstRoute, type ActiveContextType } from "@/lib/contextAccess";
+import { toast } from "@ui/ui/use-toast";
 
 export default function AssignmentPendingPage() {
-  const { user, currentTenant, signOut } = useAuth();
+  const navigate = useNavigate();
+  const {
+    user,
+    currentTenant,
+    signOut,
+    refreshTenants,
+  } = useAuth();
+  const [isCheckingAccess, setIsCheckingAccess] = useState(false);
+
+  const resolveAllowedRoute = async () => {
+    if (!currentTenant?.id) return null;
+
+    const { data: contextData, error: contextError } = await (supabase.rpc as any)(
+      "resolve_user_contexts",
+      {
+        p_tenant_id: currentTenant.id,
+      }
+    );
+
+    if (contextError) {
+      throw contextError;
+    }
+
+    const contextType = ((contextData?.default_context_type as ActiveContextType | undefined) || "location");
+    const locationId =
+      contextType === "location" ? (contextData?.default_location_id as string | null) || null : null;
+    const availableLocations = Array.isArray(contextData?.available_locations)
+      ? contextData.available_locations
+      : [];
+
+    if (contextType === "location" && !locationId && availableLocations.length === 0) {
+      return null;
+    }
+
+    const { data: routesData, error: routesError } = await (supabase.rpc as any)(
+      "list_accessible_routes",
+      {
+        p_tenant_id: currentTenant.id,
+        p_context_type: contextType,
+        p_location_id: locationId,
+      }
+    );
+
+    if (routesError) {
+      throw routesError;
+    }
+
+    const routes = (Array.isArray(routesData) ? routesData : []).filter(
+      (route: unknown) => typeof route === "string" && route !== "/salon/access-denied"
+    ) as string[];
+
+    return routes[0] || fallbackFirstRoute(contextType);
+  };
 
   useEffect(() => {
     if (!user?.id || !currentTenant?.id) return;
@@ -22,6 +76,63 @@ export default function AssignmentPendingPage() {
       });
     })();
   }, [currentTenant?.id, user?.id]);
+
+  useEffect(() => {
+    let active = true;
+
+    const recheckAccess = async () => {
+      if (!user?.id) return;
+
+      setIsCheckingAccess(true);
+      try {
+        await refreshTenants();
+        if (!active) return;
+
+        const nextRoute = await resolveAllowedRoute();
+        if (!active) return;
+
+        if (nextRoute) {
+          window.location.assign(nextRoute);
+          return;
+        }
+
+        window.location.assign("/salon/access-denied");
+      } finally {
+        if (active) {
+          setIsCheckingAccess(false);
+        }
+      }
+    };
+
+    void recheckAccess();
+
+    return () => {
+      active = false;
+    };
+  }, [navigate, refreshTenants, user?.id]);
+
+  const handleGoToAllowedPage = async () => {
+    setIsCheckingAccess(true);
+    try {
+      await refreshTenants();
+      const nextRoute = await resolveAllowedRoute();
+
+      if (!nextRoute) {
+        window.location.assign("/salon/access-denied");
+        return;
+      }
+
+      window.location.assign(nextRoute);
+    } catch (error: any) {
+      toast({
+        title: "Unable to resolve allowed page",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingAccess(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -42,6 +153,15 @@ export default function AssignmentPendingPage() {
               Get help
             </Button>
           </Link>
+          <Button
+            variant="secondary"
+            onClick={() => void handleGoToAllowedPage()}
+            disabled={isCheckingAccess}
+            className="gap-2 w-full sm:w-auto"
+          >
+            {isCheckingAccess ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+            Go to allowed page
+          </Button>
           <Button onClick={() => void signOut()} className="gap-2 w-full sm:w-auto">
             <LogOut className="w-4 h-4" />
             Sign out

@@ -19,6 +19,7 @@ import {
 import { ScrollArea } from "@ui/scroll-area";
 import { Users, Plus, Loader2, Check, Clock } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
+import { AddServiceDialog } from "./AddServiceDialog";
 import { AppointmentNotesInput } from "@/components/notes/AppointmentNotesInput";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useServices } from "@/hooks/useServices";
@@ -50,8 +51,9 @@ interface SelectedService {
 }
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, activeLocationId } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
+  const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
     id: string;
     fileName: string;
@@ -68,10 +70,14 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
   const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers();
-  const { services, isLoading: servicesLoading } = useServices();
+  const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
   const { staff, isLoading: staffLoading } = useStaff();
-  const { defaultLocation } = useLocations();
+  const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  const appointmentLocationId =
+    (activeLocationId && locations.find((location) => location.id === activeLocationId)?.id) ||
+    defaultLocation?.id ||
+    null;
 
   // Reset form when dialog opens, use tenant default buffer
   useEffect(() => {
@@ -92,6 +98,10 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
     refetchCustomers();
   };
 
+  const handleServiceCreated = () => {
+    refetchServices();
+  };
+
   const toggleService = (service: { id: string; name: string; price: number; duration_minutes: number }) => {
     const exists = selectedServices.find((s) => s.id === service.id);
     if (exists) {
@@ -110,7 +120,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!defaultLocation?.id) {
+    if (!appointmentLocationId) {
       return;
     }
 
@@ -134,7 +144,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
         price: s.price,
         duration: s.duration,
       })),
-      locationId: defaultLocation.id,
+      locationId: appointmentLocationId,
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
       isWalkIn: true,
@@ -158,9 +168,9 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
               <Users className="w-5 h-5 text-warning-foreground" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Walk-in Customer</DialogTitle>
+              <DialogTitle className="text-xl">Record Walk-ins</DialogTitle>
               <p className="text-sm text-muted-foreground">
-                Quickly add a walk-in and start the service immediately
+                Quickly add a walk-in and start the service immediately.
               </p>
             </div>
           </DialogHeader>
@@ -203,9 +213,21 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
 
             {/* Service Selection */}
             <div className="space-y-2">
-              <Label>
-                Services <span className="text-destructive">*</span>
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label>
+                  Services <span className="text-destructive">*</span>
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setServiceDialogOpen(true)}
+                  className="h-auto py-1 px-2 text-xs"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add Service
+                </Button>
+              </div>
               <ScrollArea className="h-48 rounded-md border p-2">
                 {servicesLoading ? (
                   <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
@@ -370,7 +392,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                   className="flex-1 sm:flex-initial"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Start Walk-in
+                  Record Walk-in
                 </Button>
               </div>
             </DialogFooter>
@@ -383,6 +405,11 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
         open={customerDialogOpen}
         onOpenChange={setCustomerDialogOpen}
         onSuccess={handleCustomerCreated}
+      />
+      <AddServiceDialog
+        open={serviceDialogOpen}
+        onOpenChange={setServiceDialogOpen}
+        onSuccess={handleServiceCreated}
       />
     </>
   );

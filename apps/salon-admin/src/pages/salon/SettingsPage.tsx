@@ -74,6 +74,8 @@ import { WalletLedger } from "@/components/billing/WalletLedger";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { useClaimTenantSalesPromo, useTenantSalesPromo } from "@/hooks/useSalesPromo";
+import { usePlans } from "@/hooks/usePlans";
 
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch";
@@ -125,6 +127,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     isSaving: notificationsSaving,
     saveSettings: saveNotificationSettings
   } = useNotificationSettings();
+  const [subscriptionPromoCode, setSubscriptionPromoCode] = useState("");
+  const [isStartingSubscriptionCheckout, setIsStartingSubscriptionCheckout] = useState(false);
+  const claimTenantPromo = useClaimTenantSalesPromo();
+  const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
+  const { data: activeTenantPromo } = useTenantSalesPromo();
+  const { data: plans } = usePlans();
 
   const isChain = currentTenant?.plan === "chain";
   const resolvedScope: Exclude<SettingsScope, "auto"> =
@@ -182,6 +190,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   // Handle top-up success/cancel notifications
   useEffect(() => {
     const topupStatus = searchParams.get("topup");
+    const subscriptionStatus = searchParams.get("subscription");
     
     if (topupStatus === "success") {
       toast({
@@ -203,6 +212,27 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       // Clean up URL parameter
       const newParams = new URLSearchParams(searchParams);
       newParams.delete("topup");
+      setSearchParams(newParams, { replace: true });
+    }
+
+    if (subscriptionStatus === "success") {
+      toast({
+        title: "Subscription started",
+        description: "Your billing checkout completed successfully.",
+      });
+
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("subscription");
+      setSearchParams(newParams, { replace: true });
+    } else if (subscriptionStatus === "cancelled") {
+      toast({
+        title: "Subscription checkout cancelled",
+        description: "No subscription changes were made.",
+        variant: "destructive",
+      });
+
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("subscription");
       setSearchParams(newParams, { replace: true });
     }
   }, [searchParams, setSearchParams]);
@@ -253,6 +283,78 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     requireStaffSelection: false,
     autoAssignStaff: true,
   });
+  const [cancellationGraceHoursInput, setCancellationGraceHoursInput] = useState("24");
+  const [defaultDepositPercentageInput, setDefaultDepositPercentageInput] = useState("0");
+  const [slotCapacityDefaultInput, setSlotCapacityDefaultInput] = useState("1");
+
+  const startSubscriptionCheckout = async () => {
+    if (!currentTenant?.id || !currentTenant.plan) {
+      toast({
+        title: "Subscription unavailable",
+        description: "Your current tenant plan could not be resolved.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const currentPlan = plans?.find((plan) => plan.slug === currentTenant.plan);
+    if (!currentPlan) {
+      toast({
+        title: "Subscription unavailable",
+        description: "Your plan pricing could not be resolved.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsStartingSubscriptionCheckout(true);
+    try {
+      const { data: pricingRow, error: pricingError } = await supabase
+        .from("plan_pricing")
+        .select("stripe_price_id")
+        .eq("plan_id", currentPlan.id)
+        .eq("currency", currentTenant.currency || "USD")
+        .is("valid_until", null)
+        .maybeSingle();
+
+      if (pricingError) {
+        throw pricingError;
+      }
+
+      if (!pricingRow?.stripe_price_id) {
+        throw new Error("Stripe pricing is not configured for this plan yet.");
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: {
+          tenantId: currentTenant.id,
+          priceId: pricingRow.stripe_price_id,
+          billingCycle: "monthly",
+          successUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=success`,
+          cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=cancelled`,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data?.url) {
+        throw new Error("No checkout URL returned.");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      console.error("Failed to start subscription checkout:", error);
+      toast({
+        title: "Checkout unavailable",
+        description: error instanceof Error ? error.message : "Unable to start subscription checkout right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsStartingSubscriptionCheckout(false);
+    }
+  };
 
   const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
   const activeLocation =
@@ -325,6 +427,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         autoAssignStaff: (currentTenant as any).auto_assign_staff ?? true,
       };
       setBookingSettings(nextBooking);
+      setCancellationGraceHoursInput(String(nextBooking.cancellationGraceHours));
+      setDefaultDepositPercentageInput(String(nextBooking.defaultDepositPercentage));
+      setSlotCapacityDefaultInput(String(nextBooking.slotCapacityDefault));
       setBookingBaseline(nextBooking);
       setLogoUrl(currentTenant.logo_url || null);
       setBannerUrls(currentTenant.banner_urls || []);
@@ -1652,13 +1757,28 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               <Input
                 type="number"
                 min={0}
-                value={bookingSettings.cancellationGraceHours}
-                onChange={(e) =>
+                value={cancellationGraceHoursInput}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setCancellationGraceHoursInput(nextValue);
+                  if (nextValue === "") return;
+                  const parsed = Number.parseInt(nextValue, 10);
+                  if (!Number.isNaN(parsed) && parsed >= 0) {
+                    setBookingSettings((prev) => ({
+                      ...prev,
+                      cancellationGraceHours: parsed,
+                    }));
+                  }
+                }}
+                onBlur={() => {
+                  const parsed = Number.parseInt(cancellationGraceHoursInput, 10);
+                  const normalized = !Number.isNaN(parsed) && parsed >= 0 ? parsed : bookingSettings.cancellationGraceHours;
+                  setCancellationGraceHoursInput(String(normalized));
                   setBookingSettings((prev) => ({
                     ...prev,
-                    cancellationGraceHours: parseInt(e.target.value) || 0,
-                  }))
-                }
+                    cancellationGraceHours: normalized,
+                  }));
+                }}
               />
               <span className="text-sm text-muted-foreground">hours</span>
             </div>
@@ -1672,13 +1792,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               type="number"
               min={0}
               max={100}
-              value={bookingSettings.defaultDepositPercentage}
-              onChange={(e) =>
+              value={defaultDepositPercentageInput}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setDefaultDepositPercentageInput(nextValue);
+                if (nextValue === "") return;
+                const parsed = Number.parseInt(nextValue, 10);
+                if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                  setBookingSettings((prev) => ({
+                    ...prev,
+                    defaultDepositPercentage: parsed,
+                  }));
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number.parseInt(defaultDepositPercentageInput, 10);
+                const normalized = !Number.isNaN(parsed)
+                  ? Math.min(100, Math.max(0, parsed))
+                  : bookingSettings.defaultDepositPercentage;
+                setDefaultDepositPercentageInput(String(normalized));
                 setBookingSettings((prev) => ({
                   ...prev,
-                  defaultDepositPercentage: parseInt(e.target.value) || 0,
-                }))
-              }
+                  defaultDepositPercentage: normalized,
+                }));
+              }}
               className="w-24"
             />
             <span className="text-sm text-muted-foreground">%</span>
@@ -1693,13 +1830,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               type="number"
               min={1}
               max={100}
-              value={bookingSettings.slotCapacityDefault}
-              onChange={(e) =>
+              value={slotCapacityDefaultInput}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setSlotCapacityDefaultInput(nextValue);
+                if (nextValue === "") return;
+                const parsed = Number.parseInt(nextValue, 10);
+                if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 100) {
+                  setBookingSettings((prev) => ({
+                    ...prev,
+                    slotCapacityDefault: parsed,
+                  }));
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number.parseInt(slotCapacityDefaultInput, 10);
+                const normalized = !Number.isNaN(parsed)
+                  ? Math.min(100, Math.max(1, parsed))
+                  : bookingSettings.slotCapacityDefault;
+                setSlotCapacityDefaultInput(String(normalized));
                 setBookingSettings((prev) => ({
                   ...prev,
-                  slotCapacityDefault: parseInt(e.target.value) || 1,
-                }))
-              }
+                  slotCapacityDefault: normalized,
+                }));
+              }}
               className="w-24"
             />
           </div>
@@ -2045,9 +2199,47 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           {/* Upgrade Button */}
           {isTrialing && (
             <div className="pt-4 border-t">
-              <Button className="w-full gap-2">
-                <Zap className="w-4 h-4" />
-                Upgrade Now
+              {subscriptionPromo ? (
+                <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
+                  <p className="font-medium">Active subscription promo</p>
+                  <p className="text-muted-foreground">
+                    {subscriptionPromo.code} · {subscriptionPromo.campaign_name} · {subscriptionPromo.remaining_uses} use{subscriptionPromo.remaining_uses === 1 ? "" : "s"} remaining
+                  </p>
+                </div>
+              ) : (
+                <div className="mb-4 space-y-2">
+                  <Label>Apply Sales Promo Code</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={subscriptionPromoCode}
+                      onChange={(event) => setSubscriptionPromoCode(event.target.value.toUpperCase())}
+                      placeholder="Enter promo code"
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await claimTenantPromo.mutateAsync({ code: subscriptionPromoCode, surface: "subscription" });
+                          setSubscriptionPromoCode("");
+                          toast({ title: "Promo claimed", description: "The promo is now attached to this tenant for subscription billing." });
+                        } catch (error) {
+                          toast({
+                            title: "Promo unavailable",
+                            description: error instanceof Error ? error.message : "Failed to claim promo code.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      disabled={!subscriptionPromoCode.trim() || claimTenantPromo.isPending}
+                    >
+                      {claimTenantPromo.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apply"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <Button className="w-full gap-2" onClick={startSubscriptionCheckout} disabled={isStartingSubscriptionCheckout}>
+                {isStartingSubscriptionCheckout ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                {isStartingSubscriptionCheckout ? "Redirecting..." : "Upgrade Now"}
               </Button>
               <p className="text-xs text-muted-foreground text-center mt-2">
                 Continue using all features after your trial ends
@@ -2071,6 +2263,27 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
     return (
       <div className="space-y-6">
+        {activeTenantPromo && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Ticket className="w-5 h-5" />
+                Active Sales Promo
+              </CardTitle>
+              <CardDescription>
+                This promo stays available to your tenant until it is consumed, expires, or is invalidated.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div><span className="text-muted-foreground">Code:</span> <span className="font-medium">{activeTenantPromo.code}</span></div>
+              <div><span className="text-muted-foreground">Campaign:</span> <span className="font-medium">{activeTenantPromo.campaign_name}</span></div>
+              <div><span className="text-muted-foreground">Targets:</span> <span className="font-medium">{activeTenantPromo.billing_targets.join(", ")}</span></div>
+              <div><span className="text-muted-foreground">Remaining uses:</span> <span className="font-medium">{activeTenantPromo.remaining_uses}</span></div>
+              <div><span className="text-muted-foreground">Campaign ends:</span> <span className="font-medium">{format(new Date(activeTenantPromo.campaign_ends_at), "MMM d, yyyy")}</span></div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Referral Program */}
         <Card>
           <CardHeader>

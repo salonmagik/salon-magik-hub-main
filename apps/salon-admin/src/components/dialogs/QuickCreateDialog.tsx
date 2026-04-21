@@ -56,16 +56,16 @@ export function QuickCreateDialog({ open, onOpenChange }: QuickCreateDialogProps
   const actions: QuickAction[] = [
     {
       icon: Calendar,
-      label: "New Appointment",
-      description: "Schedule a new appointment",
+      label: "Book Appointments",
+      description: "Book a new appointment",
       color: "text-primary",
       bgColor: "bg-primary/10 hover:bg-primary/20",
       modal: "appointment",
     },
     {
       icon: Users,
-      label: "Walk-in",
-      description: "Add a walk-in customer",
+      label: "Record Walk-ins",
+      description: "Record a walk-in customer",
       color: "text-amber-600",
       bgColor: "bg-amber-50 hover:bg-amber-100",
       modal: "walkin",

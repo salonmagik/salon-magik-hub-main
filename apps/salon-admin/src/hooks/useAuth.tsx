@@ -142,6 +142,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getContextStorageKey = (tenantId: string) => `${CONTEXT_STORAGE_PREFIX}${tenantId}`;
   const buildSessionHydrationKey = (session: Session) =>
     `${session.user.id}:${session.access_token.slice(-12)}`;
+  const buildSignedOutState = (): AuthState => ({
+    user: null,
+    session: null,
+    profile: null,
+    tenants: [],
+    roles: [],
+    currentTenant: null,
+    isLoading: false,
+    isAuthenticated: false,
+    hasCompletedOnboarding: false,
+    requiresPasswordChange: false,
+    activeContextType: "location",
+    activeLocationId: null,
+    assignedLocationIds: [],
+    availableContexts: [],
+    canUseOwnerHub: false,
+    currentRole: null,
+    isAssignmentPending: false,
+  });
+  const getVerifiedAuthUser = async (session: Session): Promise<User | null> => {
+    const { data, error } = await supabase.auth.getUser(session.access_token);
+    if (error) {
+      console.error("Failed to verify auth session against server:", error);
+      return null;
+    }
+    return data.user ?? null;
+  };
 
   const parseStoredContext = (tenantId: string): { type: ActiveContextType; locationId: string | null } | null => {
     const raw = localStorage.getItem(getContextStorageKey(tenantId));
@@ -172,29 +199,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const forceSignOut = async () => {
     console.log("Forcing sign out - user data not found");
     await supabase.auth.signOut();
+    lastHydratedSessionRef.current = null;
     localStorage.removeItem("currentTenantId");
     Object.keys(localStorage)
       .filter((key) => key.startsWith(CONTEXT_STORAGE_PREFIX))
       .forEach((key) => localStorage.removeItem(key));
-    setState({
-      user: null,
-      session: null,
-      profile: null,
-      tenants: [],
-      roles: [],
-      currentTenant: null,
-      isLoading: false,
-      isAuthenticated: false,
-      hasCompletedOnboarding: false,
-      requiresPasswordChange: false,
-      activeContextType: "location",
-      activeLocationId: null,
-      assignedLocationIds: [],
-      availableContexts: [],
-      canUseOwnerHub: false,
-      currentRole: null,
-      isAssignmentPending: false,
-    });
+    setState(buildSignedOutState());
   };
 
   // Fetch profile data - returns null if user doesn't exist (deleted account)
@@ -505,7 +515,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastHydratedSessionRef.current = hydrationKey;
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
-              let profile = await fetchProfile(session.user.id);
+              const verifiedUser = await getVerifiedAuthUser(session);
+              if (!verifiedUser) {
+                await forceSignOut();
+                return;
+              }
+
+              let profile = await fetchProfile(verifiedUser.id);
               
               // If profile doesn't exist, try to create it from auth metadata
               if (!profile) {
@@ -513,9 +529,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const { data: newProfile, error: createError } = await supabase
                   .from("profiles")
                   .insert({
-                    user_id: session.user.id,
-                    full_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "User",
-                    phone: session.user.user_metadata?.phone || null,
+                    user_id: verifiedUser.id,
+                    full_name: verifiedUser.user_metadata?.full_name || verifiedUser.email?.split("@")[0] || "User",
+                    phone: verifiedUser.user_metadata?.phone || null,
                   })
                   .select()
                   .single();
@@ -528,13 +544,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 profile = newProfile;
               }
               
-              const { tenants, roles } = await fetchTenantsAndRoles(session.user.id);
+              const { tenants, roles } = await fetchTenantsAndRoles(verifiedUser.id);
               
               // Get stored tenant preference or use first tenant
               const storedTenantId = localStorage.getItem("currentTenantId");
               const currentTenant = tenants.find((t) => t.id === storedTenantId) || tenants[0] || null;
               const contextState = currentTenant
-                ? await resolveContexts(session.user.id, currentTenant.id, roles)
+                ? await resolveContexts(verifiedUser.id, currentTenant.id, roles)
                 : {
                     activeContextType: "location" as ActiveContextType,
                     activeLocationId: null,
@@ -561,7 +577,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
 
               setState({
-                user: session.user,
+                user: verifiedUser,
                 session,
                 profile,
                 tenants,
@@ -601,7 +617,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
         lastHydratedSessionRef.current = hydrationKey;
-        let profile = await fetchProfile(session.user.id);
+        const verifiedUser = await getVerifiedAuthUser(session);
+        if (!verifiedUser) {
+          await forceSignOut();
+          return () => {
+            subscription.unsubscribe();
+          };
+        }
+
+        let profile = await fetchProfile(verifiedUser.id);
         
         // If profile doesn't exist, try to create it from auth metadata
         if (!profile) {
@@ -609,9 +633,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { data: newProfile, error: createError } = await supabase
             .from("profiles")
             .insert({
-              user_id: session.user.id,
-              full_name: session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "User",
-              phone: session.user.user_metadata?.phone || null,
+              user_id: verifiedUser.id,
+              full_name: verifiedUser.user_metadata?.full_name || verifiedUser.email?.split("@")[0] || "User",
+              phone: verifiedUser.user_metadata?.phone || null,
             })
             .select()
             .single();
@@ -626,12 +650,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           profile = newProfile;
         }
         
-        const { tenants, roles } = await fetchTenantsAndRoles(session.user.id);
+        const { tenants, roles } = await fetchTenantsAndRoles(verifiedUser.id);
         
         const storedTenantId = localStorage.getItem("currentTenantId");
         const currentTenant = tenants.find((t) => t.id === storedTenantId) || tenants[0] || null;
         const contextState = currentTenant
-          ? await resolveContexts(session.user.id, currentTenant.id, roles)
+          ? await resolveContexts(verifiedUser.id, currentTenant.id, roles)
           : {
               activeContextType: "location" as ActiveContextType,
               activeLocationId: null,
@@ -654,7 +678,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setState({
-          user: session.user,
+          user: verifiedUser,
           session,
           profile,
           tenants,
@@ -695,10 +719,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
     await supabase.auth.signOut();
+    lastHydratedSessionRef.current = null;
     localStorage.removeItem("currentTenantId");
     Object.keys(localStorage)
       .filter((key) => key.startsWith(CONTEXT_STORAGE_PREFIX))
       .forEach((key) => localStorage.removeItem(key));
+    setState(buildSignedOutState());
   };
 
   const setCurrentTenant = (tenant: Tenant) => {
@@ -830,26 +856,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       saveStoredContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
       await syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
     }
-    // Use setTimeout to defer state update, preventing UI blocking
-    setTimeout(() => {
-      setState((prev) => ({
-        ...prev,
-        tenants,
-        roles,
-        currentTenant,
-        hasCompletedOnboarding: tenants.length > 0,
-        activeContextType: contextState.activeContextType,
-        activeLocationId: contextState.activeLocationId,
-        assignedLocationIds: contextState.assignedLocationIds,
-        availableContexts: contextState.availableContexts,
-        canUseOwnerHub: contextState.canUseOwnerHub,
-        currentRole: contextState.currentRole,
-        isAssignmentPending: isAssignmentPendingState(
-          contextState.currentRole,
-          contextState.assignedLocationIds
-        ),
-      }));
-    }, 0);
+    setState((prev) => ({
+      ...prev,
+      tenants,
+      roles,
+      currentTenant,
+      hasCompletedOnboarding: tenants.length > 0,
+      activeContextType: contextState.activeContextType,
+      activeLocationId: contextState.activeLocationId,
+      assignedLocationIds: contextState.assignedLocationIds,
+      availableContexts: contextState.availableContexts,
+      canUseOwnerHub: contextState.canUseOwnerHub,
+      currentRole: contextState.currentRole,
+      isAssignmentPending: isAssignmentPendingState(
+        contextState.currentRole,
+        contextState.assignedLocationIds
+      ),
+    }));
   };
 
   useEffect(() => {

@@ -233,11 +233,11 @@ export default function StaffPage() {
     if (!staffToDeactivate || !currentTenant?.id) return;
     
     try {
-      const { error } = await supabase
-        .from("user_roles")
-        .update({ is_active: false })
-        .eq("user_id", staffToDeactivate.userId)
-        .eq("tenant_id", currentTenant.id);
+      const { error } = await (supabase.rpc as any)("set_staff_active_status", {
+        p_tenant_id: currentTenant.id,
+        p_user_id: staffToDeactivate.userId,
+        p_is_active: false,
+      });
 
       if (error) throw error;
 
@@ -250,6 +250,11 @@ export default function StaffPage() {
           deactivated_by_user_id: user?.id,
         },
       });
+
+      updateStaffLocal(staffToDeactivate.userId, (member) => ({
+        ...member,
+        isActive: false,
+      }));
       
       toast({ title: "Success", description: "Staff member deactivated" });
       await refetch();
@@ -268,11 +273,11 @@ export default function StaffPage() {
     if (!staffToReactivate || !currentTenant?.id) return;
 
     try {
-      const { error } = await supabase
-        .from("user_roles")
-        .update({ is_active: true })
-        .eq("user_id", staffToReactivate.userId)
-        .eq("tenant_id", currentTenant.id);
+      const { error } = await (supabase.rpc as any)("set_staff_active_status", {
+        p_tenant_id: currentTenant.id,
+        p_user_id: staffToReactivate.userId,
+        p_is_active: true,
+      });
 
       if (error) throw error;
 
@@ -285,6 +290,11 @@ export default function StaffPage() {
           reactivated_by_user_id: user?.id,
         },
       });
+
+      updateStaffLocal(staffToReactivate.userId, (member) => ({
+        ...member,
+        isActive: true,
+      }));
 
       toast({ title: "Success", description: "Staff member reactivated" });
       await refetch();
@@ -674,13 +684,14 @@ export default function StaffPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="overflow-x-auto -mx-4 sm:mx-0">
-                    <Table>
+                  <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                    <Table className="min-w-[900px]">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>
                           <TableHead className="hidden sm:table-cell">Email</TableHead>
                           <TableHead>Role</TableHead>
+                          <TableHead>Status</TableHead>
                           <TableHead className="hidden lg:table-cell">Last Login</TableHead>
                           <TableHead>Assignments</TableHead>
                           <TableHead className="w-[50px]"></TableHead>
@@ -724,12 +735,18 @@ export default function StaffPage() {
                                 <Badge variant={roleVariants[member.role]}>
                                   {roleLabels[member.role]}
                                 </Badge>
-                                {!isActive && (
-                                  <Badge variant="outline" className="text-muted-foreground">
-                                    Inactive
-                                  </Badge>
-                                )}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {isActive ? (
+                                <Badge className="bg-success/10 text-success hover:bg-success/10">
+                                  Active
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground">
+                                  Deactivated
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                               {member.lastLoginAt ? format(new Date(member.lastLoginAt), "MMM d, yyyy p") : "Never"}

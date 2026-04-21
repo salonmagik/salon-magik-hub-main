@@ -836,6 +836,20 @@ async function processWebhook(
                 console.error("Error inserting messaging_credit_purchases:", purchaseInsertError);
               }
 
+              const usageReference = messagingPaymentIntentId || reference;
+              if (usageReference) {
+                const { error: promoConsumeError } = await (supabase.rpc as any)("consume_tenant_sales_promo_use", {
+                  p_tenant_id: messagingTenantId,
+                  p_surface: "credits",
+                  p_usage_reference: usageReference,
+                  p_amount: messagingAmount,
+                });
+
+                if (promoConsumeError) {
+                  console.error("Error consuming sales promo usage for messaging credits:", promoConsumeError);
+                }
+              }
+
               // Send confirmation email to tenant owner
               if (resendApiKey) {
                 const { data: tenantDetails } = await supabase
