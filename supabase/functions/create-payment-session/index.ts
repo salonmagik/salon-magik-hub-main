@@ -1,4 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getPaystackKeyForCurrency,
+  validateCurrencyMatch,
+  determineEffectiveCurrency,
+} from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -54,7 +59,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const authHeader = req.headers.get("Authorization");
@@ -156,6 +160,19 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Tenant not found" }, 404);
     }
 
+    // Determine effective currency with fallback
+    const effectiveCurrency = determineEffectiveCurrency(currency, tenant.currency);
+
+    if (!effectiveCurrency) {
+      return jsonResponse({ error: "Currency is required" }, 400);
+    }
+
+    // Validate currency consistency
+    const currencyValidation = validateCurrencyMatch(tenant.currency, effectiveCurrency);
+    if (!currencyValidation.isValid) {
+      return jsonResponse({ error: currencyValidation.error }, 400);
+    }
+
     let payableAmount = amount;
     let appliedPromo: Record<string, unknown> | null = null;
 
@@ -185,10 +202,22 @@ Deno.serve(async (req) => {
     }
 
     const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
-                        ["NGN", "GHS"].includes(currency.toUpperCase());
-    const usePaystack = preferredGateway 
-      ? preferredGateway === "paystack" 
+      ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
+    const usePaystack = preferredGateway
+      ? preferredGateway === "paystack"
       : isPaystackRegion;
+
+    // Get currency-specific Paystack key
+    let paystackSecretKey: string | null = null;
+    if (usePaystack) {
+      const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+      if (paystackKeyResult.error || !paystackKeyResult.key) {
+        return jsonResponse({
+          error: paystackKeyResult.error || "Paystack not configured for this currency"
+        }, 500);
+      }
+      paystackSecretKey = paystackKeyResult.key;
+    }
 
     const reference = `sm_${appointmentId?.substring(0, 8) || Date.now().toString().substring(0, 8)}_${Date.now()}`;
 
@@ -197,8 +226,8 @@ Deno.serve(async (req) => {
       .insert({
         tenant_id: tenantId,
         appointment_id: appointmentId || null,
-        amount: payableAmount,
-        currency: currency.toUpperCase(),
+        amount: amount,
+        currency: effectiveCurrency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
         gateway: usePaystack ? "paystack" : "stripe",
@@ -236,11 +265,10 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           email: customerEmail,
           amount: amountInMinorUnits,
-          currency: currency.toUpperCase(),
+          currency: effectiveCurrency.toUpperCase(),
           reference: reference,
           callback_url: successUrl,
           metadata: {
-            appointment_id: appointmentId || null,
             appointment_ids: body.appointmentIds || [appointmentId],
             appointment_id: appointmentId || null,
             payment_intent_id: paymentIntent?.id,
@@ -291,14 +319,13 @@ Deno.serve(async (req) => {
         body: new URLSearchParams({
           "mode": "payment",
           "payment_method_types[0]": "card",
-          "line_items[0][price_data][currency]": currency.toLowerCase(),
+          "line_items[0][price_data][currency]": effectiveCurrency.toLowerCase(),
           "line_items[0][price_data][product_data][name]": description || "Appointment Payment",
           "line_items[0][price_data][unit_amount]": amountInCents.toString(),
           "line_items[0][quantity]": "1",
           "customer_email": customerEmail,
           "success_url": `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
           "cancel_url": cancelUrl,
-          "metadata[appointment_id]": appointmentId || "",
           "metadata[appointment_id]": appointmentId || "",
           "metadata[appointment_ids]": JSON.stringify(body.appointmentIds || (appointmentId ? [appointmentId] : [])),
           "metadata[payment_intent_id]": paymentIntent?.id || "",

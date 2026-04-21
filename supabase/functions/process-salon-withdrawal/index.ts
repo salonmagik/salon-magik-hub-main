@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,15 +24,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-
-    // Verify Paystack is configured
-    if (!paystackSecretKey) {
-      return new Response(
-        JSON.stringify({ error: "Paystack not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Verify the user's JWT
     const authHeader = req.headers.get("Authorization");
@@ -164,6 +156,18 @@ Deno.serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Get currency-specific Paystack key based on wallet currency
+    const paystackKeyResult = getPaystackKeyForCurrency(wallet.currency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return new Response(
+        JSON.stringify({ 
+          error: paystackKeyResult.error || `Paystack not configured for currency ${wallet.currency}` 
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const paystackSecretKey = paystackKeyResult.key;
 
     // Check sufficient balance early (before creating withdrawal record)
     if (wallet.balance < amount) {

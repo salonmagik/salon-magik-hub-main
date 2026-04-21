@@ -6,6 +6,11 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
+import {
+  getPaystackKeyForCurrency,
+  validateCurrencyMatch,
+  determineEffectiveCurrency,
+} from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -536,15 +541,48 @@ serve(async (req) => {
     if (createPaymentSession && paymentAmount && paymentAmount > 0) {
       try {
         console.log("Creating payment session...");
-        const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
         const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+        
+        // Determine effective currency with fallback
+        const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, tenant.currency);
+        
+        if (!effectiveCurrency) {
+          return new Response(
+            JSON.stringify({ error: "Currency is required" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Validate currency consistency
+        const currencyValidation = validateCurrencyMatch(tenant.currency, effectiveCurrency);
+        if (!currencyValidation.isValid) {
+          return new Response(
+            JSON.stringify({ error: currencyValidation.error }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         
         // Determine gateway based on preference or region
         const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country || "") ||
-                            ["NGN", "GHS"].includes((paymentCurrency || tenant.currency || "USD").toUpperCase());
+                            ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
         const usePaystack = preferredPaymentGateway 
           ? preferredPaymentGateway === "paystack" 
           : isPaystackRegion;
+
+        // Get currency-specific Paystack key if needed
+        let paystackSecretKey: string | null = null;
+        if (usePaystack) {
+          const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+          if (paystackKeyResult.error || !paystackKeyResult.key) {
+            return new Response(
+              JSON.stringify({ 
+                error: paystackKeyResult.error || "Paystack not configured for this currency" 
+              }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          paystackSecretKey = paystackKeyResult.key;
+        }
 
         console.log("Payment gateway selection:", {
           usePaystack,
@@ -553,7 +591,7 @@ serve(async (req) => {
           hasPaystackKey: !!paystackSecretKey,
           hasStripeKey: !!stripeSecretKey,
           tenantCountry: tenant.country,
-          paymentCurrency: paymentCurrency || tenant.currency
+          effectiveCurrency
         });
 
       // Validate that we have the required secret key for the selected gateway
@@ -586,7 +624,7 @@ serve(async (req) => {
           tenant_id: tenantId,
           appointment_id: primaryAppointmentId,
           amount: paymentAmount,
-          currency: (paymentCurrency || tenant.currency || "USD").toUpperCase(),
+          currency: effectiveCurrency.toUpperCase(),
           customer_email: customer.email,
           customer_name: `${customer.firstName} ${customer.lastName}`,
           gateway: usePaystack ? "paystack" : "stripe",
@@ -630,7 +668,7 @@ serve(async (req) => {
           body: JSON.stringify({
             email: customer.email,
             amount: amountInMinorUnits,
-            currency: (paymentCurrency || tenant.currency || "USD").toUpperCase(),
+            currency: effectiveCurrency.toUpperCase(),
             reference: sessionReference,
             callback_url: paymentSuccessUrl,
             metadata: {
@@ -675,7 +713,7 @@ serve(async (req) => {
           // Provide user-friendly error messages
           let errorMessage = paystackData.message || "Unknown error";
           if (paystackData.code === "unsupported_currency") {
-            errorMessage = `This payment method doesn't support ${(paymentCurrency || tenant.currency || "NGN").toUpperCase()}. Please contact the salon for alternative payment options.`;
+            errorMessage = `This payment method doesn't support ${effectiveCurrency.toUpperCase()}. Please contact the salon for alternative payment options.`;
           }
           
           return new Response(

@@ -1,4 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getPaystackKeyForCurrency,
+  validateCurrencyMatch,
+  determineEffectiveCurrency,
+} from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +22,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: InvoicePaymentRequest = await req.json();
@@ -61,13 +65,34 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Verify Paystack is configured
-    if (!paystackSecretKey) {
+    // Determine effective currency and validate
+    const effectiveCurrency = determineEffectiveCurrency(invoice.currency, (invoice.tenants as any).currency);
+    
+    if (!effectiveCurrency) {
       return new Response(
-        JSON.stringify({ error: "Paystack not configured" }),
+        JSON.stringify({ error: "Currency is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate currency consistency
+    const currencyValidation = validateCurrencyMatch((invoice.tenants as any).currency, effectiveCurrency);
+    if (!currencyValidation.isValid) {
+      return new Response(
+        JSON.stringify({ error: currencyValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Get currency-specific Paystack key
+    const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return new Response(
+        JSON.stringify({ error: paystackKeyResult.error || "Paystack not configured for this currency" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const paystackSecretKey = paystackKeyResult.key;
 
     // Fetch customer email
     const { data: customer, error: customerError } = await supabase
@@ -94,7 +119,7 @@ Deno.serve(async (req) => {
       .insert({
         tenant_id: invoice.tenant_id,
         amount: invoice.total,
-        currency: invoice.currency.toUpperCase(),
+        currency: effectiveCurrency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
         gateway: "paystack",
@@ -127,7 +152,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         email: customerEmail,
         amount: amountInMinorUnits,
-        currency: invoice.currency.toUpperCase(),
+        currency: effectiveCurrency.toUpperCase(),
         reference: reference,
         metadata: {
           tenant_id: invoice.tenant_id,

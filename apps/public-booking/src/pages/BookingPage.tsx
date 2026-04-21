@@ -5,6 +5,13 @@ import {
   usePublicCatalog,
   useBookingCountryContext,
   BookingCartProvider,
+  useBookingCart,
+  type PublicTenant,
+  type PublicLocation,
+  type PublicService,
+  type PublicPackage,
+  type PublicProduct,
+  type PublicCategory,
 } from "@/hooks";
 import type { PublicCatalogMode } from "@/hooks/usePublicCatalog";
 import { resolvePublicBookingSlug } from "@/lib/slugResolution";
@@ -12,6 +19,7 @@ import { BookingLayout } from "./components/BookingLayout";
 import { SalonHeader } from "./components/SalonHeader";
 import { CatalogView } from "./components/CatalogView";
 import { BookingWizard } from "./components/BookingWizard";
+import { PaymentStatusDialog } from "./components/PaymentStatusDialog";
 import { Skeleton } from "@ui/skeleton";
 import { Button } from "@ui/button";
 import {
@@ -56,8 +64,6 @@ function BookingPageContent() {
     isDev: import.meta.env.DEV,
   });
 
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [modalCountryCode, setModalCountryCode] = useState<string | null>(null);
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
 
   const {
@@ -155,17 +161,6 @@ function BookingPageContent() {
   }, [salon?.brand_color]);
 
   useEffect(() => {
-    if (!isCatalogBlocked) {
-      setModalCountryCode(null);
-      return;
-    }
-
-    if (!modalCountryCode && supportedCountryCodes.length > 0) {
-      setModalCountryCode(supportedCountryCodes[0]);
-    }
-  }, [isCatalogBlocked, supportedCountryCodes, modalCountryCode]);
-
-  useEffect(() => {
     setSelectedLocationIds((prev) => {
       if (locationIds.length === 0) {
         return prev.length === 0 ? prev : [];
@@ -212,96 +207,202 @@ function BookingPageContent() {
 
   return (
     <BookingCartProvider scopeKey={cartScopeKey}>
-      <>
-        <BookingLayout
-          salon={salon}
-          onCartClick={() => setCheckoutOpen(true)}
-        >
-          <div className="space-y-8">
-            <SalonHeader
-              salon={salon}
-              locations={countryScopedLocations}
-              supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
-              selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
-              onCountryChange={countryContextEnabled ? setCountry : undefined}
-            />
-
-            {!isCatalogBlocked ? (
-              <CatalogView
-                services={services}
-                packages={packages}
-                products={products}
-                categories={categories}
-                locations={countryScopedLocations}
-                currency={storefrontCurrency}
-                strictLocationScope={countryContextEnabled}
-                strictScopedLocationIds={scopedLocationIds}
-                selectedLocationIds={selectedLocationIds}
-                onLocationFilterChange={setSelectedLocationIds}
-              />
-            ) : (
-              <div className="rounded-xl border bg-muted/20 p-8 text-center space-y-2">
-                <h2 className="text-xl font-semibold">Select your shopping country</h2>
-                <p className="text-sm text-muted-foreground">
-                  Choose a country to load available services, products, packages, and vouchers.
-                </p>
-              </div>
-            )}
-          </div>
-        </BookingLayout>
-
-        <BookingWizard
-          open={checkoutOpen}
-          onOpenChange={setCheckoutOpen}
-          salon={salon}
-          locations={checkoutLocations}
-          selectedCountryCode={selectedCountryCode}
-          services={services}
-          packages={packages}
-          products={products}
-        />
-
-        <Dialog open={isCatalogBlocked}>
-          <DialogContent className="sm:max-w-md [&>button]:hidden">
-            <DialogHeader>
-              <DialogTitle>Select your country</DialogTitle>
-              <DialogDescription>
-                We could not match your location to this salon's supported countries. Pick where you want to shop.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3">
-              <Select value={modalCountryCode || undefined} onValueChange={setModalCountryCode}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose country" />
-                </SelectTrigger>
-                <SelectContent>
-                  {supportedCountryCodes.map((code) => {
-                    const country = getCountryByCode(code);
-                    return (
-                      <SelectItem key={code} value={code}>
-                        {country ? `${country.flag} ${country.name}` : code}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-
-              <Button
-                className="w-full"
-                onClick={() => {
-                  if (!modalCountryCode) return;
-                  setCountry(modalCountryCode);
-                }}
-                disabled={!modalCountryCode}
-              >
-                Continue to {getCountryByCode(modalCountryCode || "")?.name ?? "selected country"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </>
+      <BookingPageWithCart
+        salon={salon}
+        locations={countryScopedLocations}
+        checkoutLocations={checkoutLocations}
+        selectedCountryCode={selectedCountryCode}
+        supportedCountryCodes={supportedCountryCodes}
+        countryContextEnabled={countryContextEnabled}
+        services={services}
+        packages={packages}
+        products={products}
+        categories={categories}
+        storefrontCurrency={storefrontCurrency}
+        isCatalogBlocked={isCatalogBlocked}
+        scopedLocationIds={scopedLocationIds}
+        selectedLocationIds={selectedLocationIds}
+        onLocationFilterChange={setSelectedLocationIds}
+        setCountry={setCountry}
+      />
     </BookingCartProvider>
+  );
+}
+
+interface BookingPageWithCartProps {
+  salon: PublicTenant;
+  locations: PublicLocation[];
+  checkoutLocations: PublicLocation[];
+  selectedCountryCode: string | null;
+  supportedCountryCodes: string[];
+  countryContextEnabled: boolean;
+  services: PublicService[];
+  packages: PublicPackage[];
+  products: PublicProduct[];
+  categories: PublicCategory[];
+  storefrontCurrency: string;
+  isCatalogBlocked: boolean;
+  scopedLocationIds: string[];
+  selectedLocationIds: string[];
+  onLocationFilterChange: (ids: string[]) => void;
+  setCountry: (code: string) => void;
+}
+
+function BookingPageWithCart({
+  salon,
+  locations,
+  checkoutLocations,
+  selectedCountryCode,
+  supportedCountryCodes,
+  countryContextEnabled,
+  services,
+  packages,
+  products,
+  categories,
+  storefrontCurrency,
+  isCatalogBlocked,
+  scopedLocationIds,
+  selectedLocationIds,
+  onLocationFilterChange,
+  setCountry,
+}: BookingPageWithCartProps) {
+  const { clearCart } = useBookingCart();
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [modalCountryCode, setModalCountryCode] = useState<string | null>(null);
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [showPaymentStatus, setShowPaymentStatus] = useState(false);
+
+  // Detect payment return from Paystack
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const reference = urlParams.get("reference") || urlParams.get("trxref");
+
+    if (reference) {
+      setPaymentReference(reference);
+      setShowPaymentStatus(true);
+
+      // Clear the cart since payment was initiated
+      clearCart();
+
+      // Clean URL: remove payment params but keep other params like slug
+      urlParams.delete("reference");
+      urlParams.delete("trxref");
+      const remainingParams = urlParams.toString();
+      const cleanUrl = remainingParams 
+        ? `${window.location.pathname}?${remainingParams}`
+        : window.location.pathname;
+      window.history.replaceState({}, "", cleanUrl);
+    }
+  }, [clearCart]);
+
+  useEffect(() => {
+    if (!isCatalogBlocked) {
+      setModalCountryCode(null);
+      return;
+    }
+
+    if (!modalCountryCode && supportedCountryCodes.length > 0) {
+      setModalCountryCode(supportedCountryCodes[0]);
+    }
+  }, [isCatalogBlocked, supportedCountryCodes, modalCountryCode]);
+
+  return (
+    <>
+      <BookingLayout
+        salon={salon}
+        onCartClick={() => setCheckoutOpen(true)}
+      >
+        <div className="space-y-8">
+          <SalonHeader
+            salon={salon}
+            locations={locations}
+            supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
+            selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
+            onCountryChange={countryContextEnabled ? setCountry : undefined}
+          />
+
+          {!isCatalogBlocked ? (
+            <CatalogView
+              services={services}
+              packages={packages}
+              products={products}
+              categories={categories}
+              locations={locations}
+              currency={storefrontCurrency}
+              strictLocationScope={countryContextEnabled}
+              strictScopedLocationIds={scopedLocationIds}
+              selectedLocationIds={selectedLocationIds}
+              onLocationFilterChange={onLocationFilterChange}
+            />
+          ) : (
+            <div className="rounded-xl border bg-muted/20 p-8 text-center space-y-2">
+              <h2 className="text-xl font-semibold">Select your shopping country</h2>
+              <p className="text-sm text-muted-foreground">
+                Choose a country to load available services, products, packages, and vouchers.
+              </p>
+            </div>
+          )}
+        </div>
+      </BookingLayout>
+
+      <BookingWizard
+        open={checkoutOpen}
+        onOpenChange={setCheckoutOpen}
+        salon={salon}
+        locations={checkoutLocations}
+        selectedCountryCode={selectedCountryCode}
+        services={services}
+        packages={packages}
+        products={products}
+      />
+
+      <PaymentStatusDialog
+        open={showPaymentStatus}
+        onOpenChange={setShowPaymentStatus}
+        reference={paymentReference}
+        brandColor={salon.brand_color}
+      />
+
+      <Dialog open={isCatalogBlocked}>
+        <DialogContent className="sm:max-w-md [&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle>Select your country</DialogTitle>
+            <DialogDescription>
+              We could not match your location to this salon's supported countries. Pick where you want to shop.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Select value={modalCountryCode || undefined} onValueChange={setModalCountryCode}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose country" />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedCountryCodes.map((code) => {
+                  const country = getCountryByCode(code);
+                  return (
+                    <SelectItem key={code} value={code}>
+                      {country ? `${country.flag} ${country.name}` : code}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+
+            <Button
+              className="w-full"
+              onClick={() => {
+                if (!modalCountryCode) return;
+                setCountry(modalCountryCode);
+              }}
+              disabled={!modalCountryCode}
+            >
+              Continue to {getCountryByCode(modalCountryCode || "")?.name ?? "selected country"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
