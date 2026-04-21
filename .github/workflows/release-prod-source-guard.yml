@@ -8,9 +8,11 @@ on:
 jobs:
   only-approved-branches-can-merge-into-release-prod:
     name: Source Branch Policy
+    if: github.event_name == 'pull_request' && github.base_ref == 'release/prod'
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR source branch
+        shell: bash
         run: |
           echo "base_ref=${{ github.base_ref }}"
           echo "head_ref=${{ github.head_ref }}"
@@ -20,9 +22,15 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ github.head_ref }}" != "main" ] && [ "${{ github.head_ref }}" != "merge/main-into-release-prod" ]; then
-            echo "Blocked: only PRs from 'main' or 'merge/main-into-release-prod' can merge into 'release/prod'."
-            exit 1
+          if [ "${{ github.head_ref }}" = "main" ]; then
+            echo "Allowed source branch."
+            exit 0
           fi
 
-          echo "Allowed source branch."
+          if [[ "${{ github.head_ref }}" =~ ^merge/.+-into-release-prod$ ]]; then
+            echo "Allowed source branch."
+            exit 0
+          fi
+
+          echo "Blocked: only PRs from 'main' or branches matching 'merge/*-into-release-prod' can merge into 'release/prod'."
+          exit 1
