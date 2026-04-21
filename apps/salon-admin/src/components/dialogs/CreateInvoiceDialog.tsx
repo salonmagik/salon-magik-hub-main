@@ -27,8 +27,8 @@ interface CreateInvoiceDialogProps {
 interface LineItem {
   id: string;
   description: string;
-  quantity: number;
-  unitPrice: number;
+  quantity: number | "";
+  unitPrice: number | "";
   serviceId?: string;
   productId?: string;
 }
@@ -160,7 +160,7 @@ export function CreateInvoiceDialog({
   };
 
   const calculateTotal = () => {
-    return lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    return lineItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -170,7 +170,7 @@ export function CreateInvoiceDialog({
 
     try {
       const validItems = lineItems.filter(
-        (item) => item.description.trim() && item.quantity > 0 && item.unitPrice >= 0
+        (item) => item.description.trim() && Number(item.quantity) > 0 && Number(item.unitPrice) >= 0
       );
 
       if (validItems.length === 0) {
@@ -189,8 +189,8 @@ export function CreateInvoiceDialog({
         customerId,
         items: validItems.map((item) => ({
           description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
           serviceId: item.serviceId,
           productId: item.productId,
         })),
@@ -350,7 +350,13 @@ export function CreateInvoiceDialog({
                         type="number"
                         min="1"
                         value={item.quantity}
-                        onChange={(e) => updateLineItem(item.id, "quantity", parseInt(e.target.value) || 1)}
+                        onChange={(e) =>
+                          updateLineItem(
+                            item.id,
+                            "quantity",
+                            e.target.value === "" ? "" : Number.parseInt(e.target.value, 10) || 1,
+                          )
+                        }
                         required
                       />
                     </div>
@@ -361,7 +367,13 @@ export function CreateInvoiceDialog({
                         min="0"
                         step="0.01"
                         value={item.unitPrice}
-                        onChange={(e) => updateLineItem(item.id, "unitPrice", parseFloat(e.target.value) || 0)}
+                        onChange={(e) =>
+                          updateLineItem(
+                            item.id,
+                            "unitPrice",
+                            e.target.value === "" ? "" : Number.parseFloat(e.target.value) || 0,
+                          )
+                        }
                         required
                         disabled={itemType !== "custom"}
                       />
@@ -370,7 +382,7 @@ export function CreateInvoiceDialog({
                       <Label>Total ({currency})</Label>
                       <Input
                         type="text"
-                        value={(item.quantity * item.unitPrice).toFixed(2)}
+                        value={(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toFixed(2)}
                         disabled
                       />
                     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Mail, Lock, Phone } from "lucide-react";
 import { useToast } from "@ui/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -23,8 +23,11 @@ import {
   AlertDialogTitle,
 } from "@ui/alert-dialog";
 import {
+  clearPendingSalesPromoCode,
   clearGoogleOAuthIntent,
+  readPendingSalesPromoCode,
   readGoogleOAuthIntent,
+  savePendingSalesPromoCode,
   saveGoogleOAuthIntent,
 } from "@/lib/googleOAuthFlow";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
@@ -74,12 +77,14 @@ function persistLastAuthMethod(method: LastAuthMethod) {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading, hasCompletedOnboarding, profile, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loginMode, setLoginMode] = useState<LoginMode>("email");
   const [showGoogleSignupPrompt, setShowGoogleSignupPrompt] = useState(false);
   const googleOAuthIntent = readGoogleOAuthIntent();
+  const promoCodeFromUrl = searchParams.get("promo");
   const [lastAuthMethod, setLastAuthMethod] = useState<LastAuthMethod | null>(null);
 
   // Email login state
@@ -92,6 +97,12 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("phone");
   const [otp, setOtp] = useState("");
+
+  useEffect(() => {
+    if (promoCodeFromUrl) {
+      savePendingSalesPromoCode(promoCodeFromUrl);
+    }
+  }, [promoCodeFromUrl]);
 
   useEffect(() => {
     const remembered = readRememberMePreference();
@@ -328,6 +339,7 @@ export default function LoginPage() {
       saveGoogleOAuthIntent({
         source: "login",
         inviteToken: null,
+        promoCode: promoCodeFromUrl || readPendingSalesPromoCode(),
         pendingAction: "resolve",
         createdAt: new Date().toISOString(),
       });
@@ -338,6 +350,7 @@ export default function LoginPage() {
 
       if (error) {
         clearGoogleOAuthIntent();
+        clearPendingSalesPromoCode();
         toast({
           title: "Google sign-in failed",
           description: error.message,

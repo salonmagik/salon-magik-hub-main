@@ -34,7 +34,7 @@ export function useSalesOps() {
     queryFn: async () => {
       const { data, error } = await (supabase
         .from("sales_promo_campaigns" as never)
-        .select("id, name, starts_at, ends_at, is_active, discount_type, discount_value, enable_trial_extension, trial_extension_days")
+        .select("id, name, starts_at, ends_at, is_active, discount_type, discount_value, enable_trial_extension, trial_extension_days, billing_targets, max_uses_per_tenant, email_subject_template, email_body_template")
         .order("created_at", { ascending: false }) as never);
       if (error) throw error;
       return (data || []) as any[];
@@ -76,7 +76,41 @@ export function useSalesOps() {
     queryFn: async () => {
       let query = (supabase
         .from("sales_promo_codes" as never)
-        .select("id, code, target_email, status, expires_at, created_at, agent_id")
+        .select(`
+          id,
+          code,
+          target_email,
+          status,
+          expires_at,
+          created_at,
+          agent_id,
+          claimed_at,
+          claimed_tenant_id,
+          invalidated_at,
+          invalidation_reason,
+          last_sent_at,
+          send_count,
+          sales_promo_campaigns (
+            id,
+            name,
+            ends_at,
+            discount_type,
+            discount_value,
+            billing_targets,
+            max_uses_per_tenant
+          ),
+          sales_promo_redemptions (
+            id,
+            tenant_id,
+            status,
+            max_uses,
+            uses_consumed,
+            remaining_uses,
+            claimed_at,
+            last_surface,
+            last_used_at
+          )
+        `)
         .order("created_at", { ascending: false })
         .limit(25) as never);
       if (!isSuperAdmin && ownSalesAgentQuery.data) {
@@ -150,7 +184,17 @@ export function useSalesOps() {
   });
 
   const createPromoCode = useMutation({
-    mutationFn: async ({ campaignId, agentId, targetEmail }: { campaignId: string; agentId?: string; targetEmail: string }) => {
+    mutationFn: async ({
+      campaignId,
+      agentId,
+      targetEmail,
+      targetFirstName,
+    }: {
+      campaignId: string;
+      agentId?: string;
+      targetEmail: string;
+      targetFirstName?: string;
+    }) => {
       if (!canCaptureClient) throw new Error("You do not have permission to generate promo codes");
       const resolvedAgentId = isSuperAdmin ? agentId : ownSalesAgentQuery.data;
       if (!resolvedAgentId) {
@@ -160,6 +204,7 @@ export function useSalesOps() {
         p_campaign_id: campaignId,
         p_agent_id: resolvedAgentId,
         p_target_email: targetEmail,
+        p_target_first_name: targetFirstName?.trim() || null,
       });
       if (error) throw error;
       return data;
@@ -169,6 +214,39 @@ export function useSalesOps() {
       toast.success("Promo code generated");
     },
     onError: (error: Error) => toast.error(`Failed to generate promo code: ${error.message}`),
+  });
+
+  const sendPromoEmail = useMutation({
+    mutationFn: async (promoCodeId: string) => {
+      const { data, error } = await supabase.functions.invoke("send-sales-promo-email", {
+        body: { promoCodeId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales-promo-codes"] });
+      toast.success("Promo email sent");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to send promo email"),
+  });
+
+  const invalidatePromoCode = useMutation({
+    mutationFn: async ({ promoCodeId, reason }: { promoCodeId: string; reason?: string }) => {
+      const { data, error } = await (supabase.rpc as any)("invalidate_sales_promo_code", {
+        p_promo_code_id: promoCodeId,
+        p_reason: reason || null,
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.message || "Failed to invalidate promo code");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales-promo-codes"] });
+      toast.success("Promo code invalidated");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to invalidate promo code"),
   });
 
   const ensureOwnAgentProfile = useMutation({
@@ -209,6 +287,10 @@ export function useSalesOps() {
       discountValue: number;
       trialEnabled: boolean;
       trialDays: number;
+      billingTargets: string[];
+      maxUsesPerTenant: number;
+      emailSubjectTemplate: string;
+      emailBodyTemplate: string;
     }) => {
       if (!canManageCampaigns) throw new Error("You do not have permission to manage campaigns");
       const { error } = await (supabase
@@ -221,6 +303,10 @@ export function useSalesOps() {
           discount_value: payload.discountValue,
           enable_trial_extension: payload.trialEnabled,
           trial_extension_days: payload.trialEnabled ? payload.trialDays : 0,
+          billing_targets: payload.billingTargets,
+          max_uses_per_tenant: payload.maxUsesPerTenant,
+          email_subject_template: payload.emailSubjectTemplate.trim(),
+          email_body_template: payload.emailBodyTemplate.trim(),
           is_active: true,
         } as never) as never);
       if (error) throw error;
@@ -383,6 +469,8 @@ export function useSalesOps() {
     kycRowsQuery,
     documentsQuery,
     createPromoCode,
+    sendPromoEmail,
+    invalidatePromoCode,
     ensureOwnAgentProfile,
     ensureAgentProfileForUser,
     createCampaign,

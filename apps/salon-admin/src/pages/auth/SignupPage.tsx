@@ -12,9 +12,12 @@ import { AuthDivider } from "@/components/auth/AuthDivider";
 import { Checkbox } from "@ui/checkbox";
 import { validateSignup, type SignupField, type SignupFormData } from "@/pages/auth/signup/validation";
 import {
+  clearPendingSalesPromoCode,
   clearGoogleOAuthIntent,
   normalizeEmail,
+  readPendingSalesPromoCode,
   readGoogleOAuthIntent,
+  savePendingSalesPromoCode,
   saveGoogleOAuthIntent,
 } from "@/lib/googleOAuthFlow";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
@@ -40,6 +43,7 @@ export default function SignupPage() {
   const [searchParams] = useSearchParams();
    // Support both 'invitation' and 'invite' query params for waitlist tokens
    const invitationToken = searchParams.get("invitation") || searchParams.get("invite");
+  const promoCodeFromUrl = searchParams.get("promo");
   
   const [isLoading, setIsLoading] = useState(false);
   const [isValidatingToken, setIsValidatingToken] = useState(!!invitationToken);
@@ -54,6 +58,7 @@ export default function SignupPage() {
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
   const googleOAuthIntent = readGoogleOAuthIntent();
+  const pendingPromoCode = readPendingSalesPromoCode();
 
   const [touched, setTouched] = useState<Record<SignupField, boolean>>({
     firstName: false,
@@ -66,6 +71,12 @@ export default function SignupPage() {
   });
 
   // Validate invitation token on mount
+  useEffect(() => {
+    if (promoCodeFromUrl) {
+      savePendingSalesPromoCode(promoCodeFromUrl);
+    }
+  }, [promoCodeFromUrl]);
+
   useEffect(() => {
     async function validateInvitationToken() {
       if (!invitationToken) return;
@@ -139,6 +150,7 @@ export default function SignupPage() {
       persistLastAuthMethod("google");
 
       if (waitlistLead && normalizeEmail(waitlistLead.email) !== normalizeEmail(user?.email)) {
+        clearPendingSalesPromoCode();
         clearGoogleOAuthIntent();
         await supabase.auth.signOut();
         toast({
@@ -255,6 +267,7 @@ export default function SignupPage() {
       saveGoogleOAuthIntent({
         source: "signup",
         inviteToken: invitationToken,
+        promoCode: promoCodeFromUrl || pendingPromoCode,
         pendingAction: "resolve",
         createdAt: new Date().toISOString(),
       });

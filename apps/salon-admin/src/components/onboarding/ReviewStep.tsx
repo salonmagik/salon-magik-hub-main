@@ -1,4 +1,7 @@
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
+import { Input } from "@ui/input";
+import { Button } from "@ui/button";
+import { Alert, AlertDescription } from "@ui/alert";
 import { CheckCircle2, User, Building2, MapPin, Users, Sparkles } from "lucide-react";
 import type { UserRole } from "./RoleStep";
 import type { ProfileInfo } from "./ProfileStep";
@@ -22,6 +25,20 @@ interface ReviewStepProps {
     requiresCustom?: boolean;
   } | null;
   trialDays?: number;
+  promoCode?: string;
+  onPromoCodeChange?: (value: string) => void;
+  onApplyPromo?: () => void;
+  isApplyingPromo?: boolean;
+  promoPreview?: {
+    valid: boolean;
+    message?: string;
+    campaignName?: string;
+    discountType?: string;
+    discountValue?: number;
+    maxUsesPerTenant?: number;
+    billingTargets?: string[];
+    campaignEndsAt?: string | null;
+  } | null;
 }
 
 const PLAN_NAMES: Record<SubscriptionPlan, string> = {
@@ -56,6 +73,11 @@ export function ReviewStep({
   locations,
   chainSummary,
   trialDays = 14,
+  promoCode = "",
+  onPromoCodeChange,
+  onApplyPromo,
+  isApplyingPromo = false,
+  promoPreview = null,
 }: ReviewStepProps) {
   const formatDays = (days: string[]) => {
     const dayMap: Record<string, string> = {
@@ -174,6 +196,53 @@ export function ReviewStep({
             )}
           </div>
         )}
+
+        <div className="border rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Sparkles className="w-4 h-4 text-primary" />
+            Promo Code
+          </div>
+          <div className="flex gap-2">
+            <Input
+              value={promoCode}
+              onChange={(event) => onPromoCodeChange?.(event.target.value.toUpperCase())}
+              placeholder="Enter promo code"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onApplyPromo}
+              disabled={!promoCode.trim() || isApplyingPromo}
+            >
+              {isApplyingPromo ? "Applying..." : "Apply"}
+            </Button>
+          </div>
+          {promoPreview ? (
+            <Alert variant={promoPreview.valid ? "default" : "destructive"}>
+              <AlertDescription>
+                {promoPreview.valid ? (
+                  <>
+                    <span className="font-medium">{promoPreview.campaignName}</span>
+                    {" · "}
+                    {promoPreview.discountType === "fixed"
+                      ? promoPreview.discountValue
+                      : `${promoPreview.discountValue}% off`}
+                    {" · "}
+                    {promoPreview.maxUsesPerTenant} use{promoPreview.maxUsesPerTenant === 1 ? "" : "s"}
+                    {" · "}
+                    {promoPreview.billingTargets?.join(", ")}
+                  </>
+                ) : (
+                  promoPreview.message
+                )}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Promo codes are optional. If valid, your discount will be attached when onboarding completes.
+            </p>
+          )}
+        </div>
 
         {/* Business & Location */}
         <div className="border rounded-lg p-4 space-y-3">
