@@ -414,13 +414,13 @@ export default function AppointmentsPage() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setWalkInDialogOpen(true)}>
               <UserPlus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Walk-in</span>
-              <span className="sm:hidden">Walk-in</span>
+              <span className="hidden sm:inline">Record Walk-ins</span>
+              <span className="sm:hidden">Walk-ins</span>
             </Button>
             <Button onClick={() => setAppointmentDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Schedule</span>
-              <span className="sm:hidden">Schedule</span>
+              <span className="hidden sm:inline">Book appointments</span>
+              <span className="sm:hidden">Book</span>
             </Button>
           </div>
         </div>

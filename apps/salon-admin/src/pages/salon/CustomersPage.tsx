@@ -71,6 +71,7 @@ export default function CustomersPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [inactiveDialogOpen, setInactiveDialogOpen] = useState(false);
   const [inactiveDaysThreshold, setInactiveDaysThreshold] = useState(30);
+  const [inactiveDaysThresholdInput, setInactiveDaysThresholdInput] = useState("30");
   const [reactivationDialogOpen, setReactivationDialogOpen] = useState(false);
   const [reactivationChannel, setReactivationChannel] = useState<ReactivationChannel>("email");
   const [reactivationMessage, setReactivationMessage] = useState(
@@ -750,8 +751,22 @@ export default function CustomersPage() {
             <Input
               type="number"
               min={1}
-              value={inactiveDaysThreshold}
-              onChange={(event) => setInactiveDaysThreshold(Number(event.target.value || 30))}
+              value={inactiveDaysThresholdInput}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setInactiveDaysThresholdInput(nextValue);
+                if (nextValue === "") return;
+                const parsed = Number(nextValue);
+                if (Number.isInteger(parsed) && parsed >= 1) {
+                  setInactiveDaysThreshold(parsed);
+                }
+              }}
+              onBlur={() => {
+                const parsed = Number(inactiveDaysThresholdInput);
+                const normalized = Number.isInteger(parsed) && parsed >= 1 ? parsed : inactiveDaysThreshold;
+                setInactiveDaysThreshold(normalized);
+                setInactiveDaysThresholdInput(String(normalized));
+              }}
               className="w-40"
             />
             <Button variant="outline" onClick={() => refetchInactiveCustomers()}>

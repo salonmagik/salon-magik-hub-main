@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +30,7 @@ const handler = async (req: Request): Promise<Response> => {
         { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
+    const accessToken = authHeader.replace("Bearer ", "").trim();
 
     // Client with user's auth
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -84,6 +85,7 @@ const handler = async (req: Request): Promise<Response> => {
         user_metadata: {
           ...user.user_metadata,
           requires_password_change: false, // Clear the flag
+          requires_password_reset: false,
         },
       }
     );

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
 
 const corsHeaders = {
@@ -95,6 +95,51 @@ serve(async (req) => {
               stripe_subscription_id: subscription.id,
             })
             .eq("id", tenantId);
+        }
+        break;
+      }
+
+      case "invoice.paid":
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+
+        if (!subscriptionId) {
+          break;
+        }
+
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const tenantId = subscription.metadata?.tenant_id;
+        const promoCodeId = subscription.metadata?.promo_code_id;
+        const invoiceReference = invoice.id || `${subscriptionId}:${invoice.period_end}`;
+
+        if (tenantId && promoCodeId && ["subscription_create", "subscription_cycle"].includes(invoice.billing_reason || "")) {
+          const { data: consumeResult, error: consumeError } = await (supabase.rpc as any)("consume_tenant_sales_promo_use", {
+            p_tenant_id: tenantId,
+            p_surface: "subscription",
+            p_usage_reference: invoiceReference,
+            p_amount: Number(invoice.amount_paid || 0) / 100,
+          });
+
+          if (consumeError) {
+            console.error("Failed to consume subscription promo usage:", consumeError);
+          }
+
+          if (!consumeError && consumeResult?.remaining_uses === 0) {
+            try {
+              await stripe.subscriptions.update(subscriptionId, { discounts: [] });
+            } catch (updateError) {
+              console.error("Failed to remove exhausted subscription promo discount:", updateError);
+            }
+          }
+
+          if (!consumeError && consumeResult?.applied === false) {
+            try {
+              await stripe.subscriptions.update(subscriptionId, { discounts: [] });
+            } catch (updateError) {
+              console.error("Failed to clear invalid subscription promo discount:", updateError);
+            }
+          }
         }
         break;
       }
