@@ -245,6 +245,30 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
+      const { data: seatGateData, error: seatGateError } = await (supabase.rpc as any)("assert_tenant_can_add_staff", {
+        p_tenant_id: tenantId,
+      });
+
+      if (seatGateError) {
+        throw seatGateError;
+      }
+
+      const seatGate = Array.isArray(seatGateData) ? seatGateData[0] : seatGateData;
+      if (seatGate && seatGate.can_add === false) {
+        const message =
+          String(seatGate.required_plan || "").toLowerCase() === "studio"
+            ? "Studio upgrade required before inviting another staff member."
+            : "No staff seats available. Add seats in Subscription before inviting another team member.";
+
+        return new Response(
+          JSON.stringify({
+            error: message,
+            seatGate,
+          }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
       const normalizedEmail = email.toLowerCase();
       tempPassword = generateSecurePassword();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

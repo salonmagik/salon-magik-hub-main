@@ -19,6 +19,7 @@ import type {
 } from "@/hooks";
 
 interface CatalogViewProps {
+  themeKey?: string | null;
   services: PublicService[];
   packages: PublicPackage[];
   products: PublicProduct[];
@@ -51,6 +52,7 @@ type CatalogItem = {
 };
 
 export function CatalogView({
+  themeKey,
   services,
   packages,
   products,
@@ -62,6 +64,7 @@ export function CatalogView({
   selectedLocationIds,
   onLocationFilterChange,
 }: CatalogViewProps) {
+  const isEcommerceTheme = themeKey === "ecommerce";
   const [activeTab, setActiveTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -221,10 +224,11 @@ export function CatalogView({
     }
 
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className={isEcommerceTheme ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
         {items.map((item) => (
           <ItemCard
             key={`${item.type}-${item.id}`}
+            themeKey={themeKey}
             type={item.type}
             id={item.id}
             name={item.name}
@@ -246,7 +250,7 @@ export function CatalogView({
 
   return (
     <div className="space-y-6">
-      {/* Search and Sort Controls */}
+      <div className={isEcommerceTheme ? "rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm" : ""}>
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -254,12 +258,12 @@ export function CatalogView({
             placeholder="Search services, packages, products..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className={isEcommerceTheme ? "pl-9 bg-[#fcfaf6]" : "pl-9"}
           />
         </div>
 
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-          <SelectTrigger className="w-full sm:w-[180px]">
+          <SelectTrigger className={isEcommerceTheme ? "w-full bg-[#fcfaf6] sm:w-[180px]" : "w-full sm:w-[180px]"}>
             <ArrowUpDown className="h-4 w-4 mr-2" />
             <SelectValue />
           </SelectTrigger>
@@ -272,7 +276,7 @@ export function CatalogView({
       </div>
 
       {locations.length > 1 && (
-        <div className="rounded-lg border p-3 space-y-2">
+        <div className={isEcommerceTheme ? "mt-4 rounded-2xl border border-stone-200 bg-[#fcfaf6] p-3 space-y-2" : "rounded-lg border p-3 space-y-2"}>
           <div className="text-sm font-medium flex items-center gap-2">
             <MapPin className="h-4 w-4" />
             Filter by city
@@ -313,7 +317,7 @@ export function CatalogView({
       )}
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveCategory(null); }}>
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className={isEcommerceTheme ? "mt-4 w-full justify-start overflow-x-auto rounded-full bg-stone-100 p-1" : "w-full justify-start overflow-x-auto"}>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="services">Services</TabsTrigger>
           <TabsTrigger value="packages">Packages</TabsTrigger>
@@ -364,6 +368,7 @@ export function CatalogView({
           {renderItemGrid(displayItems)}
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

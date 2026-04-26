@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useClientAuth } from "./useClientAuth";
 import type { Tables } from "@/lib/supabase";
+import { getCountryByCode } from "@shared/countries";
 
 type CustomerPurse = Tables<"customer_purses">;
 type Transaction = Tables<"transactions">;
@@ -9,6 +10,14 @@ type Tenant = Tables<"tenants">;
 
 export interface PurseWithTenant extends CustomerPurse {
   tenant: Tenant;
+}
+
+export interface PurseCountryGroup {
+  countryCode: string;
+  countryLabel: string;
+  currency: string | null;
+  totalBalance: number | null;
+  purses: PurseWithTenant[];
 }
 
 export function useClientPurse() {
@@ -93,11 +102,44 @@ export function useClientPurse() {
     }
   };
 
-  // Total balance across all salons
-  const totalBalance = purses.reduce((sum, p) => sum + Number(p.balance), 0);
+  const purseGroups = Object.values(
+    purses.reduce<Record<string, PurseCountryGroup>>((acc, purse) => {
+      const countryCode = String(purse.tenant.country || "UNKNOWN").toUpperCase();
+      const currency = purse.currency || purse.tenant.currency || null;
+      const existing = acc[countryCode];
+      const countryLabel = getCountryByCode(countryCode)?.name || countryCode;
+
+      if (!existing) {
+        acc[countryCode] = {
+          countryCode,
+          countryLabel,
+          currency,
+          totalBalance: Number(purse.balance || 0),
+          purses: [purse],
+        };
+        return acc;
+      }
+
+      existing.purses.push(purse);
+      if (existing.currency && currency && existing.currency !== currency) {
+        existing.totalBalance = null;
+        existing.currency = null;
+      } else if (existing.totalBalance !== null) {
+        existing.totalBalance += Number(purse.balance || 0);
+      }
+
+      return acc;
+    }, {}),
+  ).sort((a, b) => a.countryLabel.localeCompare(b.countryLabel));
+
+  const hasMultipleCountries = purseGroups.length > 1;
+  const totalBalance =
+    purseGroups.length === 1 && purseGroups[0].totalBalance !== null ? purseGroups[0].totalBalance : null;
 
   return {
     purses,
+    purseGroups,
+    hasMultipleCountries,
     totalBalance,
     isLoading,
     error,

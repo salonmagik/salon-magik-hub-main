@@ -10,6 +10,7 @@ import { QuantityControl } from "./QuantityControl";
 import { ImageSlider } from "@/components/ImageSlider";
 
 interface ItemCardProps {
+  themeKey?: string | null;
   type: "service" | "package" | "product";
   id: string;
   name: string;
@@ -26,6 +27,7 @@ interface ItemCardProps {
 }
 
 export function ItemCard({
+  themeKey,
   type,
   id,
   name,
@@ -40,6 +42,7 @@ export function ItemCard({
   branches = [],
   locationNames = [],
 }: ItemCardProps) {
+  const isEcommerceTheme = themeKey === "ecommerce";
   const [detailsOpen, setDetailsOpen] = useState(false);
   const { addItem, getItemInCart, updateQuantity } = useBookingCart();
 
@@ -106,7 +109,11 @@ export function ItemCard({
   return (
 		<>
 			<div
-				className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px] cursor-pointer"
+				className={
+					isEcommerceTheme
+						? "flex h-full min-h-[240px] cursor-pointer flex-col rounded-[26px] border border-stone-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+						: "rounded-xl border bg-card p-4 hover:shadow-md transition-shadow flex flex-col h-full min-h-[200px] cursor-pointer"
+				}
 				onClick={() => setDetailsOpen(true)}
 				role="button"
 				tabIndex={0}
@@ -118,10 +125,10 @@ export function ItemCard({
 				}}
 			>
 				{/* Image + Content Row */}
-				<div className="flex gap-3 mb-3">
+				<div className={isEcommerceTheme ? "mb-4 space-y-4" : "flex gap-3 mb-3"}>
 					{/* Image Slider */}
-					<div className="w-20 h-20 shrink-0">
-						<ImageSlider images={imageUrls} alt={name} className="w-20 h-20" />
+					<div className={isEcommerceTheme ? "h-48 w-full shrink-0" : "w-20 h-20 shrink-0"}>
+						<ImageSlider images={imageUrls} alt={name} className={isEcommerceTheme ? "h-48 w-full" : "w-20 h-20"} />
 					</div>
 
 					{/* Header + Name */}
@@ -149,7 +156,7 @@ export function ItemCard({
 						</div>
 
 						{/* Name */}
-						<h3 className="font-semibold text-base line-clamp-1">{name}</h3>
+						<h3 className={isEcommerceTheme ? "font-semibold text-lg line-clamp-1" : "font-semibold text-base line-clamp-1"}>{name}</h3>
 
 						{/* Description */}
 						{description && (
@@ -184,7 +191,7 @@ export function ItemCard({
 				<div className="flex-1" />
 
 				{/* Metadata Badges + Add Button / Quantity Counter */}
-				<div className="flex items-end justify-between mt-3 gap-2">
+				<div className={isEcommerceTheme ? "mt-3 flex flex-col gap-3" : "flex items-end justify-between mt-3 gap-2"}>
 					<div className="flex flex-wrap gap-1.5">
 						{type === "service" && durationMinutes && (
 							<Badge variant="secondary" className="text-xs gap-1">
@@ -221,7 +228,7 @@ export function ItemCard({
 								handleAddToCart();
 							}}
 							disabled={isOutOfStock}
-							className="gap-1.5 shrink-0 border-0"
+							className={isEcommerceTheme ? "w-full gap-1.5 shrink-0 border-0" : "gap-1.5 shrink-0 border-0"}
 							style={{
 								backgroundColor: isOutOfStock
 									? undefined

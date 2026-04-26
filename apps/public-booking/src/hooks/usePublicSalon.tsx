@@ -19,7 +19,6 @@ export type PublicTenant = Pick<
   | "booking_status_message"
   | "slot_capacity_default"
   | "default_buffer_minutes"
-  | "pay_at_salon_enabled"
   | "allow_staff_selection"
   | "require_staff_selection"
   | "auto_assign_staff"
@@ -28,6 +27,7 @@ export type PublicTenant = Pick<
   contact_phone?: string | null;
   show_contact_on_booking?: boolean;
   auto_confirm_bookings?: boolean;
+  theme_key?: string | null;
 };
 
 export type PublicLocation = Pick<

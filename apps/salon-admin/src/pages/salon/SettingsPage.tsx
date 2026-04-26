@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
@@ -31,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
 import { TimePicker } from "@ui/time-picker";
 import {
   Building2,
@@ -60,6 +62,10 @@ import {
   ArrowDownUp,
   CalendarX2,
   Globe,
+  Eye,
+  ExternalLink,
+  Palette,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -78,6 +84,10 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useClaimTenantSalesPromo, useTenantSalesPromo } from "@/hooks/useSalesPromo";
 import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
+import { usePlanPricingByPlan } from "@/hooks/usePlanPricing";
+import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
+import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
+import { formatCurrency } from "@shared/currency";
 
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch";
@@ -119,10 +129,13 @@ interface SettingsPageProps {
   scope?: SettingsScope;
 }
 
+type BookingThemeKey = "default" | "ecommerce";
+type BookingSettingsSubTab = "booking_config" | "themes_and_style";
+
 export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSaving, setIsSaving] = useState(false);
-  const { currentTenant, profile, user, activeContextType, activeLocationId } = useAuth();
+  const { currentTenant, profile, user, activeContextType, activeLocationId, refreshTenants } = useAuth();
   const { locations, defaultLocation, isLoading: locationsLoading, refetch: refetchLocations } = useLocations();
   const {
     settings: dbNotificationSettings,
@@ -132,10 +145,62 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   } = useNotificationSettings();
   const [subscriptionPromoCode, setSubscriptionPromoCode] = useState("");
   const [isStartingSubscriptionCheckout, setIsStartingSubscriptionCheckout] = useState(false);
+  const [seatPurchaseQuantityInput, setSeatPurchaseQuantityInput] = useState("1");
+  const [isPurchasingSeats, setIsPurchasingSeats] = useState(false);
+  const [isPurchasingTheme, setIsPurchasingTheme] = useState(false);
+  const [isUpgradingStudio, setIsUpgradingStudio] = useState(false);
+  const [isUpgradingChain, setIsUpgradingChain] = useState(false);
   const claimTenantPromo = useClaimTenantSalesPromo();
   const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
   const { data: activeTenantPromo } = useTenantSalesPromo();
   const { data: plans } = usePlans();
+  const { data: entitlements, refetch: refetchEntitlements } = useTenantEntitlements(currentTenant?.id);
+  const currentPlan = plans?.find((plan) => plan.slug === currentTenant?.plan);
+  const studioPlan = plans?.find((plan) => plan.slug === "studio");
+  const chainPlan = plans?.find((plan) => plan.slug === "chain");
+  const { data: studioPlanPricing } = usePlanPricingByPlan(studioPlan?.id || "", currentTenant?.currency || "USD");
+  const { data: chainPlanPricing } = usePlanPricingByPlan(chainPlan?.id || "", currentTenant?.currency || "USD");
+
+  const { data: staffSeatPricing } = useQuery({
+    queryKey: ["staff-addon-pricing", currentTenant?.country, currentTenant?.currency],
+    enabled: Boolean(currentTenant?.country && currentTenant?.currency),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("staff_addon_pricing" as any)
+        .select("unit_price_per_extra_seat")
+        .eq("country_code", currentTenant?.country || "")
+        .eq("currency", currentTenant?.currency || "USD")
+        .eq("status", "active")
+        .order("effective_from", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ? Number((data as any).unit_price_per_extra_seat || 0) : 0;
+    },
+    staleTime: 1000 * 60,
+  });
+
+  const { data: ecommerceThemePricing } = useQuery({
+    queryKey: ["theme-addon-pricing", currentTenant?.country, currentTenant?.currency],
+    enabled: Boolean(currentTenant?.country && currentTenant?.currency),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("theme_addon_pricing" as any)
+        .select("unit_price")
+        .eq("theme_key", "ecommerce")
+        .eq("country_code", currentTenant?.country || "")
+        .eq("currency", currentTenant?.currency || "USD")
+        .eq("status", "active")
+        .order("effective_from", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data ? Number((data as any).unit_price || 0) : 0;
+    },
+    staleTime: 1000 * 60,
+  });
 
   const isChain = currentTenant?.plan === "chain";
   const resolvedScope: Exclude<SettingsScope, "auto"> =
@@ -277,6 +342,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [bookingSettings, setBookingSettings] = useState({
     onlineBookingEnabled: false,
     autoConfirmBookings: false,
+    depositsEnabled: false,
     defaultBufferMinutes: 0,
     cancellationGraceHours: 24,
     defaultDepositPercentage: 0,
@@ -290,6 +356,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [cancellationGraceHoursInput, setCancellationGraceHoursInput] = useState("24");
   const [defaultDepositPercentageInput, setDefaultDepositPercentageInput] = useState("0");
   const [slotCapacityDefaultInput, setSlotCapacityDefaultInput] = useState("1");
+  const [bookingSubTab, setBookingSubTab] = useState<BookingSettingsSubTab>("booking_config");
 
   const startSubscriptionCheckout = async () => {
     if (!currentTenant?.id || !currentTenant.plan) {
@@ -360,6 +427,107 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     }
   };
 
+  const runPlanUpgrade = async (targetPlan: "studio" | "chain") => {
+    if (!currentTenant?.id) return;
+
+    const setPending = targetPlan === "studio" ? setIsUpgradingStudio : setIsUpgradingChain;
+    setPending(true);
+    try {
+      const { error } = await (supabase.rpc as any)("upgrade_tenant_plan_and_log_billing", {
+        p_tenant_id: currentTenant.id,
+        p_target_plan: targetPlan,
+        p_source: "settings_subscription",
+        p_reason:
+          targetPlan === "studio"
+            ? "Tenant upgraded to Studio for additional team seats."
+            : "Tenant upgraded to Chain for additional locations.",
+        p_seed_allowed_locations:
+          targetPlan === "chain" ? Math.max(entitlements?.used_locations || 1, 2) : null,
+      });
+
+      if (error) throw error;
+
+      await Promise.all([refreshTenants(), refetchEntitlements()]);
+      toast({
+        title: "Plan updated",
+        description:
+          targetPlan === "studio"
+            ? "Your tenant is now on the Studio plan."
+            : "Your tenant is now on the Chain plan and can add another branch.",
+      });
+    } catch (error) {
+      toast({
+        title: "Upgrade failed",
+        description: error instanceof Error ? error.message : "Unable to update the plan right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const purchaseExtraSeats = async () => {
+    if (!currentTenant?.id) return;
+    const quantity = Math.max(1, Number(seatPurchaseQuantityInput || 1));
+
+    setIsPurchasingSeats(true);
+    try {
+      const { error } = await (supabase.rpc as any)("purchase_tenant_extra_seats_and_log_billing", {
+        p_tenant_id: currentTenant.id,
+        p_quantity: quantity,
+        p_source: "settings_subscription",
+        p_reason: `Tenant purchased ${quantity} extra staff seat${quantity === 1 ? "" : "s"} from subscription settings.`,
+      });
+
+      if (error) throw error;
+
+      setSeatPurchaseQuantityInput("1");
+      await refetchEntitlements();
+      toast({
+        title: "Seats added",
+        description: `${quantity} extra seat${quantity === 1 ? "" : "s"} added to your tenant entitlement.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Seat purchase failed",
+        description: error instanceof Error ? error.message : "Unable to add seats right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPurchasingSeats(false);
+    }
+  };
+
+  const purchaseThemeAddon = async () => {
+    if (!currentTenant?.id) return;
+
+    setIsPurchasingTheme(true);
+    try {
+      const { error } = await (supabase.rpc as any)("purchase_tenant_theme_addon_and_log_billing", {
+        p_tenant_id: currentTenant.id,
+        p_theme_key: "ecommerce",
+        p_source: "settings_subscription",
+        p_reason: "Tenant activated the annual e-commerce storefront theme.",
+      });
+
+      if (error) throw error;
+
+      await refetchEntitlements();
+      toast({
+        title: "Theme activated",
+        description: "The e-commerce storefront theme is now active for your public booking page.",
+      });
+    } catch (error) {
+      toast({
+        title: "Theme activation failed",
+        description: error instanceof Error ? error.message : "Unable to activate the theme right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPurchasingTheme(false);
+    }
+  };
+
   const [isGeneratingSlug, setIsGeneratingSlug] = useState(false);
   const activeLocation =
     locations.find((location) => location.id === activeLocationId) ?? defaultLocation ?? null;
@@ -371,6 +539,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const [themePreviewOpen, setThemePreviewOpen] = useState(false);
+  const [themePreviewKey, setThemePreviewKey] = useState<BookingThemeKey>("default");
   const [profileBaseline, setProfileBaseline] = useState({
     salonName: "",
     city: "",
@@ -387,6 +557,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [bookingBaseline, setBookingBaseline] = useState({
     onlineBookingEnabled: false,
     autoConfirmBookings: false,
+    depositsEnabled: false,
     defaultBufferMinutes: 0,
     cancellationGraceHours: 24,
     defaultDepositPercentage: 0,
@@ -420,6 +591,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       const nextBooking = {
         onlineBookingEnabled: currentTenant.online_booking_enabled || false,
         autoConfirmBookings: currentTenant.auto_confirm_bookings || false,
+        depositsEnabled: currentTenant.deposits_enabled || false,
         defaultBufferMinutes: currentTenant.default_buffer_minutes || 0,
         cancellationGraceHours: currentTenant.cancellation_grace_hours || 24,
         defaultDepositPercentage: Number(currentTenant.default_deposit_percentage) || 0,
@@ -593,6 +765,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
     hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
   });
+  const activeBookingTheme: BookingThemeKey = entitlements?.has_ecommerce_theme ? "ecommerce" : "default";
 
   const handleCopyUrl = () => {
     if (bookingUrl) {
@@ -603,7 +776,38 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     }
   };
 
-  const { refreshTenants } = useAuth();
+  const getThemePreviewUrl = (themeKey: BookingThemeKey) => {
+    if (!bookingUrl) return null;
+    try {
+      const url = new URL(bookingUrl);
+      if (themeKey === "ecommerce") {
+        url.searchParams.set("preview_theme", "ecommerce");
+      } else {
+        url.searchParams.delete("preview_theme");
+      }
+      return url.toString();
+    } catch {
+      return bookingUrl;
+    }
+  };
+
+  const openThemePreview = (themeKey: BookingThemeKey) => {
+    setThemePreviewKey(themeKey);
+    setThemePreviewOpen(true);
+  };
+
+  const openThemePreviewInNewTab = (themeKey: BookingThemeKey) => {
+    const previewUrl = getThemePreviewUrl(themeKey);
+    if (!previewUrl) {
+      toast({
+        title: "Preview unavailable",
+        description: "Generate your booking URL first to preview booking page themes.",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.open(previewUrl, "_blank", "noopener,noreferrer");
+  };
 
   const handleLogoUpload = async (file: File) => {
     if (!currentTenant?.id) return;
@@ -726,6 +930,38 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       console.error("Error removing banner:", err);
       toast({ title: "Error", description: "Failed to remove banner", variant: "destructive" });
     }
+  };
+
+  const renderBookingThemePreview = (themeKey: BookingThemeKey, mode: "card" | "dialog" = "card") => {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between rounded-2xl border bg-muted/30 px-4 py-3">
+          <div>
+            <p className="font-medium">{themeKey === "ecommerce" ? "E-commerce" : "Default"} theme preview</p>
+            <p className="text-xs text-muted-foreground">
+              Exact in-app theme simulator using your current branding, banners, contact settings, and representative booking content.
+            </p>
+          </div>
+          <Badge variant="outline">{themeKey === "ecommerce" ? "Storefront simulation" : "Appointment-first simulation"}</Badge>
+        </div>
+        <BookingThemePreview
+          themeKey={themeKey}
+          mode={mode}
+          salonName={profileData.salonName || currentTenant?.name || "Your Salon"}
+          brandColor={bookingSettings.brandColor || "#2563EB"}
+          bannerUrls={bannerUrls}
+          bookingStatusMessage={bookingSettings.bookingStatusMessage}
+          contactPhone={profileData.contactPhone || currentTenant?.contact_phone || null}
+          showContactOnBooking={profileData.showContactOnBooking}
+          locations={(locations || []).map((location) => ({
+            id: location.id,
+            name: location.name,
+            city: location.city,
+            address: location.address,
+          }))}
+        />
+      </div>
+    );
   };
 
   const handleProfileSave = async () => {
@@ -961,6 +1197,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         .update({
           online_booking_enabled: bookingSettings.onlineBookingEnabled,
           auto_confirm_bookings: bookingSettings.autoConfirmBookings,
+          deposits_enabled: bookingSettings.depositsEnabled,
           default_buffer_minutes: bookingSettings.defaultBufferMinutes,
           cancellation_grace_hours: bookingSettings.cancellationGraceHours,
           default_deposit_percentage: bookingSettings.defaultDepositPercentage,
@@ -1601,397 +1838,412 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       <CardHeader>
         <CardTitle>Booking Settings</CardTitle>
         <CardDescription>
-          Configure how customers can book appointments with your salon.
+          Manage booking behavior, payment rules, and the customer-facing styling of your booking page.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Booking URL */}
-        {bookingUrl ? (
-          <div className="space-y-2">
-            <Label>Booking URL</Label>
-            <div className="flex items-center gap-2">
-              <Input value={bookingUrl} readOnly className="flex-1 bg-muted" />
-              <Button variant="outline" size="icon" onClick={handleCopyUrl}>
-                {copiedUrl ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              </Button>
+        <Tabs value={bookingSubTab} onValueChange={(value) => setBookingSubTab(value as BookingSettingsSubTab)}>
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="booking_config">Booking Config</TabsTrigger>
+            <TabsTrigger value="themes_and_style">Themes &amp; Style</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {bookingSubTab === "booking_config" ? (
+          <div className="space-y-6">
+            {bookingUrl ? (
+              <div className="space-y-2">
+                <Label>Booking URL</Label>
+                <div className="flex items-center gap-2">
+                  <Input value={bookingUrl} readOnly className="flex-1 bg-muted" />
+                  <Button variant="outline" size="icon" onClick={handleCopyUrl}>
+                    {copiedUrl ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Share this link with customers to let them book online.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Booking URL</Label>
+                <div className="rounded-lg border border-dashed bg-muted/50 p-4">
+                  <p className="mb-3 text-sm text-muted-foreground">Generate a booking URL before publishing the booking page.</p>
+                  <Button onClick={handleGenerateSlug} disabled={isGeneratingSlug} className="gap-2">
+                    {isGeneratingSlug ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                    Generate Booking URL
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium">Enable Online Booking</p>
+                  <p className="text-sm text-muted-foreground">Allow customers to book through the public booking page.</p>
+                </div>
+                <Switch
+                  checked={bookingSettings.onlineBookingEnabled}
+                  onCheckedChange={(checked) => setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: checked }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium">Auto-Confirm Bookings</p>
+                  <p className="text-sm text-muted-foreground">When off, customers submit requests first and only pay after salon approval.</p>
+                </div>
+                <Switch
+                  checked={bookingSettings.autoConfirmBookings}
+                  onCheckedChange={(checked) => setBookingSettings((prev) => ({ ...prev, autoConfirmBookings: checked }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium">Accept Online Deposits</p>
+                  <p className="text-sm text-muted-foreground">Tenant-level payment rule used across the whole public booking checkout.</p>
+                </div>
+                <Switch
+                  checked={bookingSettings.depositsEnabled}
+                  onCheckedChange={(checked) => setBookingSettings((prev) => ({ ...prev, depositsEnabled: checked }))}
+                />
+              </div>
+
+              <div className="rounded-xl border bg-muted/30 p-4 text-sm">
+                <p className="font-medium">Payment model</p>
+                <p className="mt-1 text-muted-foreground">
+                  Public booking now uses tenant-level payment rules only. Service-level payment settings no longer control checkout behavior, and pay-at-salon is no longer offered.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium">Allow Staff Selection</p>
+                  <p className="text-sm text-muted-foreground">Let customers choose a preferred staff member during booking.</p>
+                </div>
+                <Switch
+                  checked={bookingSettings.allowStaffSelection}
+                  onCheckedChange={(checked) =>
+                    setBookingSettings((prev) => ({
+                      ...prev,
+                      allowStaffSelection: checked,
+                      requireStaffSelection: checked ? prev.requireStaffSelection : false,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium">Require Staff Selection</p>
+                  <p className="text-sm text-muted-foreground">Force customers to select a staff member before checkout.</p>
+                </div>
+                <Switch
+                  checked={bookingSettings.requireStaffSelection}
+                  disabled={!bookingSettings.allowStaffSelection}
+                  onCheckedChange={(checked) =>
+                    setBookingSettings((prev) => ({
+                      ...prev,
+                      requireStaffSelection: checked,
+                      autoAssignStaff: checked ? false : prev.autoAssignStaff,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium">Auto-Assign Staff</p>
+                  <p className="text-sm text-muted-foreground">Automatically assign an eligible staff member when the customer leaves staff unselected.</p>
+                </div>
+                <Switch
+                  checked={bookingSettings.autoAssignStaff}
+                  disabled={bookingSettings.requireStaffSelection}
+                  onCheckedChange={(checked) => setBookingSettings((prev) => ({ ...prev, autoAssignStaff: checked }))}
+                />
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Share this link with your customers to let them book online
-            </p>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Default Buffer Time</Label>
+                <Select
+                  value={bookingSettings.defaultBufferMinutes.toString()}
+                  onValueChange={(v) => setBookingSettings((prev) => ({ ...prev, defaultBufferMinutes: parseInt(v, 10) }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">No buffer</SelectItem>
+                    <SelectItem value="5">5 minutes</SelectItem>
+                    <SelectItem value="10">10 minutes</SelectItem>
+                    <SelectItem value="15">15 minutes</SelectItem>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Cancellation Grace Period</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={cancellationGraceHoursInput}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setCancellationGraceHoursInput(nextValue);
+                      if (nextValue === "") return;
+                      const parsed = Number.parseInt(nextValue, 10);
+                      if (!Number.isNaN(parsed) && parsed >= 0) {
+                        setBookingSettings((prev) => ({ ...prev, cancellationGraceHours: parsed }));
+                      }
+                    }}
+                    onBlur={() => {
+                      const parsed = Number.parseInt(cancellationGraceHoursInput, 10);
+                      const normalized = !Number.isNaN(parsed) && parsed >= 0 ? parsed : bookingSettings.cancellationGraceHours;
+                      setCancellationGraceHoursInput(String(normalized));
+                      setBookingSettings((prev) => ({ ...prev, cancellationGraceHours: normalized }));
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">hours</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Default Deposit Percentage</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={defaultDepositPercentageInput}
+                    disabled={!bookingSettings.depositsEnabled}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setDefaultDepositPercentageInput(nextValue);
+                      if (nextValue === "") return;
+                      const parsed = Number.parseInt(nextValue, 10);
+                      if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                        setBookingSettings((prev) => ({ ...prev, defaultDepositPercentage: parsed }));
+                      }
+                    }}
+                    onBlur={() => {
+                      const parsed = Number.parseInt(defaultDepositPercentageInput, 10);
+                      const normalized = !Number.isNaN(parsed)
+                        ? Math.min(100, Math.max(0, parsed))
+                        : bookingSettings.defaultDepositPercentage;
+                      setDefaultDepositPercentageInput(String(normalized));
+                      setBookingSettings((prev) => ({ ...prev, defaultDepositPercentage: normalized }));
+                    }}
+                    className="w-24"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Bookings per Time Slot</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={slotCapacityDefaultInput}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    setSlotCapacityDefaultInput(nextValue);
+                    if (nextValue === "") return;
+                    const parsed = Number.parseInt(nextValue, 10);
+                    if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 100) {
+                      setBookingSettings((prev) => ({ ...prev, slotCapacityDefault: parsed }));
+                    }
+                  }}
+                  onBlur={() => {
+                    const parsed = Number.parseInt(slotCapacityDefaultInput, 10);
+                    const normalized = !Number.isNaN(parsed)
+                      ? Math.min(100, Math.max(1, parsed))
+                      : bookingSettings.slotCapacityDefault;
+                    setSlotCapacityDefaultInput(String(normalized));
+                    setBookingSettings((prev) => ({ ...prev, slotCapacityDefault: normalized }));
+                  }}
+                  className="w-24"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Booking Status Message</Label>
+              <Textarea
+                placeholder="Optional message to display on your booking page..."
+                value={bookingSettings.bookingStatusMessage}
+                onChange={(e) => setBookingSettings((prev) => ({ ...prev, bookingStatusMessage: e.target.value }))}
+                rows={2}
+              />
+            </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            <Label>Booking URL</Label>
-            <div className="p-4 rounded-lg bg-muted/50 border border-dashed">
-              <p className="text-sm text-muted-foreground mb-3">
-                Generate a booking URL to enable online bookings for your salon
-              </p>
-              <Button
-                onClick={handleGenerateSlug}
-                disabled={isGeneratingSlug}
-                className="gap-2"
-              >
-                {isGeneratingSlug ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Link2 className="w-4 h-4" />
-                )}
-                Generate Booking URL
-              </Button>
+          <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-[1.1fr_1.6fr]">
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div>
+                    <Label>Booking Page Banners</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Add up to 2 images to personalize your booking page.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {bannerUrls.map((url, index) => (
+                      <div key={index} className="relative group">
+                        <div className="h-20 w-32 overflow-hidden rounded-lg border bg-muted">
+                          <img src={url} alt={`Banner ${index + 1}`} className="h-full w-full object-cover" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBanner(index)}
+                          className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {bannerUrls.length < 2 && (
+                      <div>
+                        <input
+                          ref={bannerInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleBannerUpload(file);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => bannerInputRef.current?.click()}
+                          disabled={isUploadingBanner}
+                          className="flex h-20 w-32 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                        >
+                          {isUploadingBanner ? <Loader2 className="h-5 w-5 animate-spin" /> : <><ImageIcon className="h-5 w-5" /><span className="text-xs">Add banner</span></>}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Brand Highlight Color</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="color"
+                      value={bookingSettings.brandColor}
+                      onChange={(e) => setBookingSettings((prev) => ({ ...prev, brandColor: e.target.value }))}
+                      className="h-10 w-16 cursor-pointer p-1"
+                    />
+                    <Input
+                      type="text"
+                      value={bookingSettings.brandColor}
+                      onChange={(e) => setBookingSettings((prev) => ({ ...prev, brandColor: e.target.value }))}
+                      placeholder="#2563EB"
+                      className="w-28 font-mono text-sm"
+                    />
+                    <div className="h-10 w-10 rounded-md border" style={{ backgroundColor: bookingSettings.brandColor }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Used for buttons and accents on your booking page.</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <Label>Booking Page Themes</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Preview the real public booking page, then purchase and apply a paid theme when ready.</p>
+                  </div>
+                  <Badge variant="outline" className="w-fit">
+                    Current theme: {activeBookingTheme === "ecommerce" ? "E-commerce" : "Default"}
+                  </Badge>
+                </div>
+
+                <div className="grid gap-4">
+                  <div className="rounded-3xl border bg-card p-4 shadow-sm">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Palette className="h-4 w-4 text-muted-foreground" />
+                          <p className="font-medium">Default</p>
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">Clean appointment-first booking page with your salon branding.</p>
+                      </div>
+                      {activeBookingTheme === "default" && <Badge>Applied</Badge>}
+                    </div>
+                    {renderBookingThemePreview("default", "card")}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={() => openThemePreview("default")}><Eye className="mr-2 h-4 w-4" />Preview</Button>
+                      <Button type="button" variant="ghost" onClick={() => openThemePreviewInNewTab("default")} disabled={!bookingUrl}><ExternalLink className="mr-2 h-4 w-4" />Open live preview</Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border bg-card p-4 shadow-sm">
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          <p className="font-medium">E-commerce</p>
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">Shopify-inspired storefront styling adapted for bookable services, packages, vouchers, and products.</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        {activeBookingTheme === "ecommerce" ? <Badge>Applied</Badge> : <Badge variant="secondary">Paid theme</Badge>}
+                        <span className="text-xs text-muted-foreground">
+                          {ecommerceThemePricing ? `${formatCurrency(ecommerceThemePricing, currentTenant?.currency || "USD")} / year` : "Annual billing"}
+                        </span>
+                      </div>
+                    </div>
+                    {renderBookingThemePreview("ecommerce", "card")}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" onClick={() => openThemePreview("ecommerce")}><Eye className="mr-2 h-4 w-4" />Preview</Button>
+                      <Button type="button" variant="ghost" onClick={() => openThemePreviewInNewTab("ecommerce")} disabled={!bookingUrl}><ExternalLink className="mr-2 h-4 w-4" />Open live preview</Button>
+                      <Button type="button" onClick={purchaseThemeAddon} disabled={isPurchasingTheme || activeBookingTheme === "ecommerce"}>
+                        {isPurchasingTheme ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                        {activeBookingTheme === "ecommerce" ? "Applied to booking page" : "Purchase & apply"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <Dialog open={themePreviewOpen} onOpenChange={setThemePreviewOpen}>
+              <DialogContent className="sm:max-w-5xl">
+                <DialogHeader>
+                  <DialogTitle>{themePreviewKey === "ecommerce" ? "E-commerce theme preview" : "Default theme preview"}</DialogTitle>
+                  <DialogDescription>
+                    This preview loads the real public booking page in a bounded frame, so what you see here matches the live theme composition.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  {renderBookingThemePreview(themePreviewKey, "dialog")}
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => openThemePreviewInNewTab(themePreviewKey)} disabled={!bookingUrl}>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Open live preview
+                    </Button>
+                    {themePreviewKey === "ecommerce" && activeBookingTheme !== "ecommerce" && (
+                      <Button type="button" onClick={purchaseThemeAddon} disabled={isPurchasingTheme}>
+                        {isPurchasingTheme ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                        Purchase & apply
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 
-        {/* Toggle Settings */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Enable Online Booking</p>
-              <p className="text-sm text-muted-foreground">
-                Allow customers to book appointments through your booking page
-              </p>
-            </div>
-            <Switch
-              checked={bookingSettings.onlineBookingEnabled}
-              disabled={isSaving}
-              onCheckedChange={async (checked) => {
-                if (!currentTenant?.id) return;
-                setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: checked }));
-                setIsSaving(true);
-                try {
-                  const { error } = await supabase
-                    .from("tenants")
-                    .update({ online_booking_enabled: checked })
-                    .eq("id", currentTenant.id);
-                  if (error) throw error;
-                  await refreshTenants();
-                  toast({
-                    title: checked ? "Online booking enabled" : "Online booking disabled",
-                    description: checked ? "Customers can now book online" : "Online booking is now off"
-                  });
-                } catch (err) {
-                  console.error("Error updating online booking:", err);
-                  setBookingSettings((prev) => ({ ...prev, onlineBookingEnabled: !checked }));
-                  toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
-                } finally {
-                  setIsSaving(false);
-                }
-              }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Auto-Confirm Bookings</p>
-              <p className="text-sm text-muted-foreground">
-                Automatically confirm new bookings without manual approval
-              </p>
-            </div>
-            <Switch
-              checked={bookingSettings.autoConfirmBookings}
-              onCheckedChange={(checked) =>
-                setBookingSettings((prev) => ({ ...prev, autoConfirmBookings: checked }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Allow Staff Selection</p>
-              <p className="text-sm text-muted-foreground">
-                Let customers choose a preferred staff member during booking.
-              </p>
-            </div>
-            <Switch
-              checked={bookingSettings.allowStaffSelection}
-              onCheckedChange={(checked) =>
-                setBookingSettings((prev) => ({
-                  ...prev,
-                  allowStaffSelection: checked,
-                  requireStaffSelection: checked ? prev.requireStaffSelection : false,
-                }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Require Staff Selection</p>
-              <p className="text-sm text-muted-foreground">
-                Force customers to select a staff member before checkout.
-              </p>
-            </div>
-            <Switch
-              checked={bookingSettings.requireStaffSelection}
-              disabled={!bookingSettings.allowStaffSelection}
-              onCheckedChange={(checked) =>
-                setBookingSettings((prev) => ({
-                  ...prev,
-                  requireStaffSelection: checked,
-                  autoAssignStaff: checked ? false : prev.autoAssignStaff,
-                }))
-              }
-            />
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="font-medium">Auto-Assign Staff</p>
-              <p className="text-sm text-muted-foreground">
-                Automatically assign an eligible staff member when customer does not select one.
-              </p>
-            </div>
-            <Switch
-              checked={bookingSettings.autoAssignStaff}
-              disabled={bookingSettings.requireStaffSelection}
-              onCheckedChange={(checked) =>
-                setBookingSettings((prev) => ({ ...prev, autoAssignStaff: checked }))
-              }
-            />
-          </div>
-        </div>
-
-        {/* Numeric Settings */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Default Buffer Time</Label>
-            <Select
-              value={bookingSettings.defaultBufferMinutes.toString()}
-              onValueChange={(v) =>
-                setBookingSettings((prev) => ({ ...prev, defaultBufferMinutes: parseInt(v) }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="0">No buffer</SelectItem>
-                <SelectItem value="5">5 minutes</SelectItem>
-                <SelectItem value="10">10 minutes</SelectItem>
-                <SelectItem value="15">15 minutes</SelectItem>
-                <SelectItem value="30">30 minutes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Cancellation Grace Period</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                value={cancellationGraceHoursInput}
-                onChange={(e) => {
-                  const nextValue = e.target.value;
-                  setCancellationGraceHoursInput(nextValue);
-                  if (nextValue === "") return;
-                  const parsed = Number.parseInt(nextValue, 10);
-                  if (!Number.isNaN(parsed) && parsed >= 0) {
-                    setBookingSettings((prev) => ({
-                      ...prev,
-                      cancellationGraceHours: parsed,
-                    }));
-                  }
-                }}
-                onBlur={() => {
-                  const parsed = Number.parseInt(cancellationGraceHoursInput, 10);
-                  const normalized = !Number.isNaN(parsed) && parsed >= 0 ? parsed : bookingSettings.cancellationGraceHours;
-                  setCancellationGraceHoursInput(String(normalized));
-                  setBookingSettings((prev) => ({
-                    ...prev,
-                    cancellationGraceHours: normalized,
-                  }));
-                }}
-              />
-              <span className="text-sm text-muted-foreground">hours</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Default Deposit Percentage</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              value={defaultDepositPercentageInput}
-              onChange={(e) => {
-                const nextValue = e.target.value;
-                setDefaultDepositPercentageInput(nextValue);
-                if (nextValue === "") return;
-                const parsed = Number.parseInt(nextValue, 10);
-                if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-                  setBookingSettings((prev) => ({
-                    ...prev,
-                    defaultDepositPercentage: parsed,
-                  }));
-                }
-              }}
-              onBlur={() => {
-                const parsed = Number.parseInt(defaultDepositPercentageInput, 10);
-                const normalized = !Number.isNaN(parsed)
-                  ? Math.min(100, Math.max(0, parsed))
-                  : bookingSettings.defaultDepositPercentage;
-                setDefaultDepositPercentageInput(String(normalized));
-                setBookingSettings((prev) => ({
-                  ...prev,
-                  defaultDepositPercentage: normalized,
-                }));
-              }}
-              className="w-24"
-            />
-            <span className="text-sm text-muted-foreground">%</span>
-          </div>
-        </div>
-
-        {/* Slot Capacity */}
-        <div className="space-y-2">
-          <Label>Bookings per Time Slot</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={1}
-              max={100}
-              value={slotCapacityDefaultInput}
-              onChange={(e) => {
-                const nextValue = e.target.value;
-                setSlotCapacityDefaultInput(nextValue);
-                if (nextValue === "") return;
-                const parsed = Number.parseInt(nextValue, 10);
-                if (!Number.isNaN(parsed) && parsed >= 1 && parsed <= 100) {
-                  setBookingSettings((prev) => ({
-                    ...prev,
-                    slotCapacityDefault: parsed,
-                  }));
-                }
-              }}
-              onBlur={() => {
-                const parsed = Number.parseInt(slotCapacityDefaultInput, 10);
-                const normalized = !Number.isNaN(parsed)
-                  ? Math.min(100, Math.max(1, parsed))
-                  : bookingSettings.slotCapacityDefault;
-                setSlotCapacityDefaultInput(String(normalized));
-                setBookingSettings((prev) => ({
-                  ...prev,
-                  slotCapacityDefault: normalized,
-                }));
-              }}
-              className="w-24"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Maximum number of bookings allowed for the same time slot
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Booking Status Message</Label>
-          <Textarea
-            placeholder="Optional message to display on your booking page..."
-            value={bookingSettings.bookingStatusMessage}
-            onChange={(e) =>
-              setBookingSettings((prev) => ({ ...prev, bookingStatusMessage: e.target.value }))
-            }
-            rows={2}
-          />
-        </div>
-
-        {/* Booking Page Banners */}
-        <div className="space-y-3">
-          <div>
-            <Label>Booking Page Banners</Label>
-            <p className="text-xs text-muted-foreground mt-1">
-              Add up to 2 images to personalize your booking page
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {bannerUrls.map((url, index) => (
-              <div key={index} className="relative group">
-                <div className="w-32 h-20 rounded-lg overflow-hidden border bg-muted">
-                  <img src={url} alt={`Banner ${index + 1}`} className="w-full h-full object-cover" />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveBanner(index)}
-                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-            {bannerUrls.length < 2 && (
-              <div>
-                <input
-                  ref={bannerInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleBannerUpload(file);
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => bannerInputRef.current?.click()}
-                  disabled={isUploadingBanner}
-                  className="w-32 h-20 rounded-lg border-2 border-dashed border-border hover:border-primary/50 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                >
-                  {isUploadingBanner ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <ImageIcon className="w-5 h-5" />
-                      <span className="text-xs">Add banner</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Brand Highlight Color */}
-        <div className="space-y-2">
-          <Label>Brand Highlight Color</Label>
-          <div className="flex items-center gap-3">
-            <Input
-              type="color"
-              value={bookingSettings.brandColor}
-              onChange={(e) =>
-                setBookingSettings((prev) => ({
-                  ...prev,
-                  brandColor: e.target.value,
-                }))
-              }
-              className="h-10 w-16 p-1 cursor-pointer"
-            />
-            <Input
-              type="text"
-              value={bookingSettings.brandColor}
-              onChange={(e) =>
-                setBookingSettings((prev) => ({
-                  ...prev,
-                  brandColor: e.target.value,
-                }))
-              }
-              placeholder="#2563EB"
-              className="w-28 font-mono text-sm"
-            />
-            <div
-              className="h-10 w-10 rounded-md border"
-              style={{ backgroundColor: bookingSettings.brandColor }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Used for buttons and accents on your booking page
-          </p>
-        </div>
-
-        {/* Save Button */}
-        <div className="flex justify-end pt-4 border-t">
+        <div className="flex justify-end border-t pt-4">
           <Button onClick={handleBookingSave} disabled={isSaving || !bookingDirty}>
-            {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save settings
           </Button>
         </div>
@@ -2028,80 +2280,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Card</Badge>
                 {isPaystack && <Badge variant="secondary">Mobile Money</Badge>}
-                <Badge variant="secondary">Cash (at salon)</Badge>
                 <Badge variant="secondary">POS</Badge>
                 <Badge variant="secondary">Transfer</Badge>
               </div>
             </div>
-
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="font-medium">Pay at Salon</p>
-                <p className="text-sm text-muted-foreground">
-                  Allow customers to choose to pay when they arrive
-                </p>
-              </div>
-              <Switch
-                checked={currentTenant?.pay_at_salon_enabled || false}
-                disabled={isSaving}
-                onCheckedChange={async (checked) => {
-                  if (!currentTenant?.id) return;
-                  setIsSaving(true);
-                  try {
-                    const { error } = await supabase
-                      .from("tenants")
-                      .update({ pay_at_salon_enabled: checked })
-                      .eq("id", currentTenant.id);
-                    if (error) {
-                      console.error("Error updating pay at salon:", error);
-                      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
-                      return;
-                    }
-                    await refreshTenants();
-                    toast({ title: "Saved", description: `Pay at Salon ${checked ? "enabled" : "disabled"}` });
-                  } catch (err) {
-                    console.error("Error updating pay at salon:", err);
-                    toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="font-medium">Deposits</p>
-                <p className="text-sm text-muted-foreground">
-                  Require deposits for bookings
-                </p>
-              </div>
-              <Switch
-                checked={currentTenant?.deposits_enabled || false}
-                disabled={isSaving}
-                onCheckedChange={async (checked) => {
-                  if (!currentTenant?.id) return;
-                  setIsSaving(true);
-                  try {
-                    const { error } = await supabase
-                      .from("tenants")
-                      .update({ deposits_enabled: checked })
-                      .eq("id", currentTenant.id);
-                    if (error) {
-                      console.error("Error updating deposits:", error);
-                      toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
-                      return;
-                    }
-                    await refreshTenants();
-                    toast({ title: "Saved", description: `Deposits ${checked ? "enabled" : "disabled"}` });
-                  } catch (err) {
-                    console.error("Error updating deposits:", err);
-                    toast({ title: "Error", description: "Failed to update setting", variant: "destructive" });
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-              />
+            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+              <p className="font-medium">Booking payment configuration moved</p>
+              <p className="mt-1 text-muted-foreground">
+                Booking payment behavior now lives under Booking Settings → Booking Config and is enforced at the tenant level across the public booking flow.
+              </p>
             </div>
           </div>
 
@@ -2159,6 +2346,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     const trialEndsAt = currentTenant?.trial_ends_at ? new Date(currentTenant.trial_ends_at) : null;
     const daysRemaining = trialEndsAt ? Math.max(0, differenceInDays(trialEndsAt, new Date())) : 0;
     const isTrialing = currentTenant?.subscription_status === "trialing";
+    const canUpgradeToStudio = currentTenant?.plan === "solo";
+    const canUpgradeToChain = currentTenant?.plan === "solo" || currentTenant?.plan === "studio";
+    const canBuySeats = currentTenant?.plan === "studio" || currentTenant?.plan === "chain";
+    const seatQuantity = Math.max(1, Number(seatPurchaseQuantityInput || 1));
+    const seatPurchaseTotal = (staffSeatPricing || 0) * seatQuantity;
 
     return (
       <Card>
@@ -2169,7 +2361,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Current Plan */}
           <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
             <div className="flex items-center justify-between mb-2">
               <p className="font-semibold capitalize">{currentTenant?.plan || "Solo"} Plan</p>
@@ -2195,30 +2386,111 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             )}
           </div>
 
-          {/* Plan Features */}
-          <div>
-            <p className="text-sm font-medium mb-2">Plan Features</p>
-            <ul className="space-y-2">
-              <li className="flex items-center gap-2 text-sm">
-                <CheckCircle className="w-4 h-4 text-success" />
-                Unlimited appointments
-              </li>
-              <li className="flex items-center gap-2 text-sm">
-                <CheckCircle className="w-4 h-4 text-success" />
-                Online booking
-              </li>
-              <li className="flex items-center gap-2 text-sm">
-                <CheckCircle className="w-4 h-4 text-success" />
-                Email & SMS notifications
-              </li>
-              <li className="flex items-center gap-2 text-sm">
-                <CheckCircle className="w-4 h-4 text-success" />
-                Customer management
-              </li>
-            </ul>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Locations</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {entitlements?.used_locations ?? 0} / {entitlements?.allowed_locations ?? currentPlan?.limits?.max_locations ?? 1}
+              </p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Seats</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {entitlements?.used_staff ?? 0} / {entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Base {entitlements?.base_staff_limit ?? currentPlan?.limits?.max_staff ?? 1}
+                {Number(entitlements?.extra_staff_seats || 0) > 0 ? ` + ${entitlements?.extra_staff_seats} add-on` : ""}
+              </p>
+            </div>
+            <div className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Storefront Theme</p>
+              <p className="mt-1 text-lg font-semibold">
+                {entitlements?.has_ecommerce_theme ? "E-commerce active" : "Default theme"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {entitlements?.ecommerce_theme_expires_at
+                  ? `Renews until ${format(new Date(entitlements.ecommerce_theme_expires_at), "MMM d, yyyy")}`
+                  : "No paid storefront theme active"}
+              </p>
+            </div>
           </div>
 
-          {/* Upgrade Button */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Growth Actions</p>
+            {canUpgradeToStudio && (
+              <div className="rounded-lg border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">Upgrade to Studio</p>
+                  <p className="text-sm text-muted-foreground">
+                    Unlock 6 base seats for a growing team.
+                    {studioPlanPricing && ` Starts at ${formatCurrency(studioPlanPricing.monthly_price, currentTenant?.currency || "USD")} / month.`}
+                  </p>
+                </div>
+                <Button onClick={() => runPlanUpgrade("studio")} disabled={isUpgradingStudio}>
+                  {isUpgradingStudio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Upgrade to Studio
+                </Button>
+              </div>
+            )}
+
+            {canUpgradeToChain && (
+              <div className="rounded-lg border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">Upgrade to Chain</p>
+                  <p className="text-sm text-muted-foreground">
+                    Add more branches and move to multi-location entitlements.
+                    {chainPlanPricing && ` Starts at ${formatCurrency(chainPlanPricing.monthly_price, currentTenant?.currency || "USD")} / month.`}
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => runPlanUpgrade("chain")} disabled={isUpgradingChain}>
+                  {isUpgradingChain && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Upgrade to Chain
+                </Button>
+              </div>
+            )}
+
+            {canBuySeats && (
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-medium">Add team seats</p>
+                    <p className="text-sm text-muted-foreground">
+                      {staffSeatPricing
+                        ? `${formatCurrency(staffSeatPricing, currentTenant?.currency || "USD")} per extra seat / month`
+                        : "Per-seat add-on pricing follows your tenant country and currency."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="w-full sm:w-40">
+                    <Label htmlFor="seat-quantity">Quantity</Label>
+                    <Input
+                      id="seat-quantity"
+                      type="number"
+                      min={1}
+                      value={seatPurchaseQuantityInput}
+                      onChange={(event) => setSeatPurchaseQuantityInput(event.target.value)}
+                    />
+                  </div>
+                  <div className="text-sm text-muted-foreground sm:pb-2">
+                    Estimated monthly add-on: {formatCurrency(seatPurchaseTotal, currentTenant?.currency || "USD")}
+                  </div>
+                  <Button onClick={purchaseExtraSeats} disabled={isPurchasingSeats}>
+                    {isPurchasingSeats && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Add Seats
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-lg border p-4">
+              <p className="font-medium">Booking page themes</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Preview, purchase, and apply booking page themes from the Booking Settings tab where your banners and booking brand controls live.
+              </p>
+            </div>
+          </div>
           {isTrialing && (
             <div className="pt-4 border-t">
               {subscriptionPromo ? (

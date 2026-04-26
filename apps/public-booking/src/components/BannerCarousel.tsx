@@ -6,12 +6,14 @@ interface BannerCarouselProps {
   bannerUrls: string[];
   salonName: string;
   autoPlayInterval?: number; // Default 30000ms (30 seconds)
+  variant?: "default" | "ecommerce";
 }
 
 export function BannerCarousel({ 
   bannerUrls, 
   salonName, 
-  autoPlayInterval = 30000 
+  autoPlayInterval = 30000,
+  variant = "default",
 }: BannerCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
@@ -34,9 +36,11 @@ export function BannerCarousel({
 
   if (!bannerUrls || bannerUrls.length === 0) return null;
 
+  const isEcommerceTheme = variant === "ecommerce";
+
   return (
     <div
-      className="relative h-48 md:h-64 rounded-xl overflow-hidden"
+      className={isEcommerceTheme ? "relative h-64 md:h-[22rem] overflow-hidden" : "relative h-48 md:h-64 rounded-xl overflow-hidden"}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
@@ -54,11 +58,11 @@ export function BannerCarousel({
       ))}
 
       {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+      <div className={isEcommerceTheme ? "absolute inset-0 bg-gradient-to-r from-[#1f1b17]/75 via-[#1f1b17]/30 to-transparent" : "absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"} />
 
-      {/* Salon name */}
-      <div className="absolute bottom-4 left-4 right-16 text-white">
-        <h1 className="text-2xl md:text-3xl font-bold">{salonName}</h1>
+      <div className={isEcommerceTheme ? "absolute bottom-0 left-0 right-0 p-6 text-white md:p-8" : "absolute bottom-4 left-4 right-16 text-white"}>
+        {isEcommerceTheme && <p className="text-xs uppercase tracking-[0.22em] text-white/75">Curated booking storefront</p>}
+        <h1 className={isEcommerceTheme ? "mt-2 text-3xl font-semibold md:text-4xl" : "text-2xl md:text-3xl font-bold"}>{salonName}</h1>
       </div>
 
       {/* Navigation arrows - only visible on hover when multiple banners */}

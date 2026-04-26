@@ -150,11 +150,81 @@ interface ChainTierRowDraft {
   is_custom: boolean;
 }
 
+interface MarketCountry {
+  country_code: string;
+  country_name: string;
+  is_selectable: boolean;
+}
+
+interface MarketCountryCurrency {
+  country_code: string;
+  currency_code: string;
+  is_default: boolean;
+  is_enabled: boolean;
+}
+
+interface StaffAddonPricingRow {
+  id: string;
+  country_code: string;
+  currency: string;
+  unit_price_per_extra_seat: number;
+  status: "draft" | "active" | "retired";
+  notes: string | null;
+  effective_from: string;
+}
+
+interface ThemeCatalogRow {
+  theme_key: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+}
+
+interface ThemeAddonPricingRow {
+  id: string;
+  theme_key: string;
+  country_code: string;
+  currency: string;
+  billing_interval: "annual";
+  unit_price: number;
+  status: "draft" | "active" | "retired";
+  notes: string | null;
+  effective_from: string;
+}
+
+interface SeatPricingDraft {
+  rowId: string | null;
+  country_code: string;
+  country_name: string;
+  currency: string;
+  unit_price: string;
+  status: "draft" | "active" | "retired";
+  notes: string;
+}
+
+interface ThemePricingDraft {
+  rowId: string | null;
+  theme_key: string;
+  country_code: string;
+  country_name: string;
+  currency: string;
+  billing_interval: "annual";
+  unit_price: string;
+  status: "draft" | "active" | "retired";
+  notes: string;
+}
+
 type RolloutMode = "now" | "schedule";
+type PricingStatus = "draft" | "active" | "retired";
 
 const CURRENCIES: CurrencyCode[] = ["USD", "NGN", "GHS"];
 const MAX_PLANS = 4;
 const MAX_BATCH_ITEMS = 3;
+const PRICING_STATUS_OPTIONS: Array<{ value: PricingStatus; label: string }> = [
+  { value: "active", label: "Active" },
+  { value: "draft", label: "Draft" },
+  { value: "retired", label: "Retired" },
+];
 
 const sanitizeSlug = (value: string) =>
   value
@@ -308,6 +378,12 @@ export default function PlansPage() {
     GHS: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
   });
   const [chainTierDirty, setChainTierDirty] = useState(false);
+  const [seatPricingReason, setSeatPricingReason] = useState("");
+  const [seatPricingDrafts, setSeatPricingDrafts] = useState<Record<string, SeatPricingDraft>>({});
+  const [seatPricingDirty, setSeatPricingDirty] = useState(false);
+  const [themePricingReason, setThemePricingReason] = useState("");
+  const [themePricingDrafts, setThemePricingDrafts] = useState<Record<string, ThemePricingDraft>>({});
+  const [themePricingDirty, setThemePricingDirty] = useState(false);
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["backoffice-plans"],
@@ -351,10 +427,117 @@ export default function PlansPage() {
     },
   });
 
+  const { data: marketCountries } = useQuery({
+    queryKey: ["backoffice-market-countries-compact"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)
+        ("market_countries")
+        .select("country_code,country_name,is_selectable")
+        .order("country_name", { ascending: true });
+      if (error) throw error;
+      return (data || []) as MarketCountry[];
+    },
+  });
+
+  const { data: marketCurrencies } = useQuery({
+    queryKey: ["backoffice-market-country-currencies-compact"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)
+        ("market_country_currency")
+        .select("country_code,currency_code,is_default,is_enabled");
+      if (error) throw error;
+      return (data || []) as MarketCountryCurrency[];
+    },
+  });
+
+  const { data: seatPricingRows } = useQuery({
+    queryKey: ["backoffice-seat-addon-pricing"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)
+        ("staff_addon_pricing")
+        .select("id,country_code,currency,unit_price_per_extra_seat,status,notes,effective_from")
+        .order("country_code", { ascending: true })
+        .order("effective_from", { ascending: false });
+      if (error) throw error;
+      return (data || []) as StaffAddonPricingRow[];
+    },
+  });
+
+  const { data: themeCatalog } = useQuery({
+    queryKey: ["backoffice-theme-catalog", "ecommerce"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)
+        ("theme_catalog")
+        .select("theme_key,name,description,is_active")
+        .eq("theme_key", "ecommerce")
+        .maybeSingle();
+      if (error) throw error;
+      return (data || null) as ThemeCatalogRow | null;
+    },
+  });
+
+  const { data: themePricingRows } = useQuery({
+    queryKey: ["backoffice-theme-addon-pricing", "ecommerce"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)
+        ("theme_addon_pricing")
+        .select("id,theme_key,country_code,currency,billing_interval,unit_price,status,notes,effective_from")
+        .eq("theme_key", "ecommerce")
+        .order("country_code", { ascending: true })
+        .order("effective_from", { ascending: false });
+      if (error) throw error;
+      return (data || []) as ThemeAddonPricingRow[];
+    },
+  });
+
   const chainPlan = useMemo(
     () => (plans || []).find((plan) => plan.slug.trim().toLowerCase() === "chain") || null,
     [plans],
   );
+
+  const defaultCurrencyByCountry = useMemo(() => {
+    const map = new Map<string, string>();
+    (marketCurrencies || [])
+      .filter((row) => row.is_default || row.is_enabled)
+      .forEach((row) => {
+        if (!map.has(row.country_code) || row.is_default) {
+          map.set(row.country_code, row.currency_code);
+        }
+      });
+    return map;
+  }, [marketCurrencies]);
+
+  const pricingMarkets = useMemo(() => {
+    const selectableMarkets = (marketCountries || []).filter((country) => country.is_selectable);
+    const source = selectableMarkets.length > 0 ? selectableMarkets : marketCountries || [];
+    return source
+      .map((country) => ({
+        country_code: country.country_code,
+        country_name: country.country_name,
+        currency: defaultCurrencyByCountry.get(country.country_code) || "USD",
+      }))
+      .sort((a, b) => a.country_name.localeCompare(b.country_name));
+  }, [defaultCurrencyByCountry, marketCountries]);
+
+  const latestSeatPricingByCountry = useMemo(() => {
+    const map = new Map<string, StaffAddonPricingRow>();
+    (seatPricingRows || []).forEach((row) => {
+      if (!map.has(row.country_code)) {
+        map.set(row.country_code, row);
+      }
+    });
+    return map;
+  }, [seatPricingRows]);
+
+  const latestThemePricingByCountry = useMemo(() => {
+    const map = new Map<string, ThemeAddonPricingRow>();
+    (themePricingRows || []).forEach((row) => {
+      if (!map.has(row.country_code)) {
+        map.set(row.country_code, row);
+      }
+    });
+    return map;
+  }, [themePricingRows]);
 
   const { data: chainTierPricing } = useQuery({
     queryKey: ["backoffice-chain-tier-pricing", chainPlan?.id],
@@ -404,6 +587,45 @@ export default function PlansPage() {
     });
     setChainTierDrafts(grouped);
   }, [chainPlan?.id, chainTierDirty, chainTierPricing]);
+
+  useEffect(() => {
+    if (seatPricingDirty || pricingMarkets.length === 0) return;
+    const nextDrafts: Record<string, SeatPricingDraft> = {};
+    pricingMarkets.forEach((market) => {
+      const row = latestSeatPricingByCountry.get(market.country_code);
+      nextDrafts[market.country_code] = {
+        rowId: row?.id || null,
+        country_code: market.country_code,
+        country_name: market.country_name,
+        currency: row?.currency || market.currency,
+        unit_price:
+          row?.unit_price_per_extra_seat == null ? "" : String(row.unit_price_per_extra_seat),
+        status: row?.status || "active",
+        notes: row?.notes || "",
+      };
+    });
+    setSeatPricingDrafts(nextDrafts);
+  }, [latestSeatPricingByCountry, pricingMarkets, seatPricingDirty]);
+
+  useEffect(() => {
+    if (themePricingDirty || pricingMarkets.length === 0) return;
+    const nextDrafts: Record<string, ThemePricingDraft> = {};
+    pricingMarkets.forEach((market) => {
+      const row = latestThemePricingByCountry.get(market.country_code);
+      nextDrafts[market.country_code] = {
+        rowId: row?.id || null,
+        theme_key: row?.theme_key || "ecommerce",
+        country_code: market.country_code,
+        country_name: market.country_name,
+        currency: row?.currency || market.currency,
+        billing_interval: "annual",
+        unit_price: row?.unit_price == null ? "" : String(row.unit_price),
+        status: row?.status || "active",
+        notes: row?.notes || "",
+      };
+    });
+    setThemePricingDrafts(nextDrafts);
+  }, [latestThemePricingByCountry, pricingMarkets, themePricingDirty]);
 
   const limitsByPlan = useMemo(() => {
     const map = new Map<string, PlanLimit>();
@@ -698,6 +920,48 @@ export default function PlansPage() {
     });
     return { isValid: errors.length === 0, errors };
   }, [chainPlan?.id, chainTierDrafts, chainTierReason]);
+
+  const seatPricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!seatPricingReason.trim()) {
+      errors.push("Seat pricing reason is required.");
+    }
+    const drafts = Object.values(seatPricingDrafts);
+    if (!drafts.length) {
+      errors.push("No seat pricing rows available.");
+    }
+    drafts.forEach((draft) => {
+      if (!draft.currency.trim() || draft.currency.trim().length !== 3) {
+        errors.push(`${draft.country_name}: currency must be a 3-letter code.`);
+      }
+      const unitPrice = parseNumericInput(draft.unit_price);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        errors.push(`${draft.country_name}: unit price must be 0 or greater.`);
+      }
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [seatPricingDrafts, seatPricingReason]);
+
+  const themePricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!themePricingReason.trim()) {
+      errors.push("Theme pricing reason is required.");
+    }
+    const drafts = Object.values(themePricingDrafts);
+    if (!drafts.length) {
+      errors.push("No theme pricing rows available.");
+    }
+    drafts.forEach((draft) => {
+      if (!draft.currency.trim() || draft.currency.trim().length !== 3) {
+        errors.push(`${draft.country_name}: currency must be a 3-letter code.`);
+      }
+      const unitPrice = parseNumericInput(draft.unit_price);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        errors.push(`${draft.country_name}: annual price must be 0 or greater.`);
+      }
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [themePricingDrafts, themePricingReason]);
 
   const createPlansMutation = useMutation({
     mutationFn: async (drafts: PlanDraft[]) => {
@@ -1104,6 +1368,118 @@ export default function PlansPage() {
     },
   });
 
+  const saveSeatPricingMutation = useMutation({
+    mutationFn: async () => {
+      for (const draft of Object.values(seatPricingDrafts)) {
+        const payload = {
+          country_code: draft.country_code,
+          currency: draft.currency.trim().toUpperCase(),
+          unit_price_per_extra_seat: Number(draft.unit_price),
+          status: draft.status,
+          notes: draft.notes.trim() || null,
+        };
+
+        if (draft.rowId) {
+          const { error } = await (supabase.from as any)
+            ("staff_addon_pricing")
+            .update(payload)
+            .eq("id", draft.rowId);
+          if (error) throw error;
+        } else {
+          const { error } = await (supabase.from as any)("staff_addon_pricing").insert({
+            ...payload,
+            created_by: backofficeUser?.user_id || null,
+          });
+          if (error) throw error;
+        }
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "staff_addon_pricing_updated",
+        entity_type: "staff_addon_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: seatPricingReason.trim(),
+          rows: Object.values(seatPricingDrafts).map((draft) => ({
+            country_code: draft.country_code,
+            currency: draft.currency.trim().toUpperCase(),
+            unit_price_per_extra_seat: Number(draft.unit_price),
+            status: draft.status,
+          })),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Seat add-on pricing updated.");
+      setSeatPricingReason("");
+      setSeatPricingDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-seat-addon-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const saveThemePricingMutation = useMutation({
+    mutationFn: async () => {
+      for (const draft of Object.values(themePricingDrafts)) {
+        const payload = {
+          theme_key: draft.theme_key,
+          country_code: draft.country_code,
+          currency: draft.currency.trim().toUpperCase(),
+          billing_interval: "annual" as const,
+          unit_price: Number(draft.unit_price),
+          status: draft.status,
+          notes: draft.notes.trim() || null,
+        };
+
+        if (draft.rowId) {
+          const { error } = await (supabase.from as any)
+            ("theme_addon_pricing")
+            .update(payload)
+            .eq("id", draft.rowId);
+          if (error) throw error;
+        } else {
+          const { error } = await (supabase.from as any)("theme_addon_pricing").insert({
+            ...payload,
+            created_by: backofficeUser?.user_id || null,
+          });
+          if (error) throw error;
+        }
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "theme_addon_pricing_updated",
+        entity_type: "theme_addon_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: themePricingReason.trim(),
+          theme_key: "ecommerce",
+          rows: Object.values(themePricingDrafts).map((draft) => ({
+            country_code: draft.country_code,
+            currency: draft.currency.trim().toUpperCase(),
+            unit_price: Number(draft.unit_price),
+            status: draft.status,
+            billing_interval: draft.billing_interval,
+          })),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Theme pricing updated.");
+      setThemePricingReason("");
+      setThemePricingDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-theme-addon-pricing", "ecommerce"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
   const openCreatePlansDialog = () => {
     if (remainingPlanSlots <= 0) {
       toast.error("Maximum of 4 plans reached.");
@@ -1344,12 +1720,32 @@ export default function PlansPage() {
     }));
   };
 
+  const updateSeatPricingDraft = (countryCode: string, patch: Partial<SeatPricingDraft>) => {
+    setSeatPricingDirty(true);
+    setSeatPricingDrafts((prev) => ({
+      ...prev,
+      [countryCode]: { ...prev[countryCode], ...patch },
+    }));
+  };
+
+  const updateThemePricingDraft = (countryCode: string, patch: Partial<ThemePricingDraft>) => {
+    setThemePricingDirty(true);
+    setThemePricingDrafts((prev) => ({
+      ...prev,
+      [countryCode]: { ...prev[countryCode], ...patch },
+    }));
+  };
+
   const canSubmitCreatePlans =
     isSuperAdmin && createPlansValidation.isValid && !createPlansMutation.isPending;
   const canSubmitCreatePricing =
     isSuperAdmin && createPricingValidation.isValid && !createPricingMutation.isPending;
   const canSubmitChainTiers =
     isSuperAdmin && chainTierValidation.isValid && !saveChainTiersMutation.isPending;
+  const canSubmitSeatPricing =
+    isSuperAdmin && seatPricingValidation.isValid && !saveSeatPricingMutation.isPending;
+  const canSubmitThemePricing =
+    isSuperAdmin && themePricingValidation.isValid && !saveThemePricingMutation.isPending;
 
   const validateEditPlan = () => {
     const errors: string[] = [];
@@ -1770,6 +2166,268 @@ export default function PlansPage() {
                   </CardContent>
                 </Card>
               )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Seat Add-on Pricing</CardTitle>
+                  <CardDescription>
+                    Manage monthly per-seat add-on pricing by market for Studio and Chain seat expansion.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {seatPricingValidation.errors.length > 0 && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                        {seatPricingValidation.errors.slice(0, 8).map((error) => (
+                          <li key={error}>{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Market</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Monthly Price</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pricingMarkets.map((market) => {
+                          const draft = seatPricingDrafts[market.country_code];
+                          return (
+                            <TableRow key={market.country_code}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="font-medium">{market.country_name}</p>
+                                  <p className="text-xs text-muted-foreground">{market.country_code}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="min-w-[120px]">
+                                <Input
+                                  value={draft?.currency || market.currency}
+                                  maxLength={3}
+                                  onChange={(event) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      currency: event.target.value.toUpperCase(),
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={draft?.unit_price || ""}
+                                  onChange={(event) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      unit_price: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Select
+                                  value={draft?.status || "active"}
+                                  onValueChange={(value) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      status: value as PricingStatus,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PRICING_STATUS_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="min-w-[240px]">
+                                <Input
+                                  value={draft?.notes || ""}
+                                  placeholder="Optional internal note"
+                                  onChange={(event) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      notes: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div>
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={seatPricingReason}
+                      onChange={(event) => {
+                        setSeatPricingDirty(true);
+                        setSeatPricingReason(event.target.value);
+                      }}
+                      placeholder="Why are you updating seat add-on pricing?"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={() => saveSeatPricingMutation.mutate()} disabled={!canSubmitSeatPricing}>
+                      {saveSeatPricingMutation.isPending ? "Saving..." : "Save Seat Pricing"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>E-commerce Theme Pricing</CardTitle>
+                      <CardDescription>
+                        Manage annual storefront theme pricing by market for the purchasable e-commerce theme add-on.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={themeCatalog?.is_active === false ? "secondary" : "default"}>
+                        {themeCatalog?.is_active === false ? "Catalog inactive" : "Catalog active"}
+                      </Badge>
+                      <Badge variant="outline">Annual only</Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {themeCatalog?.description && (
+                    <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                      {themeCatalog.description}
+                    </div>
+                  )}
+
+                  {themePricingValidation.errors.length > 0 && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                        {themePricingValidation.errors.slice(0, 8).map((error) => (
+                          <li key={error}>{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Market</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Annual Price</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pricingMarkets.map((market) => {
+                          const draft = themePricingDrafts[market.country_code];
+                          return (
+                            <TableRow key={market.country_code}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="font-medium">{market.country_name}</p>
+                                  <p className="text-xs text-muted-foreground">{market.country_code}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="min-w-[120px]">
+                                <Input
+                                  value={draft?.currency || market.currency}
+                                  maxLength={3}
+                                  onChange={(event) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      currency: event.target.value.toUpperCase(),
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={draft?.unit_price || ""}
+                                  onChange={(event) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      unit_price: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Select
+                                  value={draft?.status || "active"}
+                                  onValueChange={(value) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      status: value as PricingStatus,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PRICING_STATUS_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="min-w-[240px]">
+                                <Input
+                                  value={draft?.notes || ""}
+                                  placeholder="Optional internal note"
+                                  onChange={(event) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      notes: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div>
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={themePricingReason}
+                      onChange={(event) => {
+                        setThemePricingDirty(true);
+                        setThemePricingReason(event.target.value);
+                      }}
+                      placeholder="Why are you updating e-commerce theme pricing?"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={() => saveThemePricingMutation.mutate()} disabled={!canSubmitThemePricing}>
+                      {saveThemePricingMutation.isPending ? "Saving..." : "Save Theme Pricing"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>

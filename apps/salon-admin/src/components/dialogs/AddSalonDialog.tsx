@@ -16,6 +16,7 @@ import { Loader2, Building2, Crown, ArrowRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
 import { usePlans } from "@/hooks/usePlans";
+import { usePlanPricingByPlan } from "@/hooks/usePlanPricing";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
@@ -59,7 +60,7 @@ interface ChainUnlockRequest {
 const SELF_SERVE_CHAIN_LOCATION_LIMIT = 10;
 
 export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, refreshTenants } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
   const { data: plans } = usePlans();
   const { data: marketCountries } = useMarketCountries();
@@ -117,6 +118,8 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
   });
 
   const currentPlan = plans?.find((p) => p.slug === String(currentTenant?.plan || "").toLowerCase());
+  const chainPlan = plans?.find((p) => p.slug === "chain");
+  const { data: chainPlanPricing } = usePlanPricingByPlan(chainPlan?.id || "", currentTenant?.currency || "USD");
   const fallbackMax = currentPlan?.limits?.max_locations || 1;
   const fallbackUsed = locations.length;
 
@@ -170,6 +173,61 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
     locationGate?.requires_custom,
   ]);
 
+  const createLocationRecord = async (expansionResult: EntitlementExpansionResult | null = null) => {
+    if (!currentTenant?.id) return;
+
+    const { error } = await supabase.from("locations").insert({
+      tenant_id: currentTenant.id,
+      name: formData.name,
+      city: formData.city,
+      country: formData.country,
+      address: formData.address,
+      is_default: false,
+      availability: "open",
+    });
+
+    if (error) throw error;
+
+    if ((isChainPlan || String(currentTenant?.plan || "").toLowerCase() === "chain") && currentTenant?.id) {
+      const nextActiveLocations = currentLocationCount + 1;
+      await (supabase.rpc as any)("create_tenant_addon_quote_snapshot", {
+        p_tenant_id: currentTenant.id,
+        p_country_code: formData.country || currentTenant.country,
+        p_currency: expansionResult?.currency || currentTenant.currency,
+        p_included_locations: 1,
+        p_active_locations: nextActiveLocations,
+        p_extra_locations: Math.max(0, nextActiveLocations - 1),
+        p_unit_price_per_extra_location: expansionResult?.unit_price ?? null,
+        p_monthly_addon_total: expansionResult?.subtotal ?? null,
+        p_snapshot: {
+          source: "add_branch_dialog",
+          location_name: formData.name,
+          location_city: formData.city,
+          location_country: formData.country,
+          allowed_before: allowedLocations,
+          used_before: currentLocationCount,
+          used_after: nextActiveLocations,
+          expansion_result: expansionResult,
+        },
+        p_mark_accepted: true,
+      });
+    }
+
+    if (expansionResult?.billing_effective_at) {
+      toast({
+        title: "Branch added",
+        description: `Branch added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
+      });
+    } else {
+      toast({ title: "Success", description: "New branch added" });
+    }
+
+    await Promise.all([refreshTenants(), refetchLocations()]);
+    await onSuccess?.();
+    onOpenChange(false);
+    setFormData({ name: "", city: "", country: currentTenant?.country || "", address: "" });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -204,55 +262,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
         expansionResult = data as EntitlementExpansionResult;
       }
 
-      const { error } = await supabase.from("locations").insert({
-        tenant_id: currentTenant.id,
-        name: formData.name,
-        city: formData.city,
-        country: formData.country,
-        address: formData.address,
-        is_default: false,
-        availability: "open",
-      });
-
-      if (error) throw error;
-
-      if (isChainPlan) {
-        const nextActiveLocations = currentLocationCount + 1;
-        await (supabase.rpc as any)("create_tenant_addon_quote_snapshot", {
-          p_tenant_id: currentTenant.id,
-          p_country_code: formData.country || currentTenant.country,
-          p_currency: expansionResult?.currency || currentTenant.currency,
-          p_included_locations: 1,
-          p_active_locations: nextActiveLocations,
-          p_extra_locations: Math.max(0, nextActiveLocations - 1),
-          p_unit_price_per_extra_location: expansionResult?.unit_price ?? null,
-          p_monthly_addon_total: expansionResult?.subtotal ?? null,
-          p_snapshot: {
-            source: "add_branch_dialog",
-            location_name: formData.name,
-            location_city: formData.city,
-            location_country: formData.country,
-            allowed_before: allowedLocations,
-            used_before: currentLocationCount,
-            used_after: nextActiveLocations,
-            expansion_result: expansionResult,
-          },
-          p_mark_accepted: true,
-        });
-      }
-
-      if (expansionResult?.billing_effective_at) {
-        toast({
-          title: "Branch added",
-          description: `Branch added. Billing adjusts on ${new Date(expansionResult.billing_effective_at).toLocaleDateString()}.`,
-        });
-      } else {
-        toast({ title: "Success", description: "New branch added" });
-      }
-      await refetchLocations();
-      await onSuccess?.();
-      onOpenChange(false);
-      setFormData({ name: "", city: "", country: currentTenant?.country || "", address: "" });
+      await createLocationRecord(expansionResult);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -265,15 +275,43 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
   };
 
   const handleUpgrade = async () => {
-    toast({
-      title: isChainPlan ? "Expansion required" : "Upgrade Required",
-      description: isChainPlan
-        ? hasPendingChainUnlock
+    if (!currentTenant?.id) return;
+
+    if (isChainPlan) {
+      toast({
+        title: "Expansion required",
+        description: hasPendingChainUnlock
           ? "Your request is pending approval. We'll notify you once extra branches are activated."
-          : "Contact support to unlock this custom branch tier."
-        : "Please visit Settings > Subscription to upgrade your plan.",
-    });
-    onOpenChange(false);
+          : "Contact support to unlock this custom branch tier.",
+      });
+      onOpenChange(false);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await (supabase.rpc as any)("upgrade_tenant_plan_and_log_billing", {
+        p_tenant_id: currentTenant.id,
+        p_target_plan: "chain",
+        p_source: "add_salon_dialog",
+        p_reason: "Tenant upgraded to chain while adding an additional branch.",
+        p_seed_allowed_locations: Math.max(2, currentLocationCount + 1),
+      });
+
+      if (error) throw error;
+
+      await refreshTenants();
+      setShowUpgradePrompt(false);
+      await createLocationRecord(null);
+    } catch (error: any) {
+      toast({
+        title: "Upgrade failed",
+        description: error.message || "Unable to upgrade to chain right now.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSubmitUnlockRequest = async () => {
@@ -336,6 +374,11 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
                     Current: {currentLocationCount} / {allowedLocations} branches
                   </p>
                   <p className="text-sm text-muted-foreground">{upgradeMessage}</p>
+                  {!isChainPlan && chainPlanPricing && (
+                    <p className="text-sm font-medium">
+                      Chain starts at {currentTenant?.currency || "USD"} {Number(chainPlanPricing.monthly_price).toLocaleString()} / month
+                    </p>
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
@@ -351,8 +394,9 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
             >
               Cancel
             </Button>
-            <Button onClick={handleUpgrade} className="gap-2">
-              {isChainPlan ? (hasPendingChainUnlock ? "Pending approval" : "Contact support") : "Upgrade to Chain"}
+            <Button onClick={handleUpgrade} className="gap-2" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isChainPlan ? (hasPendingChainUnlock ? "Pending approval" : "Contact support") : "Upgrade to Chain and add branch"}
               <ArrowRight className="w-4 h-4" />
             </Button>
           </DialogFooter>

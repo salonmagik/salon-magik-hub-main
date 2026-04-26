@@ -64,6 +64,8 @@ function BookingPageContent() {
     configuredBaseDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
     isDev: import.meta.env.DEV,
   });
+  const previewThemeParam = new URLSearchParams(window.location.search).get("preview_theme");
+  const previewThemeKey = previewThemeParam === "ecommerce" ? "ecommerce" : null;
 
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
 
@@ -210,6 +212,8 @@ function BookingPageContent() {
     <BookingCartProvider scopeKey={cartScopeKey}>
       <BookingPageWithCart
         salon={salon}
+        themeKey={previewThemeKey || salon.theme_key || null}
+        isThemePreview={Boolean(previewThemeKey)}
         locations={countryScopedLocations}
         checkoutLocations={checkoutLocations}
         selectedCountryCode={selectedCountryCode}
@@ -232,6 +236,8 @@ function BookingPageContent() {
 
 interface BookingPageWithCartProps {
   salon: PublicTenant;
+  themeKey: string | null;
+  isThemePreview: boolean;
   locations: PublicLocation[];
   checkoutLocations: PublicLocation[];
   selectedCountryCode: string | null;
@@ -251,6 +257,8 @@ interface BookingPageWithCartProps {
 
 function BookingPageWithCart({
   salon,
+  themeKey,
+  isThemePreview,
   locations,
   checkoutLocations,
   selectedCountryCode,
@@ -311,11 +319,14 @@ function BookingPageWithCart({
     <>
       <BookingLayout
         salon={salon}
+        themeKey={themeKey}
+        isThemePreview={isThemePreview}
         onCartClick={() => setCheckoutOpen(true)}
       >
         <div className="space-y-8">
           <SalonHeader
             salon={salon}
+            themeKey={themeKey}
             locations={locations}
             supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
             selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
@@ -324,6 +335,7 @@ function BookingPageWithCart({
 
           {!isCatalogBlocked ? (
             <CatalogView
+              themeKey={themeKey}
               services={services}
               packages={packages}
               products={products}
