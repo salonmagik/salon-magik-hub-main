@@ -190,9 +190,9 @@ export function useServices() {
           duration_minutes: data.durationMinutes,
           description: data.description || null,
           category_id: data.categoryId || null,
-          deposit_required: data.depositRequired || false,
-          deposit_amount: data.depositAmount || null,
-          deposit_percentage: data.depositPercentage || null,
+          deposit_required: false,
+          deposit_amount: null,
+          deposit_percentage: null,
           image_urls: data.imageUrls || [],
         })
         .select()

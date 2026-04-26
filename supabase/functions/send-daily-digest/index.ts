@@ -161,7 +161,7 @@ Deno.serve(async (req) => {
       const upcomingAppointmentsCount = appointmentsResult.count || 0;
       const paymentsReceived = (paymentsResult.data || []).reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
       const outstandingBalances = (outstandingResult.data || []).reduce((sum, appointment) => {
-        if (["fully_paid", "refunded_full", "pay_at_salon"].includes(appointment.payment_status)) {
+        if (["fully_paid", "refunded_full"].includes(appointment.payment_status)) {
           return sum;
         }
         return sum + Math.max(Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0), 0);

@@ -9,7 +9,7 @@ import { formatCurrency } from "@shared/currency";
 import type { CartItem, GiftRecipient } from "@/hooks/useBookingCart";
 import type { BookerInfo } from "./BookerInfoStep";
 
-export type PaymentOption = "pay_now" | "pay_deposit" | "pay_at_salon";
+export type PaymentOption = "pay_now" | "pay_deposit";
 
 interface ReviewStepProps {
   bookerInfo: BookerInfo;
@@ -18,7 +18,7 @@ interface ReviewStepProps {
   salon: {
     id: string;
     currency: string;
-    pay_at_salon_enabled?: boolean;
+    auto_confirm_bookings?: boolean;
     deposits_enabled?: boolean;
     default_deposit_percentage?: number;
   };
@@ -59,6 +59,7 @@ export function ReviewStep({
   amountDueAtSalon,
 }: ReviewStepProps) {
   const depositRequired = salon.deposits_enabled && depositAmount > 0;
+  const requiresApproval = salon.auto_confirm_bookings === false;
 
   return (
     <div className="space-y-6">
@@ -179,7 +180,7 @@ export function ReviewStep({
         />
       )}
 
-      {afterPurse > 0 && (
+      {afterPurse > 0 && !requiresApproval && (
         <div className="space-y-3">
           <h3 className="font-semibold flex items-center gap-2">
             <Wallet className="h-4 w-4" />
@@ -208,17 +209,16 @@ export function ReviewStep({
                 <span className="font-medium">{formatCurrency(depositAmount, salon.currency)}</span>
               </div>
             )}
-
-            {salon.pay_at_salon_enabled && (
-              <div className="flex items-center space-x-2 rounded-lg border p-3">
-                <RadioGroupItem value="pay_at_salon" id="pay-at-salon" />
-                <Label htmlFor="pay-at-salon" className="flex-1 cursor-pointer">
-                  Pay at salon
-                </Label>
-                <span className="font-medium">{formatCurrency(amountDueAtSalon, salon.currency)}</span>
-              </div>
-            )}
           </RadioGroup>
+        </div>
+      )}
+
+      {requiresApproval && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
+          <p className="font-medium">Booking approval required</p>
+          <p className="mt-1 text-amber-900/90">
+            This salon reviews bookings before payment. After you submit, the salon will accept, reschedule, or decline the request. If accepted, you will receive an invoice in your client portal and by email.
+          </p>
         </div>
       )}
 
@@ -243,8 +243,8 @@ export function ReviewStep({
         )}
         <Separator />
         <div className="flex justify-between font-semibold">
-          <span>Amount Due Now</span>
-          <span>{formatCurrency(amountDueNow, salon.currency)}</span>
+          <span>{requiresApproval ? "Amount Due After Approval" : "Amount Due Now"}</span>
+          <span>{formatCurrency(requiresApproval ? afterPurse : amountDueNow, salon.currency)}</span>
         </div>
       </div>
     </div>

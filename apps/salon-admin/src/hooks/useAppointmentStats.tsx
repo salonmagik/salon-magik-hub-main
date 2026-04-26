@@ -8,6 +8,8 @@ interface ScheduledStats {
   cancelledCount: number;
   rescheduledCount: number;
   amountDue: number;
+  unconfirmedCount: number;
+  unconfirmedValue: number;
 }
 
 interface UnscheduledStats {
@@ -38,6 +40,8 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
     cancelledCount: 0,
     rescheduledCount: 0,
     amountDue: 0,
+    unconfirmedCount: 0,
+    unconfirmedValue: 0,
   });
   const [unscheduledStats, setUnscheduledStats] = useState<UnscheduledStats>({
     totalCount: 0,
@@ -72,6 +76,8 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
         cancelledResult,
         rescheduledResult,
         amountDueResult,
+        unconfirmedCountResult,
+        unconfirmedValueResult,
         unscheduledTotalResult,
         unscheduledGiftedResult,
         unscheduledPaidResult,
@@ -128,6 +134,24 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
           .neq("payment_status", "refunded_full")
           .gte("scheduled_start", startOfRange)
           .lte("scheduled_start", endOfRange),
+
+        supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", currentTenant.id)
+          .in("approval_status", ["pending", "reschedule_proposed"])
+          .or(
+            `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
+          ),
+
+        supabase
+          .from("appointments")
+          .select("total_amount")
+          .eq("tenant_id", currentTenant.id)
+          .in("approval_status", ["pending", "reschedule_proposed"])
+          .or(
+            `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
+          ),
         
         // Total unscheduled
         supabase
@@ -173,6 +197,9 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
       const amountDue = amountDueResult.data?.reduce((sum, apt) => {
         return sum + ((apt.total_amount || 0) - (apt.amount_paid || 0));
       }, 0) || 0;
+      const unconfirmedValue = unconfirmedValueResult.data?.reduce((sum, apt) => {
+        return sum + Number(apt.total_amount || 0);
+      }, 0) || 0;
 
       setScheduledStats({
         rangeCount: rangeResult.count || 0,
@@ -180,6 +207,8 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
         cancelledCount: cancelledResult.count || 0,
         rescheduledCount: rescheduledResult.count || 0,
         amountDue,
+        unconfirmedCount: unconfirmedCountResult.count || 0,
+        unconfirmedValue,
       });
 
       setUnscheduledStats({

@@ -68,7 +68,6 @@ interface BookingRequest {
     deliveryAddress?: DeliveryAddress;
   };
   items: CartItem[];
-  payAtSalon?: boolean;
   voucherCode?: string | null;
   voucherDiscount?: number;
   purseAmount?: number;
@@ -144,6 +143,21 @@ function renderBookingSummary(items: CartItem[], currency: string) {
     .join("");
 }
 
+function buildActionButton(url: string, label: string, variant: "primary" | "secondary" | "ghost" = "primary") {
+  const styles =
+    variant === "primary"
+      ? "background:#2563EB;color:#ffffff;border:1px solid #2563EB;"
+      : variant === "secondary"
+        ? "background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;"
+        : "background:#ffffff;color:#111827;border:1px solid #d1d5db;";
+
+  return `
+    <a href="${url}" style="display:inline-block;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;${styles}">
+      ${label}
+    </a>
+  `;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -159,7 +173,6 @@ serve(async (req) => {
       tenantId,
       customer,
       items,
-      payAtSalon,
       voucherDiscount = 0,
       purseAmount = 0,
       depositAmount = 0,
@@ -275,9 +288,11 @@ serve(async (req) => {
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
+    const salonAdminBaseUrl = Deno.env.get("SALON_ADMIN_BASE_URL") || "https://app.salonmagik.com/salon";
     const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const createdAppointmentIds: string[] = [];
+    const approvalRequired = tenant.auto_confirm_bookings === false;
 
     for (const item of items) {
       if (!item.locationId) {
@@ -421,7 +436,11 @@ serve(async (req) => {
           is_unscheduled: !scheduledStart,
           is_gifted: item.isGift,
           status: "scheduled",
-          payment_status: payAtSalon ? "pay_at_salon" : "unpaid",
+          payment_status: "unpaid",
+          confirmation_status: approvalRequired ? "pending" : "confirmed",
+          approval_status: approvalRequired ? "pending" : "approved",
+          approval_requested_at: approvalRequired ? new Date().toISOString() : null,
+          customer_response_status: approvalRequired ? "pending" : "not_required",
           total_amount: lineTotal,
           notes: customer.notes || null,
           booking_reference: reference,
@@ -472,16 +491,42 @@ serve(async (req) => {
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     const bookingSummaryHtml = renderBookingSummary(items, tenant.currency || "USD");
-    const paymentLine = payAtSalon
-      ? `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Payment will be completed at the salon.</p>`
+    const paymentLine = approvalRequired
+      ? `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.</p>`
       : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Payment status: pending checkout completion.</p>`;
+    const hasServiceLikeItems = items.some((item) => item.type === "service" || item.type === "package");
+    const hasProductOnlyItems = items.every((item) => item.type === "product");
+    const isSingleReviewItem = items.length === 1;
+    const reviewBaseUrl = `${salonAdminBaseUrl.replace(/\/$/, "")}/appointments?tab=unconfirmed&bookingRef=${encodeURIComponent(reference)}`;
+    const reviewActionsHtml = approvalRequired
+      ? isSingleReviewItem && hasServiceLikeItems
+        ? `
+          <div style="margin:24px 0 8px;">
+            ${buildActionButton(`${reviewBaseUrl}&approvalAction=approve`, "Accept")}
+            ${buildActionButton(`${reviewBaseUrl}&approvalAction=reschedule`, "Reschedule", "secondary")}
+            ${buildActionButton(`${reviewBaseUrl}&approvalAction=decline`, "Decline", "ghost")}
+          </div>
+        `
+        : isSingleReviewItem && hasProductOnlyItems
+          ? `
+            <div style="margin:24px 0 8px;">
+              ${buildActionButton(`${reviewBaseUrl}&approvalAction=approve`, "Accept")}
+              ${buildActionButton(`${reviewBaseUrl}&approvalAction=decline`, "Decline", "ghost")}
+            </div>
+          `
+          : `
+            <div style="margin:24px 0 8px;">
+              ${buildActionButton(`${reviewBaseUrl}&approvalAction=review`, "Review order")}
+            </div>
+          `
+      : "";
 
     await createTenantNotification(supabase, {
       tenantId,
-      title: "New Booking",
+      title: approvalRequired ? "Booking requires confirmation" : "New Booking",
       description: `${customerFullName} placed a booking for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
       entityId: primaryAppointmentId,
-      urgent: false,
+      urgent: approvalRequired,
     });
 
     if (customer.email) {
@@ -489,10 +534,10 @@ serve(async (req) => {
         resendApiKey,
         fromEmail: resendFromEmail,
         to: [customer.email],
-        subject: `Booking received at ${tenant.name}`,
+        subject: approvalRequired ? `Booking review started at ${tenant.name}` : `Booking received at ${tenant.name}`,
         salonName: tenant.name,
         htmlContent: `
-          <h2 style="color: #2563EB; margin-bottom: 16px;">Your booking is in</h2>
+          <h2 style="color: #2563EB; margin-bottom: 16px;">${approvalRequired ? "Your booking is awaiting review" : "Your booking is in"}</h2>
           <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi ${customer.firstName},</p>
           <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">We’ve received your booking with <strong>${tenant.name}</strong>.</p>
           <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Booking reference:</strong> ${reference}</p>
@@ -513,16 +558,17 @@ serve(async (req) => {
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
-          subject: `New booking at ${tenant.name}`,
+          subject: approvalRequired ? `Booking approval required at ${tenant.name}` : `New booking at ${tenant.name}`,
           salonName: tenant.name,
           htmlContent: `
-            <h2 style="color: #2563EB; margin-bottom: 16px;">New booking received</h2>
+            <h2 style="color: #2563EB; margin-bottom: 16px;">${approvalRequired ? "Booking approval required" : "New booking received"}</h2>
             <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customerFullName}</p>
             <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Booking reference:</strong> ${reference}</p>
             <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}</p>
             <div style="margin: 24px 0;">
               ${bookingSummaryHtml}
             </div>
+            ${reviewActionsHtml}
           `,
         });
       }
@@ -538,7 +584,7 @@ serve(async (req) => {
       check: createPaymentSession && paymentAmount && paymentAmount > 0
     });
 
-    if (createPaymentSession && paymentAmount && paymentAmount > 0) {
+    if (!approvalRequired && createPaymentSession && paymentAmount && paymentAmount > 0) {
       try {
         console.log("Creating payment session...");
         const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
@@ -798,7 +844,7 @@ serve(async (req) => {
     }
 
     // Process purse-only payment if requested (mimics webhook behavior for security and idempotency)
-    if (processPursePayment && pursePaymentCustomerId && paymentAmount && paymentAmount > 0) {
+    if (!approvalRequired && processPursePayment && pursePaymentCustomerId && paymentAmount && paymentAmount > 0) {
       console.log(`Processing purse-only payment: ${paymentAmount} for customer ${pursePaymentCustomerId}`);
       
       try {
@@ -903,6 +949,7 @@ serve(async (req) => {
         appointmentIds: createdAppointmentIds,
         checkoutUrl,
         paymentGateway,
+        requiresApproval: approvalRequired,
         totals: {
           subtotal: totalAmount,
           voucherDiscount,
