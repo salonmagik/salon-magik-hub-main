@@ -1435,7 +1435,6 @@ export default function AppointmentsPage() {
                                       </DropdownMenuItem>
                                     )}
                                   </>
-                                )}
                                 ) : (
                                   <>
                                     {actions.includes("start") && (
