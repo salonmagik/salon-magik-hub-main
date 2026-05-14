@@ -108,3 +108,21 @@
 
 ### Learnings
 - Added component dynamically to `SettingsPage` which is quite large. Breaking out complex new settings tabs into separate files improves maintainability.
+
+---
+## 2026-05-14 10:25:00 - US-007: Salon Admin UI - Purchase & Payment Modal
+
+### Implemented
+- Created `DomainPurchaseModal.tsx` in `apps/salon-admin/src/pages/salon/`.
+- Built a WHOIS registration form using `react-hook-form` and `zod` for validation, pre-filling tenant data (name, phone, country).
+- Wired the modal to `dotlet-purchase-domain` edge function.
+- Implemented a success screen to display `bank_transfer_instructions` and order ID cleanly within the dialog upon successful API call.
+- Updated `CustomDomainManager.tsx` to include the `DomainPurchaseModal` and trigger it when clicking the new "Purchase" button shown on available domains.
+
+### Files Changed
+- `apps/salon-admin/src/pages/salon/CustomDomainManager.tsx`
+- `apps/salon-admin/src/pages/salon/DomainPurchaseModal.tsx`
+
+### Learnings
+- Extracting complex modals like `DomainPurchaseModal` with internal form state handling simplifies the parent `CustomDomainManager` and makes testing and modifications much easier.
+- `shadcn/ui` `Dialog` component can gracefully transition contents from the form view to the success text view by rendering different children based on `purchaseResult` state.

@@ -107,8 +107,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created DomainPurchaseModal using shadcn/ui Dialog and react-hook-form to gather WHOIS registrant information pre-filled from tenant data. Wired up the form to submit to the dotlet-purchase-domain edge function and gracefully show bank transfer instructions with order reference ID. Typecheck and lint pass."
     },
     {
       "id": "US-008",
