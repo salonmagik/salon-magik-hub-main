@@ -92,3 +92,19 @@
 ### Learnings
 - Destructuring objects inside a custom hook helps bypass `react-hooks/exhaustive-deps` without resorting to `eslint-disable` when options are just primitives.
 - Turborepo `pnpm --filter ... exec` can be helpful for running underlying commands without a dedicated npm script, like `tsc --noEmit`.
+
+---
+## 2026-05-14 10:20:00 - US-006: Salon Admin UI - Search & Validation
+
+### Implemented
+- Created `CustomDomainManager` component in `apps/salon-admin/src/pages/salon/CustomDomainManager.tsx`
+- Added UI to search and check custom domain availability by invoking the `dotlet-check-domain-availability` edge function.
+- Displayed availability and pricing information.
+- Added 'Custom Domain' tab to `SettingsPage.tsx` using the new component.
+
+### Files Changed
+- `apps/salon-admin/src/pages/salon/SettingsPage.tsx`
+- `apps/salon-admin/src/pages/salon/CustomDomainManager.tsx`
+
+### Learnings
+- Added component dynamically to `SettingsPage` which is quite large. Breaking out complex new settings tabs into separate files improves maintainability.

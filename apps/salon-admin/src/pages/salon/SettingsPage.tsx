@@ -59,6 +59,7 @@ import {
   Banknote,
   ArrowDownUp,
   CalendarX2,
+  Globe,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -76,6 +77,7 @@ import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useClaimTenantSalesPromo, useTenantSalesPromo } from "@/hooks/useSalesPromo";
 import { usePlans } from "@/hooks/usePlans";
+import { CustomDomainManager } from "./CustomDomainManager";
 
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch";
@@ -100,6 +102,7 @@ const BASE_SETTINGS_TABS = [
   { id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
+  { id: "custom-domain", label: "Custom Domain", icon: Globe },
 ] as const;
 
 const weekDays = [
@@ -159,6 +162,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         { id: "payments", label: "Payments", icon: CreditCard },
         { id: "notifications", label: "Notifications", icon: Bell },
         { id: "subscription", label: "Subscription", icon: Zap },
+        { id: "custom-domain", label: "Custom Domain", icon: Globe },
       ];
     }
     return BASE_SETTINGS_TABS;
@@ -2587,6 +2591,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             {activeTab === "notifications" && renderNotificationsTab()}
             {activeTab === "roles" && renderRolesTab()}
             {activeTab === "subscription" && renderSubscriptionTab()}
+            {activeTab === "custom-domain" && <CustomDomainManager />}
           </div>
         </div>
       </div>
