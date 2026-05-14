@@ -126,3 +126,22 @@
 ### Learnings
 - Extracting complex modals like `DomainPurchaseModal` with internal form state handling simplifies the parent `CustomDomainManager` and makes testing and modifications much easier.
 - `shadcn/ui` `Dialog` component can gracefully transition contents from the form view to the success text view by rendering different children based on `purchaseResult` state.
+
+---
+## 2026-05-14 10:30:00 - US-008: Salon Admin UI - Order History & Management
+
+### Implemented
+- Created `useDomainOrders` hook utilizing `@tanstack/react-query` to fetch domain orders for the current tenant.
+- Updated `CustomDomainManager` to display an "Order History" card listing domains purchased along with status badges.
+- Implemented `configureDomain` functionality tied to a "Configure" button for "completed" orders, which hits `dotlet-configure-domain`.
+- Added an "Active Custom Domain" view if the tenant has a fully verified domain.
+- Implemented `disconnectDomain` functionality to clear tenant columns (effectively disabling custom domain integration locally).
+- All changes passed `eslint`, `vitest`, and `tsc` typechecking successfully.
+
+### Files Changed
+- `apps/salon-admin/src/hooks/useDomainOrders.ts`
+- `apps/salon-admin/src/pages/salon/CustomDomainManager.tsx`
+
+### Learnings
+- We can embed new sections nicely into `CustomDomainManager` to show both active domain status and past order histories.
+- Leveraging `react-query` natively for querying new tables maintains caching consistency and simplifies polling integration if needed later.

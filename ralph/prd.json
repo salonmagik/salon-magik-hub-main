@@ -123,8 +123,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created useDomainOrders hook using react-query. Updated CustomDomainManager to list domain_orders with status badges, a Configure button, and an Active state UI with a Disconnect button. Typecheck passes."
     },
     {
       "id": "US-009",
