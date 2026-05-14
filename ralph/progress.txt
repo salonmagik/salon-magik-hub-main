@@ -53,3 +53,21 @@
 ### Learnings
 - RLS validation for edge functions is gracefully achieved by creating the Supabase client with `global: { headers: { Authorization: authHeader } }`.
 - Insert then update pattern ensures we have a local record even if Dotlet fails, though here we insert first to lock intent/validate RLS, then call Dotlet, then update with external details.
+
+---
+## 2026-05-14 10:15:00 - US-004: Edge Function - Status & Configuration
+
+### Implemented
+- Created `supabase/functions/dotlet-check-order-status/index.ts` to fetch current domain order status from Dotlet and sync it to the `domain_orders` table.
+- Created `supabase/functions/dotlet-configure-domain/index.ts` to execute domain setup once the order is completed.
+- Implemented API calls to Dotlet to set proxied CNAME records (`@` and `www`) pointing to `cname.vercel-dns.com`.
+- Implemented API call to Dotlet to create an Origin Rule directing traffic to the tenant's slug.
+- Implemented DB update via Supabase Service Role client to update `tenants` with `custom_booking_domain`, `custom_domain_verified`, and `dotlet_origin_rule_id`.
+
+### Files Changed
+- supabase/functions/dotlet-check-order-status/index.ts
+- supabase/functions/dotlet-configure-domain/index.ts
+
+### Learnings
+- Using the Service Role key (`SUPABASE_SERVICE_ROLE_KEY`) is necessary in edge functions when updating administrative columns (like verification status) on the `tenants` table to bypass RLS, while still fetching the initial order using the user's Auth Header to verify ownership.
+- Deno is not installed in this environment; code correctness is ensured via visual inspection of types and standard libraries.

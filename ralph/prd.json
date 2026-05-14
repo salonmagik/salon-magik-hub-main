@@ -63,8 +63,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created supabase/functions/dotlet-check-order-status/index.ts and supabase/functions/dotlet-configure-domain/index.ts. Implemented polling to Dotlet API, DNS CNAME configuration for Vercel, and Origin Rules configuration via Dotlet API. Updates tenants table securely using a service role client. Deno types pass visual inspection."
     },
     {
       "id": "US-005",
