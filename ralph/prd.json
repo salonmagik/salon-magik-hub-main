@@ -16,8 +16,8 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed migration 20260414002000_custom_domain_integration.sql which adds custom domain columns to tenants, updates the public_booking_tenants view, creates the domain_orders table, and adds RLS. Also manually updated packages/supabase-client/src/supabase/types.ts to pass typechecking."
     },
     {
       "id": "US-002",

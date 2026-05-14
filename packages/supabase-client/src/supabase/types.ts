@@ -433,9 +433,6 @@ export type Database = {
           city: string | null
           country: string | null
           created_at: string
-          device_type: string | null
-          end_reason: string | null
-          ended_at: string | null
           id: string
           ip_address: unknown
           isp: string | null
@@ -2647,6 +2644,12 @@ export type Database = {
           country: string
           created_at: string
           currency: string
+          custom_booking_domain: string | null
+          custom_domain_verified: boolean
+          custom_domain_verified_at: string | null
+          custom_domain_source: string | null
+          dotlet_domain_id: string | null
+          dotlet_origin_rule_id: string | null
           default_buffer_minutes: number | null
           default_deposit_percentage: number | null
           deposits_enabled: boolean
@@ -2677,6 +2680,12 @@ export type Database = {
           country: string
           created_at?: string
           currency?: string
+          custom_booking_domain?: string | null
+          custom_domain_verified?: boolean
+          custom_domain_verified_at?: string | null
+          custom_domain_source?: string | null
+          dotlet_domain_id?: string | null
+          dotlet_origin_rule_id?: string | null
           default_buffer_minutes?: number | null
           default_deposit_percentage?: number | null
           deposits_enabled?: boolean
@@ -2707,6 +2716,12 @@ export type Database = {
           country?: string
           created_at?: string
           currency?: string
+          custom_booking_domain?: string | null
+          custom_domain_verified?: boolean
+          custom_domain_verified_at?: string | null
+          custom_domain_source?: string | null
+          dotlet_domain_id?: string | null
+          dotlet_origin_rule_id?: string | null
           default_buffer_minutes?: number | null
           default_deposit_percentage?: number | null
           deposits_enabled?: boolean
@@ -2728,6 +2743,50 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      domain_orders: {
+        Row: {
+          id: string
+          tenant_id: string
+          domain_name: string
+          status: Database["public"]["Enums"]["domain_order_status"]
+          dotlet_order_id: string | null
+          price_amount: number | null
+          price_currency: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          domain_name: string
+          status?: Database["public"]["Enums"]["domain_order_status"]
+          dotlet_order_id?: string | null
+          price_amount?: number | null
+          price_currency?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          domain_name?: string
+          status?: Database["public"]["Enums"]["domain_order_status"]
+          dotlet_order_id?: string | null
+          price_amount?: number | null
+          price_currency?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "domain_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       transactions: {
         Row: {
@@ -3072,6 +3131,8 @@ export type Database = {
           contact_phone: string | null
           country: string | null
           currency: string | null
+          custom_booking_domain: string | null
+          custom_domain_verified: boolean | null
           default_deposit_percentage: number | null
           deposits_enabled: boolean | null
           id: string | null
@@ -3172,6 +3233,12 @@ export type Database = {
     }
     Enums: {
       app_role: "owner" | "manager" | "supervisor" | "receptionist" | "staff"
+      domain_order_status:
+        | "pending_payment"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "cancelled"
       appointment_status:
         | "scheduled"
         | "started"

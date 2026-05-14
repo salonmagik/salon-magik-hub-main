@@ -1,0 +1,19 @@
+
+---
+## 2026-05-14 10:00:00 - US-001: Database Schema & RLS Policies
+
+### Implemented
+- Created SQL migration `20260414002000_custom_domain_integration.sql`
+- Added columns to `tenants`: `custom_booking_domain`, `custom_domain_verified`, `custom_domain_verified_at`, `custom_domain_source`, `dotlet_domain_id`, `dotlet_origin_rule_id`
+- Recreated `public_booking_tenants` view to include new columns
+- Created `domain_orders` table and `domain_order_status` enum
+- Added RLS policies using `public.has_role(auth.uid(), tenant_id, 'owner')` and manager checks
+- Manually updated `@salonmagik/supabase-client` types `packages/supabase-client/src/supabase/types.ts` since I don't have a local Supabase running to run `gen types typescript`.
+
+### Files Changed
+- supabase/migrations/20260414002000_custom_domain_integration.sql
+- packages/supabase-client/src/supabase/types.ts
+
+### Learnings
+- RLS checks for owner/manager use the custom `public.has_role()` and `public.is_tenant_owner()` functions
+- Database types are in a shared package that must be built via `pnpm run --filter supabase-client build`
