@@ -17,3 +17,20 @@
 ### Learnings
 - RLS checks for owner/manager use the custom `public.has_role()` and `public.is_tenant_owner()` functions
 - Database types are in a shared package that must be built via `pnpm run --filter supabase-client build`
+
+---
+## 2026-05-14 10:05:00 - US-002: Edge Function - Domain Availability
+
+### Implemented
+- Created `supabase/functions/dotlet-check-domain-availability/index.ts`
+- Implemented `normalizeDomain` to strip protocols, `www.`, and trailing slashes.
+- Queries Dotlet API (`/registrar/availability` and `/registrar/price`) via Deno's fetch.
+- Expects `DOTLET_API_URL` and `DOTLET_API_KEY` environment variables.
+- Returns standardized JSON format with `available`, `price`, and `currency`.
+
+### Files Changed
+- supabase/functions/dotlet-check-domain-availability/index.ts
+
+### Learnings
+- Dotlet endpoints use a standard bearer token which we fetch from env.
+- Used similar CORS headers as other Edge Functions.
