@@ -1029,6 +1029,24 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
       if (updateError) throw updateError;
 
+      // Sync the new slug with Dotlet if a custom domain is active
+      if (currentTenant.custom_booking_domain && currentTenant.dotlet_origin_rule_id) {
+        const { error: syncError } = await supabase.functions.invoke("dotlet-sync-slug", {
+          body: { tenantId: currentTenant.id, newSlug: slug },
+        });
+
+        if (syncError) {
+          console.error("Failed to sync new slug with custom domain:", syncError);
+          // We don't throw here to avoid failing the slug generation, 
+          // but we notify the user.
+          toast({
+            title: "Warning",
+            description: "Slug updated, but failed to sync with custom domain. Please contact support.",
+            variant: "destructive",
+          });
+        }
+      }
+
       await refreshTenants();
       toast({ title: "Success", description: "Booking URL generated!" });
     } catch (err) {

@@ -138,8 +138,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated handleGenerateSlug in apps/salon-admin/src/pages/salon/SettingsPage.tsx to intercept slug changes and hit a newly created Edge Function (dotlet-sync-slug). The dotlet-sync-slug Edge Function updates the origin rule via the Dotlet API to ensure the domain correctly proxies to the new slug."
     }
   ]
 }

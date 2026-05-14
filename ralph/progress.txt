@@ -145,3 +145,18 @@
 ### Learnings
 - We can embed new sections nicely into `CustomDomainManager` to show both active domain status and past order histories.
 - Leveraging `react-query` natively for querying new tables maintains caching consistency and simplifies polling integration if needed later.
+
+---
+## 2026-05-14 12:00:00 - US-009: Handle Slug Change Sync
+
+### Implemented
+- Created `supabase/functions/dotlet-sync-slug/index.ts` edge function to update the Dotlet Origin Rule whenever the tenant slug changes.
+- Updated `handleGenerateSlug` in `apps/salon-admin/src/pages/salon/SettingsPage.tsx` to invoke the `dotlet-sync-slug` edge function immediately after successfully updating the slug in the database, ensuring custom domains do not break when a salon owner decides to change their booking URL.
+
+### Files Changed
+- `supabase/functions/dotlet-sync-slug/index.ts`
+- `apps/salon-admin/src/pages/salon/SettingsPage.tsx`
+
+### Learnings
+- SettingsPage slug update is only done via `handleGenerateSlug`. By calling the edge function directly from the frontend after database update, we can give users immediate feedback and toast warnings if the sync fails.
+- Re-creating/updating Cloudflare/Dotlet origin rules via PUT or POST on `/origin-rules` allows us to smoothly shift the proxy target to the new slug.
