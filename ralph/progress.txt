@@ -34,3 +34,22 @@
 ### Learnings
 - Dotlet endpoints use a standard bearer token which we fetch from env.
 - Used similar CORS headers as other Edge Functions.
+
+---
+## 2026-05-14 10:10:00 - US-003: Edge Function - Purchase Domain
+
+### Implemented
+- Created `supabase/functions/dotlet-purchase-domain/index.ts`
+- Initialized Supabase client with the caller's JWT `Authorization` header to automatically enforce RLS (`domain_orders` insert requires owner/manager).
+- Inserts a `domain_orders` record initially with `pending_payment`.
+- Calls Dotlet `/registrar/order` API with domain and WHOIS info.
+- Updates the `domain_orders` record with the returned `dotlet_order_id` and price information.
+- Returns the order details and manual bank transfer instructions.
+- Fixed Deno typing and standard library version imports to match existing functions.
+
+### Files Changed
+- supabase/functions/dotlet-purchase-domain/index.ts
+
+### Learnings
+- RLS validation for edge functions is gracefully achieved by creating the Supabase client with `global: { headers: { Authorization: authHeader } }`.
+- Insert then update pattern ensures we have a local record even if Dotlet fails, though here we insert first to lock intent/validate RLS, then call Dotlet, then update with external details.

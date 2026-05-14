@@ -47,8 +47,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created supabase/functions/dotlet-purchase-domain/index.ts. Uses authenticated Supabase client for built-in RLS validation (only owners/managers can insert to domain_orders). Calls Dotlet /registrar/order API and then updates the inserted order with the returned Dotlet order ID. Deno typecheck passed."
     },
     {
       "id": "US-004",
