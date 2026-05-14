@@ -77,8 +77,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated resolveSlugFromCustomDomain in apps/public-booking/src/lib/slugResolution.ts to query public_booking_tenants by custom_booking_domain, stripping www. Created useResolvedSlug hook in apps/public-booking/src/hooks/useResolvedSlug.ts to handle both sync and async slug resolution. Integrated useResolvedSlug in BookingPage.tsx so it seamlessly supports the existing loading skeleton. Tests pass and typecheck passes."
     },
     {
       "id": "US-006",

@@ -6,6 +6,7 @@ import {
   useBookingCountryContext,
   BookingCartProvider,
   useBookingCart,
+  useResolvedSlug,
   type PublicTenant,
   type PublicLocation,
   type PublicService,
@@ -14,7 +15,6 @@ import {
   type PublicCategory,
 } from "@/hooks";
 import type { PublicCatalogMode } from "@/hooks/usePublicCatalog";
-import { resolvePublicBookingSlug } from "@/lib/slugResolution";
 import { BookingLayout } from "./components/BookingLayout";
 import { SalonHeader } from "./components/SalonHeader";
 import { CatalogView } from "./components/CatalogView";
@@ -56,7 +56,8 @@ const toCountryCode = (value: string | null | undefined): string | null => {
 
 function BookingPageContent() {
   const { slug: routeSlug } = useParams<{ slug: string }>();
-  const slug = resolvePublicBookingSlug({
+  
+  const { slug, isLoading: slugLoading } = useResolvedSlug({
     routeSlug,
     hostname: window.location.hostname,
     search: window.location.search,
@@ -130,7 +131,7 @@ function BookingPageContent() {
   const cartScopeKey = `${slug ?? "unknown"}:${effectiveCountryCode ?? "legacy"}`;
   const storefrontCurrency = getCurrencyForCountryCode(effectiveCountryCode, salon?.currency || "USD");
   const isCatalogBlocked = countryContextEnabled && requiresCountrySelection && !selectedCountryCode;
-  const isLoading = salonLoading || countryContextLoading || (!isCatalogBlocked && catalogLoading);
+  const isLoading = slugLoading || salonLoading || countryContextLoading || (!isCatalogBlocked && catalogLoading);
 
   useEffect(() => {
     if (salon?.name) {

@@ -71,3 +71,24 @@
 ### Learnings
 - Using the Service Role key (`SUPABASE_SERVICE_ROLE_KEY`) is necessary in edge functions when updating administrative columns (like verification status) on the `tenants` table to bypass RLS, while still fetching the initial order using the user's Auth Header to verify ownership.
 - Deno is not installed in this environment; code correctness is ensured via visual inspection of types and standard libraries.
+
+---
+## 2026-05-14 01:30 - US-005: Public Booking App Slug Resolution
+
+### Implemented
+- Updated `slugResolution.ts` to export an async `resolveSlugFromCustomDomain` that queries `public_booking_tenants` by `custom_booking_domain`, properly stripping the `www.` prefix.
+- Kept the original synchronous slug resolution functionality under `resolvePublicBookingSlugSync` and aliased `resolvePublicBookingSlug` for backwards compatibility.
+- Created `useResolvedSlug` hook in `apps/public-booking/src/hooks/useResolvedSlug.ts` which handles the async fallback effectively and efficiently.
+- Updated `BookingPage.tsx` to use the `useResolvedSlug` hook. The synchronous resolution displays instantly without visual lag, while the custom domain fallback leverages the existing `Skeleton` loading state gracefully.
+- Re-tested the app using `vitest`, all assertions passed.
+- Analyzed React code for `useEffect` stable dependencies explicitly mapping objects from parameter values instead of full objects to avoid `eslint-hooks/exhaustive-deps`.
+
+### Files Changed
+- `apps/public-booking/src/lib/slugResolution.ts`
+- `apps/public-booking/src/hooks/useResolvedSlug.ts`
+- `apps/public-booking/src/hooks/index.ts`
+- `apps/public-booking/src/pages/BookingPage.tsx`
+
+### Learnings
+- Destructuring objects inside a custom hook helps bypass `react-hooks/exhaustive-deps` without resorting to `eslint-disable` when options are just primitives.
+- Turborepo `pnpm --filter ... exec` can be helpful for running underlying commands without a dedicated npm script, like `tsc --noEmit`.
