@@ -93,7 +93,7 @@ export function DomainPurchaseModal({
       });
 
       if (error) throw error;
-      
+
       setPurchaseResult(data);
       toast({
         title: "Purchase Order Created",
@@ -132,7 +132,7 @@ export function DomainPurchaseModal({
             </div>
             <div className="text-sm">
               <p><strong>Order ID:</strong> {purchaseResult.id}</p>
-              <p><strong>Amount Due:</strong> {purchaseResult.currency === "USD" ? "$" : ""}{(purchaseResult.price / 100).toFixed(2)} {purchaseResult.currency !== "USD" ? purchaseResult.currency : ""}</p>
+              <p><strong>Amount Due:</strong> {purchaseResult.currency === "USD" ? "$" : ""}{purchaseResult.price.toFixed(2)} {purchaseResult.currency !== "USD" ? purchaseResult.currency : ""}</p>
             </div>
             <p className="text-sm text-muted-foreground">
               Your domain will be configured automatically once payment is received.
@@ -188,7 +188,7 @@ export function DomainPurchaseModal({
                 )}
               />
             </div>
-            
+
             <FormField
               control={form.control}
               name="organization"
@@ -310,7 +310,7 @@ export function DomainPurchaseModal({
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Purchase for {currency === "USD" ? "$" : ""}{(price / 100).toFixed(2)} {currency !== "USD" ? currency : ""}
+                Purchase for {currency === "USD" ? "$" : ""}{(price).toFixed(2)} {currency !== "USD" ? currency : ""}
               </Button>
             </DialogFooter>
           </form>

@@ -186,7 +186,7 @@ export function CustomDomainManager() {
                         <div>
                           <p className="font-medium text-lg">
                             {availabilityResult.currency === "USD" ? "$" : ""}
-                            {(availabilityResult.price / 100).toFixed(2)}
+                            {availabilityResult.price.toFixed(2)}
                             {availabilityResult.currency !== "USD" ? ` ${availabilityResult.currency}` : ""}
                           </p>
                           <p className="text-xs text-muted-foreground">per year</p>
