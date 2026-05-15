@@ -55,7 +55,7 @@ serve(async (req) => {
     }
 
     // 2. Call Dotlet API
-    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.io/v1";
+    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.net/api/v1";
     const dotletApiKey = Deno.env.get("DOTLET_API_KEY") ?? "";
 
     const payload = {
@@ -80,7 +80,7 @@ serve(async (req) => {
     if (!dotletRes.ok) {
       const errorText = await dotletRes.text();
       console.error(`Dotlet order error: ${dotletRes.status} ${errorText}`);
-      
+
       // Mark as failed in our DB
       await supabase.from("domain_orders").update({ status: "failed" }).eq("id", order.id);
 
