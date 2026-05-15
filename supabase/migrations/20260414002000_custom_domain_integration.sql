@@ -11,9 +11,7 @@ ADD COLUMN dotlet_origin_rule_id text;
 CREATE UNIQUE INDEX idx_tenants_custom_booking_domain ON public.tenants (custom_booking_domain) WHERE custom_booking_domain IS NOT NULL;
 
 -- 3. Update public_booking_tenants view
-DROP VIEW IF EXISTS public.public_booking_tenants;
-
-CREATE VIEW public.public_booking_tenants
+CREATE OR REPLACE VIEW public.public_booking_tenants
 WITH (security_invoker = off)
 AS
 SELECT

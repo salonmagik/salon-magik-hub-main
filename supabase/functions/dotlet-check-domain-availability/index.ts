@@ -23,7 +23,15 @@ serve(async (req) => {
   }
 
   try {
-    const { domain } = await req.json();
+    let bodyText = "";
+    try {
+      bodyText = await req.text();
+      console.log("Raw request body:", bodyText);
+    } catch (e) {
+      console.error("Failed to read request body text:", e);
+    }
+    const { domain } = JSON.parse(bodyText);
+    console.log(`Parsed domain from request:`, domain);
 
     if (!domain || typeof domain !== "string") {
       return new Response(
@@ -45,6 +53,9 @@ serve(async (req) => {
 
     const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.io/v1";
     const dotletApiKey = Deno.env.get("DOTLET_API_KEY") ?? "";
+    
+    console.log(`DOTLET_API_URL: ${dotletApiUrl}`);
+    console.log(`DOTLET_API_KEY length: ${dotletApiKey.length}`);
 
     const headers = {
       "Authorization": `Bearer ${dotletApiKey}`,
@@ -53,10 +64,13 @@ serve(async (req) => {
     };
 
     // 1. Check Availability
+    console.log(`Sending GET request to ${dotletApiUrl}/registrar/availability/${normalizedDomain}`);
     const availabilityRes = await fetch(`${dotletApiUrl}/registrar/availability/${normalizedDomain}`, {
       method: "GET",
       headers,
     });
+
+    console.log(`Availability response status: ${availabilityRes.status}`);
 
     if (!availabilityRes.ok) {
       const errorText = await availabilityRes.text();
@@ -65,13 +79,17 @@ serve(async (req) => {
     }
 
     const availabilityData = await availabilityRes.json();
+    console.log("Availability response data:", JSON.stringify(availabilityData));
     // Assuming availabilityData looks like: { available: true }
 
     // 2. Check Price
+    console.log(`Sending GET request to ${dotletApiUrl}/registrar/price/${normalizedDomain}`);
     const priceRes = await fetch(`${dotletApiUrl}/registrar/price/${normalizedDomain}`, {
       method: "GET",
       headers,
     });
+    
+    console.log(`Price response status: ${priceRes.status}`);
 
     if (!priceRes.ok) {
       const errorText = await priceRes.text();
@@ -80,13 +98,17 @@ serve(async (req) => {
     }
 
     const priceData = await priceRes.json();
+    console.log("Price response data:", JSON.stringify(priceData));
     // Assuming priceData looks like: { price: 15.00, currency: "USD" }
+
+    const priceStr = priceData.registration_price ?? availabilityData.price ?? "0";
+    const parsedPrice = parseFloat(priceStr);
 
     const responsePayload = {
       domain: normalizedDomain,
       available: availabilityData.available ?? false,
-      price: priceData.price ?? 0,
-      currency: priceData.currency ?? "USD"
+      price: isNaN(parsedPrice) ? 0 : parsedPrice,
+      currency: priceData.currency ?? availabilityData.currency ?? "USD"
     };
 
     return new Response(
@@ -94,7 +116,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
-    console.error("Domain availability check error:", error);
+    console.error("Domain availability check error. Full error object:", error);
+    if (error instanceof Error) {
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
     const errorMessage = error instanceof Error ? error.message : "An error occurred";
     return new Response(
       JSON.stringify({ error: errorMessage }),
