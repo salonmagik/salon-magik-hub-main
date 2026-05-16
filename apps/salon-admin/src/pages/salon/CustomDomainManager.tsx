@@ -13,7 +13,7 @@ import { Badge } from "@ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function CustomDomainManager() {
-  const { currentTenant, refetchTenant } = useAuth();
+  const { currentTenant, refreshTenants } = useAuth();
   const [searchDomain, setSearchDomain] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [availabilityResult, setAvailabilityResult] = useState<any>(null);
@@ -58,7 +58,7 @@ export function CustomDomainManager() {
         title: "Success",
         description: "Domain configuration started.",
       });
-      await refetchTenant();
+      await refreshTenants();
       await refetchOrders();
     } catch (err: any) {
       console.error("Domain configure error:", err);
@@ -92,7 +92,7 @@ export function CustomDomainManager() {
         title: "Success",
         description: "Domain disconnected successfully.",
       });
-      await refetchTenant();
+      await refreshTenants();
     } catch (err: any) {
       console.error("Domain disconnect error:", err);
       toast({
