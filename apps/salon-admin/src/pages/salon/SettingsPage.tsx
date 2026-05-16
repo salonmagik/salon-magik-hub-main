@@ -59,6 +59,7 @@ import {
   Banknote,
   ArrowDownUp,
   CalendarX2,
+  Globe,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -76,6 +77,7 @@ import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useClaimTenantSalesPromo, useTenantSalesPromo } from "@/hooks/useSalesPromo";
 import { usePlans } from "@/hooks/usePlans";
+import { CustomDomainManager } from "./CustomDomainManager";
 
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch";
@@ -100,6 +102,7 @@ const BASE_SETTINGS_TABS = [
   { id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
+  { id: "custom-domain", label: "Custom Domain", icon: Globe },
 ] as const;
 
 const weekDays = [
@@ -159,6 +162,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         { id: "payments", label: "Payments", icon: CreditCard },
         { id: "notifications", label: "Notifications", icon: Bell },
         { id: "subscription", label: "Subscription", icon: Zap },
+        { id: "custom-domain", label: "Custom Domain", icon: Globe },
       ];
     }
     return BASE_SETTINGS_TABS;
@@ -1024,6 +1028,24 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         .eq("id", currentTenant.id);
 
       if (updateError) throw updateError;
+
+      // Sync the new slug with Dotlet if a custom domain is active
+      if (currentTenant.custom_booking_domain && currentTenant.dotlet_origin_rule_id) {
+        const { error: syncError } = await supabase.functions.invoke("dotlet-sync-slug", {
+          body: { tenantId: currentTenant.id, newSlug: slug },
+        });
+
+        if (syncError) {
+          console.error("Failed to sync new slug with custom domain:", syncError);
+          // We don't throw here to avoid failing the slug generation, 
+          // but we notify the user.
+          toast({
+            title: "Warning",
+            description: "Slug updated, but failed to sync with custom domain. Please contact support.",
+            variant: "destructive",
+          });
+        }
+      }
 
       await refreshTenants();
       toast({ title: "Success", description: "Booking URL generated!" });
@@ -2587,6 +2609,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             {activeTab === "notifications" && renderNotificationsTab()}
             {activeTab === "roles" && renderRolesTab()}
             {activeTab === "subscription" && renderSubscriptionTab()}
+            {activeTab === "custom-domain" && <CustomDomainManager />}
           </div>
         </div>
       </div>
