@@ -14,6 +14,13 @@ import {
   DialogFooter,
 } from "@ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@ui/select";
+import {
   Form,
   FormControl,
   FormField,
@@ -36,6 +43,8 @@ const whoisSchema = z.object({
   state: z.string().min(1, "State/Province is required"),
   postalCode: z.string().min(1, "Postal code is required"),
   country: z.string().length(2, "Must be a 2-letter country code"),
+  years: z.coerce.number().min(1).max(10),
+  paymentMethod: z.enum(["card", "wire"]),
 });
 
 type WhoisFormValues = z.infer<typeof whoisSchema>;
@@ -75,6 +84,8 @@ export function DomainPurchaseModal({
       state: "",
       postalCode: "",
       country: tenant.country || "US",
+      years: 1,
+      paymentMethod: "card",
     },
   });
 
@@ -86,9 +97,8 @@ export function DomainPurchaseModal({
           domain,
           tenantId: tenant.id,
           registrant: values,
-          admin: values,
-          tech: values,
-          billing: values,
+          payment_method: values.paymentMethod,
+          years: values.years,
         },
       });
 
@@ -97,7 +107,9 @@ export function DomainPurchaseModal({
       setPurchaseResult(data);
       toast({
         title: "Purchase Order Created",
-        description: "Please follow the bank transfer instructions to complete your purchase.",
+        description: data.checkout_url 
+          ? "Please proceed to checkout to complete your purchase."
+          : "Please follow the bank transfer instructions to complete your purchase.",
       });
     } catch (err: any) {
       console.error("Domain purchase error:", err);
@@ -121,18 +133,41 @@ export function DomainPurchaseModal({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bank Transfer Instructions</DialogTitle>
+            <DialogTitle>{purchaseResult.checkout_url ? "Complete Payment" : "Bank Transfer Instructions"}</DialogTitle>
             <DialogDescription>
               Your order for {domain} has been placed.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm font-mono">
-              {purchaseResult.bank_transfer_instructions}
-            </div>
+            {purchaseResult.checkout_url ? (
+              <div className="p-4 bg-muted/50 rounded-lg text-sm">
+                <p className="mb-4">Please complete your payment securely via Stripe.</p>
+                <Button 
+                  className="w-full" 
+                  onClick={() => window.location.href = purchaseResult.checkout_url}
+                >
+                  Proceed to Checkout
+                </Button>
+              </div>
+            ) : purchaseResult.banking_details ? (
+              <div className="p-4 bg-muted/50 rounded-lg text-sm font-mono space-y-2">
+                <p><strong>Bank Name:</strong> {purchaseResult.banking_details.bank_name}</p>
+                <p><strong>Account Name:</strong> {purchaseResult.banking_details.account_name}</p>
+                <p><strong>Account Number:</strong> {purchaseResult.banking_details.account_number}</p>
+                <p><strong>Routing Number:</strong> {purchaseResult.banking_details.routing_number}</p>
+              </div>
+            ) : purchaseResult.bank_transfer_instructions ? (
+              <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm font-mono">
+                {purchaseResult.bank_transfer_instructions}
+              </div>
+            ) : (
+              <div className="p-4 bg-muted/50 rounded-lg whitespace-pre-wrap text-sm font-mono break-all">
+                {JSON.stringify(purchaseResult, null, 2)}
+              </div>
+            )}
             <div className="text-sm">
-              <p><strong>Order ID:</strong> {purchaseResult.id}</p>
-              <p><strong>Amount Due:</strong> {purchaseResult.currency === "USD" ? "$" : ""}{purchaseResult.price.toFixed(2)} {purchaseResult.currency !== "USD" ? purchaseResult.currency : ""}</p>
+              <p><strong>Order ID:</strong> {purchaseResult.id || purchaseResult.dotlet_order_id}</p>
+              <p><strong>Amount Due:</strong> {purchaseResult.currency === "USD" ? "$" : ""}{parseFloat(purchaseResult.price).toFixed(2)} {purchaseResult.currency !== "USD" ? purchaseResult.currency : ""}</p>
             </div>
             <p className="text-sm text-muted-foreground">
               Your domain will be configured automatically once payment is received.
@@ -160,6 +195,43 @@ export function DomainPurchaseModal({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="years"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Registration Years</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={1} max={10} {...field} onChange={e => field.onChange(parseInt(e.target.value, 10))} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="paymentMethod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Payment Method</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select payment method" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="card">Credit Card</SelectItem>
+                        <SelectItem value="wire">Wire Transfer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -310,7 +382,7 @@ export function DomainPurchaseModal({
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Purchase for {currency === "USD" ? "$" : ""}{(price).toFixed(2)} {currency !== "USD" ? currency : ""}
+                Purchase for {currency === "USD" ? "$" : ""}{(price * form.watch("years")).toFixed(2)} {currency !== "USD" ? currency : ""}
               </Button>
             </DialogFooter>
           </form>

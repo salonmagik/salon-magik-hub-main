@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { domain, tenantId, registrant, admin, tech, billing } = await req.json();
+    const { domain, tenantId, registrant, payment_method, years } = await req.json();
 
     if (!domain || typeof domain !== "string" || !tenantId) {
       return new Response(
@@ -58,13 +58,23 @@ serve(async (req) => {
     const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.net/api/v1";
     const dotletApiKey = Deno.env.get("DOTLET_API_KEY") ?? "";
 
+    const contactInfo = registrant || {};
     const payload = {
       domain,
-      registrant: registrant || {},
-      admin: admin || {},
-      tech: tech || {},
-      billing: billing || {},
-      years: 1 // Assuming 1 year for now
+      years: years || 1,
+      contact: {
+        first_name: contactInfo.firstName || contactInfo.first_name,
+        last_name: contactInfo.lastName || contactInfo.last_name,
+        email: contactInfo.email,
+        phone: contactInfo.phone,
+        address1: contactInfo.address1,
+        city: contactInfo.city,
+        state: contactInfo.state,
+        postal_code: contactInfo.postalCode || contactInfo.postal_code,
+        country: contactInfo.country
+      },
+      payment_method: payment_method || "wire",
+      dns_setup: true
     };
 
     const dotletRes = await fetch(`${dotletApiUrl}/registrar/order`, {
@@ -88,14 +98,13 @@ serve(async (req) => {
     }
 
     const dotletData = await dotletRes.json();
-    // Assuming dotletData returns: { id: "order_123", price: 15.00, currency: "USD", bank_transfer_instructions: "..." }
 
     // 3. Update order with Dotlet details
     const { error: updateError } = await supabase
       .from("domain_orders")
       .update({
-        dotlet_order_id: dotletData.id || `req_${Date.now()}`,
-        price_amount: dotletData.price || 0,
+        dotlet_order_id: dotletData.order_id || `req_${Date.now()}`,
+        price_amount: parseFloat(dotletData.price || "0"),
         price_currency: dotletData.currency || "USD",
       })
       .eq("id", order.id);
@@ -110,10 +119,12 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         id: order.id, // Internal order ID
-        dotlet_order_id: dotletData.id,
+        dotlet_order_id: dotletData.order_id,
         price: dotletData.price,
         currency: dotletData.currency,
-        bank_transfer_instructions: dotletData.bank_transfer_instructions || "Please transfer the amount to our bank account...",
+        status: dotletData.status,
+        checkout_url: dotletData.checkout_url,
+        banking_details: dotletData.banking_details,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

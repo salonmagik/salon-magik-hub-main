@@ -219,7 +219,7 @@ export function CustomDomainManager() {
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <Badge variant={order.status === 'completed' ? 'default' : order.status === 'failed' ? 'destructive' : 'secondary'}>
+                    <Badge variant={order.status === 'completed' ? 'default' : order.status === 'failed' ? 'destructive' : order.status.includes('pending') ? 'outline' : 'secondary'}>
                       {order.status.replace('_', ' ')}
                     </Badge>
                     {order.status === 'completed' && (!hasActiveDomain || currentTenant?.custom_booking_domain !== order.domain_name) && (
