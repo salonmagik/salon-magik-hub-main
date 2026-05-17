@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabase";
+
 const DEFAULT_BOOKING_DOMAIN = "salonmagik.com";
 
 function normalizeBaseDomain(raw?: string): string {
@@ -42,5 +44,36 @@ export function resolvePublicBookingSlug(options: {
     options.isDev && !routeSlug && !subdomainSlug ? resolveSlugFromQuery(options.search) : null;
 
   return routeSlug || subdomainSlug || querySlug || undefined;
+}
+
+export const resolvePublicBookingSlugSync = resolvePublicBookingSlug;
+
+export async function resolveSlugFromCustomDomain(hostname: string): Promise<string | null> {
+  let normalizedHost = hostname.toLowerCase();
+  
+  // Strip www. from the hostname before querying
+  if (normalizedHost.startsWith("www.")) {
+    normalizedHost = normalizedHost.substring(4);
+  }
+  
+  if (!normalizedHost || normalizedHost === "localhost") return null;
+
+  try {
+    const { data, error } = await supabase
+      .from("public_booking_tenants")
+      .select("slug")
+      .eq("custom_booking_domain", normalizedHost)
+      .eq("custom_domain_verified", true)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data.slug;
+  } catch (err) {
+    console.error("Error resolving custom domain:", err);
+    return null;
+  }
 }
 
