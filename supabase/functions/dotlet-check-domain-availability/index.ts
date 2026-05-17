@@ -41,19 +41,19 @@ serve(async (req) => {
     }
 
     const normalizedDomain = normalizeDomain(domain);
-    
+
     // Basic format validation (e.g., mysalon.com)
     const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]{2,})+$/;
     if (!domainRegex.test(normalizedDomain)) {
-       return new Response(
+      return new Response(
         JSON.stringify({ error: "Invalid domain format" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.io/v1";
+    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.net/api/v1";
     const dotletApiKey = Deno.env.get("DOTLET_API_KEY") ?? "";
-    
+
     console.log(`DOTLET_API_URL: ${dotletApiUrl}`);
     console.log(`DOTLET_API_KEY length: ${dotletApiKey.length}`);
 
@@ -88,7 +88,7 @@ serve(async (req) => {
       method: "GET",
       headers,
     });
-    
+
     console.log(`Price response status: ${priceRes.status}`);
 
     if (!priceRes.ok) {

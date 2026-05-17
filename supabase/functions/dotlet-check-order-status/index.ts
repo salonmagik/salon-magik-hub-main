@@ -31,7 +31,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    
+
     // We use the auth header to validate RLS (owner/manager)
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
@@ -60,7 +60,7 @@ serve(async (req) => {
     }
 
     // 2. Call Dotlet API to get current status
-    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.io/v1";
+    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.net/api/v1";
     const dotletApiKey = Deno.env.get("DOTLET_API_KEY") ?? "";
 
     const dotletRes = await fetch(`${dotletApiUrl}/registrar/orders/${order.dotlet_order_id}`, {
@@ -88,9 +88,9 @@ serve(async (req) => {
         .from("domain_orders")
         .update({ status: newStatus })
         .eq("id", order.id);
-        
+
       if (updateError) {
-         console.error("Failed to update order status in DB:", updateError);
+        console.error("Failed to update order status in DB:", updateError);
       }
     }
 

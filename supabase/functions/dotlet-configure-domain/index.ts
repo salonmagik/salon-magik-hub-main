@@ -32,12 +32,12 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
+
     // Auth client for RLS checks
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    
+
     // Service role client to update tenants table (which might have strict RLS)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -55,7 +55,7 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
+
     if (order.status !== "completed") {
       return new Response(
         JSON.stringify({ error: "Order is not completed yet" }),
@@ -75,7 +75,7 @@ serve(async (req) => {
       );
     }
 
-    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.io/v1";
+    const dotletApiUrl = Deno.env.get("DOTLET_API_URL") ?? "https://api.dotlet.net/api/v1";
     const dotletApiKey = Deno.env.get("DOTLET_API_KEY") ?? "";
 
     // 2. Set proxied CNAME records via Dotlet DNS API
