@@ -115,6 +115,9 @@ verify_jwt = false
 [functions.manage-termii-sender-id]
 verify_jwt = false
 
+[functions.manage-sms-sender-name]
+verify_jwt = false
+
 [functions.send-bulk-message]
 verify_jwt = false
 

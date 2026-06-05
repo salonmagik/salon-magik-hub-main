@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress } from "../_shared/email-template.ts";
-import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendTxtconnectSMS } from "../_shared/txtconnect-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,10 +12,19 @@ const corsHeaders = {
 type Channel = "email" | "sms" | "whatsapp";
 
 const CREDIT_COST: Record<Channel, number> = {
-  email: 1,
+  email: 0,
   sms: 2,
   whatsapp: 2,
 };
+
+function normalizeCountry(country?: string | null) {
+  return String(country || "").trim().toLowerCase();
+}
+
+function isGhanaMarket(country?: string | null) {
+  const normalized = normalizeCountry(country);
+  return normalized === "ghana" || normalized === "gh";
+}
 
 async function sendEmail(resendApiKey: string, from: string, to: string, subject: string, html: string) {
   const response = await fetch("https://api.resend.com/emails", {
@@ -30,22 +40,24 @@ async function sendEmail(resendApiKey: string, from: string, to: string, subject
   }
 }
 
-async function sendSms(termiiApiKey: string, senderId: string, to: string, text: string) {
-  const response = await fetch("https://api.ng.termii.com/api/sms/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: termiiApiKey,
+async function sendSms(country: string | null | undefined, senderId: string, to: string, text: string) {
+  if (isGhanaMarket(country)) {
+    await sendTxtconnectSMS({
       to,
       from: senderId,
       sms: text,
-      type: "plain",
-      channel: "generic",
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Termii failed with status ${response.status}`);
+    });
+    return "txtconnect_sms";
   }
+
+  await sendTermiiSMS({
+    to,
+    from: senderId,
+    sms: text,
+    type: "plain",
+    channel: "generic",
+  });
+  return "termii_sms";
 }
 
 async function sendWhatsApp(metaToken: string, phoneNumberId: string, to: string, text: string) {
@@ -133,10 +145,10 @@ serve(async (req) => {
       });
     }
 
-    // Fetch tenant configuration for Termii settings
+    // Fetch tenant messaging configuration
     const { data: tenant } = await adminClient
       .from("tenants")
-      .select("termii_device_id, termii_sender_id")
+      .select("country, termii_device_id, termii_sender_id, sms_sender_name")
       .eq("id", campaign.tenant_id)
       .single();
 
@@ -184,8 +196,7 @@ serve(async (req) => {
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-    const termiiApiKey = Deno.env.get("TERMII_API_KEY") || "";
-    const termiiSenderId = Deno.env.get("TERMII_SENDER_ID") || "SalonMagik";
+    const smsSenderName = tenant?.sms_sender_name || tenant?.termii_sender_id || "SalonMagik";
     const whatsappToken = Deno.env.get("META_WHATSAPP_TOKEN") || "";
     const whatsappPhoneId = Deno.env.get("META_WHATSAPP_PHONE_NUMBER_ID") || "";
 
@@ -220,8 +231,7 @@ serve(async (req) => {
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
-          if (!termiiApiKey) throw new Error("TERMII_API_KEY not configured");
-          await sendSms(termiiApiKey, termiiSenderId, customer.phone, message);
+          await sendSms(tenant?.country, smsSenderName, customer.phone, message);
         } else if (channel === "whatsapp") {
           if (!customer.phone) throw new Error("Customer has no phone number");
           
@@ -271,7 +281,7 @@ serve(async (req) => {
         if (channel === "email") {
           provider = "resend";
         } else if (channel === "sms") {
-          provider = "termii_sms";
+          provider = isGhanaMarket(tenant?.country) ? "txtconnect_sms" : "termii_sms";
         } else if (channel === "whatsapp") {
           const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
           provider = whatsappProvider === "termii" ? "termii_whatsapp" : "meta_whatsapp";

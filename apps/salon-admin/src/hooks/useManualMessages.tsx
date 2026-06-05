@@ -24,7 +24,7 @@ export interface SendMessageOptions {
   message: string;
   subject?: string;
   templateId?: string;
-  templateVariables?: Record<string, string>;
+  templateVariables?: Record<string, unknown>;
 }
 
 export function useManualMessages(options: UseManualMessagesOptions) {
@@ -117,7 +117,18 @@ export function useManualMessages(options: UseManualMessagesOptions) {
         }
       );
 
-      if (sendError) throw sendError;
+      if (sendError) {
+        let errorMessage = "Failed to send message";
+        try {
+          const functionPayload = await (sendError as { context?: Response }).context?.json?.();
+          if (functionPayload?.error) {
+            errorMessage = functionPayload.error;
+          }
+        } catch {
+          // Ignore function body parsing errors and fall back to the generic message below.
+        }
+        throw new Error(errorMessage);
+      }
 
       toast({
         title: "Success",

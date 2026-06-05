@@ -18,7 +18,7 @@ export interface MessageLog {
   tenant_id: string;
   customer_id: string | null;
   template_type: string | null;
-  channel: "email" | "sms";
+  channel: "email" | "sms" | "whatsapp";
   recipient: string;
   subject: string | null;
   status: "pending" | "sent" | "delivered" | "failed";

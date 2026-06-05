@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { sendTermiiSMS, sendTermiiBulkSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { buildFromAddress } from "../_shared/email-template.ts";
+import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendTxtconnectSMS } from "../_shared/txtconnect-client.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -17,7 +19,18 @@ interface SendBulkMessageRequest {
   subject?: string;
   templateId?: string;
   templateVariables?: Record<string, string>;
+  senderContext?: {
+    senderDisplayName?: string;
+  };
 }
+
+type BulkCustomerRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  tenant_id: string | null;
+};
 
 interface BulkMessageResult {
   sent: number;
@@ -32,10 +45,23 @@ interface BulkMessageResult {
 
 // Credit costs per channel
 const CREDIT_COST: Record<string, number> = {
-  email: 1,
+  email: 0,
   sms: 2,
   whatsapp: 2,
 };
+
+function getSmsSegments(message: string) {
+  return Math.max(1, Math.ceil(Math.max(message.trim().length, 1) / 160));
+}
+
+function normalizeCountry(country?: string | null) {
+  return String(country || "").trim().toLowerCase();
+}
+
+function isGhanaMarket(country?: string | null) {
+  const normalized = normalizeCountry(country);
+  return normalized === "ghana" || normalized === "gh";
+}
 
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
@@ -72,10 +98,11 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const requestBody: SendBulkMessageRequest = await req.json();
-    const { customerIds, channel, message, subject, templateId, templateVariables } = requestBody;
+    const { customerIds, channel, message, subject, templateId, templateVariables, senderContext } = requestBody;
+    const normalizedCustomerIds = [...new Set((customerIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
 
     // Validate required fields
-    if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
+    if (!customerIds || !Array.isArray(customerIds) || normalizedCustomerIds.length === 0) {
       return new Response(
         JSON.stringify({ error: "customerIds must be a non-empty array" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -106,29 +133,32 @@ const handler = async (req: Request): Promise<Response> => {
     // Use service role for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch customers with joins to validate they exist and belong to tenant
+    // Fetch customers directly first. Avoid relationship joins here so valid customers
+    // cannot be masked as "not found" because of relation or schema drift.
     const { data: customers, error: customersError } = await supabase
       .from("customers")
-      .select(`
-        id,
-        full_name,
-        email,
-        phone,
-        tenant_id,
-        tenant:tenants(id, name, termii_device_id, termii_sender_id)
-      `)
-      .in("id", customerIds);
+      .select("id, full_name, email, phone, tenant_id")
+      .in("id", normalizedCustomerIds);
 
     if (customersError || !customers || customers.length === 0) {
       console.error("Failed to fetch customers:", customersError);
       return new Response(
-        JSON.stringify({ error: "No valid customers found" }),
+        JSON.stringify({
+          error: "No valid customers found",
+          debug: {
+            requestedCustomerIds: normalizedCustomerIds,
+            matchedCustomerIds: [],
+            reason: customersError ? String((customersError as { message?: string }).message || customersError) : "no_rows",
+          },
+        }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    const typedCustomers = customers as BulkCustomerRow[];
+
     // Verify all customers belong to same tenant
-    const tenantIds = [...new Set(customers.map(c => c.tenant_id))];
+    const tenantIds = [...new Set(typedCustomers.map((c) => c.tenant_id).filter(Boolean))];
     if (tenantIds.length > 1) {
       return new Response(
         JSON.stringify({ error: "All customers must belong to the same tenant" }),
@@ -137,6 +167,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const tenantId = tenantIds[0];
+    if (!tenantId) {
+      return new Response(
+        JSON.stringify({ error: "Customers are missing tenant ownership." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Verify user has permission for tenant
     const { data: userRole } = await supabase
@@ -153,11 +189,33 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const tenant = customers[0].tenant;
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    if (tenantError || !tenant) {
+      console.error("Failed to fetch tenant for bulk send:", tenantError, { tenantId, normalizedCustomerIds });
+      return new Response(
+        JSON.stringify({
+          error: "Salon details could not be loaded. Please retry.",
+          debug: {
+            tenantId,
+            matchedCustomerIds: typedCustomers.map((customer) => customer.id),
+            reason: tenantError ? String((tenantError as { message?: string }).message || tenantError) : "tenant_missing",
+          },
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const senderDisplayName = senderContext?.senderDisplayName?.trim() || tenant.name;
 
     // Calculate total credits required
     const creditsPerMessage = CREDIT_COST[channel] || 1;
-    const totalCreditsRequired = customers.length * creditsPerMessage;
+    const smsSegments = channel === "sms" ? getSmsSegments(message) : 1;
+    const totalCreditsRequired = typedCustomers.length * creditsPerMessage * smsSegments;
 
     // Check credit balance
     const { data: creditBalance, error: creditError } = await supabase
@@ -177,7 +235,7 @@ const handler = async (req: Request): Promise<Response> => {
     if (creditBalance.balance < totalCreditsRequired) {
       return new Response(
         JSON.stringify({
-          error: `Insufficient credits. Required: ${totalCreditsRequired} (${creditsPerMessage} per message × ${customers.length} customers), Available: ${creditBalance.balance}. Please purchase more credits.`
+          error: `Insufficient credits. Required: ${totalCreditsRequired} (${creditsPerMessage * smsSegments} per message × ${typedCustomers.length} customers), Available: ${creditBalance.balance}. Please purchase more credits.`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -211,7 +269,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     // Create manual_messages records for all customers
-    const manualMessagesData = customers.map(customer => ({
+    const manualMessagesData = typedCustomers.map(customer => ({
       tenant_id: tenantId,
       customer_id: customer.id,
       channel,
@@ -250,22 +308,23 @@ const handler = async (req: Request): Promise<Response> => {
       // SMS: Use bulk API for batches up to 100
       await processBulkSMS(
         supabase,
-        customers,
+        typedCustomers,
         createdMessages,
         message,
         tenant,
-        creditsPerMessage,
+        creditsPerMessage * smsSegments,
         result
       );
     } else if (channel === "email") {
       // Email: Process in batches of 10 to avoid timeouts
       await processBulkEmail(
         supabase,
-        customers,
+        typedCustomers,
         createdMessages,
         message,
         subject,
         tenant,
+        senderDisplayName,
         creditsPerMessage,
         result
       );
@@ -273,7 +332,7 @@ const handler = async (req: Request): Promise<Response> => {
       // WhatsApp: Process individually (Termii API requires single recipient)
       await processBulkWhatsApp(
         supabase,
-        customers,
+        typedCustomers,
         createdMessages,
         message,
         template,
@@ -293,7 +352,7 @@ const handler = async (req: Request): Promise<Response> => {
       resource_id: null,
       details: {
         channel,
-        total_recipients: customers.length,
+        total_recipients: typedCustomers.length,
         sent: result.sent,
         failed: result.failed,
         credits_used: result.creditsUsed,
@@ -320,8 +379,7 @@ const handler = async (req: Request): Promise<Response> => {
 };
 
 /**
- * Process bulk SMS messages using Termii bulk API
- * Splits into batches of 100 if needed
+ * Process bulk SMS messages via market-aware provider routing.
  */
 async function processBulkSMS(
   supabase: any,
@@ -332,79 +390,46 @@ async function processBulkSMS(
   creditsPerMessage: number,
   result: BulkMessageResult
 ) {
-  const senderID = tenant.termii_sender_id || "SalonMagik";
-  const BATCH_SIZE = 100;
+  const senderID = tenant.sms_sender_name || tenant.termii_sender_id || "SalonMagik";
+  const isGhanaTenant = isGhanaMarket(tenant.country);
+  const BATCH_SIZE = 25;
 
-  // Split into batches of 100
+  // Process in smaller batches to avoid timeouts and keep per-message status.
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
     const batch = customers.slice(i, i + BATCH_SIZE);
     const batchMessages = createdMessages.slice(i, i + BATCH_SIZE);
 
-    // Filter customers with valid phone numbers
-    const validCustomers = batch.filter(c => c.phone);
-    const phoneNumbers = validCustomers.map(c => c.phone);
-
-    if (phoneNumbers.length === 0) {
-      // All customers in batch have no phone number
-      for (let j = 0; j < batch.length; j++) {
-        const customer = batch[j];
-        const messageRecord = batchMessages[j];
-
-        result.failed++;
-        result.failedMessages.push({
-          customerId: customer.id,
-          customerName: customer.full_name,
-          error: "Customer has no phone number",
-        });
-
-        // Update manual_messages status to failed
-        await supabase
-          .from("manual_messages")
-          .update({
-            status: "failed",
-            error_message: "Customer has no phone number",
-          })
-          .eq("id", messageRecord.id);
-      }
-      continue;
-    }
-
-    try {
-      // Send bulk SMS
-      const smsResponse = await sendTermiiBulkSMS({
-        to: phoneNumbers,
-        from: senderID,
-        sms: message,
-        type: "plain",
-        channel: "generic",
-      });
-
-      // Mark all as sent and deduct credits
-      const successCount = validCustomers.length;
-      const creditsUsed = successCount * creditsPerMessage;
-
-      result.sent += successCount;
-      result.creditsUsed += creditsUsed;
-
-      // Deduct credits from tenant
-      await supabase
-        .from("communication_credits")
-        .update({
-          balance: supabase.raw(`balance - ${creditsUsed}`),
-        })
-        .eq("tenant_id", tenant.id);
-
-      // Update manual_messages and insert message_logs for successful sends
-      for (let j = 0; j < batch.length; j++) {
-        const customer = batch[j];
-        const messageRecord = batchMessages[j];
-
+    const promises = batch.map(async (customer, index) => {
+      const messageRecord = batchMessages[index];
+      try {
         if (!customer.phone) {
-          // Already handled above
-          continue;
+          throw new Error("Customer has no phone number");
         }
 
-        // Update manual_messages
+        const smsResponse = isGhanaTenant
+          ? await sendTxtconnectSMS({
+              to: customer.phone,
+              from: senderID,
+              sms: message,
+            })
+          : await sendTermiiSMS({
+              to: customer.phone,
+              from: senderID,
+              sms: message,
+              type: "plain",
+              channel: "generic",
+            });
+
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
+
+        await supabase
+          .from("communication_credits")
+          .update({
+            balance: supabase.raw(`balance - ${creditsPerMessage}`),
+          })
+          .eq("tenant_id", tenant.id);
+
         await supabase
           .from("manual_messages")
           .update({
@@ -414,7 +439,6 @@ async function processBulkSMS(
           })
           .eq("id", messageRecord.id);
 
-        // Insert message_logs
         await supabase.from("message_logs").insert({
           tenant_id: tenant.id,
           customer_id: customer.id,
@@ -423,35 +447,14 @@ async function processBulkSMS(
           subject: null,
           status: "sent",
           sent_at: new Date().toISOString(),
-          provider: "termii_sms",
-          termii_message_id: smsResponse.message_id,
+          provider: isGhanaTenant ? "txtconnect_sms" : "termii_sms",
+          termii_message_id: isGhanaTenant ? smsResponse.messageId : smsResponse.message_id,
           termii_device_id: null,
           initiated_by: "salon",
           credits_used: creditsPerMessage,
           error_message: null,
         });
-      }
-
-      // Mark customers with no phone as failed
-      for (let j = 0; j < batch.length; j++) {
-        const customer = batch[j];
-        if (!customer.phone) {
-          result.failed++;
-          result.failedMessages.push({
-            customerId: customer.id,
-            customerName: customer.full_name,
-            error: "Customer has no phone number",
-          });
-        }
-      }
-    } catch (error: any) {
-      console.error("Bulk SMS batch failed:", error);
-
-      // Mark all in batch as failed
-      for (let j = 0; j < batch.length; j++) {
-        const customer = batch[j];
-        const messageRecord = batchMessages[j];
-
+      } catch (error: any) {
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
@@ -459,7 +462,6 @@ async function processBulkSMS(
           error: error.message || "Failed to send SMS",
         });
 
-        // Update manual_messages status to failed
         await supabase
           .from("manual_messages")
           .update({
@@ -468,7 +470,9 @@ async function processBulkSMS(
           })
           .eq("id", messageRecord.id);
       }
-    }
+    });
+
+    await Promise.allSettled(promises);
   }
 }
 
@@ -482,12 +486,17 @@ async function processBulkEmail(
   message: string,
   subject: string | undefined,
   tenant: any,
+  senderDisplayName: string,
   creditsPerMessage: number,
   result: BulkMessageResult
 ) {
   const BATCH_SIZE = 10;
   const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-  const fromAddress = `${tenant.name} <${fromEmail}>`;
+  const fromAddress = buildFromAddress({
+    mode: "salon",
+    salonName: senderDisplayName || tenant.name,
+    fromEmail,
+  });
 
   // Process in batches of 10
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
@@ -513,7 +522,7 @@ async function processBulkEmail(
           body: JSON.stringify({
             from: fromAddress,
             to: [customer.email],
-            subject: subject || "Message from " + tenant.name,
+            subject: subject || "Message from " + (senderDisplayName || tenant.name),
             html: message,
           }),
         });

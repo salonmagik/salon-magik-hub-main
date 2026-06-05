@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildFromAddress } from "../_shared/email-template.ts";
 import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendTxtconnectSMS } from "../_shared/txtconnect-client.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -16,10 +18,23 @@ interface SendManualMessageRequest {
 
 // Credit costs per channel
 const CREDIT_COST: Record<string, number> = {
-  email: 1,
+  email: 0,
   sms: 2,
   whatsapp: 2,
 };
+
+function normalizeCountry(country?: string | null) {
+  return String(country || "").trim().toLowerCase();
+}
+
+function isGhanaMarket(country?: string | null) {
+  const normalized = normalizeCountry(country);
+  return normalized === "ghana" || normalized === "gh";
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
@@ -68,25 +83,95 @@ const handler = async (req: Request): Promise<Response> => {
     // Use service role for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch message with joins to customer, tenant, and template
-    const { data: message, error: messageError } = await supabase
-      .from("manual_messages")
-      .select(`
-        *,
-        customer:customers(id, full_name, email, phone),
-        tenant:tenants(id, name, termii_device_id, termii_sender_id),
-        template:whatsapp_templates(id, template_id, template_content, variables, status)
-      `)
-      .eq("id", messageId)
-      .single();
+    // Fetch the row first without joins. This avoids joined-read fragility and lets us retry
+    // immediately after the insert in case the function reads before the row becomes visible.
+    let messageRecord: Record<string, any> | null = null;
+    let messageError: unknown = null;
 
-    if (messageError || !message) {
-      console.error("Failed to fetch message:", messageError);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = await supabase
+        .from("manual_messages")
+        .select("*")
+        .eq("id", messageId)
+        .maybeSingle();
+
+      messageRecord = response.data as Record<string, any> | null;
+      messageError = response.error;
+
+      if (messageRecord) break;
+      if (attempt < 2) {
+        await sleep(120 * (attempt + 1));
+      }
+    }
+
+    if (messageError || !messageRecord) {
+      console.error("Failed to fetch message:", messageError, { messageId });
       return new Response(
-        JSON.stringify({ error: "Message not found" }),
+        JSON.stringify({
+          error: "Message not found",
+          debug: {
+            messageId,
+            reason: messageError ? String((messageError as { message?: string }).message || messageError) : "row_missing",
+          },
+        }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { data: customer, error: customerError } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("id", messageRecord.customer_id)
+      .maybeSingle();
+
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", messageRecord.tenant_id)
+      .maybeSingle();
+
+    const templateId = messageRecord.template_id as string | null;
+    let template: Record<string, any> | null = null;
+    if (templateId) {
+      const templateResponse = await supabase
+        .from("whatsapp_templates")
+        .select("*")
+        .eq("id", templateId)
+        .maybeSingle();
+      template = (templateResponse.data as Record<string, any> | null) || null;
+    }
+
+    if (customerError || !customer || tenantError || !tenant) {
+      console.error("Failed to hydrate manual message relations:", {
+        messageId,
+        customerError,
+        tenantError,
+        customerId: messageRecord.customer_id,
+        tenantId: messageRecord.tenant_id,
+      });
+      return new Response(
+        JSON.stringify({
+          error: "Message data could not be loaded. Please retry.",
+          debug: {
+            messageId,
+            customerId: messageRecord.customer_id,
+            tenantId: messageRecord.tenant_id,
+            missingCustomer: !customer,
+            missingTenant: !tenant,
+            customerError: customerError ? String((customerError as { message?: string }).message || customerError) : null,
+            tenantError: tenantError ? String((tenantError as { message?: string }).message || tenantError) : null,
+          },
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const message = {
+      ...messageRecord,
+      customer,
+      tenant,
+      template,
+    };
 
     // Verify user has permission for tenant
     const { data: userRole } = await supabase
@@ -114,46 +199,49 @@ const handler = async (req: Request): Promise<Response> => {
     // Calculate credits required
     const creditsRequired = CREDIT_COST[message.channel] || 1;
 
-    // Check credit balance
-    const { data: creditBalance, error: creditError } = await supabase
-      .from("communication_credits")
-      .select("balance")
-      .eq("tenant_id", message.tenant_id)
-      .single();
+    // Only check credit balance for paid channels (SMS, WhatsApp). Email is always free.
+    let creditBalance: { balance: number } | null = null;
+    if (creditsRequired > 0) {
+      const { data, error: creditError } = await supabase
+        .from("communication_credits")
+        .select("balance")
+        .eq("tenant_id", message.tenant_id)
+        .single();
 
-    if (creditError || !creditBalance) {
-      console.error("Failed to fetch credit balance:", creditError);
-      // Update message status to failed
-      await supabase
-        .from("manual_messages")
-        .update({
-          status: "failed",
-          error_message: "Credit balance not found. Please contact support.",
-        })
-        .eq("id", messageId);
+      if (creditError || !data) {
+        console.error("Failed to fetch credit balance:", creditError);
+        await supabase
+          .from("manual_messages")
+          .update({
+            status: "failed",
+            error_message: "Credit balance not found. Please contact support.",
+          })
+          .eq("id", messageId);
 
-      return new Response(
-        JSON.stringify({ error: "Credit balance not found. Please contact support." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+        return new Response(
+          JSON.stringify({ error: "Credit balance not found. Please contact support." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-    if (creditBalance.balance < creditsRequired) {
-      // Update message status to failed
-      await supabase
-        .from("manual_messages")
-        .update({
-          status: "failed",
-          error_message: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}`,
-        })
-        .eq("id", messageId);
+      creditBalance = data;
 
-      return new Response(
-        JSON.stringify({
-          error: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}. Please purchase more credits.`
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (creditBalance.balance < creditsRequired) {
+        await supabase
+          .from("manual_messages")
+          .update({
+            status: "failed",
+            error_message: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}`,
+          })
+          .eq("id", messageId);
+
+        return new Response(
+          JSON.stringify({
+            error: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}. Please purchase more credits.`,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Send message based on channel
@@ -171,8 +259,21 @@ const handler = async (req: Request): Promise<Response> => {
           throw new Error("Customer email not found");
         }
 
+        const composeMeta = (message.template_variables as { _compose?: Record<string, unknown> } | null)?._compose || {};
+        const senderDisplayName =
+          typeof composeMeta.senderDisplayName === "string" && composeMeta.senderDisplayName.trim().length > 0
+            ? composeMeta.senderDisplayName.trim()
+            : message.tenant.name;
         const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-        const fromAddress = `${message.tenant.name} <${fromEmail}>`;
+        const fromAddress = buildFromAddress({
+          mode: "salon",
+          salonName: senderDisplayName,
+          fromEmail,
+        });
+        const html =
+          typeof message.message === "string" && /<[^>]+>/.test(message.message)
+            ? message.message
+            : `<p>${String(message.message || "").replace(/\n/g, "<br />")}</p>`;
 
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -183,8 +284,8 @@ const handler = async (req: Request): Promise<Response> => {
           body: JSON.stringify({
             from: fromAddress,
             to: [message.customer.email],
-            subject: message.subject || "Message from " + message.tenant.name,
-            html: message.message,
+            subject: message.subject || "Message from " + senderDisplayName,
+            html,
           }),
         });
 
@@ -198,24 +299,33 @@ const handler = async (req: Request): Promise<Response> => {
         success = true;
 
       } else if (message.channel === "sms") {
-        // Send via Termii SMS
-        provider = "termii_sms";
+        const senderID = message.tenant.sms_sender_name || message.tenant.termii_sender_id || "SalonMagik";
+        const isGhanaTenant = isGhanaMarket(message.tenant.country);
 
         if (!message.customer?.phone) {
           throw new Error("Customer phone number not found");
         }
 
-        const senderID = message.tenant.termii_sender_id || "SalonMagik";
+        if (isGhanaTenant) {
+          provider = "txtconnect_sms";
+          const smsResponse = await sendTxtconnectSMS({
+            to: message.customer.phone,
+            from: senderID,
+            sms: message.message,
+          });
+          termiiMessageId = smsResponse.messageId;
+        } else {
+          provider = "termii_sms";
+          const smsResponse = await sendTermiiSMS({
+            to: message.customer.phone,
+            from: senderID,
+            sms: message.message,
+            type: "plain",
+            channel: "generic",
+          });
+          termiiMessageId = smsResponse.message_id;
+        }
 
-        const smsResponse = await sendTermiiSMS({
-          to: message.customer.phone,
-          from: senderID,
-          sms: message.message,
-          type: "plain",
-          channel: "generic",
-        });
-
-        termiiMessageId = smsResponse.message_id;
         success = true;
 
       } else if (message.channel === "whatsapp") {

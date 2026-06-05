@@ -22,10 +22,10 @@ export interface SMSTemplate {
 }
 
 export const smsTemplateTypeLabels: Record<SMSTemplateType, string> = {
-  appointment_confirmation: "Appointment Confirmation",
-  appointment_reminder: "Appointment Reminder",
-  appointment_cancelled: "Appointment Cancelled",
-  payment_receipt: "Payment Receipt",
+  appointment_confirmation: "Confirmed booking text",
+  appointment_reminder: "Appointment reminder text",
+  appointment_cancelled: "Cancelled booking text",
+  payment_receipt: "Payment receipt text",
 };
 
 export const smsTemplateAutoSendTriggers: Record<string, string> = {
