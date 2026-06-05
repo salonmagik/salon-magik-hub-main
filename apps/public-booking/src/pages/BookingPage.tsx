@@ -323,39 +323,71 @@ function BookingPageWithCart({
         isThemePreview={isThemePreview}
         onCartClick={() => setCheckoutOpen(true)}
       >
-        <div className="space-y-8">
-          <SalonHeader
-            salon={salon}
-            themeKey={themeKey}
-            locations={locations}
-            supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
-            selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
-            onCountryChange={countryContextEnabled ? setCountry : undefined}
-          />
-
-          {!isCatalogBlocked ? (
-            <CatalogView
+        {themeKey === "ecommerce" ? (
+          <>
+            <SalonHeader
+              salon={salon}
               themeKey={themeKey}
-              services={services}
-              packages={packages}
-              products={products}
-              categories={categories}
               locations={locations}
-              currency={storefrontCurrency}
-              strictLocationScope={countryContextEnabled}
-              strictScopedLocationIds={scopedLocationIds}
-              selectedLocationIds={selectedLocationIds}
-              onLocationFilterChange={onLocationFilterChange}
+              supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
+              selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
+              onCountryChange={countryContextEnabled ? setCountry : undefined}
             />
-          ) : (
-            <div className="rounded-xl border bg-muted/20 p-8 text-center space-y-2">
-              <h2 className="text-xl font-semibold">Select your shopping country</h2>
-              <p className="text-sm text-muted-foreground">
-                Choose a country to load available services, products, packages, and vouchers.
-              </p>
-            </div>
-          )}
-        </div>
+            {!isCatalogBlocked ? (
+              <CatalogView
+                themeKey={themeKey}
+                services={services}
+                packages={packages}
+                products={products}
+                categories={categories}
+                locations={locations}
+                currency={storefrontCurrency}
+                strictLocationScope={countryContextEnabled}
+                strictScopedLocationIds={scopedLocationIds}
+                selectedLocationIds={selectedLocationIds}
+                onLocationFilterChange={onLocationFilterChange}
+              />
+            ) : (
+              <div className="mx-auto max-w-7xl px-6 py-20 text-center lg:px-8">
+                <h2 className="text-xl font-semibold">Select your shopping country</h2>
+                <p className="mt-2 text-sm text-gray-500">Choose a country to load available services and products.</p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="space-y-8">
+            <SalonHeader
+              salon={salon}
+              themeKey={themeKey}
+              locations={locations}
+              supportedCountryCodes={countryContextEnabled ? supportedCountryCodes : []}
+              selectedCountryCode={countryContextEnabled ? selectedCountryCode : null}
+              onCountryChange={countryContextEnabled ? setCountry : undefined}
+            />
+            {!isCatalogBlocked ? (
+              <CatalogView
+                themeKey={themeKey}
+                services={services}
+                packages={packages}
+                products={products}
+                categories={categories}
+                locations={locations}
+                currency={storefrontCurrency}
+                strictLocationScope={countryContextEnabled}
+                strictScopedLocationIds={scopedLocationIds}
+                selectedLocationIds={selectedLocationIds}
+                onLocationFilterChange={onLocationFilterChange}
+              />
+            ) : (
+              <div className="rounded-xl border bg-muted/20 p-8 text-center space-y-2">
+                <h2 className="text-xl font-semibold">Select your shopping country</h2>
+                <p className="text-sm text-muted-foreground">
+                  Choose a country to load available services, products, packages, and vouchers.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </BookingLayout>
 
       <BookingWizard

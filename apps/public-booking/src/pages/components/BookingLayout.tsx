@@ -13,23 +13,29 @@ interface BookingLayoutProps {
   cartCount?: number;
 }
 
-export function BookingLayout({ children, salon, themeKey, isThemePreview = false, onCartClick }: BookingLayoutProps) {
+export function BookingLayout({
+  children,
+  salon,
+  themeKey,
+  isThemePreview = false,
+  onCartClick,
+}: BookingLayoutProps) {
   const { getItemCount } = useBookingCart();
   const itemCount = getItemCount();
-  const brandColor = salon?.brand_color || "#2563EB";
+  const brandColor = salon?.brand_color || "#111827";
   const isEcommerceTheme = themeKey === "ecommerce";
 
   return (
     <div
-      className={isEcommerceTheme ? "min-h-screen bg-[#f4efe6] text-slate-900" : "min-h-screen bg-background"}
+      className={isEcommerceTheme ? "min-h-screen bg-white text-gray-900" : "min-h-screen bg-background"}
       style={{
         "--brand-color": brandColor,
-        "--theme-surface": isEcommerceTheme ? "#fffaf3" : "hsl(var(--background))",
+        "--brand-foreground": "#ffffff",
       } as React.CSSProperties}
     >
       {isThemePreview && (
         <div className="border-b border-amber-200 bg-amber-50 text-amber-900">
-          <div className="container mx-auto flex items-center justify-center px-4 py-2 text-xs font-medium uppercase tracking-[0.2em]">
+          <div className="mx-auto flex items-center justify-center px-4 py-2 text-[11px] font-medium uppercase tracking-[0.2em]">
             Preview mode
           </div>
         </div>
@@ -38,44 +44,40 @@ export function BookingLayout({ children, salon, themeKey, isThemePreview = fals
       <header
         className={
           isEcommerceTheme
-            ? "sticky top-0 z-50 border-b border-stone-200 bg-[color:var(--theme-surface)]/95 backdrop-blur"
+            ? "sticky top-0 z-50 border-b border-black/8 bg-white/95 backdrop-blur"
             : "sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
         }
       >
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+        <div className={isEcommerceTheme ? "mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-8" : "container mx-auto flex h-16 items-center justify-between px-4"}>
+          {/* Logo */}
           <div className="flex items-center gap-3">
             {salon?.logo_url ? (
-              <img
-                src={salon.logo_url}
-                alt={salon.name}
-                className="h-10 w-10 rounded-lg object-cover"
-              />
+              <img src={salon.logo_url} alt={salon.name} className={isEcommerceTheme ? "h-8 w-8 object-contain" : "h-9 w-9 rounded-lg object-cover"} />
             ) : (
-              <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg">
+              <div
+                className={isEcommerceTheme ? "flex h-8 w-8 items-center justify-center text-sm font-bold text-white" : "flex h-9 w-9 items-center justify-center rounded-lg text-base font-bold text-white"}
+                style={{ backgroundColor: brandColor }}
+              >
                 {salon?.name?.charAt(0) || "S"}
               </div>
             )}
-            <span className="font-semibold text-lg hidden sm:block">
+            <span className={isEcommerceTheme ? "text-sm font-semibold uppercase tracking-widest" : "hidden font-semibold sm:block"}>
               {salon?.name || "Book Appointment"}
             </span>
-            {isEcommerceTheme && (
-              <Badge variant="secondary" className="hidden md:inline-flex border border-stone-200 bg-white text-stone-700">
-                Storefront theme
-              </Badge>
-            )}
           </div>
 
+          {/* Cart */}
           <Button
-            variant="outline"
+            variant={isEcommerceTheme ? "ghost" : "outline"}
             size="icon"
-            className={isEcommerceTheme ? "relative border-slate-200 bg-white hover:bg-slate-50" : "relative"}
+            className="relative"
             onClick={onCartClick}
           >
-            <ShoppingBag className="h-5 w-5" />
+            <ShoppingBag className={isEcommerceTheme ? "h-5 w-5 text-gray-700" : "h-5 w-5"} />
             {itemCount > 0 && (
               <Badge
-                className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs text-white border-0"
-                style={{ backgroundColor: 'var(--brand-color, hsl(220, 91%, 54%))' }}
+                className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center border-0 p-0 text-[10px] font-bold text-white"
+                style={{ backgroundColor: brandColor }}
               >
                 {itemCount}
               </Badge>
@@ -84,13 +86,23 @@ export function BookingLayout({ children, salon, themeKey, isThemePreview = fals
         </div>
       </header>
 
-      <main className={isEcommerceTheme ? "container mx-auto max-w-6xl px-4 py-8" : "container mx-auto max-w-5xl px-4 py-6"}>
-        {children}
-      </main>
+      {/* For ecommerce: full-width, children own their layout */}
+      {isEcommerceTheme ? (
+        <main className="w-full overflow-x-hidden">{children}</main>
+      ) : (
+        <main className="container mx-auto max-w-5xl px-4 py-6">{children}</main>
+      )}
 
-      <footer className={isEcommerceTheme ? "mt-12 border-t border-stone-200 py-6" : "mt-12 border-t py-6"}>
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          Powered by SalonMagik
+      <footer className={isEcommerceTheme ? "border-t border-black/8 py-8" : "mt-12 border-t py-6"}>
+        <div className={isEcommerceTheme ? "mx-auto max-w-7xl px-6 lg:px-8 flex items-center justify-between text-[11px] uppercase tracking-widest text-gray-400" : "container mx-auto px-4 text-center text-sm text-muted-foreground"}>
+          {isEcommerceTheme ? (
+            <>
+              <span>{salon?.name}</span>
+              <span>Powered by SalonMagik</span>
+            </>
+          ) : (
+            <span>Powered by SalonMagik</span>
+          )}
         </div>
       </footer>
     </div>

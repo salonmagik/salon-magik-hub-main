@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { Tables } from "@/lib/supabase";
+import type { Tables } from "@supabase-client/supabase/types";
 
 export type PublicTenant = Pick<
   Tables<"tenants">,
@@ -16,6 +16,7 @@ export type PublicTenant = Pick<
   | "deposits_enabled"
   | "default_deposit_percentage"
   | "cancellation_grace_hours"
+  | "booking_page_bio"
   | "booking_status_message"
   | "slot_capacity_default"
   | "default_buffer_minutes"

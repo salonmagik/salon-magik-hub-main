@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, ArrowUpDown, MapPin } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@ui/tabs";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Input } from "@ui/input";
 import {
   Select,
@@ -33,6 +32,7 @@ interface CatalogViewProps {
 }
 
 type SortOption = "name" | "price-asc" | "price-desc";
+type TypeFilter = "all" | "service" | "package" | "product";
 
 type CatalogItem = {
   id: string;
@@ -65,166 +65,97 @@ export function CatalogView({
   onLocationFilterChange,
 }: CatalogViewProps) {
   const isEcommerceTheme = themeKey === "ecommerce";
-  const [activeTab, setActiveTab] = useState("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // Normalize all items into a common format
   const allItems: CatalogItem[] = useMemo(() => {
-    const serviceItems: CatalogItem[] = services.map((s) => ({
-      id: s.id,
-      name: s.name,
-      description: s.description,
-      price: Number(s.price),
-      imageUrls: s.image_urls || [],
-      durationMinutes: s.duration_minutes,
-      type: "service" as const,
-      categoryId: s.category_id,
-      branches: s.branches ?? [],
-      locationIds: s.location_ids ?? [],
-      locationNames: Array.from(
-        new Set(
-          (s.branches ?? []).map((branch) => branch.city || branch.name),
-        ),
-      ),
+    const s: CatalogItem[] = services.map((item) => ({
+      id: item.id, name: item.name, description: item.description,
+      price: Number(item.price), imageUrls: item.image_urls || [],
+      durationMinutes: item.duration_minutes, type: "service" as const,
+      categoryId: item.category_id, branches: item.branches ?? [],
+      locationIds: item.location_ids ?? [],
+      locationNames: Array.from(new Set((item.branches ?? []).map((b) => b.city || b.name))),
     }));
-
-    const packageItems: CatalogItem[] = packages.map((p) => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      price: Number(p.price),
-      originalPrice: p.original_price ? Number(p.original_price) : undefined,
-      imageUrls: p.image_urls || [],
-      durationMinutes: p.duration_minutes || undefined,
-      serviceIds: p.service_ids ?? [],
-      type: "package" as const,
-      branches: p.branches ?? [],
-      locationIds: p.location_ids ?? [],
-      locationNames: Array.from(
-        new Set(
-          (p.branches ?? []).map((branch) => branch.city || branch.name),
-        ),
-      ),
+    const p: CatalogItem[] = packages.map((item) => ({
+      id: item.id, name: item.name, description: item.description,
+      price: Number(item.price), originalPrice: item.original_price ? Number(item.original_price) : undefined,
+      imageUrls: item.image_urls || [], durationMinutes: item.duration_minutes || undefined,
+      serviceIds: item.service_ids ?? [], type: "package" as const,
+      branches: item.branches ?? [], locationIds: item.location_ids ?? [],
+      locationNames: Array.from(new Set((item.branches ?? []).map((b) => b.city || b.name))),
     }));
-
-    const productItems: CatalogItem[] = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      price: Number(p.price),
-      imageUrls: p.image_urls || [],
-      stockQuantity: p.stock_quantity,
-      type: "product" as const,
-      branches: p.branches ?? [],
-      locationIds: p.location_ids ?? [],
-      locationNames: Array.from(
-        new Set(
-          (p.branches ?? []).map((branch) => branch.city || branch.name),
-        ),
-      ),
+    const r: CatalogItem[] = products.map((item) => ({
+      id: item.id, name: item.name, description: item.description,
+      price: Number(item.price), imageUrls: item.image_urls || [],
+      stockQuantity: item.stock_quantity, type: "product" as const,
+      branches: item.branches ?? [], locationIds: item.location_ids ?? [],
+      locationNames: Array.from(new Set((item.branches ?? []).map((b) => b.city || b.name))),
     }));
-
-    return [...serviceItems, ...packageItems, ...productItems];
+    return [...s, ...p, ...r];
   }, [services, packages, products]);
 
-  const getItemLocationIds = (item: CatalogItem): string[] => {
-    if (Array.isArray(item.branches) && item.branches.length > 0) {
-      return item.branches.map((branch) => branch.id);
-    }
-    return item.locationIds ?? [];
-  };
+  const getItemLocationIds = (item: CatalogItem) =>
+    item.branches?.length ? item.branches.map((b) => b.id) : item.locationIds ?? [];
 
-  // Filter function
-  const filterItems = (items: CatalogItem[]) => {
-    let filtered = items;
-
-    // Filter by search query
+  const displayItems = useMemo(() => {
+    let items = allItems;
+    // Type filter
+    if (typeFilter !== "all") items = items.filter((i) => i.type === typeFilter);
+    // Category filter (only for services)
+    if (activeCategory && typeFilter === "service") items = items.filter((i) => i.categoryId === activeCategory);
+    // Search
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (item) =>
-          item.name.toLowerCase().includes(query) ||
-          item.description?.toLowerCase().includes(query)
-      );
+      const q = searchQuery.toLowerCase();
+      items = items.filter((i) => i.name.toLowerCase().includes(q) || i.description?.toLowerCase().includes(q));
     }
-
-    // Filter by category (only applies to services)
-    if (activeCategory && activeTab === "services") {
-      filtered = filtered.filter((item) => item.categoryId === activeCategory);
-    }
-
+    // Location
     if (strictLocationScope) {
-      const allowedLocationIds =
-        selectedLocationIds.length > 0 ? selectedLocationIds : strictScopedLocationIds;
-      // If no scoped ids are available from the separate locations query,
-      // fall back to item-owned branch mappings from the pre-joined payload.
-      if (allowedLocationIds.length === 0) {
-        return filtered.filter((item) => getItemLocationIds(item).length > 0);
+      const allowed = selectedLocationIds.length > 0 ? selectedLocationIds : strictScopedLocationIds;
+      if (allowed.length > 0) {
+        items = items.filter((i) => { const ids = getItemLocationIds(i); return ids.length > 0 && ids.some((id) => allowed.includes(id)); });
       }
-      filtered = filtered.filter((item) => {
-        const itemLocationIds = getItemLocationIds(item);
-        return itemLocationIds.length > 0 && itemLocationIds.some((locationId) => allowedLocationIds.includes(locationId));
-      });
     } else if (selectedLocationIds.length > 0) {
-      filtered = filtered.filter((item) => {
-        const itemLocationIds = getItemLocationIds(item);
-        return (
-          itemLocationIds.length === 0 ||
-          itemLocationIds.some((locationId) => selectedLocationIds.includes(locationId))
-        );
-      });
+      items = items.filter((i) => { const ids = getItemLocationIds(i); return ids.length === 0 || ids.some((id) => selectedLocationIds.includes(id)); });
     }
-
-    return filtered;
-  };
-
-  // Sort function
-  const sortItems = (items: CatalogItem[]) => {
+    // Sort
     return [...items].sort((a, b) => {
-      switch (sortBy) {
-        case "name":
-          return a.name.localeCompare(b.name);
-        case "price-asc":
-          return a.price - b.price;
-        case "price-desc":
-          return b.price - a.price;
-        default:
-          return 0;
-      }
+      if (sortBy === "price-asc") return a.price - b.price;
+      if (sortBy === "price-desc") return b.price - a.price;
+      return a.name.localeCompare(b.name);
     });
-  };
+  }, [allItems, typeFilter, activeCategory, searchQuery, selectedLocationIds, strictLocationScope, strictScopedLocationIds, sortBy]);
 
-  // Get items for current tab
-  const getTabItems = (tab: string): CatalogItem[] => {
-    switch (tab) {
-      case "all":
-        return allItems;
-      case "services":
-        return allItems.filter((item) => item.type === "service");
-      case "packages":
-        return allItems.filter((item) => item.type === "package");
-      case "products":
-        return allItems.filter((item) => item.type === "product");
-      default:
-        return allItems;
-    }
-  };
+  const counts = useMemo(() => ({
+    all: allItems.length,
+    service: allItems.filter((i) => i.type === "service").length,
+    package: allItems.filter((i) => i.type === "package").length,
+    product: allItems.filter((i) => i.type === "product").length,
+  }), [allItems]);
 
-  const displayItems = sortItems(filterItems(getTabItems(activeTab)));
+  const typeOptions: { value: TypeFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "service", label: "Services" },
+    { value: "package", label: "Packages" },
+    { value: "product", label: "Products" },
+  ];
 
-  const renderItemGrid = (items: CatalogItem[]) => {
+  const renderGrid = (items: CatalogItem[]) => {
     if (items.length === 0) {
       return (
-        <div className="text-center py-12 text-muted-foreground">
-          {searchQuery ? "No items match your search" : "No items available"}
+        <div className="py-20 text-center">
+          <p className="text-sm text-gray-400">{searchQuery ? "No items match your search." : "No items available."}</p>
         </div>
       );
     }
-
     return (
-      <div className={isEcommerceTheme ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
+      <div className={isEcommerceTheme
+        ? "grid grid-cols-2 gap-x-5 gap-y-10 lg:grid-cols-3"
+        : "grid grid-cols-1 gap-4 sm:grid-cols-2"
+      }>
         {items.map((item) => (
           <ItemCard
             key={`${item.type}-${item.id}`}
@@ -237,10 +168,10 @@ export function CatalogView({
             originalPrice={item.originalPrice}
             currency={currency}
             imageUrls={item.imageUrls}
-                durationMinutes={item.durationMinutes}
-                serviceIds={item.serviceIds}
-                stockQuantity={item.stockQuantity}
-                branches={item.branches}
+            durationMinutes={item.durationMinutes}
+            serviceIds={item.serviceIds}
+            stockQuantity={item.stockQuantity}
+            branches={item.branches}
             locationNames={item.locationNames}
           />
         ))}
@@ -248,67 +179,247 @@ export function CatalogView({
     );
   };
 
-  return (
-    <div className="space-y-6">
-      <div className={isEcommerceTheme ? "rounded-[28px] border border-stone-200 bg-white p-4 shadow-sm" : ""}>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search services, packages, products..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={isEcommerceTheme ? "pl-9 bg-[#fcfaf6]" : "pl-9"}
-          />
+  /* ── Ecommerce: sidebar layout ─────────────────────────── */
+  if (isEcommerceTheme) {
+    const SidebarContent = () => (
+      <div className="space-y-8">
+        {/* Sort */}
+        <div>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Sort By</p>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+            <SelectTrigger className="h-8 border-black/15 bg-transparent text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name A–Z</SelectItem>
+              <SelectItem value="price-asc">Price: Low to High</SelectItem>
+              <SelectItem value="price-desc">Price: High to Low</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
+        {/* Divider */}
+        <div className="border-t border-black/8" />
+
+        {/* Type */}
+        <div>
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Type</p>
+          <ul className="space-y-2.5">
+            {typeOptions.map((opt) => (
+              <li key={opt.value}>
+                <button
+                  type="button"
+                  onClick={() => { setTypeFilter(opt.value); setActiveCategory(null); }}
+                  className="flex w-full items-center justify-between text-left text-sm transition-colors"
+                  style={{ color: typeFilter === opt.value ? "var(--brand-color)" : "#6b7280" }}
+                >
+                  <span className={typeFilter === opt.value ? "font-semibold" : ""}>{opt.label}</span>
+                  <span className="text-xs text-gray-300">{counts[opt.value]}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Categories (only relevant for services) */}
+        {categories.length > 0 && (typeFilter === "all" || typeFilter === "service") && (
+          <>
+            <div className="border-t border-black/8" />
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Category</p>
+              <ul className="space-y-2.5">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory(null)}
+                    className="text-sm transition-colors"
+                    style={{ color: activeCategory === null ? "var(--brand-color)" : "#6b7280" }}
+                  >
+                    <span className={activeCategory === null ? "font-semibold" : ""}>All</span>
+                  </button>
+                </li>
+                {categories.map((cat) => (
+                  <li key={cat.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategory(cat.id)}
+                      className="text-sm transition-colors"
+                      style={{ color: activeCategory === cat.id ? "var(--brand-color)" : "#6b7280" }}
+                    >
+                      <span className={activeCategory === cat.id ? "font-semibold" : ""}>{cat.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* Location filter */}
+        {locations.length > 1 && (
+          <>
+            <div className="border-t border-black/8" />
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Location</p>
+              <ul className="space-y-2.5">
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => onLocationFilterChange([])}
+                    className="text-sm transition-colors"
+                    style={{ color: selectedLocationIds.length === 0 ? "var(--brand-color)" : "#6b7280" }}
+                  >
+                    <span className={selectedLocationIds.length === 0 ? "font-semibold" : ""}>All locations</span>
+                  </button>
+                </li>
+                {locations.map((loc) => {
+                  const active = selectedLocationIds.includes(loc.id);
+                  return (
+                    <li key={loc.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (active) onLocationFilterChange(selectedLocationIds.filter((id) => id !== loc.id));
+                          else onLocationFilterChange([...selectedLocationIds, loc.id]);
+                        }}
+                        className="text-sm transition-colors"
+                        style={{ color: active ? "var(--brand-color)" : "#6b7280" }}
+                      >
+                        <span className={active ? "font-semibold" : ""}>{loc.city || loc.name}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </>
+        )}
+      </div>
+    );
+
+    return (
+      <div id="ecom-catalog" className="mx-auto max-w-7xl px-6 pb-20 pt-12 lg:px-8">
+        {/* Mobile filter bar */}
+        <div className="mb-8 flex items-center justify-between lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="flex items-center gap-2 text-sm font-medium"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Filter & Sort
+          </button>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <Input
+              placeholder="Search…"
+              value={searchQuery}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+              className="h-9 w-48 border-black/15 pl-9 text-sm"
+            />
+          </div>
+        </div>
+
+        {/* Mobile sidebar drawer */}
+        {mobileSidebarOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setMobileSidebarOpen(false)} />
+            <div className="absolute left-0 top-0 h-full w-72 overflow-y-auto bg-white px-6 py-8">
+              <div className="mb-6 flex items-center justify-between">
+                <span className="text-sm font-semibold uppercase tracking-widest">Filters</span>
+                <button type="button" onClick={() => setMobileSidebarOpen(false)}>
+                  <X className="h-5 w-5 text-gray-500" />
+                </button>
+              </div>
+              <SidebarContent />
+            </div>
+          </div>
+        )}
+
+        <div className="lg:grid lg:grid-cols-[220px_1fr] lg:gap-12">
+          {/* Desktop sidebar */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-24">
+              <SidebarContent />
+            </div>
+          </aside>
+
+          {/* Main content */}
+          <div>
+            {/* Header row: count + search */}
+            <div className="mb-8 flex items-center justify-between">
+              <p className="text-sm text-gray-400">
+                {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
+              </p>
+              <div className="relative hidden lg:block">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Search…"
+                  value={searchQuery}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                  className="h-9 w-56 border-black/15 pl-9 text-sm"
+                />
+              </div>
+            </div>
+
+            {renderGrid(displayItems)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Default layout ─────────────────────────────────────── */
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search services, packages, products…"
+            value={searchQuery}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-          <SelectTrigger className={isEcommerceTheme ? "w-full bg-[#fcfaf6] sm:w-[180px]" : "w-full sm:w-[180px]"}>
-            <ArrowUpDown className="h-4 w-4 mr-2" />
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="name">Name A-Z</SelectItem>
+            <SelectItem value="name">Name A–Z</SelectItem>
             <SelectItem value="price-asc">Price: Low to High</SelectItem>
             <SelectItem value="price-desc">Price: High to Low</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
+      {/* Type pills for default */}
+      <div className="flex flex-wrap gap-2">
+        {typeOptions.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setTypeFilter(opt.value)}
+            className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${typeFilter === opt.value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted/40"}`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {locations.length > 1 && (
-        <div className={isEcommerceTheme ? "mt-4 rounded-2xl border border-stone-200 bg-[#fcfaf6] p-3 space-y-2" : "rounded-lg border p-3 space-y-2"}>
-          <div className="text-sm font-medium flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            Filter by city
-          </div>
+        <div className="rounded-lg border p-3 space-y-2">
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => onLocationFilterChange([])}
-              className={`px-3 py-1.5 rounded-full text-xs border ${
-                selectedLocationIds.length === 0 ? "bg-primary text-primary-foreground" : "bg-background"
-              }`}
-            >
+            <button type="button" onClick={() => onLocationFilterChange([])}
+              className={`rounded-full border px-3 py-1.5 text-xs ${selectedLocationIds.length === 0 ? "bg-primary text-primary-foreground" : "bg-background"}`}>
               All locations
             </button>
-            {locations.map((location) => {
-              const checked = selectedLocationIds.includes(location.id);
+            {locations.map((loc) => {
+              const checked = selectedLocationIds.includes(loc.id);
               return (
-                <button
-                  type="button"
-                  key={location.id}
-                  onClick={() => {
-                    if (checked) {
-                      onLocationFilterChange(selectedLocationIds.filter((id) => id !== location.id));
-                      return;
-                    }
-                    onLocationFilterChange([...selectedLocationIds, location.id]);
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-xs border ${
-                    checked ? "bg-primary text-primary-foreground" : "bg-background"
-                  }`}
-                >
-                  {location.city || location.name}
+                <button key={loc.id} type="button"
+                  onClick={() => checked ? onLocationFilterChange(selectedLocationIds.filter((id) => id !== loc.id)) : onLocationFilterChange([...selectedLocationIds, loc.id])}
+                  className={`rounded-full border px-3 py-1.5 text-xs ${checked ? "bg-primary text-primary-foreground" : "bg-background"}`}>
+                  {loc.city || loc.name}
                 </button>
               );
             })}
@@ -316,59 +427,7 @@ export function CatalogView({
         </div>
       )}
 
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveCategory(null); }}>
-        <TabsList className={isEcommerceTheme ? "mt-4 w-full justify-start overflow-x-auto rounded-full bg-stone-100 p-1" : "w-full justify-start overflow-x-auto"}>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="services">Services</TabsTrigger>
-          <TabsTrigger value="packages">Packages</TabsTrigger>
-          <TabsTrigger value="products">Products</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-6">
-          {renderItemGrid(displayItems)}
-        </TabsContent>
-
-        <TabsContent value="services" className="mt-6">
-          {/* Category Filter */}
-          {categories.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto pb-4">
-              <button
-                onClick={() => setActiveCategory(null)}
-                className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors"
-                style={{
-                  backgroundColor: activeCategory === null ? 'var(--brand-color)' : undefined,
-                  color: activeCategory === null ? 'white' : undefined,
-                }}
-              >
-                All
-              </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className="px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors bg-muted hover:bg-muted/80"
-                  style={{
-                    backgroundColor: activeCategory === cat.id ? 'var(--brand-color)' : undefined,
-                    color: activeCategory === cat.id ? 'white' : undefined,
-                  }}
-                >
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-          )}
-          {renderItemGrid(displayItems)}
-        </TabsContent>
-
-        <TabsContent value="packages" className="mt-6">
-          {renderItemGrid(displayItems)}
-        </TabsContent>
-
-        <TabsContent value="products" className="mt-6">
-          {renderItemGrid(displayItems)}
-        </TabsContent>
-      </Tabs>
-      </div>
+      {renderGrid(displayItems)}
     </div>
   );
 }
