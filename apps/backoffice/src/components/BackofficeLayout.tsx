@@ -37,6 +37,7 @@ import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate"
   Eye,
   FileText,
   BriefcaseBusiness,
+  MessageSquareText,
   Users2,
   type LucideIcon,
  } from "lucide-react";
@@ -69,6 +70,7 @@ const navItems: NavItem[] = [
   },
   { href: "/feature-flags", label: "Feature Flags", icon: Flag, pageKey: "feature_flags" },
   { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
+  { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
   {
     href: "/sales/campaigns",
     label: "Sales Ops",
