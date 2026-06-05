@@ -347,6 +347,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     cancellationGraceHours: 24,
     defaultDepositPercentage: 0,
     bookingStatusMessage: "",
+    bookingPageBio: "",
     slotCapacityDefault: 1,
     brandColor: "#2563EB",
     allowStaffSelection: true,
@@ -359,20 +360,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const [bookingSubTab, setBookingSubTab] = useState<BookingSettingsSubTab>("booking_config");
 
   const startSubscriptionCheckout = async () => {
-    if (!currentTenant?.id || !currentTenant.plan) {
+    if (!currentTenant?.id) {
       toast({
         title: "Subscription unavailable",
-        description: "Your current tenant plan could not be resolved.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const currentPlan = plans?.find((plan) => plan.slug === currentTenant.plan);
-    if (!currentPlan) {
-      toast({
-        title: "Subscription unavailable",
-        description: "Your plan pricing could not be resolved.",
+        description: "Your current tenant could not be resolved.",
         variant: "destructive",
       });
       return;
@@ -380,27 +371,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
     setIsStartingSubscriptionCheckout(true);
     try {
-      const { data: pricingRow, error: pricingError } = await supabase
-        .from("plan_pricing")
-        .select("stripe_price_id")
-        .eq("plan_id", currentPlan.id)
-        .eq("currency", currentTenant.currency || "USD")
-        .is("valid_until", null)
-        .maybeSingle();
-
-      if (pricingError) {
-        throw pricingError;
-      }
-
-      if (!pricingRow?.stripe_price_id) {
-        throw new Error("Stripe pricing is not configured for this plan yet.");
-      }
-
       const { data, error } = await supabase.functions.invoke("create-checkout-session", {
         body: {
           tenantId: currentTenant.id,
-          priceId: pricingRow.stripe_price_id,
-          billingCycle: "monthly",
           successUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=success`,
           cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=cancelled`,
         },
@@ -562,6 +535,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     cancellationGraceHours: 24,
     defaultDepositPercentage: 0,
     bookingStatusMessage: "",
+    bookingPageBio: "",
     slotCapacityDefault: 1,
     brandColor: "#2563EB",
     allowStaffSelection: true,
@@ -596,6 +570,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         cancellationGraceHours: currentTenant.cancellation_grace_hours || 24,
         defaultDepositPercentage: Number(currentTenant.default_deposit_percentage) || 0,
         bookingStatusMessage: currentTenant.booking_status_message || "",
+        bookingPageBio: (currentTenant as { booking_page_bio?: string | null }).booking_page_bio || "",
         slotCapacityDefault: currentTenant.slot_capacity_default || 1,
         brandColor: (currentTenant as any).brand_color || "#2563EB",
         allowStaffSelection: (currentTenant as any).allow_staff_selection ?? true,
@@ -934,33 +909,23 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
   const renderBookingThemePreview = (themeKey: BookingThemeKey, mode: "card" | "dialog" = "card") => {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between rounded-2xl border bg-muted/30 px-4 py-3">
-          <div>
-            <p className="font-medium">{themeKey === "ecommerce" ? "E-commerce" : "Default"} theme preview</p>
-            <p className="text-xs text-muted-foreground">
-              Exact in-app theme simulator using your current branding, banners, contact settings, and representative booking content.
-            </p>
-          </div>
-          <Badge variant="outline">{themeKey === "ecommerce" ? "Storefront simulation" : "Appointment-first simulation"}</Badge>
-        </div>
-        <BookingThemePreview
-          themeKey={themeKey}
-          mode={mode}
-          salonName={profileData.salonName || currentTenant?.name || "Your Salon"}
-          brandColor={bookingSettings.brandColor || "#2563EB"}
-          bannerUrls={bannerUrls}
-          bookingStatusMessage={bookingSettings.bookingStatusMessage}
-          contactPhone={profileData.contactPhone || currentTenant?.contact_phone || null}
-          showContactOnBooking={profileData.showContactOnBooking}
-          locations={(locations || []).map((location) => ({
-            id: location.id,
-            name: location.name,
-            city: location.city,
-            address: location.address,
-          }))}
-        />
-      </div>
+      <BookingThemePreview
+        themeKey={themeKey}
+        mode={mode}
+        salonName={profileData.salonName || currentTenant?.name || "Your Salon"}
+        brandColor={bookingSettings.brandColor || "#2563EB"}
+        bannerUrls={bannerUrls}
+        bookingPageBio={bookingSettings.bookingPageBio || null}
+        bookingStatusMessage={bookingSettings.bookingStatusMessage}
+        contactPhone={profileData.contactPhone || currentTenant?.contact_phone || null}
+        showContactOnBooking={profileData.showContactOnBooking}
+        locations={(locations || []).map((location) => ({
+          id: location.id,
+          name: location.name,
+          city: location.city,
+          address: location.address,
+        }))}
+      />
     );
   };
 
@@ -1202,6 +1167,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           cancellation_grace_hours: bookingSettings.cancellationGraceHours,
           default_deposit_percentage: bookingSettings.defaultDepositPercentage,
           booking_status_message: bookingSettings.bookingStatusMessage || null,
+          booking_page_bio: bookingSettings.bookingPageBio || null,
           slot_capacity_default: bookingSettings.slotCapacityDefault,
           brand_color: bookingSettings.brandColor,
           allow_staff_selection: bookingSettings.allowStaffSelection,
@@ -2132,6 +2098,20 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Storefront Bio</Label>
+                  <Textarea
+                    placeholder="A short description of your salon — shown on the booking page header…"
+                    value={bookingSettings.bookingPageBio}
+                    onChange={(e) => setBookingSettings((prev) => ({ ...prev, bookingPageBio: e.target.value }))}
+                    rows={2}
+                    maxLength={280}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {bookingSettings.bookingPageBio.length}/280 characters. Appears below your salon name on the public storefront.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Brand Highlight Color</Label>
                   <div className="flex items-center gap-3">
                     <Input
@@ -2214,27 +2194,25 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             </div>
 
             <Dialog open={themePreviewOpen} onOpenChange={setThemePreviewOpen}>
-              <DialogContent className="sm:max-w-5xl">
+              <DialogContent className="z-[200] sm:max-w-5xl">
                 <DialogHeader>
-                  <DialogTitle>{themePreviewKey === "ecommerce" ? "E-commerce theme preview" : "Default theme preview"}</DialogTitle>
+                  <DialogTitle>
+                    {themePreviewKey === "ecommerce" ? "E-commerce theme" : "Default theme"} — how it looks to your customers
+                  </DialogTitle>
                   <DialogDescription>
-                    This preview loads the real public booking page in a bounded frame, so what you see here matches the live theme composition.
+                    This is a live simulation using your salon's name, brand color, banners, and content. Scroll down to see the full page including the service catalog.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   {renderBookingThemePreview(themePreviewKey, "dialog")}
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => openThemePreviewInNewTab(themePreviewKey)} disabled={!bookingUrl}>
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Open live preview
-                    </Button>
-                    {themePreviewKey === "ecommerce" && activeBookingTheme !== "ecommerce" && (
+                  {themePreviewKey === "ecommerce" && activeBookingTheme !== "ecommerce" && (
+                    <div className="flex justify-end">
                       <Button type="button" onClick={purchaseThemeAddon} disabled={isPurchasingTheme}>
                         {isPurchasingTheme ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                        Purchase & apply
+                        Apply this theme to my booking page
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>

@@ -1830,6 +1830,8 @@ export type Database = {
           effective_monthly: number
           id: string
           monthly_price: number
+          paystack_plan_code_annual: string | null
+          paystack_plan_code_monthly: string | null
           plan_id: string
           valid_from: string
           valid_until: string | null
@@ -1841,6 +1843,8 @@ export type Database = {
           effective_monthly: number
           id?: string
           monthly_price: number
+          paystack_plan_code_annual?: string | null
+          paystack_plan_code_monthly?: string | null
           plan_id: string
           valid_from?: string
           valid_until?: string | null
@@ -1852,6 +1856,8 @@ export type Database = {
           effective_monthly?: number
           id?: string
           monthly_price?: number
+          paystack_plan_code_annual?: string | null
+          paystack_plan_code_monthly?: string | null
           plan_id?: string
           valid_from?: string
           valid_until?: string | null
@@ -2637,6 +2643,7 @@ export type Database = {
         Row: {
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
+          booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
           cancellation_grace_hours: number | null
@@ -2673,6 +2680,7 @@ export type Database = {
         Insert: {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
+          booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
@@ -2709,6 +2717,7 @@ export type Database = {
         Update: {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
+          booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
@@ -3125,6 +3134,7 @@ export type Database = {
         Row: {
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
+          booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
           cancellation_grace_hours: number | null
@@ -3148,6 +3158,7 @@ export type Database = {
         Insert: {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
+          booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
@@ -3169,6 +3180,7 @@ export type Database = {
         Update: {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
+          booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null

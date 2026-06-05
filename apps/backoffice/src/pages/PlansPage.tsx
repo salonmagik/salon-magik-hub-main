@@ -52,6 +52,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Coins,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
   Pencil,
   Plus,
   Trash2,
@@ -78,6 +82,8 @@ interface PlanPricing {
   monthly_price: number;
   annual_price: number;
   effective_monthly: number;
+  paystack_plan_code_monthly: string | null;
+  paystack_plan_code_annual: string | null;
 }
 
 interface PlanLimit {
@@ -344,8 +350,9 @@ const errorToMessage = (error: unknown) => {
 
 export default function PlansPage() {
   const queryClient = useQueryClient();
-  const { backofficeUser } = useBackofficeAuth();
+  const { backofficeUser, hasBackofficePermission } = useBackofficeAuth();
   const isSuperAdmin = backofficeUser?.role === "super_admin";
+  const canManagePaystackCodes = isSuperAdmin || hasBackofficePermission("plans.manage_paystack_codes");
 
   const [createPlanOpen, setCreatePlanOpen] = useState(false);
   const [createPlanDrafts, setCreatePlanDrafts] = useState<PlanDraft[]>([]);
@@ -384,6 +391,12 @@ export default function PlansPage() {
   const [themePricingReason, setThemePricingReason] = useState("");
   const [themePricingDrafts, setThemePricingDrafts] = useState<Record<string, ThemePricingDraft>>({});
   const [themePricingDirty, setThemePricingDirty] = useState(false);
+
+  // Paystack plan codes — per pricing-row drafts (NGN/GHS only)
+  interface PaystackCodeDraft { monthly: string; annual: string; dirty: boolean; }
+  const [paystackCodeDrafts, setPaystackCodeDrafts] = useState<Record<string, PaystackCodeDraft>>({});
+  const [paystackCodeRevealedRows, setPaystackCodeRevealedRows] = useState<Set<string>>(new Set());
+  const [paystackCodeSavingRows, setPaystackCodeSavingRows] = useState<Set<string>>(new Set());
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["backoffice-plans"],
@@ -626,6 +639,24 @@ export default function PlansPage() {
     });
     setThemePricingDrafts(nextDrafts);
   }, [latestThemePricingByCountry, pricingMarkets, themePricingDirty]);
+
+  useEffect(() => {
+    if (!pricing) return;
+    setPaystackCodeDrafts((prev) => {
+      const next = { ...prev };
+      pricing.forEach((row) => {
+        if (row.currency !== "NGN" && row.currency !== "GHS") return;
+        if (!next[row.id]?.dirty) {
+          next[row.id] = {
+            monthly: row.paystack_plan_code_monthly ?? "",
+            annual: row.paystack_plan_code_annual ?? "",
+            dirty: false,
+          };
+        }
+      });
+      return next;
+    });
+  }, [pricing]);
 
   const limitsByPlan = useMemo(() => {
     const map = new Map<string, PlanLimit>();
@@ -1480,6 +1511,41 @@ export default function PlansPage() {
     },
   });
 
+  const savePaystackCodeRow = async (rowId: string) => {
+    const draft = paystackCodeDrafts[rowId];
+    if (!draft) return;
+    setPaystackCodeSavingRows((prev) => new Set([...prev, rowId]));
+    try {
+      const { error } = await supabase
+        .from("plan_pricing")
+        .update({
+          paystack_plan_code_monthly: draft.monthly.trim() || null,
+          paystack_plan_code_annual: draft.annual.trim() || null,
+        })
+        .eq("id", rowId);
+      if (error) throw error;
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "paystack_plan_code_updated",
+        entity_type: "plan_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          rowId,
+          hasMonthly: Boolean(draft.monthly.trim()),
+          hasAnnual: Boolean(draft.annual.trim()),
+        },
+      });
+      if (auditError) throw auditError;
+      setPaystackCodeDrafts((prev) => ({ ...prev, [rowId]: { ...prev[rowId], dirty: false } }));
+      toast.success("Plan codes saved.");
+      queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    } catch (err) {
+      toast.error(errorToMessage(err));
+    } finally {
+      setPaystackCodeSavingRows((prev) => { const n = new Set(prev); n.delete(rowId); return n; });
+    }
+  };
+
   const openCreatePlansDialog = () => {
     if (remainingPlanSlots <= 0) {
       toast.error("Maximum of 4 plans reached.");
@@ -2031,6 +2097,137 @@ export default function PlansPage() {
                   </Table>
                 </CardContent>
               </Card>
+
+              {canManagePaystackCodes && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle>Paystack Plan Codes</CardTitle>
+                        <CardDescription>
+                          Monthly and annual PLN codes per plan, per Paystack account. Find codes in each
+                          dashboard under Products → Plans. Format:{" "}
+                          <span className="font-mono text-xs">PLN_xxxxxx</span>. Each row saves independently.
+                        </CardDescription>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 gap-1 border-amber-300 text-amber-600">
+                        <Lock className="h-3 w-3" />
+                        Sensitive
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    {(
+                      [
+                        { currency: "NGN" as CurrencyCode, label: "Nigeria", flag: "🇳🇬" },
+                        { currency: "GHS" as CurrencyCode, label: "Ghana", flag: "🇬🇭" },
+                      ] as const
+                    ).map(({ currency, label, flag }) => (
+                      <div key={currency} className="overflow-hidden rounded-md border">
+                        <div className="border-b bg-muted/40 px-4 py-2.5">
+                          <p className="text-sm font-semibold">
+                            {flag} {label}{" "}
+                            <span className="font-normal text-muted-foreground">({currency} Paystack account)</span>
+                          </p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[160px]">Plan</TableHead>
+                                <TableHead>Monthly PLN code</TableHead>
+                                <TableHead>Annual PLN code</TableHead>
+                                <TableHead className="w-[110px]" />
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(plans || []).map((plan) => {
+                                const row = activePricingByPlan.get(plan.id)?.get(currency);
+                                if (!row) {
+                                  return (
+                                    <TableRow key={plan.id}>
+                                      <TableCell className="font-medium">{plan.name}</TableCell>
+                                      <TableCell colSpan={3} className="text-xs text-muted-foreground">
+                                        No {currency} pricing row — add pricing first
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                }
+                                const draft = paystackCodeDrafts[row.id] ?? { monthly: "", annual: "", dirty: false };
+                                const isRevealed = paystackCodeRevealedRows.has(row.id);
+                                const isSaving = paystackCodeSavingRows.has(row.id);
+                                const inputType = isRevealed ? "text" : "password";
+                                return (
+                                  <TableRow key={plan.id}>
+                                    <TableCell className="font-medium">{plan.name}</TableCell>
+                                    <TableCell className="min-w-[200px]">
+                                      <Input
+                                        type={inputType}
+                                        placeholder="PLN_xxxxxx"
+                                        autoComplete="off"
+                                        value={draft.monthly}
+                                        onChange={(e) =>
+                                          setPaystackCodeDrafts((prev) => ({
+                                            ...prev,
+                                            [row.id]: { ...prev[row.id] ?? { monthly: "", annual: "", dirty: false }, monthly: e.target.value, dirty: true },
+                                          }))
+                                        }
+                                      />
+                                    </TableCell>
+                                    <TableCell className="min-w-[200px]">
+                                      <Input
+                                        type={inputType}
+                                        placeholder="PLN_xxxxxx"
+                                        autoComplete="off"
+                                        value={draft.annual}
+                                        onChange={(e) =>
+                                          setPaystackCodeDrafts((prev) => ({
+                                            ...prev,
+                                            [row.id]: { ...prev[row.id] ?? { monthly: "", annual: "", dirty: false }, annual: e.target.value, dirty: true },
+                                          }))
+                                        }
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-1.5">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 shrink-0"
+                                          title={isRevealed ? "Hide" : "Reveal"}
+                                          onClick={() =>
+                                            setPaystackCodeRevealedRows((prev) => {
+                                              const n = new Set(prev);
+                                              n.has(row.id) ? n.delete(row.id) : n.add(row.id);
+                                              return n;
+                                            })
+                                          }
+                                        >
+                                          {isRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          disabled={!draft.dirty || isSaving}
+                                          onClick={() => savePaystackCodeRow(row.id)}
+                                        >
+                                          {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                                          {isSaving ? "Saving" : "Save"}
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               {chainPlan && isSuperAdmin && (
                 <Card>
