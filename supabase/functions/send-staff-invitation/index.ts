@@ -8,6 +8,7 @@ import {
   createButton,
   buildFromAddress,
 } from "../_shared/email-template.ts";
+import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -389,8 +390,8 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     // Build email content
-    const subject = `You're invited to join ${tenant.name}`;
-    const htmlBody = buildInvitationEmail(
+    const defaultSubject = `You're invited to join ${tenant.name}`;
+    const defaultHtmlBody = buildInvitationEmail(
       recipientFirstName,
       recipientEmail,
       tenant.name,
@@ -398,6 +399,23 @@ const handler = async (req: Request): Promise<Response> => {
       loginLink,
       tempPassword,
       tenant.logo_url || undefined
+    );
+    const platformTemplate = await fetchPlatformTemplate(serviceRoleClient, "staff_invitation", "email");
+    const templateValues = {
+      first_name: recipientFirstName,
+      email: recipientEmail,
+      salon_name: tenant.name,
+      role: recipientRole,
+      login_link: loginLink,
+      temp_password: tempPassword,
+    };
+    const subject = renderPlatformTemplate(
+      platformTemplate?.is_active === false ? defaultSubject : platformTemplate?.subject || defaultSubject,
+      templateValues,
+    );
+    const htmlBody = renderPlatformTemplate(
+      platformTemplate?.is_active === false ? defaultHtmlBody : platformTemplate?.body || defaultHtmlBody,
+      templateValues,
     );
 
     // Send email via Resend API
@@ -410,7 +428,7 @@ const handler = async (req: Request): Promise<Response> => {
       body: JSON.stringify({
         from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail }),
         to: [recipientEmail],
-        subject: subject,
+        subject,
         html: htmlBody,
       }),
     });

@@ -7,6 +7,7 @@ import {
   heading,
   buildFromAddress,
 } from "../_shared/email-template.ts";
+import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -26,19 +27,6 @@ interface EmailVerificationRequest {
   origin?: string;
   mode?: "signup" | "resend";
 }
-
-const welcomeTemplate = {
-  subject: "Welcome to Salon Magik – verify your email",
-  build: (firstName: string, verificationLink: string) => {
-    const content = `
-      ${heading(`Welcome, ${firstName}!`)}
-      ${paragraph("Thanks for signing up to Salon Magik. Verify your email to secure your account and unlock your workspace.")}
-      ${createButton("Verify email", verificationLink)}
-      ${paragraph("This link expires in 24 hours. If you didn’t sign up, you can safely ignore this email.")}
-    `;
-    return wrapEmailTemplate(content, { mode: "product" });
-  },
-};
 
 type AuthUser = {
   id: string;
@@ -227,7 +215,26 @@ const handler = async (req: Request): Promise<Response> => {
       "http://localhost:8080";
     const verificationLink = `${resolvedOrigin.replace(/\/+$/, "")}/verify-email?token=${token}`;
 
-    const htmlBody = welcomeTemplate.build(firstName, verificationLink);
+    const platformTemplate = await fetchPlatformTemplate(supabase, "email_verification", "email");
+    const defaultSubject = "Welcome to Salon Magik – verify your email";
+    const defaultBody = `
+      ${heading(`Welcome, ${firstName}!`)}
+      ${paragraph("Thanks for signing up to Salon Magik. Verify your email to secure your account and unlock your workspace.")}
+      ${createButton("Verify email", verificationLink)}
+      ${paragraph("This link expires in 24 hours. If you didn’t sign up, you can safely ignore this email.")}
+    `;
+    const templateValues = {
+      first_name: firstName,
+      verification_link: verificationLink,
+    };
+    const subject = renderPlatformTemplate(
+      platformTemplate?.is_active === false ? defaultSubject : platformTemplate?.subject || defaultSubject,
+      templateValues,
+    );
+    const htmlBody = renderPlatformTemplate(
+      platformTemplate?.is_active === false ? defaultBody : platformTemplate?.body || defaultBody,
+      templateValues,
+    );
 
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {
@@ -239,7 +246,7 @@ const handler = async (req: Request): Promise<Response> => {
       body: JSON.stringify({
         from: buildFromAddress({ mode: "product", fromEmail }),
         to: [email],
-        subject: welcomeTemplate.subject,
+        subject,
         html: htmlBody,
       }),
     });

@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
+import { fetchPlatformTemplate } from "../_shared/platform-templates.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +125,7 @@ Deno.serve(async (req) => {
         paymentsResult,
         outstandingResult,
         templateResult,
+        platformTemplateResult,
       ] = await Promise.all([
         admin
           .from("appointments")
@@ -151,6 +153,7 @@ Deno.serve(async (req) => {
           .eq("tenant_id", tenant.id)
           .eq("template_type", "daily_digest")
           .maybeSingle(),
+        fetchPlatformTemplate(admin, "daily_digest", "email"),
       ]);
 
       if (appointmentsResult.error) throw appointmentsResult.error;
@@ -194,12 +197,23 @@ Deno.serve(async (req) => {
           cta_link: `${dashboardBaseUrl}/salon`,
         };
 
+        const activePlatformSubject =
+          platformTemplateResult?.is_active === false ? null : platformTemplateResult?.subject;
+        const activePlatformBody =
+          platformTemplateResult?.is_active === false ? null : platformTemplateResult?.body;
+
         const subject = replaceTokens(
-          templateResult.data?.is_active === false ? defaultSubject : templateResult.data?.subject || defaultSubject,
+          activePlatformSubject ||
+            (templateResult.data?.is_active === false
+              ? defaultSubject
+              : templateResult.data?.subject || defaultSubject),
           values,
         );
         const htmlContent = replaceTokens(
-          templateResult.data?.is_active === false ? defaultBody : templateResult.data?.body_html || defaultBody,
+          activePlatformBody ||
+            (templateResult.data?.is_active === false
+              ? defaultBody
+              : templateResult.data?.body_html || defaultBody),
           values,
         );
 

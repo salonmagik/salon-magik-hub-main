@@ -280,7 +280,7 @@ export default function SalonDashboard() {
                   <div>
                     <p className="font-medium text-warning-foreground">Low messaging credits</p>
                     <p className="text-sm text-muted-foreground">
-                      {stats.communicationCredits} credits remaining. Top up to continue sending SMS/WhatsApp.
+                      {stats.communicationCredits} credits remaining. Top up to continue sending SMS.
                     </p>
                   </div>
                 </div>
