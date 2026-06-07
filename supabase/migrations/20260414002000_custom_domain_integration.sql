@@ -11,7 +11,10 @@ ADD COLUMN dotlet_origin_rule_id text;
 CREATE UNIQUE INDEX idx_tenants_custom_booking_domain ON public.tenants (custom_booking_domain) WHERE custom_booking_domain IS NOT NULL;
 
 -- 3. Update public_booking_tenants view
-CREATE OR REPLACE VIEW public.public_booking_tenants
+-- DROP CASCADE is required because the "Anon can read locations for booking" policy
+-- on locations depends on this view; it is re-created below.
+DROP VIEW IF EXISTS public.public_booking_tenants CASCADE;
+CREATE VIEW public.public_booking_tenants
 WITH (security_invoker = off)
 AS
 SELECT
@@ -45,6 +48,17 @@ WHERE online_booking_enabled = true
   AND slug is not null;
 
 GRANT SELECT ON public.public_booking_tenants TO anon, authenticated;
+
+-- Re-create the locations RLS policy dropped by CASCADE above.
+DROP POLICY IF EXISTS "Anon can read locations for booking" ON public.locations;
+CREATE POLICY "Anon can read locations for booking"
+ON public.locations
+FOR SELECT
+TO anon
+USING (
+  (availability IS NULL OR availability = 'open')
+  AND tenant_id IN (SELECT id FROM public.public_booking_tenants)
+);
 
 -- 4. Create domain_orders table
 CREATE TYPE public.domain_order_status AS ENUM ('pending_payment', 'processing', 'completed', 'failed', 'cancelled');
