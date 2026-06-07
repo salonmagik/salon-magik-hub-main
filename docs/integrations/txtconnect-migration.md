@@ -1,4 +1,10 @@
-# Txtconnect Migration Note
+# Txtconnect Migration Note (superseded)
+
+> **This migration is superseded.** Txtconnect was later replaced entirely by Arkesel for both Nigeria and Ghana. See [arkesel-migration.md](./arkesel-migration.md) for the current SMS provider state.
+
+---
+
+
 
 ## Scope
 

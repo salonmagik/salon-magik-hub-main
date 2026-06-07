@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress } from "../_shared/email-template.ts";
 import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
-import { sendTxtconnectSMS } from "../_shared/txtconnect-client.ts";
+import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -54,14 +54,6 @@ function getSmsSegments(message: string) {
   return Math.max(1, Math.ceil(Math.max(message.trim().length, 1) / 160));
 }
 
-function normalizeCountry(country?: string | null) {
-  return String(country || "").trim().toLowerCase();
-}
-
-function isGhanaMarket(country?: string | null) {
-  const normalized = normalizeCountry(country);
-  return normalized === "ghana" || normalized === "gh";
-}
 
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
@@ -391,7 +383,6 @@ async function processBulkSMS(
   result: BulkMessageResult
 ) {
   const senderID = tenant.sms_sender_name || tenant.termii_sender_id || "SalonMagik";
-  const isGhanaTenant = isGhanaMarket(tenant.country);
   const BATCH_SIZE = 25;
 
   // Process in smaller batches to avoid timeouts and keep per-message status.
@@ -406,19 +397,11 @@ async function processBulkSMS(
           throw new Error("Customer has no phone number");
         }
 
-        const smsResponse = isGhanaTenant
-          ? await sendTxtconnectSMS({
-              to: customer.phone,
-              from: senderID,
-              sms: message,
-            })
-          : await sendTermiiSMS({
-              to: customer.phone,
-              from: senderID,
-              sms: message,
-              type: "plain",
-              channel: "generic",
-            });
+        const smsResponse = await sendArkeselSMS({
+          to: customer.phone,
+          from: senderID,
+          message,
+        });
 
         result.sent++;
         result.creditsUsed += creditsPerMessage;
@@ -447,8 +430,8 @@ async function processBulkSMS(
           subject: null,
           status: "sent",
           sent_at: new Date().toISOString(),
-          provider: isGhanaTenant ? "txtconnect_sms" : "termii_sms",
-          termii_message_id: isGhanaTenant ? smsResponse.messageId : smsResponse.message_id,
+          provider: "arkesel_sms",
+          termii_message_id: extractArkeselMessageId(smsResponse),
           termii_device_id: null,
           initiated_by: "salon",
           credits_used: creditsPerMessage,

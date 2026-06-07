@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress } from "../_shared/email-template.ts";
-import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
-import { sendTxtconnectSMS } from "../_shared/txtconnect-client.ts";
+import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -23,14 +23,6 @@ const CREDIT_COST: Record<string, number> = {
   whatsapp: 2,
 };
 
-function normalizeCountry(country?: string | null) {
-  return String(country || "").trim().toLowerCase();
-}
-
-function isGhanaMarket(country?: string | null) {
-  const normalized = normalizeCountry(country);
-  return normalized === "ghana" || normalized === "gh";
-}
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -300,31 +292,18 @@ const handler = async (req: Request): Promise<Response> => {
 
       } else if (message.channel === "sms") {
         const senderID = message.tenant.sms_sender_name || message.tenant.termii_sender_id || "SalonMagik";
-        const isGhanaTenant = isGhanaMarket(message.tenant.country);
 
         if (!message.customer?.phone) {
           throw new Error("Customer phone number not found");
         }
 
-        if (isGhanaTenant) {
-          provider = "txtconnect_sms";
-          const smsResponse = await sendTxtconnectSMS({
-            to: message.customer.phone,
-            from: senderID,
-            sms: message.message,
-          });
-          termiiMessageId = smsResponse.messageId;
-        } else {
-          provider = "termii_sms";
-          const smsResponse = await sendTermiiSMS({
-            to: message.customer.phone,
-            from: senderID,
-            sms: message.message,
-            type: "plain",
-            channel: "generic",
-          });
-          termiiMessageId = smsResponse.message_id;
-        }
+        provider = "arkesel_sms";
+        const smsResponse = await sendArkeselSMS({
+          to: message.customer.phone,
+          from: senderID,
+          message: messageRecord.message as string,
+        });
+        termiiMessageId = extractArkeselMessageId(smsResponse);
 
         success = true;
 

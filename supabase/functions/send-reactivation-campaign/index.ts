@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress } from "../_shared/email-template.ts";
-import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
-import { sendTxtconnectSMS } from "../_shared/txtconnect-client.ts";
+import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendArkeselSMS } from "../_shared/arkesel-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,15 +16,6 @@ const CREDIT_COST: Record<Channel, number> = {
   sms: 2,
   whatsapp: 2,
 };
-
-function normalizeCountry(country?: string | null) {
-  return String(country || "").trim().toLowerCase();
-}
-
-function isGhanaMarket(country?: string | null) {
-  const normalized = normalizeCountry(country);
-  return normalized === "ghana" || normalized === "gh";
-}
 
 async function sendEmail(resendApiKey: string, from: string, to: string, subject: string, html: string) {
   const response = await fetch("https://api.resend.com/emails", {
@@ -40,24 +31,9 @@ async function sendEmail(resendApiKey: string, from: string, to: string, subject
   }
 }
 
-async function sendSms(country: string | null | undefined, senderId: string, to: string, text: string) {
-  if (isGhanaMarket(country)) {
-    await sendTxtconnectSMS({
-      to,
-      from: senderId,
-      sms: text,
-    });
-    return "txtconnect_sms";
-  }
-
-  await sendTermiiSMS({
-    to,
-    from: senderId,
-    sms: text,
-    type: "plain",
-    channel: "generic",
-  });
-  return "termii_sms";
+async function sendSms(senderId: string, to: string, text: string) {
+  await sendArkeselSMS({ to, from: senderId, message: text });
+  return "arkesel_sms";
 }
 
 async function sendWhatsApp(metaToken: string, phoneNumberId: string, to: string, text: string) {
@@ -174,7 +150,8 @@ serve(async (req) => {
       .in("id", recipientCustomerIds)
       .eq("tenant_id", campaign.tenant_id);
 
-    const customerMap = new Map((customers || []).map((customer) => [customer.id, customer]));
+    type CustomerRow = { id: string; email: string | null; phone: string | null; full_name: string | null };
+    const customerMap = new Map((customers || []).map((c: CustomerRow) => [c.id, c]));
 
     const { data: creditWallet, error: creditsError } = await adminClient
       .from("communication_credits")
@@ -231,7 +208,7 @@ serve(async (req) => {
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
-          await sendSms(tenant?.country, smsSenderName, customer.phone, message);
+          await sendSms(smsSenderName, customer.phone, message);
         } else if (channel === "whatsapp") {
           if (!customer.phone) throw new Error("Customer has no phone number");
           
@@ -281,7 +258,7 @@ serve(async (req) => {
         if (channel === "email") {
           provider = "resend";
         } else if (channel === "sms") {
-          provider = isGhanaMarket(tenant?.country) ? "txtconnect_sms" : "termii_sms";
+          provider = "arkesel_sms";
         } else if (channel === "whatsapp") {
           const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
           provider = whatsappProvider === "termii" ? "termii_whatsapp" : "meta_whatsapp";
