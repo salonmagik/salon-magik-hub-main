@@ -101,7 +101,6 @@ serve(async (req: Request) => {
           sms_sender_name_requested_at: new Date().toISOString(),
           sms_sender_name_company: tenant.legal_name || tenant.name,
           sms_sender_name_use_case: "Salon Magik outbound SMS messaging",
-          sms_provider: "txtconnect",
         })
         .eq("id", tenantId);
 
