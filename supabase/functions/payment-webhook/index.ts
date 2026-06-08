@@ -31,6 +31,7 @@ interface WebhookEvent {
     isDeposit?: boolean;
     splitPurseAmount?: number;
     splitCustomerId?: string;
+    intent?: string;
   };
 }
 
@@ -274,7 +275,20 @@ async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+
+      if (intent === "subscription_activation" && tenantId && isValidUUID(tenantId)) {
+        const { error: activationError } = await supabase
+          .from("tenants")
+          .update({ subscription_status: "active" })
+          .eq("id", tenantId);
+        if (activationError) {
+          console.error("Failed to activate tenant subscription:", activationError);
+        } else {
+          console.log(`Tenant ${tenantId} subscription activated via webhook.`);
+        }
+        return;
+      }
 
       let intentType = "appointment_payment";
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
@@ -1108,6 +1122,7 @@ Deno.serve(async (req) => {
             is_deposit?: boolean | string;
             split_purse_amount?: string | number;
             split_customer_id?: string;
+            intent?: string;
           };
         };
       };
@@ -1132,6 +1147,7 @@ Deno.serve(async (req) => {
           isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
           splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
           splitCustomerId: metadata?.split_customer_id,
+          intent: metadata?.intent,
         },
       };
     } else {

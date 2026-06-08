@@ -118,6 +118,9 @@ verify_jwt = false
 [functions.manage-sms-sender-name]
 verify_jwt = false
 
+[functions.verify-subscription-payment]
+verify_jwt = false
+
 [functions.send-bulk-message]
 verify_jwt = false
 

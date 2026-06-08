@@ -107,6 +107,7 @@ Deno.serve(async (req) => {
           is_deposit?: boolean | string;
           split_purse_amount?: string | number;
           split_customer_id?: string;
+          intent?: string;
         };
       };
     };
@@ -131,6 +132,7 @@ Deno.serve(async (req) => {
         isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
         splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
         splitCustomerId: metadata?.split_customer_id,
+        intent: metadata?.intent,
       },
     };
 

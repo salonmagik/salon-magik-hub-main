@@ -124,9 +124,10 @@ serve(async (req) => {
       email: user.email,
       callback_url: successUrl,
       metadata: {
-        tenantId,
-        tenantName: tenant.name,
+        tenant_id: tenantId,
+        tenant_name: tenant.name,
         cancel_action: cancelUrl,
+        intent: "subscription_activation",
       },
     };
 
@@ -134,16 +135,12 @@ serve(async (req) => {
       // Subscription: amount comes from the plan definition, not the request
       paystackBody.plan = paystackPlanCode;
     } else {
-      // No plan code configured yet — fall back to a small authorization charge
-      // so the owner can at least add their card. Amount in lowest unit (kobo / pesewas).
-      paystackBody.amount = 5000; // ₦50 or GH₵5
+      // No plan code configured yet — fall back to a small authorization charge.
+      // Amount in lowest unit (kobo / pesewas): 100 = ₦1 / GH₵1.
+      paystackBody.amount = 100;
       paystackBody.currency = currency;
-      paystackBody.metadata = {
-        ...(paystackBody.metadata as object),
-        intent: "card_authorization",
-      };
       console.warn(
-        `No Paystack plan code for tenant ${tenantId} (plan: ${tenant.plan}, currency: ${currency}). Falling back to card authorization.`,
+        `No Paystack plan code for tenant ${tenantId} (plan: ${tenant.plan}, currency: ${currency}). Falling back to ₦1/GH₵1 authorization.`,
       );
     }
 

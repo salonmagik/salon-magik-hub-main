@@ -285,14 +285,38 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     }
 
     if (subscriptionStatus === "success") {
-      toast({
-        title: "Subscription started",
-        description: "Your billing checkout completed successfully.",
-      });
+      // Paystack appends ?trxref=xxx&reference=xxx to the callback URL
+      const reference = searchParams.get("reference") || searchParams.get("trxref");
 
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete("subscription");
-      setSearchParams(newParams, { replace: true });
+      const cleanParams = new URLSearchParams(searchParams);
+      cleanParams.delete("subscription");
+      cleanParams.delete("reference");
+      cleanParams.delete("trxref");
+      setSearchParams(cleanParams, { replace: true });
+
+      if (reference && currentTenant?.id) {
+        supabase.functions
+          .invoke("verify-subscription-payment", {
+            body: { reference, tenantId: currentTenant.id },
+          })
+          .then(async ({ error }) => {
+            if (error) {
+              console.error("Subscription verification error:", error);
+            }
+            await refreshTenants();
+            toast({
+              title: "Subscription activated",
+              description: "Your plan is now active.",
+            });
+          });
+      } else {
+        refreshTenants().then(() => {
+          toast({
+            title: "Payment received",
+            description: "Your subscription status will update shortly.",
+          });
+        });
+      }
     } else if (subscriptionStatus === "cancelled") {
       toast({
         title: "Subscription checkout cancelled",
