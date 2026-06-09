@@ -138,3 +138,9 @@ verify_jwt = false
 
 [functions.verify-bank-account]
 verify_jwt = false
+
+[functions.paystack-transfer-webhook-gh]
+verify_jwt = false
+
+[functions.paystack-transfer-webhook-ng]
+verify_jwt = false

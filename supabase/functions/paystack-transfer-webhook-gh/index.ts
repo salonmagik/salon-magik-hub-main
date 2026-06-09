@@ -5,7 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-paystack-signature",
 };
 
-// Verify Paystack webhook signature using HMAC SHA512
 async function verifyPaystackSignature(
   payload: string,
   signature: string,
@@ -20,15 +19,10 @@ async function verifyPaystackSignature(
       false,
       ["sign"]
     );
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(payload)
-    );
+    const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
     const computedSig = Array.from(new Uint8Array(signatureBuffer))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
-
     return computedSig === signature;
   } catch (error) {
     console.error("Paystack signature verification error:", error);
@@ -37,22 +31,20 @@ async function verifyPaystackSignature(
 }
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY_GH");
     if (!paystackSecretKey) {
-      console.error("PAYSTACK_SECRET_KEY not configured");
+      console.error("PAYSTACK_SECRET_KEY_GH not configured");
       return new Response(
         JSON.stringify({ error: "Server configuration error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Verify webhook signature
     const signature = req.headers.get("x-paystack-signature");
     const payload = await req.text();
 
@@ -73,9 +65,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Parse webhook event
     const event = JSON.parse(payload);
-    console.log("Paystack transfer webhook event:", event.event);
+    console.log("Paystack GH transfer webhook event:", event.event);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -84,12 +75,10 @@ Deno.serve(async (req: Request) => {
     const eventType = event.event;
     const data = event.data;
 
-    // Handle different transfer events
     switch (eventType) {
       case "transfer.success": {
         console.log("Processing transfer.success for reference:", data.reference);
-        
-        // Extract withdrawal ID from reference (format: "withdrawal_{id}_{timestamp}")
+
         const withdrawalIdMatch = data.reference?.match(/^withdrawal_([a-f0-9-]+)_/);
         if (!withdrawalIdMatch) {
           console.error("Invalid reference format:", data.reference);
@@ -98,7 +87,6 @@ Deno.serve(async (req: Request) => {
 
         const withdrawalId = withdrawalIdMatch[1];
 
-        // Update withdrawal status to completed
         const { error: updateError } = await supabase
           .from("salon_withdrawals")
           .update({ status: "completed" })
@@ -115,8 +103,7 @@ Deno.serve(async (req: Request) => {
       case "transfer.failed":
       case "transfer.reversed": {
         console.log(`Processing ${eventType} for reference:`, data.reference);
-        
-        // Extract withdrawal ID from reference (format: "withdrawal_{id}_{timestamp}")
+
         const withdrawalIdMatch = data.reference?.match(/^withdrawal_([a-f0-9-]+)_/);
         if (!withdrawalIdMatch) {
           console.error("Invalid reference format:", data.reference);
@@ -126,7 +113,6 @@ Deno.serve(async (req: Request) => {
         const withdrawalId = withdrawalIdMatch[1];
         const failureReason = data.status || `Transfer ${eventType === "transfer.failed" ? "failed" : "reversed"}`;
 
-        // Fetch the withdrawal record to get tenant_id and find ledger entry
         const { data: withdrawal, error: fetchError } = await supabase
           .from("salon_withdrawals")
           .select("tenant_id")
@@ -138,7 +124,6 @@ Deno.serve(async (req: Request) => {
           break;
         }
 
-        // Fetch the ledger entry for this withdrawal to get entry ID for reversal
         const { data: ledgerEntry, error: ledgerError } = await supabase
           .from("wallet_ledger_entries")
           .select("id")
@@ -154,7 +139,6 @@ Deno.serve(async (req: Request) => {
           break;
         }
 
-        // Create wallet reversal to refund the debited amount
         const { error: reversalError } = await supabase.rpc("create_wallet_reversal", {
           p_original_entry_id: ledgerEntry.id,
           p_reason: failureReason,
@@ -167,13 +151,9 @@ Deno.serve(async (req: Request) => {
           console.log("Wallet reversal created for withdrawal:", withdrawalId);
         }
 
-        // Update withdrawal status to failed with reason
         const { error: updateError } = await supabase
           .from("salon_withdrawals")
-          .update({
-            status: "failed",
-            failure_reason: failureReason,
-          })
+          .update({ status: "failed", failure_reason: failureReason })
           .eq("id", withdrawalId);
 
         if (updateError) {
@@ -194,7 +174,7 @@ Deno.serve(async (req: Request) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Transfer webhook error:", error);
+    console.error("GH transfer webhook error:", error);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
