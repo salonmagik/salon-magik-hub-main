@@ -134,3 +134,99 @@ export function getCountryForCurrency(currency: string): string | null {
   if (normalized === "GHS") return "GH";
   return null;
 }
+
+/**
+ * Payload for creating a Paystack subaccount.
+ */
+export interface CreateSubaccountPayload {
+  business_name: string;
+  settlement_bank: string;
+  account_number: string;
+  percentage_charge: number;
+  description?: string;
+  primary_contact_email?: string;
+  primary_contact_name?: string;
+  primary_contact_phone?: string;
+  metadata?: string;
+}
+
+/**
+ * Helper to call the Paystack API and create a subaccount.
+ * Forces settlement_schedule to "manual" based on requirements.
+ */
+export async function createPaystackSubaccount(
+  currency: string,
+  payload: CreateSubaccountPayload
+) {
+  const { key, error: keyError } = getPaystackKeyForCurrency(currency);
+  
+  if (keyError || !key) {
+    throw new Error(keyError || "Failed to get Paystack key");
+  }
+
+  const response = await fetch("https://api.paystack.co/subaccount", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...payload,
+      settlement_schedule: "manual",
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.status) {
+    throw new Error(data.message || "Failed to create Paystack subaccount");
+  }
+
+  return data.data;
+}
+
+/**
+ * Payload for updating a Paystack subaccount.
+ */
+export interface UpdateSubaccountPayload {
+  business_name?: string;
+  settlement_bank?: string;
+  account_number?: string;
+  percentage_charge?: number;
+  description?: string;
+  primary_contact_email?: string;
+  primary_contact_name?: string;
+  primary_contact_phone?: string;
+  settlement_schedule?: "auto" | "weekly" | "monthly" | "manual";
+  metadata?: string;
+}
+
+/**
+ * Helper to call the Paystack API and update an existing subaccount.
+ */
+export async function updatePaystackSubaccount(
+  currency: string,
+  idOrCode: string,
+  payload: UpdateSubaccountPayload
+) {
+  const { key, error: keyError } = getPaystackKeyForCurrency(currency);
+  
+  if (keyError || !key) {
+    throw new Error(keyError || "Failed to get Paystack key");
+  }
+
+  const response = await fetch(`https://api.paystack.co/subaccount/${idOrCode}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.status) {
+    throw new Error(data.message || "Failed to update Paystack subaccount");
+  }
+
+  return data.data;
+}

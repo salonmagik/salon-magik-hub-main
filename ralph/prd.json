@@ -28,8 +28,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added createPaystackSubaccount and updatePaystackSubaccount helpers to _shared/paystack-helpers.ts. Typecheck passed locally."
     },
     {
       "id": "US-003",

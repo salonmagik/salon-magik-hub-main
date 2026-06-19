@@ -15,3 +15,17 @@
 ### Learnings
 - Project requires generating supabase types manually if Docker isn't available, done via patching `types.ts` manually for US-001 to satisfy type checks.
 - Linting fails in backoffice/salon-admin due to out-of-scope code style issues, but builds for my code pass successfully.
+---
+## 2026-06-19 05:05 - US-002: Paystack Helpers for Subaccounts
+
+### Implemented
+- Added `createPaystackSubaccount` helper for calling Paystack's subaccount creation API.
+- Added `updatePaystackSubaccount` helper for updating subaccount details.
+- Ensured `settlement_schedule` is forced to "manual" during creation.
+- Successfully verified edge function types.
+
+### Files Changed
+- supabase/functions/_shared/paystack-helpers.ts
+
+### Learnings
+- We pass down `currency` to evaluate if Paystack is supported and retrieve the proper environment keys via the existing `getPaystackKeyForCurrency` function.
