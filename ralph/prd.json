@@ -75,8 +75,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated create-invoice-payment-session edge function to check for 'ready' payment_setup_status, retrieve default payout subaccount code, compute the 1% processing fee, adjust the customer charged amount, and include all necessary fields in the Paystack payload metadata."
     },
     {
       "id": "US-006",

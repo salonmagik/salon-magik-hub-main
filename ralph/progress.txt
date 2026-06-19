@@ -62,3 +62,20 @@
 ### Learnings
 - Supabase edge functions can be deployed to test types locally via deno bundle implicitly.
 - Handled the difference between `serviceAmount` (internal price) and `customerChargedAmount` (price + fee) clearly in metadata.
+
+---
+## 2026-06-19 05:35 - US-005: Payment Gate & 1% Fee - Invoices
+
+### Implemented
+- Updated `create-invoice-payment-session` edge function to check if the tenant's `payment_setup_status` is `ready`.
+- Fetched the salon's default payout destination to get the `paystack_subaccount_code`.
+- Calculated a 1% processing fee based on the invoice total and added it to the initial payment amount passed to Paystack.
+- Appended proper fee metadata (`processing_fee_rate`, `processing_fee_amount`, `customer_charged_amount`, `store_subaccount_code`) identically to US-004.
+- Handled Paystack initialization properly keeping `amount` in `payment_intents` as the raw invoice total (service_amount).
+
+### Files Changed
+- supabase/functions/create-invoice-payment-session/index.ts
+
+### Learnings
+- We need to pass the explicit subset of `tenants` column fields we need in queries like `tenants!inner(...)`.
+- We used `.toFixed(2)` then `parseFloat()` to safely parse the computed fee amount before appending to the final float.
