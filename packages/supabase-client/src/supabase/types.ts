@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      salon_payout_destinations: {
+        Row: {
+          id: string
+          tenant_id: string
+          destination_type: "bank" | "mobile_money"
+          country: string
+          currency: string
+          bank_code: string | null
+          bank_name: string | null
+          account_number: string | null
+          account_name: string | null
+          momo_provider: string | null
+          momo_number: string | null
+          paystack_recipient_code: string | null
+          is_default: boolean | null
+          created_at: string | null
+          paystack_subaccount_code: string | null
+          paystack_subaccount_id: number | null
+          paystack_subaccount_active: boolean | null
+          paystack_subaccount_status: string | null
+          paystack_subaccount_error: string | null
+          settlement_schedule: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          destination_type: "bank" | "mobile_money"
+          country: string
+          currency: string
+          bank_code?: string | null
+          bank_name?: string | null
+          account_number?: string | null
+          account_name?: string | null
+          momo_provider?: string | null
+          momo_number?: string | null
+          paystack_recipient_code?: string | null
+          is_default?: boolean | null
+          created_at?: string | null
+          paystack_subaccount_code?: string | null
+          paystack_subaccount_id?: number | null
+          paystack_subaccount_active?: boolean | null
+          paystack_subaccount_status?: string | null
+          paystack_subaccount_error?: string | null
+          settlement_schedule?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          destination_type?: "bank" | "mobile_money"
+          country?: string
+          currency?: string
+          bank_code?: string | null
+          bank_name?: string | null
+          account_number?: string | null
+          account_name?: string | null
+          momo_provider?: string | null
+          momo_number?: string | null
+          paystack_recipient_code?: string | null
+          is_default?: boolean | null
+          created_at?: string | null
+          paystack_subaccount_code?: string | null
+          paystack_subaccount_id?: number | null
+          paystack_subaccount_active?: boolean | null
+          paystack_subaccount_status?: string | null
+          paystack_subaccount_error?: string | null
+          settlement_schedule?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_salon_payout_destinations_tenant"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       appointment_attachments: {
         Row: {
           appointment_id: string
@@ -3244,6 +3321,11 @@ export type Database = {
       }
     }
     Enums: {
+      payment_setup_status:
+        | "pending_bank_account"
+        | "subaccount_pending"
+        | "ready"
+        | "failed"
       app_role: "owner" | "manager" | "supervisor" | "receptionist" | "staff"
       domain_order_status:
         | "pending_payment"

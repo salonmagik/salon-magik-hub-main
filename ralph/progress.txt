@@ -1,0 +1,17 @@
+
+---
+## 2026-06-19 05:00 - US-001: Database Schema & Enums for Subaccounts
+
+### Implemented
+- Created SQL migration for `payment_setup_status` enum.
+- Added `payment_setup_status`, `payment_setup_error`, and `platform_percentage_charge` to `tenants`.
+- Added Paystack subaccount fields to `salon_payout_destinations`.
+- Patched TypeScript database types in `@salonmagik/supabase-client` manually.
+
+### Files Changed
+- supabase/migrations/20260619000000_paystack_subaccounts.sql
+- packages/supabase-client/src/supabase/types.ts
+
+### Learnings
+- Project requires generating supabase types manually if Docker isn't available, done via patching `types.ts` manually for US-001 to satisfy type checks.
+- Linting fails in backoffice/salon-admin due to out-of-scope code style issues, but builds for my code pass successfully.
