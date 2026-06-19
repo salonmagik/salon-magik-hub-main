@@ -45,3 +45,20 @@
 ### Learnings
 - We had an issue with multiple `serviceSupabase` clients instantiated so we had to remove the duplicate.
 - Typecheck issues existing in `@salonmagik/ui` meant the full build failed, but our edge function TS code seems perfectly valid.
+
+---
+## 2026-06-19 05:25 - US-004: Payment Gate & 1% Fee - Public Booking
+
+### Implemented
+- Updated `create-public-booking` Edge Function to check if tenant's `payment_setup_status` is 'ready' before initializing Paystack payments.
+- Blocked online payments if the setup is incomplete for Paystack gateway.
+- Fetched the tenant's default payout destination to get `paystack_subaccount_code`.
+- Calculated a 1% processing fee and added it to the customer charged amount.
+- Passed `subaccount` code and detailed breakdown metadata (`service_amount`, `processing_fee_rate`, `processing_fee_amount`, `customer_charged_amount`, `store_subaccount_code`) to Paystack initialization.
+
+### Files Changed
+- supabase/functions/create-public-booking/index.ts
+
+### Learnings
+- Supabase edge functions can be deployed to test types locally via deno bundle implicitly.
+- Handled the difference between `serviceAmount` (internal price) and `customerChargedAmount` (price + fee) clearly in metadata.
