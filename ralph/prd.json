@@ -1,0 +1,126 @@
+{
+  "project": "salon-magik",
+  "branchName": "ralph/paystack-subaccounts",
+  "description": "Implement Paystack Subaccounts for store settlement, gate payments behind bank account setup, and apply a 1% customer processing fee.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Database Schema & Enums for Subaccounts",
+      "description": "As a developer, I want to add subaccount fields and payment setup status to the database so that we can track store payment readiness and Paystack subaccount details.",
+      "acceptanceCriteria": [
+        "Create a migration to add a new ENUM type `payment_setup_status` with values: 'pending_bank_account', 'subaccount_pending', 'ready', 'failed'",
+        "Add `payment_setup_status` (default 'pending_bank_account'), `payment_setup_error` (TEXT), and `platform_percentage_charge` (NUMERIC, default 10) to the `tenants` table",
+        "Add `paystack_subaccount_code`, `paystack_subaccount_id` (BIGINT), `paystack_subaccount_active` (BOOLEAN), `paystack_subaccount_status` (TEXT), `paystack_subaccount_error` (TEXT), and `settlement_schedule` (TEXT, default 'manual') to the `salon_payout_destinations` table",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Paystack Helpers for Subaccounts",
+      "description": "As a backend system, I need helper functions to interact with the Paystack Subaccount API.",
+      "acceptanceCriteria": [
+        "Add `createPaystackSubaccount` function to `supabase/functions/_shared/paystack-helpers.ts`",
+        "Function should call POST `https://api.paystack.co/subaccount` with `business_name`, `settlement_bank` (using bank_code), `account_number`, `percentage_charge`, and `settlement_schedule: \"manual\"`",
+        "Add `updatePaystackSubaccount` function for PUT `https://api.paystack.co/subaccount/:id_or_code`",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Update Payout Destination Creation",
+      "description": "As a salon owner, when I add my bank account, a Paystack subaccount should be automatically created so I can receive online payments.",
+      "acceptanceCriteria": [
+        "Update `create-payout-destination` Edge Function to call `createPaystackSubaccount` when a bank destination is created",
+        "Use the tenant's name, the provided bank code and account number, and the tenant's `platform_percentage_charge` for the subaccount creation payload",
+        "If successful, update the payout destination record with `paystack_subaccount_code` and update the tenant's `payment_setup_status` to 'ready'",
+        "If failed, store the error in `paystack_subaccount_error` and set tenant `payment_setup_status` to 'failed'",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Payment Gate & 1% Fee - Public Booking",
+      "description": "As a customer booking an appointment, I should be charged a 1% processing fee, and the payment should be routed to the salon's Paystack subaccount.",
+      "acceptanceCriteria": [
+        "Update `create-public-booking` Edge Function to check if tenant's `payment_setup_status` is 'ready'. If not, return an error blocking online payment.",
+        "Fetch the tenant's default payout destination to retrieve the `paystack_subaccount_code`",
+        "Calculate a 1% processing fee based on the service amount: `fee = round(serviceAmount * 0.01, 2)`",
+        "Set the Paystack initialization amount to `Math.round((serviceAmount + fee) * 100)`",
+        "Include the `subaccount` field in the Paystack initialization payload",
+        "Add metadata: `service_amount`, `processing_fee_rate` (0.01), `processing_fee_amount`, `customer_charged_amount`, and `store_subaccount_code`",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Payment Gate & 1% Fee - Invoices",
+      "description": "As a customer paying an invoice, I should be charged a 1% processing fee and the payment should be routed to the salon's subaccount.",
+      "acceptanceCriteria": [
+        "Update `create-invoice-payment-session` Edge Function to require `payment_setup_status` = 'ready'",
+        "Calculate the 1% processing fee on the invoice total",
+        "Update the Paystack initialization amount to include the fee",
+        "Include `subaccount` code in the payload and add detailed fee metadata (similar to US-004)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Webhook Accounting Adjustments",
+      "description": "As a salon owner, my wallet should be credited based on the service amount minus the platform cut, ignoring the 1% customer fee.",
+      "acceptanceCriteria": [
+        "Update `payment-webhook-processor.ts` to parse `service_amount` from metadata, falling back to the raw amount if missing",
+        "Use `service_amount` to determine if the appointment/invoice is fully paid",
+        "When crediting the salon purse, use `service_amount` and deduct the `platform_percentage_charge` if necessary to record the net store earnings",
+        "Ensure split payment logic (purse + card) only applies the 1% fee to the card portion",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Update Dashboard Setup Checklist",
+      "description": "As a salon owner, I should see a reminder to configure my bank account on the dashboard if I want to accept online payments.",
+      "acceptanceCriteria": [
+        "Update `useDashboardStats` to evaluate the \"Configure payments\" checklist item based on `currentTenant.payment_setup_status === 'ready'` instead of hardcoding `true`",
+        "Update `SalonDashboard.tsx` to show a prominent banner or warning if `payment_setup_status` is not 'ready'",
+        "Verify changes work in browser",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Settings UI for Subaccounts",
+      "description": "As a salon owner, I want to see the status of my payout destination and subaccount, and I shouldn't be allowed to accept online payments if it's not configured.",
+      "acceptanceCriteria": [
+        "Update `PayoutDestinationsManager.tsx` to display if the Paystack subaccount creation failed, including the `paystack_subaccount_error`",
+        "Provide a way to retry creating the subaccount if it failed",
+        "Update `BookingWizard.tsx` (Public Booking) to hide Paystack options or show a warning if the salon is not `ready` to accept payments",
+        "Verify changes work in browser",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
