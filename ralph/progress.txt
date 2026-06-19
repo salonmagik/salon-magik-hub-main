@@ -112,3 +112,27 @@
 
 ### Learnings
 - Added a warning alert on the dashboard with a button linking to settings (`/salon/settings?tab=payments`) for better UX guiding users to configure payments.
+
+---
+## 2026-06-19 06:15 - US-008: Settings UI for Subaccounts
+
+### Implemented
+- Updated `DestinationCard` in `PayoutDestinationsManager.tsx` to display if the Paystack subaccount creation failed, including the `paystack_subaccount_error`.
+- Created a new Edge Function `retry-paystack-subaccount` to provide a way to safely retry creating the subaccount if it failed without requiring the user to delete and recreate the destination entirely.
+- Integrated `retrySubaccount` into `usePayoutDestinations.tsx` hook and mapped it to a new "Retry" button inside the failed `DestinationCard`.
+- Updated `PublicTenant` hook and the Postgres View migration to expose the `payment_setup_status` field on `public_booking_tenants` so that public booking flow is aware of the tenant's gateway status.
+- Updated `BookingWizard.tsx` and `PaymentStep.tsx` to hide Paystack methods, disable the submit button, and show a clear warning if the salon is not `ready` to accept online payments.
+
+### Files Changed
+- supabase/functions/retry-paystack-subaccount/index.ts
+- apps/salon-admin/src/hooks/usePayoutDestinations.tsx
+- apps/salon-admin/src/components/billing/PayoutDestinationsManager.tsx
+- supabase/migrations/20260619000001_update_public_booking_tenants_view.sql
+- apps/public-booking/src/hooks/usePublicSalon.tsx
+- packages/supabase-client/src/supabase/types.ts
+- apps/public-booking/src/pages/components/BookingWizard.tsx
+- apps/public-booking/src/pages/components/PaymentStep.tsx
+
+### Learnings
+- **Security Context on Views:** When dropping a View with `CASCADE` (e.g. `public_booking_tenants`), RLS policies dependent on it (e.g. `locations`) are also dropped! Care must be taken to safely recreate dependent policies in the same migration.
+- **Supabase CLI manual typing:** While manually modifying the auto-generated types in `types.ts`, extra caution must be applied to ensure no structural JSON-like blocks are accidentally broken (which results in `Parsing error` across the monorepo).

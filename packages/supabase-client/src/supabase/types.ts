@@ -3209,6 +3209,8 @@ export type Database = {
     Views: {
       public_booking_tenants: {
         Row: {
+          allow_staff_selection: boolean | null
+          auto_assign_staff: boolean | null
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
           booking_page_bio: string | null
@@ -3220,6 +3222,7 @@ export type Database = {
           currency: string | null
           custom_booking_domain: string | null
           custom_domain_verified: boolean | null
+          default_buffer_minutes: number | null
           default_deposit_percentage: number | null
           deposits_enabled: boolean | null
           id: string | null
@@ -3227,9 +3230,12 @@ export type Database = {
           name: string | null
           online_booking_enabled: boolean | null
           pay_at_salon_enabled: boolean | null
+          payment_setup_status: Database["public"]["Enums"]["payment_setup_status"] | null
+          require_staff_selection: boolean | null
           show_contact_on_booking: boolean | null
           slot_capacity_default: number | null
           slug: string | null
+          theme_key: string | null
           timezone: string | null
         }
         Insert: {

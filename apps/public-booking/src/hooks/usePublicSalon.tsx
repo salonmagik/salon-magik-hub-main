@@ -23,6 +23,7 @@ export type PublicTenant = Pick<
   | "allow_staff_selection"
   | "require_staff_selection"
   | "auto_assign_staff"
+  | "payment_setup_status"
 > & {
   brand_color?: string | null;
   contact_phone?: string | null;

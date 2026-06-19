@@ -119,8 +119,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated DestinationCard to show payment status and added retry subaccount edge function. Updated PaymentStep to block cards if payment_setup_status is not ready. Had to update public_booking_tenants view manually to include payment_setup_status column."
     }
   ]
 }
