@@ -29,3 +29,19 @@
 
 ### Learnings
 - We pass down `currency` to evaluate if Paystack is supported and retrieve the proper environment keys via the existing `getPaystackKeyForCurrency` function.
+
+---
+## 2026-06-19 05:15 - US-003: Update Payout Destination Creation
+
+### Implemented
+- Updated `create-payout-destination` Edge Function to automatically create a Paystack subaccount when a bank destination is added.
+- Used the tenant's name and `platform_percentage_charge` to construct the subaccount creation payload.
+- Stored Paystack subaccount details (`paystack_subaccount_code`, `paystack_subaccount_id`, `paystack_subaccount_active`, etc.) in the `salon_payout_destinations` table.
+- Updated `payment_setup_status` and `payment_setup_error` on the `tenants` table based on the subaccount creation outcome.
+
+### Files Changed
+- supabase/functions/create-payout-destination/index.ts
+
+### Learnings
+- We had an issue with multiple `serviceSupabase` clients instantiated so we had to remove the duplicate.
+- Typecheck issues existing in `@salonmagik/ui` meant the full build failed, but our edge function TS code seems perfectly valid.

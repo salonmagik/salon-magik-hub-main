@@ -43,8 +43,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated create-payout-destination to call createPaystackSubaccount and properly set fields in both payout destinations and tenants. Build passed for supabase-client, though ui package failed for unrelated pre-existing reasons."
     },
     {
       "id": "US-004",
