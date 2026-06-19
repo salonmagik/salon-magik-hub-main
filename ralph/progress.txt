@@ -99,3 +99,16 @@
 ### Learnings
 - Extracted `platform_percentage_charge` from `validateTenant` helper to avoid making duplicate queries when processing webhook.
 - The `amount` field must remain as the total charged amount (with fees) for the `transactions` table inserts, but we correctly separated it from `serviceAmount` which is used for internal accounting and purse crediting.
+---
+## 2026-06-19 - US-007: Update Dashboard Setup Checklist
+
+### Implemented
+- Updated `useDashboardStats` to evaluate the "Configure payments" checklist item dynamically based on `currentTenant.payment_setup_status === 'ready'`.
+- Updated `SalonDashboard.tsx` to conditionally render a prominent payment setup banner warning if `payment_setup_status` is not 'ready'.
+
+### Files Changed
+- apps/salon-admin/src/hooks/useDashboardStats.tsx
+- apps/salon-admin/src/pages/salon/SalonDashboard.tsx
+
+### Learnings
+- Added a warning alert on the dashboard with a button linking to settings (`/salon/settings?tab=payments`) for better UX guiding users to configure payments.

@@ -104,8 +104,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated useDashboardStats and SalonDashboard to show payment configuration warning dynamically. Typecheck passed."
     },
     {
       "id": "US-008",
