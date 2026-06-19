@@ -21,6 +21,8 @@ export interface WebhookEvent {
     invoiceId?: string;
     credits?: number;
     amount?: number;
+    serviceAmount?: number;
+    processingFeeAmount?: number;
     status?: string;
     reference?: string;
     isDeposit?: boolean;
@@ -81,10 +83,10 @@ async function validateTenant(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   context: string
-): Promise<{ name: string | null; currency: string }> {
+): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null }> {
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
-    .select("name, currency")
+    .select("name, currency, platform_percentage_charge")
     .eq("id", tenantId)
     .single();
 
@@ -270,7 +272,9 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+
+      const actualServiceAmount = serviceAmount ?? amount;
 
       // Subscription activation: payment was initiated from the upgrade/trial flow.
       // Activate the tenant immediately — Paystack handles recurring billing from here.
@@ -308,7 +312,7 @@ export async function processWebhook(
             return;
           }
 
-          if (amount) {
+          if (actualServiceAmount) {
             const { data: appointments, error: appointmentsError } = await supabase
               .from("appointments")
               .select("id, tenant_id, customer_id, total_amount, booking_reference")
@@ -332,18 +336,18 @@ export async function processWebhook(
                       const priorAmount = calculateProportionalAmount(
                         Number(prior.total_amount || 0),
                         totalAppointmentAmount,
-                        amount,
+                        actualServiceAmount,
                         appointments.length
                       );
                       return sum + priorAmount;
                     }, 0);
-                  return Number((amount - previousTotal).toFixed(2));
+                  return Number((actualServiceAmount - previousTotal).toFixed(2));
                 }
 
                 return calculateProportionalAmount(
                   Number(entry.total_amount || 0),
                   totalAppointmentAmount,
-                  amount,
+                  actualServiceAmount,
                   appointments.length
                 );
               });
@@ -605,19 +609,24 @@ export async function processWebhook(
                 // Validate salon wallet currency matches tenant currency
                 await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
-                // For split payments, salon receives full amount (card + purse)
+                // For split payments, salon receives full amount (card + purse) based on actual service amount
                 const totalAmountForSalon = splitPurseAmount && splitPurseAmount > 0
-                  ? amount + splitPurseAmount
-                  : amount;
+                  ? actualServiceAmount + splitPurseAmount
+                  : actualServiceAmount;
 
-                console.log(`Crediting salon purse: card=${amount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}`);
+                let finalCreditAmount = totalAmountForSalon;
+                if (tenant.platform_percentage_charge) {
+                   finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
+                }
+
+                console.log(`Crediting salon purse: card=${actualServiceAmount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}, net=${finalCreditAmount}`);
 
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
                   p_entry_type: "salon_purse_credit_booking",
                   p_reference_type: "appointment",
                   p_reference_id: primaryAppointment.id,
-                  p_amount: totalAmountForSalon,
+                  p_amount: finalCreditAmount,
                   p_currency: tenant.currency,
                   p_idempotency_key: `booking_${reference}`,
                   p_gateway_reference: reference,
@@ -763,12 +772,17 @@ export async function processWebhook(
               // Validate salon wallet currency matches tenant currency
               await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
+              let finalCreditAmount = actualServiceAmount;
+              if (invoiceTenant.platform_percentage_charge) {
+                 finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
+              }
+
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: tenantId,
                 p_entry_type: "salon_purse_credit_invoice",
                 p_reference_type: "invoice",
                 p_reference_id: invoiceId,
-                p_amount: amount,
+                p_amount: finalCreditAmount,
                 p_currency: invoiceTenant.currency,
                 p_idempotency_key: `invoice_${reference}`,
                 p_gateway_reference: reference,
@@ -939,7 +953,7 @@ export async function processWebhook(
           p_payment_ref: reference,
           p_tenant_id: tenantId,
           p_status: "paid",
-          p_amount: amount ?? null,
+          p_amount: actualServiceAmount ?? null,
           p_currency: "USD",
           p_paid_at: new Date().toISOString(),
         });
@@ -948,7 +962,8 @@ export async function processWebhook(
 
     // Handle payment failure
     if (isPaymentFailureEvent(event.type)) {
-      const { paymentIntentId, tenantId, reference, amount } = event.data;
+      const { paymentIntentId, tenantId, reference, amount, serviceAmount } = event.data;
+      const actualServiceAmount = serviceAmount ?? amount;
 
       if (paymentIntentId && isValidUUID(paymentIntentId)) {
         await supabase
@@ -965,7 +980,7 @@ export async function processWebhook(
           p_payment_ref: reference ?? null,
           p_tenant_id: tenantId,
           p_status: "failed",
-          p_amount: amount ?? null,
+          p_amount: actualServiceAmount ?? null,
           p_currency: "USD",
           p_paid_at: new Date().toISOString(),
         });

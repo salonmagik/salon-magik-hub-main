@@ -90,8 +90,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Updated payment-webhook-processor.ts and the associated ng/gh webhooks to extract `service_amount` from metadata. Replaced `amount` with `actualServiceAmount` for crediting salon purse and applied `platform_percentage_charge` deduction logic directly before calling `credit_salon_purse` RPC. Split payment logic natively applies cleanly because `service_amount` explicitly represents the card's non-fee portion."
     },
     {
       "id": "US-007",

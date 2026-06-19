@@ -79,3 +79,23 @@
 ### Learnings
 - We need to pass the explicit subset of `tenants` column fields we need in queries like `tenants!inner(...)`.
 - We used `.toFixed(2)` then `parseFloat()` to safely parse the computed fee amount before appending to the final float.
+
+---
+## 2026-06-19 05:45 - US-006: Webhook Accounting Adjustments
+
+### Implemented
+- Updated `payment-webhook-ng` and `payment-webhook-gh` to extract `service_amount` and `processing_fee_amount` from Paystack webhook metadata.
+- Updated `payment-webhook-processor.ts` `WebhookEvent` interface to include `serviceAmount` and `processingFeeAmount`.
+- Updated `processWebhook` to calculate `actualServiceAmount` using `serviceAmount ?? amount`.
+- Replaced `amount` with `actualServiceAmount` when updating appointment/invoice statuses.
+- Deducted `platform_percentage_charge` from the credited amount before calling `credit_salon_purse`.
+- Ensured split payment logic works correctly: the 1% fee applies only to the card portion (handled by frontend, but correctly parsed out here using `service_amount`), and the total salon credit reflects card service amount + purse split amount minus platform cut.
+
+### Files Changed
+- supabase/functions/_shared/payment-webhook-processor.ts
+- supabase/functions/payment-webhook-ng/index.ts
+- supabase/functions/payment-webhook-gh/index.ts
+
+### Learnings
+- Extracted `platform_percentage_charge` from `validateTenant` helper to avoid making duplicate queries when processing webhook.
+- The `amount` field must remain as the total charged amount (with fees) for the `transactions` table inserts, but we correctly separated it from `serviceAmount` which is used for internal accounting and purse crediting.

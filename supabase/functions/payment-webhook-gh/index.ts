@@ -108,6 +108,8 @@ Deno.serve(async (req) => {
           split_purse_amount?: string | number;
           split_customer_id?: string;
           intent?: string;
+          service_amount?: string | number;
+          processing_fee_amount?: string | number;
         };
       };
     };
@@ -133,6 +135,8 @@ Deno.serve(async (req) => {
         splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
         splitCustomerId: metadata?.split_customer_id,
         intent: metadata?.intent,
+        serviceAmount: metadata?.service_amount ? parseFloat(String(metadata.service_amount)) : undefined,
+        processingFeeAmount: metadata?.processing_fee_amount ? parseFloat(String(metadata.processing_fee_amount)) : undefined,
       },
     };
 
