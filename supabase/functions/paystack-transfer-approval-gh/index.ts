@@ -25,35 +25,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log("=".repeat(80));
-    console.log("PAYSTACK TRANSFER APPROVAL REQUEST (GH)");
-    console.log("=".repeat(80));
-    console.log("Timestamp:", requestStartTime);
-    console.log("Method:", req.method);
-    console.log("URL:", req.url);
-
-    // Get raw body for verification and logging
     const rawBody = await req.text();
-
-    console.log("\n--- RAW REQUEST BODY ---");
-    console.log(rawBody);
-
-    // Parse JSON payload
     let body: any;
 
     try {
       body = JSON.parse(rawBody);
     } catch (parseError) {
       console.error("ERROR: Invalid JSON payload");
-      console.error("Parse error:", parseError);
       return new Response(
         JSON.stringify({ status: "rejected", reason: "Invalid JSON payload" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log("\n--- PARSED JSON PAYLOAD ---");
-    console.log(JSON.stringify(body, null, 2));
 
     // Verify event type
     if (body.event !== "transferrequest.approval-required") {
@@ -103,7 +86,6 @@ Deno.serve(async (req) => {
       console.warn("WARNING: No x-forwarded-for header found to verify IP.");
     }
 
-    console.log("\n--- VERIFYING AGAINST DATABASE ---");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -130,8 +112,6 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log("Found withdrawal in DB:", JSON.stringify(withdrawal, null, 2));
 
     // Verify status
     if (withdrawal.status !== "pending") {
@@ -174,8 +154,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log("Database verification: PASSED ✓");
-
     // Optional: Save the transfer code if we haven't already
     if (transferCode) {
       const { error: updateError } = await supabase
@@ -187,22 +165,8 @@ Deno.serve(async (req) => {
         
       if (updateError) {
          console.warn(`WARNING: Failed to update transfer code: ${updateError.message}`);
-      } else {
-         console.log(`Updated withdrawal ${withdrawal.id} with transfer code ${transferCode}`);
       }
     }
-
-    // Log approval decision
-    console.log("\n--- APPROVAL DECISION ---");
-    console.log("Action: APPROVE");
-    console.log("Response Code: 200");
-    console.log("Transfer will proceed with status: pending");
-
-    const responseTime = new Date().toISOString();
-    console.log("\n--- RESPONSE ---");
-    console.log("Response Timestamp:", responseTime);
-    console.log("Processing Time:", `${new Date(responseTime).getTime() - new Date(requestStartTime).getTime()}ms`);
-    console.log("=".repeat(80));
 
     // Return 200 to approve the transfer
     return new Response(
