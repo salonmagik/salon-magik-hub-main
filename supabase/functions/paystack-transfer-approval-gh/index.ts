@@ -1,4 +1,4 @@
-import { verifyPaystackSignature } from "../_shared/payment-webhook-processor.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,12 +15,8 @@ const corsHeaders = {
  * - 400 response: Transfer is rejected (status: rejected)
  * - No response/timeout: Transfer is blocked
  * 
- * Currently, this endpoint logs all transfer requests and approves them by default.
- * 
- * Configure this URL in Paystack Dashboard:
- * Settings → Transfers → URL Approval
+ * This endpoint validates the transfer approval request against `salon_withdrawals`.
  */
-
 Deno.serve(async (req) => {
   const requestStartTime = new Date().toISOString();
 
@@ -36,14 +32,6 @@ Deno.serve(async (req) => {
     console.log("Method:", req.method);
     console.log("URL:", req.url);
 
-    // Log all headers
-    console.log("\n--- REQUEST HEADERS ---");
-    const headers = {};
-    req.headers.forEach((value, key) => {
-      headers[key] = value;
-      console.log(`${key}: ${value}`);
-    });
-
     // Get raw body for verification and logging
     const rawBody = await req.text();
 
@@ -51,16 +39,15 @@ Deno.serve(async (req) => {
     console.log(rawBody);
 
     // Parse JSON payload
-    let body: Record<string, unknown>;
+    let body: any;
 
     try {
       body = JSON.parse(rawBody);
     } catch (parseError) {
       console.error("ERROR: Invalid JSON payload");
       console.error("Parse error:", parseError);
-      console.log("=".repeat(80));
       return new Response(
-        JSON.stringify({ error: "Invalid JSON payload" }),
+        JSON.stringify({ status: "rejected", reason: "Invalid JSON payload" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -68,14 +55,43 @@ Deno.serve(async (req) => {
     console.log("\n--- PARSED JSON PAYLOAD ---");
     console.log(JSON.stringify(body, null, 2));
 
+    // Verify event type
+    if (body.event !== "transferrequest.approval-required") {
+      console.warn(`WARNING: Ignored unhandled event type: ${body.event}`);
+      // Return 200 so Paystack doesn't keep retrying unknown events, but don't process it
+      return new Response(
+        JSON.stringify({ status: "ignored" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Extract details
+    const approvalData = body.data?.details?.body;
+    const transferData = body.data?.transfers?.[0];
+
+    if (!approvalData || !transferData) {
+      console.error("ERROR: Missing expected approval payload structure.");
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Invalid payload structure" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { reference, amount, currency, recipient } = approvalData;
+    const transferCode = transferData.transfer_code;
+
+    if (!reference || !amount || !currency || !recipient) {
+      console.error("ERROR: Missing required fields in approval payload.", { reference, amount, currency, recipient });
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Missing required fields" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Verify event origin by checking IP (Paystack IPs: 52.31.139.75, 52.49.173.169, 52.214.14.220)
-    // Note: This relies on Supabase edge functions 'x-forwarded-for' which may vary.
-    // For a highly secure production system, you would want to check database references here.
     const paystackIPs = ["52.31.139.75", "52.49.173.169", "52.214.14.220"];
     const forwardedFor = req.headers.get("x-forwarded-for");
     
-    // We log it but do not strictly block if the IP isn't parsed perfectly, to prevent 
-    // blocking legitimate approvals if proxy layers change.
     if (forwardedFor) {
       const isPaystackIP = paystackIPs.some(ip => forwardedFor.includes(ip));
       if (isPaystackIP) {
@@ -87,58 +103,93 @@ Deno.serve(async (req) => {
       console.warn("WARNING: No x-forwarded-for header found to verify IP.");
     }
 
-    // Extract and log transfer details
-    const paystackEvent = body as {
-      event?: string;
-      data?: {
-        transfer_code?: string;
-        reference?: string;
-        amount?: number;
-        currency?: string;
-        reason?: string;
-        status?: string;
-        recipient?: {
-          recipient_code?: string;
-          account_number?: string;
-          account_name?: string;
-          bank_code?: string;
-          bank_name?: string;
-        };
-        metadata?: any;
-        created_at?: string;
-        updated_at?: string;
-      };
-    };
+    console.log("\n--- VERIFYING AGAINST DATABASE ---");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log("\n--- TRANSFER DETAILS ---");
-    console.log("Event Type:", paystackEvent.event || "N/A");
-    
-    if (paystackEvent.data) {
-      const data = paystackEvent.data;
-      console.log("Transfer Code:", data.transfer_code || "N/A");
-      console.log("Reference:", data.reference || "N/A");
-      console.log("Amount:", data.amount ? `${data.amount / 100} ${data.currency || ""}` : "N/A");
-      console.log("Currency:", data.currency || "N/A");
-      console.log("Reason:", data.reason || "N/A");
-      console.log("Status:", data.status || "N/A");
+    const { data: withdrawal, error } = await supabase
+      .from("salon_withdrawals")
+      .select(`
+        id,
+        amount,
+        currency,
+        status,
+        paystack_reference,
+        salon_payout_destinations (
+          paystack_recipient_code
+        )
+      `)
+      .eq("paystack_reference", reference)
+      .single();
+
+    if (error || !withdrawal) {
+      console.error(`ERROR: Withdrawal not found for reference ${reference}.`, error);
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Transfer reference not found" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Found withdrawal in DB:", JSON.stringify(withdrawal, null, 2));
+
+    // Verify status
+    if (withdrawal.status !== "pending") {
+      console.error(`ERROR: Withdrawal ${withdrawal.id} is not pending (status: ${withdrawal.status}). Rejecting approval.`);
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Transfer is not in pending state" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify currency
+    if (withdrawal.currency.toUpperCase() !== currency.toUpperCase() || currency.toUpperCase() !== "GHS") {
+      console.error(`ERROR: Currency mismatch. DB: ${withdrawal.currency}, Payload: ${currency}, Expected: GHS`);
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Currency mismatch" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify amount (Payload is in subunits, e.g. pesewas)
+    const expectedAmountKobo = Math.round(Number(withdrawal.amount) * 100);
+    if (expectedAmountKobo !== amount) {
+      console.error(`ERROR: Amount mismatch. DB (in subunits): ${expectedAmountKobo}, Payload: ${amount}`);
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Amount mismatch" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify recipient
+    const expectedRecipient = Array.isArray(withdrawal.salon_payout_destinations) 
+      ? withdrawal.salon_payout_destinations[0]?.paystack_recipient_code 
+      : withdrawal.salon_payout_destinations?.paystack_recipient_code;
       
-      if (data.recipient) {
-        console.log("\n--- RECIPIENT DETAILS ---");
-        console.log("Recipient Code:", data.recipient.recipient_code || "N/A");
-        console.log("Account Number:", data.recipient.account_number || "N/A");
-        console.log("Account Name:", data.recipient.account_name || "N/A");
-        console.log("Bank Code:", data.recipient.bank_code || "N/A");
-        console.log("Bank Name:", data.recipient.bank_name || "N/A");
-      }
+    if (expectedRecipient !== recipient) {
+      console.error(`ERROR: Recipient mismatch. DB: ${expectedRecipient}, Payload: ${recipient}`);
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Recipient mismatch" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-      if (data.metadata) {
-        console.log("\n--- METADATA ---");
-        console.log(JSON.stringify(data.metadata, null, 2));
-      }
+    console.log("Database verification: PASSED ✓");
 
-      console.log("\n--- TIMESTAMPS ---");
-      console.log("Created At:", data.created_at || "N/A");
-      console.log("Updated At:", data.updated_at || "N/A");
+    // Optional: Save the transfer code if we haven't already
+    if (transferCode) {
+      const { error: updateError } = await supabase
+        .from("salon_withdrawals")
+        .update({ paystack_transfer_code: transferCode })
+        .eq("id", withdrawal.id)
+        // Ensure we don't accidentally overwrite if it's already there
+        .is("paystack_transfer_code", null);
+        
+      if (updateError) {
+         console.warn(`WARNING: Failed to update transfer code: ${updateError.message}`);
+      } else {
+         console.log(`Updated withdrawal ${withdrawal.id} with transfer code ${transferCode}`);
+      }
     }
 
     // Log approval decision
@@ -151,16 +202,13 @@ Deno.serve(async (req) => {
     console.log("\n--- RESPONSE ---");
     console.log("Response Timestamp:", responseTime);
     console.log("Processing Time:", `${new Date(responseTime).getTime() - new Date(requestStartTime).getTime()}ms`);
-
     console.log("=".repeat(80));
-    console.log("");
 
     // Return 200 to approve the transfer
     return new Response(
       JSON.stringify({ 
         status: "approved",
-        message: "Transfer approved successfully",
-        timestamp: responseTime,
+        message: "Transfer approved successfully"
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -171,12 +219,11 @@ Deno.serve(async (req) => {
     console.error("Error Message:", error?.message || "No message");
     console.error("Error Stack:", error?.stack || "No stack trace");
     console.log("=".repeat(80));
-    console.log("");
 
     return new Response(
       JSON.stringify({ 
-        error: "Internal server error",
-        message: "An unexpected error occurred processing the approval request",
+        status: "rejected",
+        reason: "Internal server error"
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

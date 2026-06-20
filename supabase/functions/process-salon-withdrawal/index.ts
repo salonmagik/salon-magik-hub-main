@@ -200,15 +200,22 @@ Deno.serve(async (req) => {
     
     console.log(`[Withdrawal] Creating withdrawal record for tenant ${tenantId}`);
     
+    // We must generate the reference here so we can save it to the DB BEFORE we call Paystack.
+    // Paystack's approval URL webhook will fire during the transfer call, so it needs to find this reference.
+    const withdrawalId = crypto.randomUUID();
+    const transferReference = `withdrawal_${withdrawalId}_${Date.now()}`;
+
     const { data: withdrawal, error: withdrawalInsertError } = await serviceSupabase
       .from("salon_withdrawals")
       .insert({
+        id: withdrawalId,
         tenant_id: tenantId,
         salon_wallet_id: wallet.id,
         payout_destination_id: payoutDestinationId,
         currency: wallet.currency,
         amount,
         status: "pending",
+        paystack_reference: transferReference, // Save it early for the approval webhook
       })
       .select()
       .single();
@@ -221,7 +228,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`[Withdrawal] Created withdrawal record: ${withdrawal.id}`);
+    console.log(`[Withdrawal] Created withdrawal record: ${withdrawal.id} with reference: ${transferReference}`);
 
     // =====================================================
     // STEP 4: CALL PAYSTACK API FIRST (BEFORE DEBITING WALLET)
@@ -229,7 +236,6 @@ Deno.serve(async (req) => {
     
     console.log(`[Withdrawal] Initiating Paystack transfer for withdrawal ${withdrawal.id}`);
     
-    const transferReference = `withdrawal_${withdrawal.id}_${Date.now()}`;
     const amountInKobo = Math.round(amount * 100); // Convert to kobo/pesewas
 
     let paystackResponse;
@@ -281,7 +287,6 @@ Deno.serve(async (req) => {
         .update({
           status: "failed",
           failure_reason: paystackData.message || "Transfer initiation failed",
-          paystack_reference: transferReference,
         })
         .eq("id", withdrawal.id);
 
@@ -309,7 +314,6 @@ Deno.serve(async (req) => {
       .update({
         status: "pending",
         paystack_transfer_code: paystackData.data.transfer_code,
-        paystack_reference: transferReference,
       })
       .eq("id", withdrawal.id);
 
