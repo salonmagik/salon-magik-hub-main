@@ -67,6 +67,61 @@ function isPaymentFailureEvent(eventType: string): boolean {
     || eventType === "charge.failed";
 }
 
+function isTransferEvent(eventType: string): boolean {
+  return eventType === "transfer.success"
+    || eventType === "transfer.failed"
+    || eventType === "transfer.reversed";
+}
+
+async function debitWalletWithRetry(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  withdrawalId: string,
+  amount: number,
+  currency: string,
+  maxRetries = 3
+): Promise<{ success: boolean; ledgerEntryId?: string; error?: string }> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    // Use unique idempotency key per withdrawal (not per attempt)
+    // This ensures that if first attempt succeeds but we don't get response, 
+    // subsequent attempts will return the same ledger entry ID
+    const idempotencyKey = `webhook_debit_${withdrawalId}`;
+    
+    console.log(`[Wallet Debit] Attempt ${attempt}/${maxRetries} for withdrawal ${withdrawalId}`);
+    
+    const { data: ledgerEntryId, error } = await supabase.rpc(
+      "debit_salon_purse_for_withdrawal",
+      {
+        p_tenant_id: tenantId,
+        p_withdrawal_id: withdrawalId,
+        p_amount: amount,
+        p_currency: currency,
+        p_idempotency_key: idempotencyKey,
+      }
+    );
+
+    if (!error) {
+      console.log(`[Wallet Debit] Success on attempt ${attempt}. Ledger entry: ${ledgerEntryId}`);
+      return { success: true, ledgerEntryId };
+    }
+
+    console.error(`[Wallet Debit] Attempt ${attempt} failed:`, error);
+
+    // If this is not the last attempt, wait before retrying (exponential backoff)
+    if (attempt < maxRetries) {
+      const delayMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+      console.log(`[Wallet Debit] Waiting ${delayMs}ms before retry...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  return { 
+    success: false, 
+    error: `Failed to debit wallet after ${maxRetries} attempts` 
+  };
+}
+
+
 function calculateProportionalAmount(
   appointmentAmount: number,
   totalAmount: number,
@@ -984,6 +1039,102 @@ export async function processWebhook(
           p_currency: "USD",
           p_paid_at: new Date().toISOString(),
         });
+      }
+    }
+
+    // Handle transfer events (for salon withdrawals)
+    if (isTransferEvent(event.type)) {
+      const { reference } = event.data;
+
+      if (!reference) {
+        console.error("Transfer event missing reference:", event.type);
+        return;
+      }
+
+      // Extract withdrawal ID from reference format: withdrawal_<uuid>_<timestamp>
+      const withdrawalIdMatch = reference.match(/^withdrawal_([a-f0-9-]+)_/);
+      if (!withdrawalIdMatch) {
+        console.log("Transfer event not for withdrawal (invalid reference format):", reference);
+        return;
+      }
+
+      const withdrawalId = withdrawalIdMatch[1];
+      console.log(`Processing ${event.type} for withdrawal ${withdrawalId}`);
+
+      if (event.type === "transfer.success") {
+        // Fetch withdrawal record to get tenant_id, amount, and currency
+        const { data: withdrawal, error: fetchError } = await supabase
+          .from("salon_withdrawals")
+          .select("tenant_id, amount, currency, status")
+          .eq("id", withdrawalId)
+          .single();
+
+        if (fetchError || !withdrawal) {
+          console.error("Failed to fetch withdrawal record:", fetchError);
+          return;
+        }
+
+        // If already completed, this is a duplicate webhook - skip processing
+        if (withdrawal.status === "completed") {
+          console.log("Withdrawal already completed, skipping:", withdrawalId);
+          return;
+        }
+
+        // Debit the wallet with retry logic
+        console.log(`[Transfer Success] Debiting wallet for withdrawal ${withdrawalId}`);
+        const debitResult = await debitWalletWithRetry(
+          supabase,
+          withdrawal.tenant_id,
+          withdrawalId,
+          withdrawal.amount,
+          withdrawal.currency
+        );
+
+        if (!debitResult.success) {
+          // Wallet debit failed after retries - mark as failed
+          console.error(`[CRITICAL] Failed to debit wallet for successful transfer ${withdrawalId}`);
+          
+          const { error: updateError } = await supabase
+            .from("salon_withdrawals")
+            .update({ 
+              status: "failed",
+              failure_reason: `CRITICAL: Transfer successful but wallet debit failed after retries. Error: ${debitResult.error}. Requires manual reconciliation.`
+            })
+            .eq("id", withdrawalId);
+
+          if (updateError) {
+            console.error("Failed to update withdrawal status after debit failure:", updateError);
+          }
+          return;
+        }
+
+        // Wallet debited successfully - mark withdrawal as completed
+        const { error: updateError } = await supabase
+          .from("salon_withdrawals")
+          .update({ status: "completed" })
+          .eq("id", withdrawalId);
+
+        if (updateError) {
+          console.error("Failed to update withdrawal status to completed:", updateError);
+        } else {
+          console.log(`[Transfer Success] Withdrawal ${withdrawalId} completed successfully`);
+        }
+      } else if (event.type === "transfer.failed" || event.type === "transfer.reversed") {
+        // Transfer failed or reversed - no wallet reversal needed since wallet was never debited
+        const failureReason = event.data.status || `Transfer ${event.type === "transfer.failed" ? "failed" : "reversed"}`;
+        
+        console.log(`[Transfer ${event.type}] Marking withdrawal ${withdrawalId} as failed (no wallet reversal needed)`);
+
+        const { error: updateError } = await supabase
+          .from("salon_withdrawals")
+          .update({ status: "failed", failure_reason: failureReason })
+          .eq("id", withdrawalId);
+
+        if (updateError) {
+          console.error("Failed to update withdrawal status:", updateError);
+        } else {
+          console.log(`Withdrawal ${withdrawalId} marked as failed:`, failureReason);
+        }
       }
     }
 

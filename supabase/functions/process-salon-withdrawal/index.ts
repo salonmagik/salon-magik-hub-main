@@ -299,60 +299,15 @@ Deno.serve(async (req) => {
     console.log(`[Withdrawal] Paystack transfer initiated successfully: ${paystackData.data.transfer_code}`);
 
     // =====================================================
-    // STEP 5: DEBIT WALLET (ONLY AFTER PAYSTACK SUCCESS)
+    // STEP 5: UPDATE WITHDRAWAL STATUS TO PENDING
     // =====================================================
-    
-    console.log(`[Withdrawal] Debiting salon purse for withdrawal ${withdrawal.id}`);
-    
-    const idempotencyKey = `withdrawal_${withdrawal.id}_${Date.now()}`;
-    const { data: ledgerEntryId, error: debitError } = await serviceSupabase.rpc(
-      "debit_salon_purse_for_withdrawal",
-      {
-        p_tenant_id: tenantId,
-        p_withdrawal_id: withdrawal.id,
-        p_amount: amount,
-        p_currency: wallet.currency,
-        p_idempotency_key: idempotencyKey,
-      }
-    );
-
-    if (debitError) {
-      console.error("ERROR: Wallet debit failed after Paystack success!", debitError);
-      console.error("CRITICAL: Paystack transfer initiated but wallet not debited!");
-      console.error(`Withdrawal ID: ${withdrawal.id}, Transfer Code: ${paystackData.data.transfer_code}`);
-      
-      // This is a critical error - Paystack has initiated the transfer but we can't debit the wallet
-      // Mark withdrawal as 'failed' but include transfer code for manual reconciliation
-      await serviceSupabase
-        .from("salon_withdrawals")
-        .update({
-          status: "failed",
-          failure_reason: `CRITICAL: Wallet debit failed after Paystack success. Transfer may need manual reversal. Error: ${debitError.message}`,
-          paystack_transfer_code: paystackData.data.transfer_code,
-          paystack_reference: transferReference,
-        })
-        .eq("id", withdrawal.id);
-
-      return new Response(
-        JSON.stringify({ 
-          error: "A critical error occurred during withdrawal processing. Our team has been notified and will resolve this manually.",
-          withdrawalId: withdrawal.id,
-          supportMessage: "Please contact support with this withdrawal ID for assistance.",
-        }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`[Withdrawal] Wallet debited successfully. Ledger entry: ${ledgerEntryId}`);
-
-    // =====================================================
-    // STEP 6: UPDATE WITHDRAWAL WITH SUCCESS STATUS
-    // =====================================================
+    // NOTE: Wallet will be debited when Paystack webhook confirms transfer success
+    // This prevents debiting the wallet if the transfer fails or is reversed
     
     const { error: updateError } = await serviceSupabase
       .from("salon_withdrawals")
       .update({
-        status: "processing",
+        status: "pending",
         paystack_transfer_code: paystackData.data.transfer_code,
         paystack_reference: transferReference,
       })
@@ -360,10 +315,10 @@ Deno.serve(async (req) => {
 
     if (updateError) {
       console.error("Error updating withdrawal status (non-critical):", updateError);
-      // Continue anyway - withdrawal is successful, this is just a status update
+      // Continue anyway - withdrawal is initiated, this is just a status update
     }
 
-    console.log(`[Withdrawal] Withdrawal ${withdrawal.id} completed successfully`);
+    console.log(`[Withdrawal] Withdrawal ${withdrawal.id} initiated successfully, awaiting webhook confirmation`);
 
     // =====================================================
     // RETURN SUCCESS RESPONSE
@@ -376,13 +331,13 @@ Deno.serve(async (req) => {
           id: withdrawal.id,
           amount,
           currency: wallet.currency,
-          status: "processing",
+          status: "pending",
           transferCode: paystackData.data.transfer_code,
           reference: transferReference,
           requestedAt: withdrawal.requested_at,
         },
         transfer: paystackData.data,
-        message: "Withdrawal initiated successfully. Funds will be transferred to your account within 1-3 business days.",
+        message: "Withdrawal initiated successfully. Your wallet will be debited once the transfer is confirmed. Funds will be transferred to your account within 1-3 business days.",
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

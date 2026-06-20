@@ -111,6 +111,13 @@ Deno.serve(async (req) => {
           service_amount?: string | number;
           processing_fee_amount?: string | number;
         };
+        // Transfer-specific fields
+        transfer_code?: string;
+        recipient?: {
+          recipient_code?: string;
+          account_number?: string;
+          bank_code?: string;
+        };
       };
     };
 
