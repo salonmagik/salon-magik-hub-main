@@ -1036,6 +1036,7 @@ export function BookingWizard({
                 customerEmail={bookerInfo.email}
                 tenantId={salon.id}
                 onPaymentModeChange={handlePaymentModeChange}
+                isPaymentReady={salon.payment_setup_status === "ready"}
               />
             )}
 

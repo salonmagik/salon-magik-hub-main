@@ -96,6 +96,7 @@ serve(async (req) => {
 
     // Look up the Paystack plan code for this plan + currency combination
     let paystackPlanCode: string | null = null;
+    let localPlanAmount: number = 0; // the amount to be paid stored in our records
     if (tenant.plan) {
       const { data: planRow } = await supabase
         .from("plans")
@@ -106,7 +107,7 @@ serve(async (req) => {
       if (planRow?.id) {
         const { data: pricingRow } = await supabase
           .from("plan_pricing")
-          .select("paystack_plan_code_monthly, paystack_plan_code_annual")
+          .select("paystack_plan_code_monthly, paystack_plan_code_annual, annual_price, monthly_price")
           .eq("plan_id", planRow.id)
           .eq("currency", currency)
           .is("valid_until", null)
@@ -114,6 +115,9 @@ serve(async (req) => {
         paystackPlanCode = billingCycle === "annual"
           ? (pricingRow?.paystack_plan_code_annual ?? null)
           : (pricingRow?.paystack_plan_code_monthly ?? null);
+        localPlanAmount = billingCycle === "annual"
+          ? (pricingRow?.annual_price ?? 0)
+          : (pricingRow?.monthly_price ?? 0);
       }
     }
 
@@ -131,9 +135,11 @@ serve(async (req) => {
       },
     };
 
-    if (paystackPlanCode) {
+    if (paystackPlanCode && localPlanAmount > 0) {
       // Subscription: amount comes from the plan definition, not the request
       paystackBody.plan = paystackPlanCode;
+      paystackBody.amount = localPlanAmount * 100; // paystack expects amount in the initialization request even if the plan code is provided, but it will be ignored and the plan's amount will be used instead. Amount is in kobo/pesewas.
+      paystackBody.currency = currency;
     } else {
       // No plan code configured yet — fall back to a small authorization charge.
       // Amount in lowest unit (kobo / pesewas): 100 = ₦1 / GH₵1.

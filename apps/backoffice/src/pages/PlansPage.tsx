@@ -443,8 +443,7 @@ export default function PlansPage() {
   const { data: marketCountries } = useQuery({
     queryKey: ["backoffice-market-countries-compact"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from as any)
-        ("market_countries")
+      const { data, error } = await (supabase.from as any)("market_countries")
         .select("country_code,country_name,is_selectable")
         .order("country_name", { ascending: true });
       if (error) throw error;
@@ -455,8 +454,7 @@ export default function PlansPage() {
   const { data: marketCurrencies } = useQuery({
     queryKey: ["backoffice-market-country-currencies-compact"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from as any)
-        ("market_country_currency")
+      const { data, error } = await (supabase.from as any)("market_country_currency")
         .select("country_code,currency_code,is_default,is_enabled");
       if (error) throw error;
       return (data || []) as MarketCountryCurrency[];
@@ -466,8 +464,7 @@ export default function PlansPage() {
   const { data: seatPricingRows } = useQuery({
     queryKey: ["backoffice-seat-addon-pricing"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from as any)
-        ("staff_addon_pricing")
+      const { data, error } = await (supabase.from as any)("staff_addon_pricing")
         .select("id,country_code,currency,unit_price_per_extra_seat,status,notes,effective_from")
         .order("country_code", { ascending: true })
         .order("effective_from", { ascending: false });
@@ -479,8 +476,7 @@ export default function PlansPage() {
   const { data: themeCatalog } = useQuery({
     queryKey: ["backoffice-theme-catalog", "ecommerce"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from as any)
-        ("theme_catalog")
+      const { data, error } = await (supabase.from as any)("theme_catalog")
         .select("theme_key,name,description,is_active")
         .eq("theme_key", "ecommerce")
         .maybeSingle();
@@ -492,8 +488,7 @@ export default function PlansPage() {
   const { data: themePricingRows } = useQuery({
     queryKey: ["backoffice-theme-addon-pricing", "ecommerce"],
     queryFn: async () => {
-      const { data, error } = await (supabase.from as any)
-        ("theme_addon_pricing")
+      const { data, error } = await (supabase.from as any)("theme_addon_pricing")
         .select("id,theme_key,country_code,currency,billing_interval,unit_price,status,notes,effective_from")
         .eq("theme_key", "ecommerce")
         .order("country_code", { ascending: true })
@@ -1411,8 +1406,7 @@ export default function PlansPage() {
         };
 
         if (draft.rowId) {
-          const { error } = await (supabase.from as any)
-            ("staff_addon_pricing")
+          const { error } = await (supabase.from as any)("staff_addon_pricing")
             .update(payload)
             .eq("id", draft.rowId);
           if (error) throw error;
@@ -1467,8 +1461,7 @@ export default function PlansPage() {
         };
 
         if (draft.rowId) {
-          const { error } = await (supabase.from as any)
-            ("theme_addon_pricing")
+          const { error } = await (supabase.from as any)("theme_addon_pricing")
             .update(payload)
             .eq("id", draft.rowId);
           if (error) throw error;
@@ -2196,10 +2189,14 @@ export default function PlansPage() {
                                           size="icon"
                                           className="h-8 w-8 shrink-0"
                                           title={isRevealed ? "Hide" : "Reveal"}
-                                          onClick={() =>
+                                            onClick={() =>
                                             setPaystackCodeRevealedRows((prev) => {
                                               const n = new Set(prev);
-                                              n.has(row.id) ? n.delete(row.id) : n.add(row.id);
+                                              if (n.has(row.id)) {
+                                                n.delete(row.id);
+                                              } else {
+                                                n.add(row.id);
+                                              }
                                               return n;
                                             })
                                           }

@@ -144,3 +144,9 @@ verify_jwt = false
 
 [functions.paystack-transfer-webhook-ng]
 verify_jwt = false
+
+[functions.paystack-transfer-approval-gh]
+verify_jwt = false
+
+[functions.paystack-transfer-approval-ng]
+verify_jwt = false

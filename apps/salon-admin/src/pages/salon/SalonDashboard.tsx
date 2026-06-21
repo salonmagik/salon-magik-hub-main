@@ -187,6 +187,34 @@ export default function SalonDashboard() {
           </Card>
         )}
 
+        {currentTenant?.payment_setup_status !== "ready" && (
+          <Card className="border-destructive bg-destructive/10">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="w-5 h-5 text-destructive" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-destructive">Payment Setup Incomplete</h3>
+                    <p className="text-sm text-destructive/80 mt-1">
+                      You must configure your bank account to receive online payments. Online bookings with deposits are currently disabled.
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="border-destructive/30 hover:bg-destructive/20 text-destructive" 
+                  onClick={() => navigate("/salon/settings?tab=payments")}
+                >
+                  Configure Payments
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {isLoading

@@ -14,7 +14,7 @@ import { cn } from "@shared/utils";
 
 export function PayoutDestinationsManager() {
   const { currentTenant } = useAuth();
-  const { destinations, isLoading, createDestination, deleteDestination } = usePayoutDestinations(currentTenant?.id);
+  const { destinations, isLoading, createDestination, deleteDestination, retrySubaccount } = usePayoutDestinations(currentTenant?.id);
 
   const [showForm, setShowForm] = useState(false);
   const [country, setCountry] = useState<"NG" | "GH">("NG");
@@ -152,6 +152,7 @@ export function PayoutDestinationsManager() {
                       key={dest.id}
                       destination={dest}
                       onDelete={handleDeleteDestination}
+                      onRetry={retrySubaccount}
                     />
                   ))}
                 </div>
@@ -360,53 +361,91 @@ export function PayoutDestinationsManager() {
 interface DestinationCardProps {
   destination: PayoutDestination;
   onDelete: (id: string) => void;
+  onRetry: (id: string) => Promise<boolean>;
 }
 
-function DestinationCard({ destination, onDelete }: DestinationCardProps) {
+function DestinationCard({ destination, onDelete, onRetry }: DestinationCardProps) {
+  const [isRetrying, setIsRetrying] = useState(false);
   const isBank = destination.destination_type === "bank";
+  const hasError = !!destination.paystack_subaccount_error;
+  const isReady = !!destination.paystack_subaccount_code;
 
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5">
-              {isBank ? (
-                <Building className="h-5 w-5 text-muted-foreground" />
-              ) : (
-                <Smartphone className="h-5 w-5 text-muted-foreground" />
-              )}
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <p className="font-medium">
-                  {isBank ? destination.bank_name : destination.momo_provider}
-                </p>
-                {destination.is_default && (
-                  <Badge variant="secondary" className="text-xs">
-                    Default
-                  </Badge>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5">
+                {isBank ? (
+                  <Building className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <Smartphone className="h-5 w-5 text-muted-foreground" />
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">
-                {destination.account_name}
-              </p>
-              <p className="text-sm font-mono text-muted-foreground">
-                {isBank ? destination.account_number : destination.momo_number}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {destination.country} · {destination.currency}
-              </p>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">
+                    {isBank ? destination.bank_name : destination.momo_provider}
+                  </p>
+                  {destination.is_default && (
+                    <Badge variant="secondary" className="text-xs">
+                      Default
+                    </Badge>
+                  )}
+                  {isBank && isReady && (
+                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 hover:bg-green-50">
+                      Payment Ready
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {destination.account_name}
+                </p>
+                <p className="text-sm font-mono text-muted-foreground">
+                  {isBank ? destination.account_number : destination.momo_number}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {destination.country} · {destination.currency}
+                </p>
+              </div>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onDelete(destination.id)}
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onDelete(destination.id)}
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+
+          {/* Subaccount Error Status */}
+          {isBank && hasError && (
+            <div className="mt-2 flex items-center justify-between rounded-md bg-destructive/10 p-3">
+              <div className="flex items-start gap-2">
+                <XCircle className="h-4 w-4 text-destructive mt-0.5" />
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium text-destructive">Online Payments Unavailable</p>
+                  <p className="text-destructive/80 text-xs">{destination.paystack_subaccount_error}</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-8 text-xs border-destructive/20 hover:bg-destructive/20"
+                onClick={async () => {
+                  setIsRetrying(true);
+                  await onRetry(destination.id);
+                  setIsRetrying(false);
+                }}
+                disabled={isRetrying}
+              >
+                {isRetrying ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Retry
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

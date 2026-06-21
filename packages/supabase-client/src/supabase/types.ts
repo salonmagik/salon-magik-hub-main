@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      salon_payout_destinations: {
+        Row: {
+          id: string
+          tenant_id: string
+          destination_type: "bank" | "mobile_money"
+          country: string
+          currency: string
+          bank_code: string | null
+          bank_name: string | null
+          account_number: string | null
+          account_name: string | null
+          momo_provider: string | null
+          momo_number: string | null
+          paystack_recipient_code: string | null
+          is_default: boolean | null
+          created_at: string | null
+          paystack_subaccount_code: string | null
+          paystack_subaccount_id: number | null
+          paystack_subaccount_active: boolean | null
+          paystack_subaccount_status: string | null
+          paystack_subaccount_error: string | null
+          settlement_schedule: string
+        }
+        Insert: {
+          id?: string
+          tenant_id: string
+          destination_type: "bank" | "mobile_money"
+          country: string
+          currency: string
+          bank_code?: string | null
+          bank_name?: string | null
+          account_number?: string | null
+          account_name?: string | null
+          momo_provider?: string | null
+          momo_number?: string | null
+          paystack_recipient_code?: string | null
+          is_default?: boolean | null
+          created_at?: string | null
+          paystack_subaccount_code?: string | null
+          paystack_subaccount_id?: number | null
+          paystack_subaccount_active?: boolean | null
+          paystack_subaccount_status?: string | null
+          paystack_subaccount_error?: string | null
+          settlement_schedule?: string
+        }
+        Update: {
+          id?: string
+          tenant_id?: string
+          destination_type?: "bank" | "mobile_money"
+          country?: string
+          currency?: string
+          bank_code?: string | null
+          bank_name?: string | null
+          account_number?: string | null
+          account_name?: string | null
+          momo_provider?: string | null
+          momo_number?: string | null
+          paystack_recipient_code?: string | null
+          is_default?: boolean | null
+          created_at?: string | null
+          paystack_subaccount_code?: string | null
+          paystack_subaccount_id?: number | null
+          paystack_subaccount_active?: boolean | null
+          paystack_subaccount_status?: string | null
+          paystack_subaccount_error?: string | null
+          settlement_schedule?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_salon_payout_destinations_tenant"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       appointment_attachments: {
         Row: {
           appointment_id: string
@@ -3132,6 +3209,8 @@ export type Database = {
     Views: {
       public_booking_tenants: {
         Row: {
+          allow_staff_selection: boolean | null
+          auto_assign_staff: boolean | null
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
           booking_page_bio: string | null
@@ -3143,6 +3222,7 @@ export type Database = {
           currency: string | null
           custom_booking_domain: string | null
           custom_domain_verified: boolean | null
+          default_buffer_minutes: number | null
           default_deposit_percentage: number | null
           deposits_enabled: boolean | null
           id: string | null
@@ -3150,9 +3230,12 @@ export type Database = {
           name: string | null
           online_booking_enabled: boolean | null
           pay_at_salon_enabled: boolean | null
+          payment_setup_status: Database["public"]["Enums"]["payment_setup_status"] | null
+          require_staff_selection: boolean | null
           show_contact_on_booking: boolean | null
           slot_capacity_default: number | null
           slug: string | null
+          theme_key: string | null
           timezone: string | null
         }
         Insert: {
@@ -3244,6 +3327,11 @@ export type Database = {
       }
     }
     Enums: {
+      payment_setup_status:
+        | "pending_bank_account"
+        | "subaccount_pending"
+        | "ready"
+        | "failed"
       app_role: "owner" | "manager" | "supervisor" | "receptionist" | "staff"
       domain_order_status:
         | "pending_payment"

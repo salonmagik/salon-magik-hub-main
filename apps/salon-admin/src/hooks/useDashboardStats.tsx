@@ -295,7 +295,7 @@ export function useDashboardStats() {
         {
           id: "payments",
           label: "Configure payments",
-          completed: true, // Platform managed, always complete
+          completed: currentTenant.payment_setup_status === "ready",
           href: "/salon/settings?tab=payments",
         },
         {

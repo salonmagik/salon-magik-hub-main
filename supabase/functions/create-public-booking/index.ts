@@ -208,7 +208,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff")
+      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff, payment_setup_status")
       .eq("id", tenantId)
       .eq("online_booking_enabled", true)
       .single();
@@ -650,6 +650,35 @@ serve(async (req) => {
         );
       }
 
+      if (usePaystack && tenant.payment_setup_status !== 'ready') {
+        return new Response(
+          JSON.stringify({ 
+            error: "The salon is not ready to accept online payments at this time. Please contact them or try again later." 
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let storeSubaccountCode: string | null = null;
+      let customerChargedAmount = paymentAmount;
+      let processingFeeAmount = 0;
+      const processingFeeRate = 0.01;
+
+      if (usePaystack) {
+        const { data: payoutDest } = await supabase
+          .from("salon_payout_destinations")
+          .select("paystack_subaccount_code")
+          .eq("tenant_id", tenantId)
+          .eq("is_default", true)
+          .single();
+
+        if (payoutDest?.paystack_subaccount_code) {
+          storeSubaccountCode = payoutDest.paystack_subaccount_code;
+          processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
+          customerChargedAmount = paymentAmount + processingFeeAmount;
+        }
+      }
+
       if (!usePaystack && !stripeSecretKey) {
         console.error("Stripe key not configured but Stripe was selected");
         return new Response(
@@ -697,7 +726,7 @@ serve(async (req) => {
 
       if (usePaystack && paystackSecretKey) {
         // Create Paystack transaction
-        const amountInMinorUnits = Math.round(paymentAmount * 100);
+        const amountInMinorUnits = Math.round(customerChargedAmount * 100);
         
         console.log("Creating Paystack transaction with split payment metadata:", {
           splitPurseAmount,
@@ -705,32 +734,43 @@ serve(async (req) => {
           hasMetadata: !!(splitPurseAmount && splitCustomerId)
         });
         
+        const paystackPayload: any = {
+          email: customer.email,
+          amount: amountInMinorUnits,
+          currency: effectiveCurrency.toUpperCase(),
+          reference: sessionReference,
+          callback_url: paymentSuccessUrl,
+          metadata: {
+            appointment_id: primaryAppointmentId,
+            appointment_ids: createdAppointmentIds,
+            payment_intent_id: paymentIntent?.id,
+            tenant_id: tenantId,
+            is_deposit: paymentIsDeposit,
+            customer_name: `${customer.firstName} ${customer.lastName}`,
+            intent_type: "appointment_payment",
+            ...(splitPurseAmount && splitCustomerId ? {
+              split_purse_amount: splitPurseAmount.toString(),
+              split_customer_id: splitCustomerId,
+            } : {}),
+            service_amount: paymentAmount,
+            processing_fee_rate: processingFeeRate,
+            processing_fee_amount: processingFeeAmount,
+            customer_charged_amount: customerChargedAmount,
+            store_subaccount_code: storeSubaccountCode || "",
+          },
+        };
+
+        if (storeSubaccountCode) {
+          paystackPayload.subaccount = storeSubaccountCode;
+        }
+
         const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${paystackSecretKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            email: customer.email,
-            amount: amountInMinorUnits,
-            currency: effectiveCurrency.toUpperCase(),
-            reference: sessionReference,
-            callback_url: paymentSuccessUrl,
-            metadata: {
-              appointment_id: primaryAppointmentId,
-              appointment_ids: createdAppointmentIds,
-              payment_intent_id: paymentIntent?.id,
-              tenant_id: tenantId,
-              is_deposit: paymentIsDeposit,
-              customer_name: `${customer.firstName} ${customer.lastName}`,
-              intent_type: "appointment_payment",
-              ...(splitPurseAmount && splitCustomerId ? {
-                split_purse_amount: splitPurseAmount.toString(),
-                split_customer_id: splitCustomerId,
-              } : {}),
-            },
-          }),
+          body: JSON.stringify(paystackPayload),
         });
 
         const paystackData = await paystackResponse.json();
