@@ -175,9 +175,17 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Update password using Admin API
+    // Update password using Admin API. Also clear requires_password_change /
+    // requires_password_reset so a staff member who reaches us via "Forgot password"
+    // (instead of the invitation's temp-password flow) doesn't get forced through
+    // a redundant "change your password" prompt right after this.
     const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
       password: password,
+      user_metadata: {
+        ...user.user_metadata,
+        requires_password_change: false,
+        requires_password_reset: false,
+      },
     });
 
     if (updateError) {
@@ -193,6 +201,25 @@ const handler = async (req: Request): Promise<Response> => {
       .from("password_reset_tokens")
       .update({ used_at: new Date().toISOString() })
       .eq("id", tokenData.id);
+
+    // If this email belongs to a pending staff invitation, resetting the password
+    // here means they've effectively accepted it — without this, "Forgot password"
+    // would let them log in fine while the invitation stayed "Pending" forever.
+    const { error: invitationError } = await supabase
+      .from("staff_invitations")
+      .update({
+        status: "accepted",
+        accepted_at: new Date().toISOString(),
+        password_changed_at: new Date().toISOString(),
+        temp_password_used: true,
+      })
+      .eq("user_id", user.id)
+      .eq("status", "pending");
+
+    if (invitationError) {
+      console.error("Error updating invitation after password reset:", invitationError);
+      // Non-critical, continue
+    }
 
     // Send confirmation email
     try {
