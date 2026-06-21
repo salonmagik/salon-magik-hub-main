@@ -226,6 +226,7 @@ const handler = async (req: Request): Promise<Response> => {
     const templateValues = {
       first_name: firstName,
       verification_link: verificationLink,
+      verification_link_button: createButton("Verify email", verificationLink),
     };
     const subject = renderPlatformTemplate(
       platformTemplate?.is_active === false ? defaultSubject : platformTemplate?.subject || defaultSubject,

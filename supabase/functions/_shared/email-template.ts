@@ -1,17 +1,24 @@
 // Shared email template utilities for Salon Magik
-// Design System: Primary Blue #2563EB, Font: Questrial
-
+// Design System: Primary Blue #2563EB
+//
+// Font: web fonts loaded via @import/@font-face are unreliable across email
+// clients — Gmail's webmail client in particular ignores the @import this file
+// used to rely on, silently falling back to a generic sans-serif. Use a system
+// font stack instead: it renders natively (crisp, no loading delay/flash) and
+// looks intentional on every platform rather than "default browser font."
 export const EMAIL_STYLES = {
   primaryColor: "#2563EB",
   primaryDark: "#1D4ED8",
-  textColor: "#1f2937",
+  primaryLight: "#EFF4FF",
+  textColor: "#111827",
   textMuted: "#4b5563",
   textLight: "#6b7280",
   textLighter: "#9ca3af",
   backgroundColor: "#ffffff",
-  surfaceColor: "#f5f7fa",
+  surfaceColor: "#f1f4f9",
   borderColor: "#e5e7eb",
-  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+  fontFamily:
+    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
 };
 
 // Salon Magik logo URL (hosted publicly)
@@ -103,27 +110,27 @@ export function wrapEmailTemplate(
   if (mode === "salon" && salonLogoUrl) {
     // Salon has a logo - show it with "Powered by" text
     headerSection = `
-      <div style="text-align: center; margin-bottom: 32px;">
-        <img src="${salonLogoUrl}" alt="${salonName || 'Salon'} Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;" />
-        ${salonName ? `<p style="color: ${EMAIL_STYLES.textMuted}; font-size: 14px; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">Powered by Salon Magik</p>` : ''}
+      <div style="text-align: center; margin-bottom: 8px;">
+        <img src="${salonLogoUrl}" alt="${salonName || 'Salon'} Logo" style="max-height: 56px; max-width: 200px; margin-bottom: 14px;" />
+        ${salonName ? `<p style="color: ${EMAIL_STYLES.textLight}; font-size: 13px; margin: 0; letter-spacing: 0.02em; font-family: ${EMAIL_STYLES.fontFamily};">Powered by Salon Magik</p>` : ''}
       </div>
     `;
   } else if (mode === "salon" && salonName) {
     // Salon branding without logo - show salon name prominently
     headerSection = `
-      <div style="text-align: center; margin-bottom: 32px;">
-        <h1 style="color: ${EMAIL_STYLES.primaryColor}; margin: 0 0 8px 0; font-size: 28px; font-family: ${EMAIL_STYLES.fontFamily};">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <h1 style="color: ${EMAIL_STYLES.textColor}; margin: 0 0 6px 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em; font-family: ${EMAIL_STYLES.fontFamily};">
           ${salonName}
         </h1>
-        <p style="color: ${EMAIL_STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${EMAIL_STYLES.fontFamily};">Powered by Salon Magik</p>
+        <p style="color: ${EMAIL_STYLES.textLight}; font-size: 13px; margin: 0; letter-spacing: 0.02em; font-family: ${EMAIL_STYLES.fontFamily};">Powered by Salon Magik</p>
       </div>
     `;
   } else {
     // Default: Salon Magik branding with logo
     headerSection = `
-      <div style="text-align: center; margin-bottom: 32px;">
-        <img src="${SALON_MAGIK_LOGO_URL}" alt="Salon Magik" style="width: 60px; height: 60px; margin-bottom: 12px; border-radius: 12px;" />
-        <h1 style="color: ${EMAIL_STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 28px; font-family: ${EMAIL_STYLES.fontFamily};">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <img src="${SALON_MAGIK_LOGO_URL}" alt="Salon Magik" style="width: 48px; height: 48px; margin-bottom: 14px; border-radius: 10px;" />
+        <h1 style="color: ${EMAIL_STYLES.textColor}; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; font-family: ${EMAIL_STYLES.fontFamily};">
           Salon Magik
         </h1>
       </div>
@@ -136,33 +143,40 @@ export function wrapEmailTemplate(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
   <title>Salon Magik</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
-  </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: ${EMAIL_STYLES.surfaceColor}; font-family: ${EMAIL_STYLES.fontFamily};">
   <table role="presentation" style="width: 100%; border-collapse: collapse;">
     <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: ${EMAIL_STYLES.backgroundColor}; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          ${headerSection}
+      <td align="center" style="padding: 32px 16px;">
+        <table role="presentation" style="max-width: 600px; width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="height: 4px; background: linear-gradient(90deg, ${EMAIL_STYLES.primaryColor}, ${EMAIL_STYLES.primaryDark}); border-radius: 10px 10px 0 0; line-height: 4px; font-size: 0;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="background-color: ${EMAIL_STYLES.backgroundColor}; border: 1px solid ${EMAIL_STYLES.borderColor}; border-top: none; border-radius: 0 0 12px 12px; padding: 40px; box-shadow: 0 4px 16px rgba(17, 24, 39, 0.06);">
+              ${headerSection}
 
-          <div style="font-family: ${EMAIL_STYLES.fontFamily}; color: ${EMAIL_STYLES.textColor};">
-            ${content}
-          </div>
+              <div style="height: 1px; background-color: ${EMAIL_STYLES.borderColor}; margin: 24px 0 28px 0; font-size: 0;">&nbsp;</div>
 
-          <hr style="border: none; border-top: 1px solid ${EMAIL_STYLES.borderColor}; margin: 32px 0;" />
+              <div style="font-family: ${EMAIL_STYLES.fontFamily}; color: ${EMAIL_STYLES.textColor};">
+                ${content}
+              </div>
 
-          <div style="color: ${EMAIL_STYLES.textLighter}; font-size: 12px; text-align: center; line-height: 1.6; font-family: ${EMAIL_STYLES.fontFamily};">
-            <p style="margin: 0 0 6px 0;">© 2026 Salon Magik. All rights reserved.</p>
-            <p style="margin: 0 0 6px 0;">You’re receiving this because you requested access or use Salon Magik. We never share your data without consent.</p>
-            <p style="margin: 0;">
-              <a href="${privacyUrl}" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none;">Privacy Policy</a>
-              ${helpUrl ? ` · <a href="${helpUrl}" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none;">Support</a>` : ""}
-            </p>
-          </div>
-        </div>
+              <hr style="border: none; border-top: 1px solid ${EMAIL_STYLES.borderColor}; margin: 32px 0 24px 0;" />
+
+              <div style="color: ${EMAIL_STYLES.textLighter}; font-size: 12px; text-align: center; line-height: 1.7; font-family: ${EMAIL_STYLES.fontFamily};">
+                <p style="margin: 0 0 6px 0;">© 2026 Salon Magik. All rights reserved.</p>
+                <p style="margin: 0 0 10px 0;">You’re receiving this because you requested access or use Salon Magik. We never share your data without consent.</p>
+                <p style="margin: 0;">
+                  <a href="${privacyUrl}" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none; font-weight: 500;">Privacy Policy</a>
+                  ${helpUrl ? ` &nbsp;·&nbsp; <a href="${helpUrl}" style="color: ${EMAIL_STYLES.primaryColor}; text-decoration: none; font-weight: 500;">Support</a>` : ""}
+                </p>
+              </div>
+            </td>
+          </tr>
+        </table>
       </td>
     </tr>
   </table>
@@ -176,20 +190,25 @@ export function wrapEmailTemplate(
  */
 export function createButton(text: string, href: string): string {
   return `
-    <div style="text-align: center; margin: 32px 0;">
-      <a href="${href}"
-         style="background-color: ${EMAIL_STYLES.primaryColor};
-                color: white;
-                padding: 14px 28px;
-                text-decoration: none;
-                border-radius: 8px;
-                display: inline-block;
-                font-weight: 500;
-                font-size: 16px;
-                font-family: ${EMAIL_STYLES.fontFamily};">
-        ${text}
-      </a>
-    </div>
+    <table role="presentation" style="margin: 28px auto; border-collapse: collapse;">
+      <tr>
+        <td style="border-radius: 8px; background-color: ${EMAIL_STYLES.primaryColor};">
+          <a href="${href}"
+             style="background-color: ${EMAIL_STYLES.primaryColor};
+                    color: #ffffff;
+                    padding: 14px 32px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    display: inline-block;
+                    font-weight: 600;
+                    font-size: 16px;
+                    letter-spacing: 0.01em;
+                    font-family: ${EMAIL_STYLES.fontFamily};">
+            ${text}
+          </a>
+        </td>
+      </tr>
+    </table>
   `;
 }
 
@@ -235,8 +254,8 @@ export function paragraph(text: string): string {
  * Styled heading
  */
 export function heading(text: string, level: 2 | 3 = 2): string {
-  const size = level === 2 ? '24px' : '20px';
-  return `<h${level} style="color: ${EMAIL_STYLES.textColor}; margin: 0 0 16px 0; font-size: ${size}; font-family: ${EMAIL_STYLES.fontFamily};">${text}</h${level}>`;
+  const size = level === 2 ? '22px' : '18px';
+  return `<h${level} style="color: ${EMAIL_STYLES.textColor}; margin: 0 0 16px 0; font-size: ${size}; font-weight: 700; letter-spacing: -0.01em; font-family: ${EMAIL_STYLES.fontFamily};">${text}</h${level}>`;
 }
 
 /**

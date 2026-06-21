@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
 import { fetchPlatformTemplate } from "../_shared/platform-templates.ts";
+import { createButton } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -181,9 +182,7 @@ Deno.serve(async (req) => {
           <p style="margin: 0 0 8px 0;"><strong>Payments received:</strong> {{payments_received}}</p>
           <p style="margin: 0;"><strong>Outstanding balances:</strong> {{outstanding_balances}}</p>
         </div>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="{{cta_link}}" style="background-color: #E11D48; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 500;">Open Dashboard</a>
-        </div>
+        {{cta_link_button}}
       `;
 
       for (const recipient of recipients) {
@@ -195,6 +194,7 @@ Deno.serve(async (req) => {
           payments_received: `${tenant.currency || "USD"} ${paymentsReceived.toFixed(2)}`,
           outstanding_balances: `${tenant.currency || "USD"} ${outstandingBalances.toFixed(2)}`,
           cta_link: `${dashboardBaseUrl}/salon`,
+          cta_link_button: createButton("Open Dashboard", `${dashboardBaseUrl}/salon`),
         };
 
         const activePlatformSubject =
