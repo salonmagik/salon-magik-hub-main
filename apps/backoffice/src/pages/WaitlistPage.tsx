@@ -41,6 +41,7 @@ import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, Globe } from "lucide-react";
 import { format } from "date-fns";
+import { EmptyState } from "@ui/empty-state";
 
 export default function WaitlistPage() {
   const [applicationsTab, setApplicationsTab] = useState<WaitlistStatus | "all">("pending");
@@ -84,13 +85,13 @@ export default function WaitlistPage() {
   const getStatusBadge = (status: WaitlistStatus) => {
     switch (status) {
       case "pending":
-        return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pending</Badge>;
+        return <Badge variant="warning">Pending</Badge>;
       case "invited":
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Invited</Badge>;
+        return <Badge variant="info">Invited</Badge>;
       case "rejected":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rejected</Badge>;
+        return <Badge variant="destructive">Rejected</Badge>;
       case "converted":
-        return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Converted</Badge>;
+        return <Badge variant="success">Converted</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -111,16 +112,16 @@ export default function WaitlistPage() {
   };
 
   const getMarketInterestStatusBadge = (status: MarketInterestStatus) => {
-    const styles: Record<MarketInterestStatus, string> = {
-      new: "bg-blue-50 text-blue-700 border-blue-200",
-      reviewing: "bg-amber-50 text-amber-700 border-amber-200",
-      contacted: "bg-violet-50 text-violet-700 border-violet-200",
-      qualified: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      closed: "bg-slate-100 text-slate-700 border-slate-200",
+    const variants: Record<MarketInterestStatus, "info" | "warning" | "success" | "neutral"> = {
+      new: "info",
+      reviewing: "warning",
+      contacted: "info",
+      qualified: "success",
+      closed: "neutral",
     };
 
     return (
-      <Badge variant="outline" className={styles[status]}>
+      <Badge variant={variants[status]}>
         {status.charAt(0).toUpperCase() + status.slice(1)}
       </Badge>
     );
@@ -164,7 +165,11 @@ export default function WaitlistPage() {
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                       </div>
                     ) : leads?.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">No leads found.</div>
+                      <EmptyState
+                        icon={Users}
+                        title="No leads found"
+                        description="Waitlist signups will appear here as people request access."
+                      />
                     ) : (
                       <div className="rounded-md border">
                         <Table>
@@ -269,7 +274,11 @@ export default function WaitlistPage() {
                     {isMarketInterestLoading ? (
                       <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
                     ) : marketInterestLeads?.length === 0 ? (
-                      <div className="text-center py-12 text-muted-foreground">No interest leads found.</div>
+                      <EmptyState
+                        icon={Globe}
+                        title="No interest leads found"
+                        description="Market interest signals will show up here as they come in."
+                      />
                     ) : (
                       <div className="rounded-md border">
                         <Table>

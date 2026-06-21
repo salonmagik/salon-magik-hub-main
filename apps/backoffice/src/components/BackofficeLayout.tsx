@@ -1,37 +1,38 @@
- import { ReactNode } from "react";
- import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ReactNode, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBackofficeAuth } from "@/hooks";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate";
- import {
-		Sidebar,
-		SidebarContent,
-		SidebarHeader,
-		SidebarMenu,
-		SidebarMenuItem,
-		SidebarMenuButton,
-		SidebarMenuSub,
-		SidebarMenuSubItem,
-		SidebarMenuSubButton,
-		SidebarProvider,
-		SidebarInset,
-		SidebarFooter,
-		SidebarTrigger,
- } from "@ui/sidebar";
- import { Button } from "@ui/button";
- import { Avatar, AvatarFallback } from "@ui/avatar";
- import {
-   DropdownMenu,
-   DropdownMenuContent,
-   DropdownMenuItem,
-   DropdownMenuTrigger,
- } from "@ui/dropdown-menu";
- import {
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
+  SidebarProvider,
+  SidebarInset,
+  SidebarFooter,
+  SidebarTrigger,
+} from "@ui/sidebar";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@ui/collapsible";
+import { Button } from "@ui/button";
+import { Avatar, AvatarFallback } from "@ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@ui/dropdown-menu";
+import {
   LayoutDashboard,
   Flag,
-   Settings,
-   LogOut,
-   Shield,
+  Settings,
+  LogOut,
+  Shield,
   ChevronDown,
   Coins,
   Eye,
@@ -40,11 +41,11 @@ import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate"
   MessageSquareText,
   Users2,
   type LucideIcon,
- } from "lucide-react";
+} from "lucide-react";
 
- interface BackofficeLayoutProps {
-   children: ReactNode;
- }
+interface BackofficeLayoutProps {
+  children: ReactNode;
+}
 
 interface NavItem {
   href: string;
@@ -88,18 +89,22 @@ const navItems: NavItem[] = [
   { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
 ];
 
- export function BackofficeLayout({ children }: BackofficeLayoutProps) {
-   const location = useLocation();
-   const navigate = useNavigate();
-   const { profile, backofficeUser, signOut, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
-   const canSeeItem = (item: NavItem) => {
+function isChildActive(child: NavItem, pathname: string) {
+  return pathname === child.href || pathname.startsWith(`${child.href}/`);
+}
+
+export function BackofficeLayout({ children }: BackofficeLayoutProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { profile, backofficeUser, signOut, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
+  const canSeeItem = (item: NavItem) => {
     if (backofficeUser?.role === "super_admin") return true;
     if (item.pageKey && !hasBackofficePageAccess(item.pageKey)) return false;
     if (item.permissionKey && !hasBackofficePermission(item.permissionKey)) return false;
     return true;
-   };
+  };
 
-   const visibleNavItems = navItems
+  const visibleNavItems = navItems
     .map((item) => ({
       ...item,
       children: item.children?.filter(canSeeItem),
@@ -109,75 +114,97 @@ const navItems: NavItem[] = [
       return canSeeItem(item);
     });
 
-   const handleSignOut = async () => {
-     await signOut();
-     navigate("/login", { replace: true });
-   };
+  // Groups with a currently-active child start expanded; everything else starts
+  // collapsed, since a parent with children isn't itself a navigable page.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const item of visibleNavItems) {
+      if (item.children?.length) {
+        initial[item.href] = item.children.some((child) => isChildActive(child, location.pathname));
+      }
+    }
+    return initial;
+  });
 
-   const initials = profile?.full_name
-     ?.split(" ")
-     .map((n) => n[0])
-     .join("")
-     .toUpperCase()
-     .slice(0, 2) || "BO";
+  const toggleGroup = (href: string) => {
+    setOpenGroups((prev) => ({ ...prev, [href]: !prev[href] }));
+  };
 
-   const roleBadge = backofficeUser?.role === "super_admin"
-     ? "Super Admin"
-     : backofficeUser?.is_sales_agent
-       ? "Sales Agent"
-       : "Team Member";
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
 
-   return (
-			<InactivityGuard warningMinutes={22} logoutMinutes={30}>
-				<SidebarProvider>
-					<div className="flex min-h-screen w-full bg-background">
-						<Sidebar className="border-r border-white/10 [&_[data-sidebar=sidebar]]:bg-zinc-950 [&_[data-sidebar=sidebar]]:text-white">
-							<SidebarHeader className="border-b border-white/10 px-4 py-4">
-								<div className="flex items-center gap-2">
-									<div className="rounded-xl bg-red-600/20 p-2.5 ring-1 ring-red-500/60 shadow-[0_0_24px_rgba(239,68,68,0.25)]">
-										<Shield className="h-6 w-6 text-red-400" />
-									</div>
-									<div>
-										<h1 className="font-semibold text-white">BackOffice</h1>
-										<p className="text-xs text-white/70">Salon Magik Admin</p>
-									</div>
-								</div>
-							</SidebarHeader>
+  const initials = profile?.full_name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "BO";
 
-							<SidebarContent className="px-2 py-4">
-								<SidebarMenu>
-									{visibleNavItems.map((item) => {
-                    const hasChildren = Boolean(item.children?.length);
-                    const isParentActive = hasChildren
-                      ? item.children!.some((child) => location.pathname === child.href || location.pathname.startsWith(`${child.href}/`))
-                      : location.pathname === item.href ||
-                        (item.href !== "/" && location.pathname.startsWith(item.href));
+  const roleBadge = backofficeUser?.role === "super_admin"
+    ? "Super Admin"
+    : backofficeUser?.is_sales_agent
+      ? "Sales Agent"
+      : "Team Member";
 
+  return (
+    <InactivityGuard warningMinutes={22} logoutMinutes={30}>
+      <SidebarProvider>
+        <div className="flex min-h-screen w-full bg-background">
+          <Sidebar className="border-r">
+            <SidebarHeader className="border-b px-4 py-4">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-primary/10 p-2.5">
+                  <Shield className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h1 className="font-semibold text-foreground">BackOffice</h1>
+                  <p className="text-xs text-muted-foreground">Salon Magik Admin</p>
+                </div>
+              </div>
+            </SidebarHeader>
+
+            <SidebarContent className="px-2 py-4">
+              <SidebarMenu>
+                {visibleNavItems.map((item) => {
+                  const hasChildren = Boolean(item.children?.length);
+
+                  if (!hasChildren) {
+                    const isActive =
+                      location.pathname === item.href ||
+                      (item.href !== "/" && location.pathname.startsWith(item.href));
                     return (
                       <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton
-                          asChild={!hasChildren}
-                          isActive={isParentActive}
-                          className="text-white/90 hover:text-white data-[active=true]:text-white"
-                        >
-                          {hasChildren ? (
-                            <div className="flex items-center gap-3 px-2 py-1.5">
-                              {item.icon ? <item.icon className="h-4 w-4" /> : null}
-                              <span>{item.label}</span>
-                            </div>
-                          ) : (
-                            <Link to={item.href} className="flex items-center gap-3">
-                              {item.icon ? <item.icon className="h-4 w-4" /> : null}
-                              <span>{item.label}</span>
-                            </Link>
-                          )}
+                        <SidebarMenuButton asChild isActive={isActive}>
+                          <Link to={item.href} className="flex items-center gap-3">
+                            {item.icon ? <item.icon className="h-4 w-4" /> : null}
+                            <span>{item.label}</span>
+                          </Link>
                         </SidebarMenuButton>
-                        {hasChildren ? (
+                      </SidebarMenuItem>
+                    );
+                  }
+
+                  const isOpen = openGroups[item.href] ?? false;
+                  const isParentActive = item.children!.some((child) => isChildActive(child, location.pathname));
+
+                  return (
+                    <Collapsible key={item.href} open={isOpen} onOpenChange={() => toggleGroup(item.href)} asChild>
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton isActive={isParentActive}>
+                            {item.icon ? <item.icon className="h-4 w-4" /> : null}
+                            <span>{item.label}</span>
+                            <ChevronDown
+                              className={`ml-auto h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                            />
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
                           <SidebarMenuSub>
                             {item.children!.map((child) => {
-                              const childActive =
-                                location.pathname === child.href ||
-                                location.pathname.startsWith(`${child.href}/`);
+                              const childActive = isChildActive(child, location.pathname);
                               return (
                                 <SidebarMenuSubItem key={child.href}>
                                   <SidebarMenuSubButton asChild isActive={childActive}>
@@ -187,62 +214,63 @@ const navItems: NavItem[] = [
                               );
                             })}
                           </SidebarMenuSub>
-                        ) : null}
+                        </CollapsibleContent>
                       </SidebarMenuItem>
-                    );
-                  })}
-								</SidebarMenu>
-							</SidebarContent>
+                    </Collapsible>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarContent>
 
-							<SidebarFooter className="border-t border-white/10 p-4">
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<Button
-											variant="ghost"
-											className="w-full justify-start gap-3 px-2 text-white hover:bg-white/10 hover:text-white"
-										>
-											<Avatar className="h-8 w-8">
-												<AvatarFallback className="bg-red-600/20 text-red-300 text-xs">
-													{initials}
-												</AvatarFallback>
-											</Avatar>
-											<div className="flex flex-1 flex-col items-start text-left">
-												<span className="text-sm font-medium truncate max-w-[120px]">
-													{profile?.full_name || "Admin"}
-												</span>
-												<span className="text-xs text-white/70">
-													{roleBadge}
-												</span>
-											</div>
-											<ChevronDown className="h-4 w-4 text-white/70" />
-										</Button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="start" className="w-56">
-										<DropdownMenuItem
-											onClick={handleSignOut}
-											className="text-destructive"
-										>
-											<LogOut className="mr-2 h-4 w-4" />
-											Sign out
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
-							</SidebarFooter>
-						</Sidebar>
+            <SidebarFooter className="border-t p-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 px-2 hover:bg-muted"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-1 flex-col items-start text-left">
+                      <span className="text-sm font-medium truncate max-w-[120px]">
+                        {profile?.full_name || "Admin"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {roleBadge}
+                      </span>
+                    </div>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuItem
+                    onClick={handleSignOut}
+                    className="text-destructive"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarFooter>
+          </Sidebar>
 
-						<SidebarInset className="flex-1">
-							<div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
-								<div className="flex items-center gap-2">
-									<Shield className="h-4 w-4 text-red-500" />
-									<span className="text-sm font-medium">BackOffice</span>
-								</div>
-								<SidebarTrigger className="h-9 w-9" />
-							</div>
-							<BackofficeOnboardingGate />
-							<main className="flex-1 overflow-auto">{children}</main>
-						</SidebarInset>
-					</div>
-				</SidebarProvider>
-			</InactivityGuard>
-		);
- }
+          <SidebarInset className="flex-1">
+            <div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">BackOffice</span>
+              </div>
+              <SidebarTrigger className="h-9 w-9" />
+            </div>
+            <BackofficeOnboardingGate />
+            <main className="flex-1 overflow-auto">{children}</main>
+          </SidebarInset>
+        </div>
+      </SidebarProvider>
+    </InactivityGuard>
+  );
+}

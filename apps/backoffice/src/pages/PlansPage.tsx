@@ -1960,9 +1960,9 @@ export default function PlansPage() {
         </Card>
 
         {!isSuperAdmin && (
-          <Card className="border-amber-200 bg-amber-50/50">
+          <Card className="border-warning-bg bg-warning-bg/50">
             <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-amber-700">
+              <div className="flex items-center gap-2 text-warning">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="text-sm">
                   You have read-only access. Super Admin role is required for changes.

@@ -22,6 +22,8 @@ import {
   TableRow,
 } from "@ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
+import { EmptyState } from "@ui/empty-state";
+import { FileText } from "lucide-react";
 
 type AuditLog = {
   id: string;
@@ -240,7 +242,9 @@ export default function AuditLogsPage() {
                   </TableRow>
                 ) : filteredLogs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6}>No logs found for the current filters.</TableCell>
+                    <TableCell colSpan={6}>
+                      <EmptyState icon={FileText} title="No logs found" description="Try adjusting the filters above." />
+                    </TableCell>
                   </TableRow>
                 ) : (
                   filteredLogs.map((row) => (

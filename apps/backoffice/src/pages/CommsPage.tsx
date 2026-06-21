@@ -54,9 +54,21 @@ const emptyEditorState: TemplateEditorState = {
 // supplies to renderPlatformTemplate(). A placeholder not in this list will render
 // as a literal "{{...}}" in the sent email — see send-staff-invitation's
 // {{staff_name}} incident for why this is enforced, not just documented.
+// Placeholders ending in _button render a ready-made, brand-styled button —
+// use those instead of the raw _link version so custom templates don't need
+// to hand-write button markup to stay on-brand.
 const KNOWN_TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
-  email_verification: ["first_name", "verification_link"],
-  staff_invitation: ["first_name", "staff_name", "email", "salon_name", "role", "login_link", "temp_password"],
+  email_verification: ["first_name", "verification_link", "verification_link_button"],
+  staff_invitation: [
+    "first_name",
+    "staff_name",
+    "email",
+    "salon_name",
+    "role",
+    "login_link",
+    "login_link_button",
+    "temp_password",
+  ],
   daily_digest: [
     "first_name",
     "salon_name",
@@ -65,6 +77,7 @@ const KNOWN_TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
     "payments_received",
     "outstanding_balances",
     "cta_link",
+    "cta_link_button",
   ],
 };
 
@@ -314,7 +327,9 @@ export default function CommsPage() {
                     <p className="text-xs text-muted-foreground">
                       Available placeholders for <span className="font-mono">{editorState.template_key}</span>:{" "}
                       {known.map((p) => (
-                        <span key={p} className="mr-1.5 font-mono">{`{{${p}}}`}</span>
+                        <span key={p} className={`mr-1.5 font-mono ${p.endsWith("_button") ? "font-semibold text-primary" : ""}`}>
+                          {`{{${p}}}`}
+                        </span>
                       ))}
                     </p>
                   );
@@ -329,7 +344,11 @@ export default function CommsPage() {
               })()}
               <p className="text-xs text-muted-foreground">
                 Brand styling (logo, colors, footer) is applied automatically around this body when the email is
-                sent — only write the message content here, not a full HTML document.
+                sent — only write the message content here, not a full HTML document. For call-to-action links,
+                use the <span className="font-mono font-semibold text-primary">_button</span> placeholder (e.g.{" "}
+                <span className="font-mono">{"{{login_link_button}}"}</span>) to get a real branded button — the
+                plain <span className="font-mono">{"{{login_link}}"}</span> version is just the raw URL and won't
+                be styled.
               </p>
             </div>
             <div className="flex items-center justify-between rounded-2xl border p-3">
