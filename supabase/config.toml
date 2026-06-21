@@ -150,3 +150,6 @@ verify_jwt = false
 
 [functions.paystack-transfer-approval-ng]
 verify_jwt = false
+
+[functions.sync-paystack-plan-pricing]
+verify_jwt = true

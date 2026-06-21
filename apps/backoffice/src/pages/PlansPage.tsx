@@ -58,6 +58,7 @@ import {
   Lock,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
@@ -373,6 +374,8 @@ export default function PlansPage() {
   const [editPricingPlanId, setEditPricingPlanId] = useState<string | null>(null);
   const [editPricingRows, setEditPricingRows] = useState<EditPricingRow[]>([]);
   const [editPricingReason, setEditPricingReason] = useState("");
+  const [editPricingRolloutMode, setEditPricingRolloutMode] = useState<RolloutMode>("now");
+  const [editPricingRolloutAt, setEditPricingRolloutAt] = useState("");
   const editPlanSaveRef = useRef(false);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
@@ -397,6 +400,7 @@ export default function PlansPage() {
   const [paystackCodeDrafts, setPaystackCodeDrafts] = useState<Record<string, PaystackCodeDraft>>({});
   const [paystackCodeRevealedRows, setPaystackCodeRevealedRows] = useState<Set<string>>(new Set());
   const [paystackCodeSavingRows, setPaystackCodeSavingRows] = useState<Set<string>>(new Set());
+  const [paystackSyncingRows, setPaystackSyncingRows] = useState<Set<string>>(new Set());
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["backoffice-plans"],
@@ -710,6 +714,8 @@ export default function PlansPage() {
       effective_monthly: number;
       annual_price: number;
     }>,
+    rolloutMode: RolloutMode = "now",
+    rolloutAt: string | null = null,
   ) => {
     const plan = (plans || []).find((item) => item.id === planId);
     if (!plan) return;
@@ -718,6 +724,17 @@ export default function PlansPage() {
       feature_text: feature.feature_text,
       sort_order: feature.sort_order,
     }));
+    const previousByCurrency = activePricingByPlan.get(planId);
+    const priceDeltas = pricingRows.map((row) => {
+      const previous = previousByCurrency?.get(row.currency);
+      return {
+        currency: row.currency,
+        previous_monthly_price: previous ? Number(previous.monthly_price) : null,
+        new_monthly_price: row.monthly_price,
+        previous_annual_price: previous ? Number(previous.annual_price) : null,
+        new_annual_price: row.annual_price,
+      };
+    });
     await (supabase.rpc as any)("backoffice_create_plan_change_batch", {
       p_plan_id: planId,
       p_reason: reason,
@@ -742,9 +759,10 @@ export default function PlansPage() {
         plan_name: plan.name,
         changes: ["pricing"],
         features: planFeatures,
+        price_deltas: priceDeltas,
       },
-      p_rollout_mode: "now",
-      p_rollout_at: null,
+      p_rollout_mode: rolloutMode,
+      p_rollout_at: rolloutAt,
     });
   };
 
@@ -1295,42 +1313,34 @@ export default function PlansPage() {
       planId,
       rows,
       reason,
+      rolloutMode = "now",
+      rolloutAt = null,
     }: {
       planId: string;
       rows: EditPricingRow[];
       reason: string;
+      rolloutMode?: RolloutMode;
+      rolloutAt?: string | null;
     }) => {
-      const changedRows: Array<{
-        currency: CurrencyCode;
-        monthly_price: number;
-        effective_monthly: number;
-        annual_price: number;
-      }> = [];
-      for (const row of rows) {
+      // The actual plan_pricing write (closing the old row, inserting the new one)
+      // happens inside backoffice_create_plan_change_batch / backoffice_apply_plan_change_batch.
+      // We only compute the target values here — writing them directly first would make
+      // scheduled rollouts take effect immediately, defeating the rollout date.
+      const changedRows = rows.map((row) => {
         const monthly = parseNumericInput(row.monthly_price);
         const annualDiscountPct = parseNumericInput(row.annual_discount_pct || "0");
         const effectiveMonthly = deriveEffectiveMonthly(monthly, annualDiscountPct);
         const annualTotal = deriveAnnualTotal(effectiveMonthly);
 
-        const { error } = await supabase
-          .from("plan_pricing")
-          .update({
-            monthly_price: toFixedNumber(monthly),
-            effective_monthly: effectiveMonthly,
-            annual_price: annualTotal,
-          })
-          .eq("id", row.id);
-        if (error) throw error;
-
-        changedRows.push({
+        return {
           currency: row.currency,
           monthly_price: toFixedNumber(monthly),
           effective_monthly: effectiveMonthly,
           annual_price: annualTotal,
-        });
-      }
+        };
+      });
 
-      await createPlanChangeBatchForPricing(planId, reason.trim(), changedRows);
+      await createPlanChangeBatchForPricing(planId, reason.trim(), changedRows, rolloutMode, rolloutAt);
 
       const { error: auditError } = await supabase.from("audit_logs").insert({
         action: "pricing_updated",
@@ -1340,18 +1350,23 @@ export default function PlansPage() {
           reason: reason.trim(),
           plan_id: planId,
           currencies: rows.map((row) => row.currency),
+          rollout_mode: rolloutMode,
+          rollout_at: rolloutAt,
         },
       });
       if (auditError) throw auditError;
+      return { rolloutMode };
     },
-    onSuccess: () => {
+    onSuccess: ({ rolloutMode }) => {
       queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
       queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
-      toast.success("Pricing updated successfully.");
+      toast.success(rolloutMode === "schedule" ? "Pricing change scheduled." : "Pricing updated successfully.");
       setEditPricingOpen(false);
       setEditPricingPlanId(null);
       setEditPricingRows([]);
       setEditPricingReason("");
+      setEditPricingRolloutMode("now");
+      setEditPricingRolloutAt("");
     },
     onError: (error) => {
       toast.error(errorToMessage(error));
@@ -1539,6 +1554,28 @@ export default function PlansPage() {
     }
   };
 
+  const syncPaystackPlanPricing = async (rowId: string) => {
+    setPaystackSyncingRows((prev) => new Set([...prev, rowId]));
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-paystack-plan-pricing", {
+        body: { planPricingId: rowId },
+      });
+      if (error) throw error;
+      const results = (data?.results || []) as Array<{ cycle: string; status: string; detail?: string }>;
+      const errors = results.filter((r) => r.status === "error");
+      if (errors.length > 0) {
+        toast.error(`Paystack sync failed for ${errors.map((e) => e.cycle).join(", ")}: ${errors[0].detail}`);
+      } else {
+        toast.success("Paystack plan amounts synced.");
+      }
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    } catch (err) {
+      toast.error(errorToMessage(err));
+    } finally {
+      setPaystackSyncingRows((prev) => { const n = new Set(prev); n.delete(rowId); return n; });
+    }
+  };
+
   const openCreatePlansDialog = () => {
     if (remainingPlanSlots <= 0) {
       toast.error("Maximum of 4 plans reached.");
@@ -1700,6 +1737,8 @@ export default function PlansPage() {
     setEditPricingPlanId(plan.id);
     setEditPricingRows(rows);
     setEditPricingReason("");
+    setEditPricingRolloutMode("now");
+    setEditPricingRolloutAt("");
     setEditPricingOpen(true);
   };
 
@@ -1855,6 +1894,9 @@ export default function PlansPage() {
     const errors: string[] = [];
     if (!editPricingPlanId) errors.push("Missing plan.");
     if (!editPricingReason.trim()) errors.push("Reason is required.");
+    if (editPricingRolloutMode === "schedule" && !editPricingRolloutAt) {
+      errors.push("Scheduled rollout requires a go-live date and time.");
+    }
 
     editPricingRows.forEach((row) => {
       const monthly = parseNumericInput(row.monthly_price);
@@ -1868,7 +1910,7 @@ export default function PlansPage() {
     });
 
     return { isValid: errors.length === 0, errors };
-  }, [editPricingPlanId, editPricingReason, editPricingRows]);
+  }, [editPricingPlanId, editPricingReason, editPricingRows, editPricingRolloutMode, editPricingRolloutAt]);
 
   return (
     <BackofficeLayout>
@@ -2149,6 +2191,7 @@ export default function PlansPage() {
                                 const draft = paystackCodeDrafts[row.id] ?? { monthly: "", annual: "", dirty: false };
                                 const isRevealed = paystackCodeRevealedRows.has(row.id);
                                 const isSaving = paystackCodeSavingRows.has(row.id);
+                                const isSyncing = paystackSyncingRows.has(row.id);
                                 const inputType = isRevealed ? "text" : "password";
                                 return (
                                   <TableRow key={plan.id}>
@@ -2212,6 +2255,22 @@ export default function PlansPage() {
                                           {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                                           {isSaving ? "Saving" : "Save"}
                                         </Button>
+                                        {isSuperAdmin && (row.paystack_plan_code_monthly || row.paystack_plan_code_annual) && (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            title="Push this plan's NGN/GHS price to its Paystack plan codes"
+                                            disabled={isSyncing}
+                                            onClick={() => syncPaystackPlanPricing(row.id)}
+                                          >
+                                            {isSyncing ? (
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                              <RefreshCw className="h-3.5 w-3.5" />
+                                            )}
+                                          </Button>
+                                        )}
                                       </div>
                                     </TableCell>
                                   </TableRow>
@@ -3693,6 +3752,41 @@ export default function PlansPage() {
                 placeholder="Why are you changing pricing?"
               />
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label>Go live</Label>
+                <Select
+                  value={editPricingRolloutMode}
+                  onValueChange={(value) => setEditPricingRolloutMode(value as RolloutMode)}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="now">Take effect now</SelectItem>
+                    <SelectItem value="schedule">Schedule for a future date</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {editPricingRolloutMode === "schedule" && (
+                <div>
+                  <Label>Go-live date</Label>
+                  <Input
+                    className="mt-2"
+                    type="datetime-local"
+                    value={editPricingRolloutAt}
+                    onChange={(event) => setEditPricingRolloutAt(event.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+            {editPricingRolloutMode === "schedule" && (
+              <p className="text-xs text-muted-foreground">
+                Existing subscribers keep today&apos;s price until this date. They&apos;ll see a notice in their
+                dashboard once the change is scheduled.
+              </p>
+            )}
           </div>
 
           <DialogFooter>
@@ -3706,11 +3800,20 @@ export default function PlansPage() {
                   planId: editPricingPlanId,
                   rows: editPricingRows,
                   reason: editPricingReason,
+                  rolloutMode: editPricingRolloutMode,
+                  rolloutAt:
+                    editPricingRolloutMode === "schedule" && editPricingRolloutAt
+                      ? new Date(editPricingRolloutAt).toISOString()
+                      : null,
                 });
               }}
               disabled={!isSuperAdmin || !editPricingValidation.isValid || updatePricingMutation.isPending}
             >
-              {updatePricingMutation.isPending ? "Saving..." : "Save Pricing"}
+              {updatePricingMutation.isPending
+                ? "Saving..."
+                : editPricingRolloutMode === "schedule"
+                  ? "Schedule Pricing Change"
+                  : "Save Pricing"}
             </Button>
           </DialogFooter>
         </DialogContent>
