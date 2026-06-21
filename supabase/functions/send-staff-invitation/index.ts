@@ -66,7 +66,7 @@ function buildInvitationEmailContent(
   `;
 }
 
-function getBaseUrlFromRequest(req: Request): string {
+function getBaseUrlFromRequest(req: Request, options: { skipEnvFallback?: boolean } = {}): string {
   const origin = req.headers.get("origin");
   if (origin && /^https?:\/\//i.test(origin)) return origin;
 
@@ -84,6 +84,8 @@ function getBaseUrlFromRequest(req: Request): string {
     const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
     return `${forwardedProto}://${forwardedHost}`;
   }
+
+  if (options.skipEnvFallback) return "";
 
   // Last-resort fallback
   return Deno.env.get("SALON_APP_URL") || Deno.env.get("BASE_URL") || "https://app.salonmagik.com";
@@ -372,11 +374,17 @@ const handler = async (req: Request): Promise<Response> => {
       recipientRole = role;
     }
 
-    // Build login link - goes directly to /login, not accept-invite
+    // Build login link - goes directly to /login, not accept-invite.
+    // Prefer the actual request's Origin (set automatically by the browser on
+    // cross-origin fetch/invoke calls) over the env-var defaults, so an admin
+    // testing from localhost gets a localhost link back, not whatever
+    // SALON_APP_URL is configured to in this project's secrets. Env vars are
+    // still the fallback for non-browser callers (e.g. the "resend" flow).
     const baseUrl =
+      getBaseUrlFromRequest(req, { skipEnvFallback: true }) ||
       Deno.env.get("SALON_APP_URL") ||
       Deno.env.get("BASE_URL") ||
-      getBaseUrlFromRequest(req);
+      "https://app.salonmagik.com";
     const loginLink = `${baseUrl}/login`;
 
     console.log("Generated login link for staff invitation", {
@@ -403,6 +411,9 @@ const handler = async (req: Request): Promise<Response> => {
       salon_name: tenant.name,
       role: recipientRole,
       login_link: loginLink,
+      // Pre-rendered styled button HTML — use this instead of {{login_link}} in a
+      // custom template to get the branded button without writing any markup.
+      login_link_button: createButton("Accept invitation", loginLink),
       temp_password: tempPassword,
     };
     const subject = renderPlatformTemplate(
