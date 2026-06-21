@@ -327,25 +327,21 @@ export function usePermissions() {
  * Seed default role permissions for a new tenant
  */
 export async function seedDefaultPermissions(tenantId: string): Promise<void> {
-  const permissionInserts: Array<{
-    tenant_id: string;
-    role: AppRole;
-    module: string;
-    allowed: boolean;
-  }> = [];
+  const permissions: Array<{ role: AppRole; module: string; allowed: boolean }> = [];
 
   (Object.keys(DEFAULT_ROLE_PERMISSIONS) as AppRole[]).forEach((role) => {
     Object.entries(DEFAULT_ROLE_PERMISSIONS[role]).forEach(([module, allowed]) => {
-      permissionInserts.push({
-        tenant_id: tenantId,
-        role,
-        module,
-        allowed,
-      });
+      permissions.push({ role, module, allowed });
     });
   });
 
-  const { error } = await supabase.from("role_permissions").insert(permissionInserts);
+  // Routed through an RPC (not a direct insert) because the inserting user may not
+  // be the tenant's owner during onboarding — see seed_default_role_permissions
+  // migration for why this can't just be a broadened RLS policy.
+  const { error } = await (supabase.rpc as any)("seed_default_role_permissions", {
+    p_tenant_id: tenantId,
+    p_permissions: permissions,
+  });
 
   if (error) {
     console.error("Error seeding default permissions:", error);

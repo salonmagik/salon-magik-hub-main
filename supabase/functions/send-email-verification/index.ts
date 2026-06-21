@@ -231,10 +231,11 @@ const handler = async (req: Request): Promise<Response> => {
       platformTemplate?.is_active === false ? defaultSubject : platformTemplate?.subject || defaultSubject,
       templateValues,
     );
-    const htmlBody = renderPlatformTemplate(
+    const renderedBody = renderPlatformTemplate(
       platformTemplate?.is_active === false ? defaultBody : platformTemplate?.body || defaultBody,
       templateValues,
     );
+    const htmlBody = wrapEmailTemplate(renderedBody, { mode: "product" });
 
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {

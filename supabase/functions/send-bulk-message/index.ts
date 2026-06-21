@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
 import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
 
@@ -480,6 +480,10 @@ async function processBulkEmail(
     salonName: senderDisplayName || tenant.name,
     fromEmail,
   });
+  const htmlMessage = wrapEmailTemplate(message, {
+    mode: "salon",
+    salonName: senderDisplayName || tenant.name,
+  });
 
   // Process in batches of 10
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
@@ -506,7 +510,7 @@ async function processBulkEmail(
             from: fromAddress,
             to: [customer.email],
             subject: subject || "Message from " + (senderDisplayName || tenant.name),
-            html: message,
+            html: htmlMessage,
           }),
         });
 

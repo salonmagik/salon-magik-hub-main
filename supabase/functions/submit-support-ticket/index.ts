@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -137,14 +137,17 @@ serve(async (req) => {
       }
     }
 
-    const supportHtml = `
+    const supportHtml = wrapEmailTemplate(
+      `
       <h2>New support ticket</h2>
       <p><strong>Ticket:</strong> ${insertedTicket.id}</p>
       <p><strong>From:</strong> ${authData.user.email ?? "Unknown"} ${profile?.phone ? `(${profile.phone})` : ""}</p>
       <p><strong>Issue type:</strong> ${issueType}</p>
       <p><strong>Subject:</strong> ${subject}</p>
       <p><strong>Body:</strong><br/>${String(body).replace(/\n/g, "<br/>")}</p>
-    `;
+    `,
+      { mode: "product" },
+    );
 
     await sendEmail(resendApiKey, {
       from: buildFromAddress({ mode: "product", fromEmail }),

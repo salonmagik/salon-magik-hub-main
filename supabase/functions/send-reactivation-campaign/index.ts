@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
 import { sendArkeselSMS } from "../_shared/arkesel-client.ts";
 
@@ -201,10 +201,10 @@ serve(async (req) => {
           if (!resendApiKey) throw new Error("RESEND_API_KEY not configured");
           await sendEmail(
             resendApiKey,
-            buildFromAddress({ mode: "product", fromEmail: resendFromEmail }),
+            buildFromAddress({ mode: "salon", salonName: tenant?.name, fromEmail: resendFromEmail }),
             customer.email,
             subject,
-            `<p>${message}</p>`,
+            wrapEmailTemplate(`<p>${message}</p>`, { mode: "salon", salonName: tenant?.name }),
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
