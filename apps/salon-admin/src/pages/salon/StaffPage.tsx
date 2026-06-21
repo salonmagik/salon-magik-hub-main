@@ -139,6 +139,15 @@ export default function StaffPage() {
 
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
   const filteredStaff = staffTab === "unassigned" ? staff.filter((member) => member.isUnassigned) : staff;
+  // send-staff-invitation creates the user_roles row (is_active: true) the moment an
+  // invite is sent, so the account exists and looks "Active" in user_roles terms even
+  // though the person has never logged in or set a real password. Cross-reference
+  // against unaccepted invitations by email so Team Members reflects that correctly.
+  const pendingInvitationByEmail = new Map(
+    pendingInvitations
+      .filter((invitation) => !invitation.accepted_at)
+      .map((invitation) => [invitation.email.toLowerCase(), invitation] as const),
+  );
   const isRoleChangedInDraft = Boolean(initialEditSnapshot && editRole !== initialEditSnapshot.role);
   const isEditingOwner = staffToEdit?.role === "owner";
   const normalizedSelectedLocations = [...selectedLocationIds].sort();
@@ -700,6 +709,10 @@ export default function StaffPage() {
                       <TableBody>
                         {filteredStaff.map((member) => {
                           const isActive = member.isActive;
+                          const pendingInvitation = member.email
+                            ? pendingInvitationByEmail.get(member.email.toLowerCase())
+                            : undefined;
+                          const resendStatus = pendingInvitation ? canResend(pendingInvitation) : null;
                           return (
                           <TableRow 
                             key={member.userId}
@@ -738,7 +751,11 @@ export default function StaffPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {isActive ? (
+                              {pendingInvitation ? (
+                                <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
+                                  Pending
+                                </Badge>
+                              ) : isActive ? (
                                 <Badge className="bg-success/10 text-success hover:bg-success/10">
                                   Active
                                 </Badge>
@@ -767,7 +784,7 @@ export default function StaffPage() {
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              {currentUserCanAssign && member.role !== "owner" && (
+                              {((currentUserCanAssign && member.role !== "owner") || pendingInvitation) && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -784,22 +801,37 @@ export default function StaffPage() {
                                       View Activities
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    {isActive ? (
-                                      <DropdownMenuItem 
-                                        onClick={() => handleDeactivateClick(member)}
-                                        className="text-destructive"
+                                    {pendingInvitation && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleResend(pendingInvitation.id)}
+                                        disabled={!resendStatus?.allowed || resendingInvitationId === pendingInvitation.id}
                                       >
-                                        <XCircle className="w-4 h-4 mr-2" />
-                                        Deactivate
+                                        <Mail className="w-4 h-4 mr-2" />
+                                        {resendingInvitationId === pendingInvitation.id
+                                          ? "Resending..."
+                                          : resendStatus?.allowed
+                                            ? "Resend invite"
+                                            : `Resend invite (${resendStatus?.minutesRemaining}m)`}
                                       </DropdownMenuItem>
-                                    ) : (
-                                      <DropdownMenuItem 
-                                        onClick={() => handleReactivateClick(member)}
-                                        className="text-success"
-                                      >
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Reactivate
-                                      </DropdownMenuItem>
+                                    )}
+                                    {currentUserCanAssign && member.role !== "owner" && (
+                                      isActive ? (
+                                        <DropdownMenuItem
+                                          onClick={() => handleDeactivateClick(member)}
+                                          className="text-destructive"
+                                        >
+                                          <XCircle className="w-4 h-4 mr-2" />
+                                          Deactivate
+                                        </DropdownMenuItem>
+                                      ) : (
+                                        <DropdownMenuItem
+                                          onClick={() => handleReactivateClick(member)}
+                                          className="text-success"
+                                        >
+                                          <CheckCircle className="w-4 h-4 mr-2" />
+                                          Reactivate
+                                        </DropdownMenuItem>
+                                      )
                                     )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -871,6 +903,9 @@ export default function StaffPage() {
                                 {invitation.first_name} {invitation.last_name}
                               </p>
                               <p className="text-sm text-muted-foreground">{invitation.email}</p>
+                              {invitation.phone && (
+                                <p className="text-sm text-muted-foreground">{invitation.phone}</p>
+                              )}
                               <div className="flex flex-wrap items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs">
                                   {roleLabels[invitation.role]}

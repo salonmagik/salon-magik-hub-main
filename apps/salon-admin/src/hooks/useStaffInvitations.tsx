@@ -10,6 +10,7 @@ export interface StaffInvitation {
   email: string;
   first_name: string;
   last_name: string;
+  phone: string | null;
   role: Enums<"app_role">;
   token: string;
   status: "pending" | "accepted" | "expired" | "cancelled";

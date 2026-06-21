@@ -152,6 +152,12 @@ export function ReviewStep({
                 <span className="text-muted-foreground">Email:</span>{" "}
                 <span className="font-medium">{ownerInvite.email}</span>
               </div>
+              {ownerInvite.phone && (
+                <div>
+                  <span className="text-muted-foreground">Phone:</span>{" "}
+                  <span className="font-medium">{ownerInvite.phone}</span>
+                </div>
+              )}
             </div>
             <p className="text-xs text-amber-600">
               An invitation will be sent after setup.
