@@ -84,7 +84,6 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useClaimTenantSalesPromo, useTenantSalesPromo } from "@/hooks/useSalesPromo";
 import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
-import { usePlanPricingByPlan } from "@/hooks/usePlanPricing";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { formatCurrency } from "@shared/currency";
@@ -125,6 +124,21 @@ const weekDays = [
   { key: "sunday", label: "Sunday" },
 ];
 
+const PLAN_CONFIG_ERROR_MESSAGES: Record<string, string> = {
+  BRANCHES_BELOW_ACTIVE_LOCATIONS: "You can't go below the number of branches you currently have open. Close a branch first if you want to reduce this.",
+  SEATS_BELOW_ACTIVE_STAFF: "You can't go below the number of team members currently on your team. Remove a team member first if you want to reduce this.",
+  CHAIN_TIER_CUSTOM_REQUIRED: "That many branches needs a custom plan. Contact support to set this up.",
+  PLAN_PRICE_NOT_FOUND: "Pricing isn't set up for your plan and currency yet. Contact support.",
+  TENANT_ACCESS_DENIED: "You don't have access to manage billing for this business.",
+  PLAN_CONFIGURATION_FORBIDDEN: "Only the business owner can change billing configuration.",
+  PLAN_CONFIGURATION_INPUT_INVALID: "Enter a valid number of branches and seats.",
+};
+
+function describePlanConfigError(message: string | undefined, fallback = "Could not price this configuration."): string {
+  if (!message) return fallback;
+  return PLAN_CONFIG_ERROR_MESSAGES[message] || message;
+}
+
 interface SettingsPageProps {
   scope?: SettingsScope;
 }
@@ -145,41 +159,29 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   } = useNotificationSettings();
   const [subscriptionPromoCode, setSubscriptionPromoCode] = useState("");
   const [isStartingSubscriptionCheckout, setIsStartingSubscriptionCheckout] = useState(false);
-  const [seatPurchaseQuantityInput, setSeatPurchaseQuantityInput] = useState("1");
-  const [isPurchasingSeats, setIsPurchasingSeats] = useState(false);
   const [isPurchasingTheme, setIsPurchasingTheme] = useState(false);
-  const [isUpgradingStudio, setIsUpgradingStudio] = useState(false);
-  const [isUpgradingChain, setIsUpgradingChain] = useState(false);
+  const [branchesInput, setBranchesInput] = useState("1");
+  const [seatsInput, setSeatsInput] = useState("1");
+  const [planConfigQuote, setPlanConfigQuote] = useState<{
+    current_plan_slug: string;
+    current_allowed_locations: number;
+    current_allowed_staff: number;
+    current_monthly_price: number;
+    required_plan_slug: string;
+    total_monthly_price: number | null;
+    price_delta: number | null;
+    requires_custom_locations: boolean;
+    currency: string;
+  } | null>(null);
+  const [isQuotingPlanConfig, setIsQuotingPlanConfig] = useState(false);
+  const [planConfigQuoteError, setPlanConfigQuoteError] = useState<string | null>(null);
+  const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
   const claimTenantPromo = useClaimTenantSalesPromo();
   const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
   const { data: activeTenantPromo } = useTenantSalesPromo();
   const { data: plans } = usePlans();
   const { data: entitlements, refetch: refetchEntitlements } = useTenantEntitlements(currentTenant?.id);
   const currentPlan = plans?.find((plan) => plan.slug === currentTenant?.plan);
-  const studioPlan = plans?.find((plan) => plan.slug === "studio");
-  const chainPlan = plans?.find((plan) => plan.slug === "chain");
-  const { data: studioPlanPricing } = usePlanPricingByPlan(studioPlan?.id || "", currentTenant?.currency || "USD");
-  const { data: chainPlanPricing } = usePlanPricingByPlan(chainPlan?.id || "", currentTenant?.currency || "USD");
-
-  const { data: staffSeatPricing } = useQuery({
-    queryKey: ["staff-addon-pricing", currentTenant?.country, currentTenant?.currency],
-    enabled: Boolean(currentTenant?.country && currentTenant?.currency),
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("staff_addon_pricing" as any)
-        .select("unit_price_per_extra_seat")
-        .eq("country_code", currentTenant?.country || "")
-        .eq("currency", currentTenant?.currency || "USD")
-        .eq("status", "active")
-        .order("effective_from", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-      return data ? Number((data as any).unit_price_per_extra_seat || 0) : 0;
-    },
-    staleTime: 1000 * 60,
-  });
 
   const { data: ecommerceThemePricing } = useQuery({
     queryKey: ["theme-addon-pricing", currentTenant?.country, currentTenant?.currency],
@@ -240,6 +242,125 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
   const { wallet } = useSalonWallet(currentTenant?.id);
 
+  // Seed the branches/seats inputs from entitlements, and re-seed whenever
+  // entitlements change (e.g. right after a payment completes) as long as
+  // the user hasn't started editing away from the last-seeded values —
+  // otherwise a fresh payment's redirect would leave the inputs showing the
+  // pre-payment numbers until a manual refresh.
+  const lastSeededRef = useRef<{ branches: string; seats: string } | null>(null);
+  useEffect(() => {
+    if (!entitlements) return;
+    const nextBranches = String(entitlements.allowed_locations || 1);
+    const nextSeats = String(entitlements.allowed_staff || 1);
+    const last = lastSeededRef.current;
+    const userHasNotEditedSinceLastSeed =
+      !last || (branchesInput === last.branches && seatsInput === last.seats);
+    if (userHasNotEditedSinceLastSeed) {
+      setBranchesInput(nextBranches);
+      setSeatsInput(nextSeats);
+      lastSeededRef.current = { branches: nextBranches, seats: nextSeats };
+    }
+  }, [entitlements]);
+
+  // Debounced live quote for the branches/seats configuration inputs.
+  // quoteRequestIdRef guards against an older, slower request resolving
+  // after a newer one and clobbering its result/error.
+  const quoteRequestIdRef = useRef(0);
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+    const branches = Number(branchesInput);
+    const seats = Number(seatsInput);
+    if (!Number.isFinite(branches) || !Number.isFinite(seats) || branches < 1 || seats < 0) {
+      setPlanConfigQuote(null);
+      setPlanConfigQuoteError(null);
+      return;
+    }
+
+    setIsQuotingPlanConfig(true);
+    setPlanConfigQuoteError(null);
+    const requestId = ++quoteRequestIdRef.current;
+    const timer = setTimeout(async () => {
+      try {
+        const { data, error } = await (supabase.rpc as any)("compute_plan_configuration", {
+          p_tenant_id: currentTenant.id,
+          p_branches: branches,
+          p_seats: seats,
+        });
+        if (error) throw error;
+        if (quoteRequestIdRef.current !== requestId) return;
+        setPlanConfigQuote(data?.[0] || null);
+        setPlanConfigQuoteError(null);
+      } catch (error) {
+        if (quoteRequestIdRef.current !== requestId) return;
+        setPlanConfigQuote(null);
+        setPlanConfigQuoteError(describePlanConfigError(error instanceof Error ? error.message : undefined));
+      } finally {
+        if (quoteRequestIdRef.current === requestId) setIsQuotingPlanConfig(false);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [branchesInput, seatsInput, currentTenant?.id]);
+
+  const applyPlanConfiguration = async () => {
+    if (!currentTenant?.id || !planConfigQuote) return;
+    const branches = Number(branchesInput);
+    const seats = Number(seatsInput);
+
+    setIsApplyingPlanConfig(true);
+    try {
+      const isIncrease = (planConfigQuote.price_delta || 0) > 0;
+
+      if (isIncrease) {
+        const { data, error } = await supabase.functions.invoke("create-plan-configuration-checkout-session", {
+          body: {
+            tenantId: currentTenant.id,
+            branches,
+            seats,
+            successUrl: `${window.location.origin}/salon/settings?tab=subscription&planconfig=success`,
+            cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&planconfig=cancelled`,
+          },
+        });
+        if (error) throw error;
+
+        if (data?.url) {
+          window.location.href = data.url;
+          return;
+        }
+
+        // Charged immediately via stored card — no redirect needed.
+        await Promise.all([refreshTenants(), refetchEntitlements()]);
+        toast({
+          title: "Billing updated",
+          description: `You're now on the ${planConfigQuote.required_plan_slug} plan.`,
+        });
+      } else {
+        const { error } = await (supabase.rpc as any)("apply_plan_configuration", {
+          p_tenant_id: currentTenant.id,
+          p_branches: branches,
+          p_seats: seats,
+          p_source: "settings_subscription",
+          p_reason: "Tenant updated branches/seats from subscription settings.",
+        });
+        if (error) throw error;
+
+        await Promise.all([refreshTenants(), refetchEntitlements()]);
+        toast({
+          title: "Billing updated",
+          description: `You're now on the ${planConfigQuote.required_plan_slug} plan. No charge — this was a decrease.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Update failed",
+        description: describePlanConfigError(error instanceof Error ? error.message : undefined, "Unable to update your plan configuration right now."),
+        variant: "destructive",
+      });
+    } finally {
+      setIsApplyingPlanConfig(false);
+    }
+  };
+
   // Sync tab with URL params
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab");
@@ -285,6 +406,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     }
 
     if (subscriptionStatus === "success") {
+      // currentTenant loads asynchronously after a hard redirect back from
+      // Paystack — wait for it instead of consuming the URL params before
+      // we're able to actually verify the payment.
+      if (!currentTenant?.id) {
+        return;
+      }
+
       // Paystack appends ?trxref=xxx&reference=xxx to the callback URL
       const reference = searchParams.get("reference") || searchParams.get("trxref");
 
@@ -294,7 +422,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       cleanParams.delete("trxref");
       setSearchParams(cleanParams, { replace: true });
 
-      if (reference && currentTenant?.id) {
+      if (reference) {
         supabase.functions
           .invoke("verify-subscription-payment", {
             body: { reference, tenantId: currentTenant.id },
@@ -328,7 +456,110 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       newParams.delete("subscription");
       setSearchParams(newParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+
+    const planConfigStatus = searchParams.get("planconfig");
+    if (planConfigStatus === "success") {
+      // Only the first-time-payer redirect fallback lands here — the stored-card
+      // path applies the change synchronously and never sets this param.
+      // currentTenant loads asynchronously after a hard redirect back from
+      // Paystack — wait for it instead of consuming the URL params (and
+      // silently skipping the verify+apply call) before it's ready.
+      if (!currentTenant?.id) {
+        return;
+      }
+
+      const reference = searchParams.get("reference") || searchParams.get("trxref");
+
+      const cleanParams = new URLSearchParams(searchParams);
+      cleanParams.delete("planconfig");
+      cleanParams.delete("reference");
+      cleanParams.delete("trxref");
+      setSearchParams(cleanParams, { replace: true });
+
+      if (reference) {
+        supabase.functions
+          .invoke("verify-plan-configuration-payment", {
+            body: { reference, tenantId: currentTenant.id },
+          })
+          .then(async ({ error }) => {
+            if (error) {
+              console.error("Plan configuration verification error:", error);
+              toast({
+                title: "Could not confirm payment",
+                description: "Contact support if the change doesn't apply shortly.",
+                variant: "destructive",
+              });
+              return;
+            }
+            await Promise.all([refreshTenants(), refetchEntitlements()]);
+            toast({
+              title: "Billing updated",
+              description: "Your branches and team seats have been updated.",
+            });
+          });
+      }
+    } else if (planConfigStatus === "cancelled") {
+      toast({
+        title: "Billing update cancelled",
+        description: "No changes were made.",
+        variant: "destructive",
+      });
+
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("planconfig");
+      setSearchParams(newParams, { replace: true });
+    }
+
+    const themePurchaseStatus = searchParams.get("themepurchase");
+    if (themePurchaseStatus === "success") {
+      // Only the first-time-payer redirect fallback lands here — the stored-card
+      // path applies the change synchronously and never sets this param.
+      if (!currentTenant?.id) {
+        return;
+      }
+
+      const reference = searchParams.get("reference") || searchParams.get("trxref");
+
+      const cleanParams = new URLSearchParams(searchParams);
+      cleanParams.delete("themepurchase");
+      cleanParams.delete("reference");
+      cleanParams.delete("trxref");
+      setSearchParams(cleanParams, { replace: true });
+
+      if (reference) {
+        supabase.functions
+          .invoke("verify-theme-purchase-payment", {
+            body: { reference, tenantId: currentTenant.id },
+          })
+          .then(async ({ error }) => {
+            if (error) {
+              console.error("Theme purchase verification error:", error);
+              toast({
+                title: "Could not confirm payment",
+                description: "Contact support if the theme doesn't activate shortly.",
+                variant: "destructive",
+              });
+              return;
+            }
+            await refetchEntitlements();
+            toast({
+              title: "Theme activated",
+              description: "The e-commerce storefront theme is now active for your public booking page.",
+            });
+          });
+      }
+    } else if (themePurchaseStatus === "cancelled") {
+      toast({
+        title: "Theme purchase cancelled",
+        description: "No charges were made.",
+        variant: "destructive",
+      });
+
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("themepurchase");
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, currentTenant?.id]);
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
@@ -424,91 +655,27 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     }
   };
 
-  const runPlanUpgrade = async (targetPlan: "studio" | "chain") => {
-    if (!currentTenant?.id) return;
-
-    const setPending = targetPlan === "studio" ? setIsUpgradingStudio : setIsUpgradingChain;
-    setPending(true);
-    try {
-      const { error } = await (supabase.rpc as any)("upgrade_tenant_plan_and_log_billing", {
-        p_tenant_id: currentTenant.id,
-        p_target_plan: targetPlan,
-        p_source: "settings_subscription",
-        p_reason:
-          targetPlan === "studio"
-            ? "Tenant upgraded to Studio for additional team seats."
-            : "Tenant upgraded to Chain for additional locations.",
-        p_seed_allowed_locations:
-          targetPlan === "chain" ? Math.max(entitlements?.used_locations || 1, 2) : null,
-      });
-
-      if (error) throw error;
-
-      await Promise.all([refreshTenants(), refetchEntitlements()]);
-      toast({
-        title: "Plan updated",
-        description:
-          targetPlan === "studio"
-            ? "Your tenant is now on the Studio plan."
-            : "Your tenant is now on the Chain plan and can add another branch.",
-      });
-    } catch (error) {
-      toast({
-        title: "Upgrade failed",
-        description: error instanceof Error ? error.message : "Unable to update the plan right now.",
-        variant: "destructive",
-      });
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const purchaseExtraSeats = async () => {
-    if (!currentTenant?.id) return;
-    const quantity = Math.max(1, Number(seatPurchaseQuantityInput || 1));
-
-    setIsPurchasingSeats(true);
-    try {
-      const { error } = await (supabase.rpc as any)("purchase_tenant_extra_seats_and_log_billing", {
-        p_tenant_id: currentTenant.id,
-        p_quantity: quantity,
-        p_source: "settings_subscription",
-        p_reason: `Tenant purchased ${quantity} extra staff seat${quantity === 1 ? "" : "s"} from subscription settings.`,
-      });
-
-      if (error) throw error;
-
-      setSeatPurchaseQuantityInput("1");
-      await refetchEntitlements();
-      toast({
-        title: "Seats added",
-        description: `${quantity} extra seat${quantity === 1 ? "" : "s"} added to your tenant entitlement.`,
-      });
-    } catch (error) {
-      toast({
-        title: "Seat purchase failed",
-        description: error instanceof Error ? error.message : "Unable to add seats right now.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPurchasingSeats(false);
-    }
-  };
-
   const purchaseThemeAddon = async () => {
     if (!currentTenant?.id) return;
 
     setIsPurchasingTheme(true);
     try {
-      const { error } = await (supabase.rpc as any)("purchase_tenant_theme_addon_and_log_billing", {
-        p_tenant_id: currentTenant.id,
-        p_theme_key: "ecommerce",
-        p_source: "settings_subscription",
-        p_reason: "Tenant activated the annual e-commerce storefront theme.",
+      const { data, error } = await supabase.functions.invoke("create-theme-purchase-checkout-session", {
+        body: {
+          tenantId: currentTenant.id,
+          themeKey: "ecommerce",
+          successUrl: `${window.location.origin}/salon/settings?tab=subscription&themepurchase=success`,
+          cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&themepurchase=cancelled`,
+        },
       });
-
       if (error) throw error;
 
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+
+      // Charged immediately via stored card — no redirect needed.
       await refetchEntitlements();
       toast({
         title: "Theme activated",
@@ -2348,18 +2515,21 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     const trialEndsAt = currentTenant?.trial_ends_at ? new Date(currentTenant.trial_ends_at) : null;
     const daysRemaining = trialEndsAt ? Math.max(0, differenceInDays(trialEndsAt, new Date())) : 0;
     const isTrialing = currentTenant?.subscription_status === "trialing";
-    const canUpgradeToStudio = currentTenant?.plan === "solo";
-    const canUpgradeToChain = currentTenant?.plan === "solo" || currentTenant?.plan === "studio";
-    const canBuySeats = currentTenant?.plan === "studio" || currentTenant?.plan === "chain";
-    const seatQuantity = Math.max(1, Number(seatPurchaseQuantityInput || 1));
-    const seatPurchaseTotal = (staffSeatPricing || 0) * seatQuantity;
+
+    const branchesValue = Number(branchesInput);
+    const seatsValue = Number(seatsInput);
+    const isPlanConfigUnchanged =
+      planConfigQuote &&
+      branchesValue === planConfigQuote.current_allowed_locations &&
+      seatsValue === planConfigQuote.current_allowed_staff;
+    const isPlanConfigIncrease = Boolean(planConfigQuote && (planConfigQuote.price_delta || 0) > 0);
 
     return (
       <Card>
         <CardHeader>
           <CardTitle>Subscription</CardTitle>
           <CardDescription>
-            Manage your subscription and billing.
+            Your business is on the <span className="font-medium capitalize">{currentTenant?.plan || "Solo"}</span> plan.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -2401,8 +2571,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                 {entitlements?.used_staff ?? 0} / {entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Base {entitlements?.base_staff_limit ?? currentPlan?.limits?.max_staff ?? 1}
-                {Number(entitlements?.extra_staff_seats || 0) > 0 ? ` + ${entitlements?.extra_staff_seats} add-on` : ""}
+                {Number(entitlements?.extra_staff_seats || 0) > 0
+                  ? `${entitlements?.base_staff_limit ?? currentPlan?.limits?.max_staff ?? 1} included in your plan + ${entitlements?.extra_staff_seats} paid add-on`
+                  : "All included in your plan"}
               </p>
             </div>
             <div className="rounded-lg border p-4">
@@ -2419,72 +2590,92 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           </div>
 
           <div className="space-y-3">
-            <p className="text-sm font-medium">Growth Actions</p>
-            {canUpgradeToStudio && (
-              <div className="rounded-lg border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium">Manage branches & team size</p>
+            <div className="rounded-lg border p-4 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Tell us how many branches and team seats you need. We'll automatically put you on the right plan for it.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                On the Chain plan, each branch you add here includes 12 team seats automatically — opening a new branch location elsewhere doesn't add seats on its own, only increasing the branch count here does.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="font-medium">Upgrade to Studio</p>
-                  <p className="text-sm text-muted-foreground">
-                    Unlock 6 base seats for a growing team.
-                    {studioPlanPricing && ` Starts at ${formatCurrency(studioPlanPricing.monthly_price, currentTenant?.currency || "USD")} / month.`}
-                  </p>
+                  <Label htmlFor="config-branches">Branches</Label>
+                  <Input
+                    id="config-branches"
+                    type="number"
+                    min={1}
+                    value={branchesInput}
+                    onChange={(event) => setBranchesInput(event.target.value)}
+                  />
                 </div>
-                <Button onClick={() => runPlanUpgrade("studio")} disabled={isUpgradingStudio}>
-                  {isUpgradingStudio && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Upgrade to Studio
-                </Button>
-              </div>
-            )}
-
-            {canUpgradeToChain && (
-              <div className="rounded-lg border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-medium">Upgrade to Chain</p>
-                  <p className="text-sm text-muted-foreground">
-                    Add more branches and move to multi-location entitlements.
-                    {chainPlanPricing && ` Starts at ${formatCurrency(chainPlanPricing.monthly_price, currentTenant?.currency || "USD")} / month.`}
-                  </p>
+                  <Label htmlFor="config-seats">Team seats</Label>
+                  <Input
+                    id="config-seats"
+                    type="number"
+                    min={0}
+                    value={seatsInput}
+                    onChange={(event) => setSeatsInput(event.target.value)}
+                  />
                 </div>
-                <Button variant="outline" onClick={() => runPlanUpgrade("chain")} disabled={isUpgradingChain}>
-                  {isUpgradingChain && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Upgrade to Chain
-                </Button>
               </div>
-            )}
 
-            {canBuySeats && (
-              <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium">Add team seats</p>
-                    <p className="text-sm text-muted-foreground">
-                      {staffSeatPricing
-                        ? `${formatCurrency(staffSeatPricing, currentTenant?.currency || "USD")} per extra seat / month`
-                        : "Per-seat add-on pricing follows your tenant country and currency."}
+              {isQuotingPlanConfig && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Calculating...
+                </p>
+              )}
+
+              {planConfigQuoteError && (
+                <p className="text-sm text-destructive">{planConfigQuoteError}</p>
+              )}
+
+              {!isQuotingPlanConfig && planConfigQuote && !planConfigQuote.requires_custom_locations && (
+                <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
+                  {isPlanConfigUnchanged ? (
+                    <p>
+                      You're currently on this configuration — <span className="font-medium capitalize">{planConfigQuote.required_plan_slug}</span> plan, {formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)} / month.
                     </p>
-                  </div>
+                  ) : (
+                    <>
+                      <p>
+                        This puts you on the <span className="font-medium capitalize">{planConfigQuote.required_plan_slug}</span> plan.
+                      </p>
+                      <p>
+                        New monthly total: <span className="font-medium">{formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}</span>
+                      </p>
+                      <p className={isPlanConfigIncrease ? "text-amber-600" : "text-success"}>
+                        {isPlanConfigIncrease
+                          ? `+${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — payment required`
+                          : `${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — applies immediately, no charge`}
+                      </p>
+                    </>
+                  )}
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="w-full sm:w-40">
-                    <Label htmlFor="seat-quantity">Quantity</Label>
-                    <Input
-                      id="seat-quantity"
-                      type="number"
-                      min={1}
-                      value={seatPurchaseQuantityInput}
-                      onChange={(event) => setSeatPurchaseQuantityInput(event.target.value)}
-                    />
-                  </div>
-                  <div className="text-sm text-muted-foreground sm:pb-2">
-                    Estimated monthly add-on: {formatCurrency(seatPurchaseTotal, currentTenant?.currency || "USD")}
-                  </div>
-                  <Button onClick={purchaseExtraSeats} disabled={isPurchasingSeats}>
-                    {isPurchasingSeats && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Add Seats
-                  </Button>
-                </div>
-              </div>
-            )}
+              )}
+
+              {!isQuotingPlanConfig && planConfigQuote?.requires_custom_locations && (
+                <p className="text-sm text-destructive">
+                  That many branches needs a custom plan. Contact support to set this up.
+                </p>
+              )}
+
+              <Button
+                className="w-full sm:w-auto"
+                onClick={applyPlanConfiguration}
+                disabled={
+                  !planConfigQuote ||
+                  planConfigQuote.requires_custom_locations ||
+                  isApplyingPlanConfig ||
+                  isQuotingPlanConfig ||
+                  Boolean(isPlanConfigUnchanged)
+                }
+              >
+                {isApplyingPlanConfig && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isPlanConfigUnchanged ? "No changes" : isPlanConfigIncrease ? "Pay & Update" : "Update Billing"}
+              </Button>
+            </div>
 
             <div className="rounded-lg border p-4">
               <p className="font-medium">Booking page themes</p>

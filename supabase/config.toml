@@ -112,6 +112,21 @@ verify_jwt = false
 [functions.send-daily-digest]
 verify_jwt = false
 
+[functions.process-recurring-addon-billing]
+verify_jwt = false
+
+[functions.create-plan-configuration-checkout-session]
+verify_jwt = false
+
+[functions.verify-plan-configuration-payment]
+verify_jwt = false
+
+[functions.create-theme-purchase-checkout-session]
+verify_jwt = false
+
+[functions.verify-theme-purchase-payment]
+verify_jwt = false
+
 [functions.manage-termii-sender-id]
 verify_jwt = false
 

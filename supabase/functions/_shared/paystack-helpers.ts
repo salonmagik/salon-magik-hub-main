@@ -230,3 +230,69 @@ export async function updatePaystackSubaccount(
 
   return data.data;
 }
+
+export interface ChargeAuthorizationResult {
+  success: boolean;
+  reference?: string;
+  authorization?: Record<string, unknown>;
+  error?: string;
+  raw?: unknown;
+}
+
+/**
+ * Charges a previously-stored, reusable card token server-to-server with no
+ * checkout redirect. Used both for the synchronous "pay the delta now" path
+ * and the recurring add-on billing cron, since Paystack's Plan/Subscription
+ * objects can't represent a dynamically-changing total — this is how we
+ * self-manage the variable portion of a tenant's bill.
+ *
+ * @param paystackKey - the secret key for the currency being charged (see getPaystackKeyForCurrency)
+ * @param params.amountInMajorUnits - amount in the currency's major unit (e.g. naira, not kobo)
+ */
+export async function chargeAuthorization(
+  paystackKey: string,
+  params: {
+    authorizationCode: string;
+    email: string;
+    amountInMajorUnits: number;
+    currency: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<ChargeAuthorizationResult> {
+  try {
+    const res = await fetch("https://api.paystack.co/transaction/charge_authorization", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        authorization_code: params.authorizationCode,
+        email: params.email,
+        amount: Math.round(params.amountInMajorUnits * 100),
+        currency: params.currency.toUpperCase(),
+        metadata: params.metadata || {},
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.status || data.data?.status !== "success") {
+      return {
+        success: false,
+        error: data.data?.gateway_response || data.message || "Charge authorization failed",
+        raw: data,
+      };
+    }
+
+    return {
+      success: true,
+      reference: data.data.reference,
+      authorization: data.data.authorization,
+      raw: data,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error charging authorization";
+    return { success: false, error: message };
+  }
+}

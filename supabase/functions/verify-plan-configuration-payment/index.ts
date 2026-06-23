@@ -48,7 +48,6 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Verify caller has owner role for this tenant
     const { data: userRole } = await supabase
       .from("user_roles")
       .select("role")
@@ -57,30 +56,37 @@ serve(async (req) => {
       .single();
 
     if (userRole?.role !== "owner") {
-      return new Response(JSON.stringify({ error: "Only owners can verify subscription payments" }), {
+      return new Response(JSON.stringify({ error: "Only owners can verify billing payments" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Load tenant to get currency
+    // Idempotency: if this reference was already applied, return success without re-applying.
+    const { data: existingLog } = await supabase
+      .from("audit_logs")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("action", "plan_configuration_charged")
+      .contains("metadata", { reference })
+      .maybeSingle();
+
+    if (existingLog) {
+      return new Response(JSON.stringify({ applied: true, alreadyApplied: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, name, logo_url, currency, subscription_status")
+      .select("id, name, logo_url, currency")
       .eq("id", tenantId)
       .single();
 
     if (!tenant) {
       return new Response(JSON.stringify({ error: "Tenant not found" }), {
         status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Already active — idempotent success
-    if (tenant.subscription_status === "active") {
-      return new Response(JSON.stringify({ activated: true, alreadyActive: true }), {
-        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -94,11 +100,9 @@ serve(async (req) => {
       });
     }
 
-    // Verify the transaction with Paystack
     const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${paystackKey}` },
     });
-
     const verifyData = await verifyRes.json();
 
     if (!verifyRes.ok || !verifyData.status) {
@@ -111,7 +115,6 @@ serve(async (req) => {
 
     const txData = verifyData.data;
 
-    // Guard: payment must be successful
     if (txData?.status !== "success") {
       return new Response(JSON.stringify({ error: `Payment status is '${txData?.status}', not 'success'` }), {
         status: 400,
@@ -119,16 +122,14 @@ serve(async (req) => {
       });
     }
 
-    // Guard: metadata must confirm this was a subscription activation
     const meta = txData?.metadata || {};
-    if (meta.intent !== "subscription_activation") {
-      return new Response(JSON.stringify({ error: "Payment was not a subscription activation" }), {
+    if (meta.intent !== "plan_configuration") {
+      return new Response(JSON.stringify({ error: "Payment was not a plan configuration update" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Guard: metadata tenant must match the caller's tenant
     if (meta.tenant_id !== tenantId) {
       return new Response(JSON.stringify({ error: "Payment tenant mismatch" }), {
         status: 403,
@@ -136,36 +137,55 @@ serve(async (req) => {
       });
     }
 
-    // Capture the reusable card token (if Paystack returned one) so future
-    // plan/add-on changes can be charged server-to-server with no redirect.
-    const authorization = txData?.authorization;
-    const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
-    if (authorization?.reusable && authorization?.authorization_code) {
-      tenantUpdate.paystack_authorization_code = authorization.authorization_code;
-      tenantUpdate.paystack_customer_code = txData?.customer?.customer_code || null;
-      tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
+    const branches = Number(meta.branches);
+    const seats = Number(meta.seats);
+    if (!Number.isFinite(branches) || !Number.isFinite(seats)) {
+      return new Response(JSON.stringify({ error: "Payment metadata missing branches/seats" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Activate the subscription
-    const { error: updateError } = await supabase
-      .from("tenants")
-      .update(tenantUpdate)
-      .eq("id", tenantId);
+    // Capture the reusable card token now that we have one, for future changes.
+    const authorization = txData?.authorization;
+    if (authorization?.reusable && authorization?.authorization_code) {
+      await supabase
+        .from("tenants")
+        .update({
+          paystack_authorization_code: authorization.authorization_code,
+          paystack_customer_code: txData?.customer?.customer_code || null,
+          paystack_authorization_email: txData?.customer?.email || null,
+        })
+        .eq("id", tenantId);
+    }
 
-    if (updateError) {
-      console.error("Failed to activate subscription:", updateError);
-      return new Response(JSON.stringify({ error: "Failed to activate subscription" }), {
+    // Must run as the calling user, not the service role — apply_plan_configuration
+    // checks auth.uid() internally, which is null for service-role calls.
+    const { data: applyResult, error: applyError } = await userClient.rpc("apply_plan_configuration", {
+      p_tenant_id: tenantId,
+      p_branches: branches,
+      p_seats: seats,
+      p_source: "owner_self_serve",
+      p_reason: "Plan configuration change (checkout redirect)",
+    });
+
+    if (applyError) {
+      console.error("apply_plan_configuration error:", applyError);
+      return new Response(JSON.stringify({ error: "Payment succeeded but applying the change failed. Contact support." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    const amount = (txData?.amount || 0) / 100;
+
     await supabase.from("audit_logs").insert({
-      action: "subscription.activated",
-      entity_type: "tenants",
-      entity_id: tenantId,
+      tenant_id: tenantId,
       actor_user_id: user.id,
-      metadata: { reference, currency, intent: "subscription_activation" },
+      action: "plan_configuration_charged",
+      entity_type: "tenant",
+      entity_id: tenantId,
+      metadata: { reference, branches, seats, price_delta: amount, currency },
     });
 
     const receiptEmail = txData?.customer?.email || user.email;
@@ -174,23 +194,21 @@ serve(async (req) => {
         recipientEmail: receiptEmail,
         salonName: tenant.name,
         salonLogoUrl: tenant.logo_url,
-        title: "Your Salon Magik subscription is active",
-        lineItems: [{ label: "Subscription plan", amount: (txData?.amount || 0) / 100 }],
-        total: (txData?.amount || 0) / 100,
+        title: "Your Salon Magik billing was updated",
+        lineItems: [{ label: `Plan configuration update (${branches} branches, ${seats} seats)`, amount }],
+        total: amount,
         currency,
         reference,
       });
     }
 
-    console.log(`Subscription activated for tenant ${tenantId} via reference ${reference}`);
-
-    return new Response(JSON.stringify({ activated: true }), {
+    return new Response(JSON.stringify({ applied: true, applyResult }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal server error";
-    console.error("verify-subscription-payment error:", error);
+    console.error("verify-plan-configuration-payment error:", error);
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
