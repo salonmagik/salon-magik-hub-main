@@ -191,12 +191,12 @@ serve(async (req) => {
       pursePaymentCustomerId,
     } = body;
 
-    console.log("Payment session params:", { 
-      createPaymentSession, 
-      paymentAmount, 
-      paymentCurrency, 
+    console.log("Payment session params:", {
+      createPaymentSession,
+      paymentAmount,
+      paymentCurrency,
       preferredPaymentGateway,
-      paymentSuccessUrl 
+      paymentSuccessUrl
     });
 
     if (!tenantId || !customer.email || !customer.firstName || !customer.lastName || items.length === 0) {
@@ -236,18 +236,18 @@ serve(async (req) => {
     const matches = (tenantCustomers || []).filter(
       (row) => {
         if (row.status === "deleted") return false;
-        
+
         // Both email and phone must be present in both the new booking and existing customer
         const hasEmail = normalizedEmail && row.email;
         const hasPhone = normalizedPhone && row.phone;
-        
+
         // Skip if either email or phone is missing from either side
         if (!hasEmail || !hasPhone) return false;
-        
+
         // Both must match
         const emailMatch = normalizeEmail(row.email) === normalizedEmail;
         const phoneMatch = normalizePhone(row.phone) === normalizedPhone;
-        
+
         return emailMatch && phoneMatch;
       }
     );
@@ -416,9 +416,9 @@ serve(async (req) => {
         },
         gift: item.isGift
           ? {
-              recipient,
-              shared_recipient: giftsBelongToSamePerson,
-            }
+            recipient,
+            shared_recipient: giftsBelongToSamePerson,
+          }
           : null,
         delivery_address: deliveryAddress,
       };
@@ -588,10 +588,10 @@ serve(async (req) => {
       try {
         console.log("Creating payment session...");
         const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-        
+
         // Determine effective currency with fallback
         const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, tenant.currency);
-        
+
         if (!effectiveCurrency) {
           return new Response(
             JSON.stringify({ error: "Currency is required" }),
@@ -607,12 +607,12 @@ serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
+
         // Determine gateway based on preference or region
         const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country || "") ||
-                            ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
-        const usePaystack = preferredPaymentGateway 
-          ? preferredPaymentGateway === "paystack" 
+          ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
+        const usePaystack = preferredPaymentGateway
+          ? preferredPaymentGateway === "paystack"
           : isPaystackRegion;
 
         // Get currency-specific Paystack key if needed
@@ -621,8 +621,8 @@ serve(async (req) => {
           const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
           if (paystackKeyResult.error || !paystackKeyResult.key) {
             return new Response(
-              JSON.stringify({ 
-                error: paystackKeyResult.error || "Paystack not configured for this currency" 
+              JSON.stringify({
+                error: paystackKeyResult.error || "Paystack not configured for this currency"
               }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
@@ -640,243 +640,245 @@ serve(async (req) => {
           effectiveCurrency
         });
 
-      // Validate that we have the required secret key for the selected gateway
-      if (usePaystack && !paystackSecretKey) {
-        return new Response(
-          JSON.stringify({ 
-            error: "Paystack payment is not configured. Please contact the salon or try a different payment method." 
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+        // Validate that we have the required secret key for the selected gateway
+        if (usePaystack && !paystackSecretKey) {
+          return new Response(
+            JSON.stringify({
+              error: "Paystack payment is not configured. Please contact the salon or try a different payment method."
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
-      if (usePaystack && tenant.payment_setup_status !== 'ready') {
-        return new Response(
-          JSON.stringify({ 
-            error: "The salon is not ready to accept online payments at this time. Please contact them or try again later." 
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+        if (usePaystack && tenant.payment_setup_status !== 'ready') {
+          return new Response(
+            JSON.stringify({
+              error: "The salon is not ready to accept online payments at this time. Please contact them or try again later."
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
-      let storeSubaccountCode: string | null = null;
-      let customerChargedAmount = paymentAmount;
-      let processingFeeAmount = 0;
-      const processingFeeRate = 0.01;
+        let storeSubaccountCode: string | null = null;
+        let customerChargedAmount = paymentAmount;
+        let processingFeeAmount = 0;
+        const processingFeeRate = 0.01;
 
-      if (usePaystack) {
-        const { data: payoutDest } = await supabase
-          .from("salon_payout_destinations")
-          .select("paystack_subaccount_code")
-          .eq("tenant_id", tenantId)
-          .eq("is_default", true)
+        if (usePaystack) {
+          const { data: payoutDest } = await supabase
+            .from("salon_payout_destinations")
+            .select("paystack_subaccount_code")
+            .eq("tenant_id", tenantId)
+            .eq("is_default", true)
+            .single();
+
+          if (payoutDest?.paystack_subaccount_code) {
+            storeSubaccountCode = payoutDest.paystack_subaccount_code;
+            processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
+            customerChargedAmount = paymentAmount + processingFeeAmount;
+          }
+        }
+
+        if (!usePaystack && !stripeSecretKey) {
+          console.error("Stripe key not configured but Stripe was selected");
+          return new Response(
+            JSON.stringify({
+              error: "Stripe payment is not configured. Please contact the salon or try a different payment method."
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const primaryAppointmentId = createdAppointmentIds[0];
+        const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
+
+        // Store payment intent
+        const { data: paymentIntent, error: paymentIntentError } = await supabase
+          .from("payment_intents")
+          .insert({
+            tenant_id: tenantId,
+            appointment_id: primaryAppointmentId,
+            amount: paymentAmount,
+            currency: effectiveCurrency.toUpperCase(),
+            customer_email: customer.email,
+            customer_name: `${customer.firstName} ${customer.lastName}`,
+            gateway: usePaystack ? "paystack" : "stripe",
+            is_deposit: paymentIsDeposit,
+            status: "pending",
+            paystack_reference: usePaystack ? sessionReference : null,
+            intent_type: "appointment_payment",
+            metadata: {
+              appointment_ids: createdAppointmentIds,
+            },
+          })
+          .select("id")
           .single();
 
-        if (payoutDest?.paystack_subaccount_code) {
-          storeSubaccountCode = payoutDest.paystack_subaccount_code;
-          processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
-          customerChargedAmount = paymentAmount + processingFeeAmount;
-        }
-      }
-
-      if (!usePaystack && !stripeSecretKey) {
-        console.error("Stripe key not configured but Stripe was selected");
-        return new Response(
-          JSON.stringify({ 
-            error: "Stripe payment is not configured. Please contact the salon or try a different payment method." 
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const primaryAppointmentId = createdAppointmentIds[0];
-      const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
-      
-      // Store payment intent
-      const { data: paymentIntent, error: paymentIntentError } = await supabase
-        .from("payment_intents")
-        .insert({
-          tenant_id: tenantId,
-          appointment_id: primaryAppointmentId,
-          amount: paymentAmount,
-          currency: effectiveCurrency.toUpperCase(),
-          customer_email: customer.email,
-          customer_name: `${customer.firstName} ${customer.lastName}`,
-          gateway: usePaystack ? "paystack" : "stripe",
-          is_deposit: paymentIsDeposit,
-          status: "pending",
-          paystack_reference: usePaystack ? sessionReference : null,
-          intent_type: "appointment_payment",
-          metadata: {
-            appointment_ids: createdAppointmentIds,
-          },
-        })
-        .select("id")
-        .single();
-
-      if (paymentIntentError) {
-        console.error("Failed to create payment intent:", paymentIntentError);
-        return new Response(
-          JSON.stringify({ 
-            error: "Failed to create payment record. Please try again." 
-          }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (usePaystack && paystackSecretKey) {
-        // Create Paystack transaction
-        const amountInMinorUnits = Math.round(customerChargedAmount * 100);
-        
-        console.log("Creating Paystack transaction with split payment metadata:", {
-          splitPurseAmount,
-          splitCustomerId,
-          hasMetadata: !!(splitPurseAmount && splitCustomerId)
-        });
-        
-        const paystackPayload: any = {
-          email: customer.email,
-          amount: amountInMinorUnits,
-          currency: effectiveCurrency.toUpperCase(),
-          reference: sessionReference,
-          callback_url: paymentSuccessUrl,
-          metadata: {
-            appointment_id: primaryAppointmentId,
-            appointment_ids: createdAppointmentIds,
-            payment_intent_id: paymentIntent?.id,
-            tenant_id: tenantId,
-            is_deposit: paymentIsDeposit,
-            customer_name: `${customer.firstName} ${customer.lastName}`,
-            intent_type: "appointment_payment",
-            ...(splitPurseAmount && splitCustomerId ? {
-              split_purse_amount: splitPurseAmount.toString(),
-              split_customer_id: splitCustomerId,
-            } : {}),
-            service_amount: paymentAmount,
-            processing_fee_rate: processingFeeRate,
-            processing_fee_amount: processingFeeAmount,
-            customer_charged_amount: customerChargedAmount,
-            store_subaccount_code: storeSubaccountCode || "",
-          },
-        };
-
-        if (storeSubaccountCode) {
-          paystackPayload.subaccount = storeSubaccountCode;
-        }
-
-        const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${paystackSecretKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(paystackPayload),
-        });
-
-        const paystackData = await paystackResponse.json();
-        console.log("Paystack API response:", { 
-          ok: paystackResponse.ok, 
-          status: paystackResponse.status,
-          data: paystackData 
-        });
-        
-        if (paystackResponse.ok && paystackData.status) {
-          // Update payment intent with access code
-          if (paymentIntent?.id) {
-            await supabase
-              .from("payment_intents")
-              .update({
-                paystack_access_code: paystackData.data.access_code,
-                status: "processing",
-              })
-              .eq("id", paymentIntent.id);
-          }
-          checkoutUrl = paystackData.data.authorization_url;
-          paymentGateway = "paystack";
-        } else {
-          console.error("Paystack payment initialization failed:", paystackData);
-          
-          // Provide user-friendly error messages
-          let errorMessage = paystackData.message || "Unknown error";
-          if (paystackData.code === "unsupported_currency") {
-            errorMessage = `This payment method doesn't support ${effectiveCurrency.toUpperCase()}. Please contact the salon for alternative payment options.`;
-          }
-          
+        if (paymentIntentError) {
+          console.error("Failed to create payment intent:", paymentIntentError);
           return new Response(
-            JSON.stringify({ 
-              error: errorMessage
+            JSON.stringify({
+              error: "Failed to create payment record. Please try again."
             }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-      } else if (!usePaystack && stripeSecretKey) {
-        // Create Stripe checkout session
-        const amountInCents = Math.round(paymentAmount * 100);
-        const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${stripeSecretKey}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({
-            "mode": "payment",
-            "payment_method_types[0]": "card",
-            "line_items[0][price_data][currency]": (paymentCurrency || tenant.currency || "USD").toLowerCase(),
-            "line_items[0][price_data][product_data][name]": paymentDescription || "Booking Payment",
-            "line_items[0][price_data][unit_amount]": amountInCents.toString(),
-            "line_items[0][quantity]": "1",
-            "customer_email": customer.email,
-            "success_url": `${paymentSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`,
-            "cancel_url": paymentCancelUrl || paymentSuccessUrl || "",
-            "metadata[appointment_id]": primaryAppointmentId,
-            "metadata[appointment_ids]": JSON.stringify(createdAppointmentIds),
-            "metadata[payment_intent_id]": paymentIntent?.id || "",
-            "metadata[tenant_id]": tenantId,
-            "metadata[is_deposit]": paymentIsDeposit ? "true" : "false",
-            "metadata[intent_type]": "appointment_payment",
-            ...(splitPurseAmount && splitCustomerId ? {
-              "metadata[split_purse_amount]": splitPurseAmount.toString(),
-              "metadata[split_customer_id]": splitCustomerId,
-            } : {}),
-          }),
-        });
 
-        const stripeData = await stripeResponse.json();
-        console.log("Stripe API response:", { 
-          ok: stripeResponse.ok, 
-          status: stripeResponse.status,
-          data: stripeData 
-        });
-        
-        if (stripeResponse.ok) {
-          // Update payment intent with session ID
-          if (paymentIntent?.id) {
-            await supabase
-              .from("payment_intents")
-              .update({
-                stripe_session_id: stripeData.id,
-                status: "processing",
-              })
-              .eq("id", paymentIntent.id);
+        if (usePaystack && paystackSecretKey) {
+          // Create Paystack transaction
+          const amountInMinorUnits = Math.round(customerChargedAmount * 100);
+
+          console.log("Creating Paystack transaction with split payment metadata:", {
+            splitPurseAmount,
+            splitCustomerId,
+            hasMetadata: !!(splitPurseAmount && splitCustomerId)
+          });
+
+          const paystackPayload: any = {
+            email: customer.email,
+            amount: amountInMinorUnits,
+            currency: effectiveCurrency.toUpperCase(),
+            reference: sessionReference,
+            callback_url: paymentSuccessUrl,
+            metadata: {
+              appointment_id: primaryAppointmentId,
+              appointment_ids: createdAppointmentIds,
+              payment_intent_id: paymentIntent?.id,
+              tenant_id: tenantId,
+              is_deposit: paymentIsDeposit,
+              customer_name: `${customer.firstName} ${customer.lastName}`,
+              intent_type: "appointment_payment",
+              ...(splitPurseAmount && splitCustomerId ? {
+                split_purse_amount: splitPurseAmount.toString(),
+                split_customer_id: splitCustomerId,
+              } : {}),
+              service_amount: paymentAmount,
+              processing_fee_rate: processingFeeRate,
+              processing_fee_amount: processingFeeAmount,
+              customer_charged_amount: customerChargedAmount,
+              store_subaccount_code: storeSubaccountCode || "",
+            },
+          };
+
+          if (storeSubaccountCode) {
+            paystackPayload.subaccount = storeSubaccountCode;
           }
-          checkoutUrl = stripeData.url;
-          paymentGateway = "stripe";
-        } else {
-          console.error("Stripe payment session creation failed:", stripeData);
-          return new Response(
-            JSON.stringify({ 
-              error: `Payment initialization failed: ${stripeData.error?.message || "Unknown error"}` 
+
+          console.log('Paystack payment initiation', paystackPayload)
+
+          const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${paystackSecretKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(paystackPayload),
+          });
+
+          const paystackData = await paystackResponse.json();
+          console.log("Paystack API response:", {
+            ok: paystackResponse.ok,
+            status: paystackResponse.status,
+            data: paystackData
+          });
+
+          if (paystackResponse.ok && paystackData.status) {
+            // Update payment intent with access code
+            if (paymentIntent?.id) {
+              await supabase
+                .from("payment_intents")
+                .update({
+                  paystack_access_code: paystackData.data.access_code,
+                  status: "processing",
+                })
+                .eq("id", paymentIntent.id);
+            }
+            checkoutUrl = paystackData.data.authorization_url;
+            paymentGateway = "paystack";
+          } else {
+            console.error("Paystack payment initialization failed:", paystackData);
+
+            // Provide user-friendly error messages
+            let errorMessage = paystackData.message || "Unknown error";
+            if (paystackData.code === "unsupported_currency") {
+              errorMessage = `This payment method doesn't support ${effectiveCurrency.toUpperCase()}. Please contact the salon for alternative payment options.`;
+            }
+
+            return new Response(
+              JSON.stringify({
+                error: errorMessage
+              }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } else if (!usePaystack && stripeSecretKey) {
+          // Create Stripe checkout session
+          const amountInCents = Math.round(paymentAmount * 100);
+          const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${stripeSecretKey}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+              "mode": "payment",
+              "payment_method_types[0]": "card",
+              "line_items[0][price_data][currency]": (paymentCurrency || tenant.currency || "USD").toLowerCase(),
+              "line_items[0][price_data][product_data][name]": paymentDescription || "Booking Payment",
+              "line_items[0][price_data][unit_amount]": amountInCents.toString(),
+              "line_items[0][quantity]": "1",
+              "customer_email": customer.email,
+              "success_url": `${paymentSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`,
+              "cancel_url": paymentCancelUrl || paymentSuccessUrl || "",
+              "metadata[appointment_id]": primaryAppointmentId,
+              "metadata[appointment_ids]": JSON.stringify(createdAppointmentIds),
+              "metadata[payment_intent_id]": paymentIntent?.id || "",
+              "metadata[tenant_id]": tenantId,
+              "metadata[is_deposit]": paymentIsDeposit ? "true" : "false",
+              "metadata[intent_type]": "appointment_payment",
+              ...(splitPurseAmount && splitCustomerId ? {
+                "metadata[split_purse_amount]": splitPurseAmount.toString(),
+                "metadata[split_customer_id]": splitCustomerId,
+              } : {}),
             }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          });
+
+          const stripeData = await stripeResponse.json();
+          console.log("Stripe API response:", {
+            ok: stripeResponse.ok,
+            status: stripeResponse.status,
+            data: stripeData
+          });
+
+          if (stripeResponse.ok) {
+            // Update payment intent with session ID
+            if (paymentIntent?.id) {
+              await supabase
+                .from("payment_intents")
+                .update({
+                  stripe_session_id: stripeData.id,
+                  status: "processing",
+                })
+                .eq("id", paymentIntent.id);
+            }
+            checkoutUrl = stripeData.url;
+            paymentGateway = "stripe";
+          } else {
+            console.error("Stripe payment session creation failed:", stripeData);
+            return new Response(
+              JSON.stringify({
+                error: `Payment initialization failed: ${stripeData.error?.message || "Unknown error"}`
+              }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
-      }
       } catch (paymentError) {
         console.error("Payment session creation error:", paymentError);
         const errorMessage = paymentError instanceof Error ? paymentError.message : "Failed to create payment session";
         return new Response(
-          JSON.stringify({ 
-            error: `Payment session creation failed: ${errorMessage}` 
+          JSON.stringify({
+            error: `Payment session creation failed: ${errorMessage}`
           }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -886,11 +888,11 @@ serve(async (req) => {
     // Process purse-only payment if requested (mimics webhook behavior for security and idempotency)
     if (!approvalRequired && processPursePayment && pursePaymentCustomerId && paymentAmount && paymentAmount > 0) {
       console.log(`Processing purse-only payment: ${paymentAmount} for customer ${pursePaymentCustomerId}`);
-      
+
       try {
         const primaryAppointmentId = createdAppointmentIds[0];
         const idempotencyKey = `purse_only_${primaryAppointmentId}_${Date.now()}`;
-        
+
         // Debit customer purse
         const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
           p_tenant_id: tenantId,
@@ -1004,11 +1006,11 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
     const errorStack = error instanceof Error ? error.stack : undefined;
     console.error("Error details:", { message: errorMessage, stack: errorStack });
-    
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: errorMessage,
-        details: errorStack 
+        details: errorStack
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
