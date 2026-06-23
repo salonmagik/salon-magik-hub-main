@@ -145,6 +145,10 @@ export function ReviewStep({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
               <div>
+                <span className="text-muted-foreground">Role:</span>{" "}
+                <span className="font-medium">Owner</span>
+              </div>
+              <div>
                 <span className="text-muted-foreground">Name:</span>{" "}
                 <span className="font-medium">{ownerInvite.name}</span>
               </div>

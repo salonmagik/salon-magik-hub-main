@@ -5,12 +5,7 @@ import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
-import {
-  clearGoogleOAuthIntent,
-  clearPasswordChangeRedirectPending,
-  readGoogleOAuthIntent,
-  readPasswordChangeRedirectPending,
-} from "@/lib/googleOAuthFlow";
+import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -108,17 +103,9 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
   const location = useLocation();
   const googleOAuthIntent = readGoogleOAuthIntent();
-  const passwordChangeRedirectPending = readPasswordChangeRedirectPending();
 
   if (isLoading) {
     return <LoadingScreen />;
-  }
-
-  if (location.pathname === "/login" && passwordChangeRedirectPending) {
-    if (!isAuthenticated) {
-      clearPasswordChangeRedirectPending();
-    }
-    return <>{children}</>;
   }
 
   // Only redirect if authenticated AND has a profile (not a BackOffice-only user)

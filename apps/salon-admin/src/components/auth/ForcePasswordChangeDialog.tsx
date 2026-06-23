@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Lock, Eye, EyeOff } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +12,6 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { useToast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/hooks/useAuth";
-import { markPasswordChangeRedirectPending } from "@/lib/googleOAuthFlow";
 import { validatePasswordStrength } from "@shared/validation";
 import { ValidationChecklist } from "@ui/validation-checklist";
 
@@ -28,8 +25,6 @@ export function ForcePasswordChangeDialog({
   onPasswordChanged,
 }: ForcePasswordChangeDialogProps) {
   const { toast } = useToast();
-  const navigate = useNavigate();
-  const { signOut } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -100,10 +95,12 @@ export function ForcePasswordChangeDialog({
         description: "Your password has been changed successfully.",
       });
 
-      markPasswordChangeRedirectPending();
-      await signOut();
+      // Refresh the session so the user's metadata (requires_password_change:
+      // false) is picked up locally — no need to sign out and log back in,
+      // the current session is still valid since changing a password via the
+      // admin API doesn't revoke existing sessions.
+      await supabase.auth.refreshSession();
       onPasswordChanged();
-      navigate("/login", { replace: true });
     } catch (error: any) {
       toast({
         title: "Error",
