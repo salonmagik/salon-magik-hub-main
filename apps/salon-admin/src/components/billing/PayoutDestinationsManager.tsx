@@ -116,14 +116,14 @@ export function PayoutDestinationsManager() {
     if (!accountNumber) return false;
     // Nigeria bank accounts are 10 digits
     if (country === "NG" && destinationType === "bank") {
-      return /^\d{10}$/.test(accountNumber);
+      return /^\d{3}$/.test(accountNumber);
     }
     // For mobile money and Ghana, just check it's not empty
     return accountNumber.length > 0;
   };
 
   const canVerify = destinationType === "bank" && selectedBank && isAccountNumberValid();
-  const canSave = 
+  const canSave =
     destinationType === "mobile_money"
       ? accountName && selectedBank && isAccountNumberValid()
       : result?.verified && accountName && selectedBank && isAccountNumberValid();
@@ -430,9 +430,9 @@ function DestinationCard({ destination, onDelete, onRetry }: DestinationCardProp
                   <p className="text-destructive/80 text-xs">{destination.paystack_subaccount_error}</p>
                 </div>
               </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="h-8 text-xs border-destructive/20 hover:bg-destructive/20"
                 onClick={async () => {
                   setIsRetrying(true);

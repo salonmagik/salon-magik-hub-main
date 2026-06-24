@@ -86,9 +86,9 @@ async function debitWalletWithRetry(
     // This ensures that if first attempt succeeds but we don't get response, 
     // subsequent attempts will return the same ledger entry ID
     const idempotencyKey = `webhook_debit_${withdrawalId}`;
-    
+
     console.log(`[Wallet Debit] Attempt ${attempt}/${maxRetries} for withdrawal ${withdrawalId}`);
-    
+
     const { data: ledgerEntryId, error } = await supabase.rpc(
       "debit_salon_purse_for_withdrawal",
       {
@@ -115,9 +115,9 @@ async function debitWalletWithRetry(
     }
   }
 
-  return { 
-    success: false, 
-    error: `Failed to debit wallet after ${maxRetries} attempts` 
+  return {
+    success: false,
+    error: `Failed to debit wallet after ${maxRetries} attempts`
   };
 }
 
@@ -138,10 +138,10 @@ async function validateTenant(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   context: string
-): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null }> {
+): Promise<{ name: string | null; currency: string }> {
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
-    .select("name, currency, platform_percentage_charge")
+    .select("name, currency")
     .eq("id", tenantId)
     .single();
 
@@ -669,19 +669,15 @@ export async function processWebhook(
                   ? actualServiceAmount + splitPurseAmount
                   : actualServiceAmount;
 
-                let finalCreditAmount = totalAmountForSalon;
-                if (tenant.platform_percentage_charge) {
-                   finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
-                }
 
-                console.log(`Crediting salon purse: card=${actualServiceAmount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}, net=${finalCreditAmount}`);
+                console.log(`Crediting salon purse: card=${actualServiceAmount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}, net=${totalAmountForSalon}`);
 
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
                   p_entry_type: "salon_purse_credit_booking",
                   p_reference_type: "appointment",
                   p_reference_id: primaryAppointment.id,
-                  p_amount: finalCreditAmount,
+                  p_amount: totalAmountForSalon,
                   p_currency: tenant.currency,
                   p_idempotency_key: `booking_${reference}`,
                   p_gateway_reference: reference,
@@ -690,7 +686,7 @@ export async function processWebhook(
                 if (creditError) {
                   console.error("Error crediting salon purse:", creditError);
                 } else {
-                  console.log(`Salon purse credited: ${amount} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
                 }
               } catch (purseError) {
                 console.error("Exception crediting salon purse:", purseError);
@@ -827,17 +823,12 @@ export async function processWebhook(
               // Validate salon wallet currency matches tenant currency
               await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
-              let finalCreditAmount = actualServiceAmount;
-              if (invoiceTenant.platform_percentage_charge) {
-                 finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
-              }
-
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: tenantId,
                 p_entry_type: "salon_purse_credit_invoice",
                 p_reference_type: "invoice",
                 p_reference_id: invoiceId,
-                p_amount: finalCreditAmount,
+                p_amount: actualServiceAmount,
                 p_currency: invoiceTenant.currency,
                 p_idempotency_key: `invoice_${reference}`,
                 p_gateway_reference: reference,
@@ -1093,10 +1084,10 @@ export async function processWebhook(
         if (!debitResult.success) {
           // Wallet debit failed after retries - mark as failed
           console.error(`[CRITICAL] Failed to debit wallet for successful transfer ${withdrawalId}`);
-          
+
           const { error: updateError } = await supabase
             .from("salon_withdrawals")
-            .update({ 
+            .update({
               status: "failed",
               failure_reason: `CRITICAL: Transfer successful but wallet debit failed after retries. Error: ${debitResult.error}. Requires manual reconciliation.`
             })
@@ -1122,7 +1113,7 @@ export async function processWebhook(
       } else if (event.type === "transfer.failed" || event.type === "transfer.reversed") {
         // Transfer failed or reversed - no wallet reversal needed since wallet was never debited
         const failureReason = event.data.status || `Transfer ${event.type === "transfer.failed" ? "failed" : "reversed"}`;
-        
+
         console.log(`[Transfer ${event.type}] Marking withdrawal ${withdrawalId} as failed (no wallet reversal needed)`);
 
         const { error: updateError } = await supabase

@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
@@ -117,8 +117,8 @@ Deno.serve(async (req) => {
     const paystackKeyResult = getPaystackKeyForCurrency(currency);
     if (paystackKeyResult.error || !paystackKeyResult.key) {
       return new Response(
-        JSON.stringify({ 
-          error: paystackKeyResult.error || `Paystack not configured for currency ${currency}` 
+        JSON.stringify({
+          error: paystackKeyResult.error || `Paystack not configured for currency ${currency}`
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -167,6 +167,7 @@ Deno.serve(async (req) => {
 
       // Try to create Paystack subaccount
       try {
+        console.log('request for payout destination')
         const subaccountData = await createPaystackSubaccount(currency.toUpperCase(), {
           business_name: tenant.name || `Salon ${tenantId}`,
           settlement_bank: bankCode!,
