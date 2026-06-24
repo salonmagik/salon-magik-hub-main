@@ -213,6 +213,7 @@ function BookingPageContent() {
       <BookingPageWithCart
         salon={salon}
         themeKey={previewThemeKey || salon.theme_key || null}
+        storefrontMode={salon.storefront_mode || "both"}
         isThemePreview={Boolean(previewThemeKey)}
         locations={countryScopedLocations}
         checkoutLocations={checkoutLocations}
@@ -237,6 +238,7 @@ function BookingPageContent() {
 interface BookingPageWithCartProps {
   salon: PublicTenant;
   themeKey: string | null;
+  storefrontMode: "services" | "products" | "both";
   isThemePreview: boolean;
   locations: PublicLocation[];
   checkoutLocations: PublicLocation[];
@@ -258,6 +260,7 @@ interface BookingPageWithCartProps {
 function BookingPageWithCart({
   salon,
   themeKey,
+  storefrontMode,
   isThemePreview,
   locations,
   checkoutLocations,
@@ -336,6 +339,7 @@ function BookingPageWithCart({
             {!isCatalogBlocked ? (
               <CatalogView
                 themeKey={themeKey}
+                storefrontMode={storefrontMode}
                 services={services}
                 packages={packages}
                 products={products}
@@ -367,6 +371,7 @@ function BookingPageWithCart({
             {!isCatalogBlocked ? (
               <CatalogView
                 themeKey={themeKey}
+                storefrontMode={storefrontMode}
                 services={services}
                 packages={packages}
                 products={products}

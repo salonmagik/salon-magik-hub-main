@@ -605,6 +605,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     bookingPageBio: "",
     slotCapacityDefault: 1,
     brandColor: "#2563EB",
+    storefrontMode: "both" as "services" | "products" | "both",
     allowStaffSelection: true,
     requireStaffSelection: false,
     autoAssignStaff: true,
@@ -729,6 +730,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     bookingPageBio: "",
     slotCapacityDefault: 1,
     brandColor: "#2563EB",
+    storefrontMode: "both" as "services" | "products" | "both",
     allowStaffSelection: true,
     requireStaffSelection: false,
     autoAssignStaff: true,
@@ -764,6 +766,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         bookingPageBio: (currentTenant as { booking_page_bio?: string | null }).booking_page_bio || "",
         slotCapacityDefault: currentTenant.slot_capacity_default || 1,
         brandColor: (currentTenant as any).brand_color || "#2563EB",
+        storefrontMode: ((currentTenant as any).storefront_mode || "both") as "services" | "products" | "both",
         allowStaffSelection: (currentTenant as any).allow_staff_selection ?? true,
         requireStaffSelection: (currentTenant as any).require_staff_selection ?? false,
         autoAssignStaff: (currentTenant as any).auto_assign_staff ?? true,
@@ -1110,6 +1113,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         bookingStatusMessage={bookingSettings.bookingStatusMessage}
         contactPhone={profileData.contactPhone || currentTenant?.contact_phone || null}
         showContactOnBooking={profileData.showContactOnBooking}
+        storefrontMode={bookingSettings.storefrontMode}
         locations={(locations || []).map((location) => ({
           id: location.id,
           name: location.name,
@@ -1361,6 +1365,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
           booking_page_bio: bookingSettings.bookingPageBio || null,
           slot_capacity_default: bookingSettings.slotCapacityDefault,
           brand_color: bookingSettings.brandColor,
+          storefront_mode: bookingSettings.storefrontMode,
           allow_staff_selection: bookingSettings.allowStaffSelection,
           require_staff_selection: bookingSettings.requireStaffSelection,
           auto_assign_staff: bookingSettings.autoAssignStaff,
@@ -2321,6 +2326,34 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                     <div className="h-10 w-10 rounded-md border" style={{ backgroundColor: bookingSettings.brandColor }} />
                   </div>
                   <p className="text-xs text-muted-foreground">Used for buttons and accents on your booking page.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Storefront Focus</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { value: "both", label: "Both" },
+                      { value: "services", label: "Services only" },
+                      { value: "products", label: "Products only" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setBookingSettings((prev) => ({ ...prev, storefrontMode: opt.value }))}
+                        className={cn(
+                          "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                          bookingSettings.storefrontMode === opt.value
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background hover:bg-muted/40"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Both keeps your full catalog. Services or Products only gives your booking page a more focused layout for that one type — packages are always included either way.
+                  </p>
                 </div>
               </div>
 

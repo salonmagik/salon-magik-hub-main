@@ -30,6 +30,7 @@ export type PublicTenant = Pick<
   show_contact_on_booking?: boolean;
   auto_confirm_bookings?: boolean;
   theme_key?: string | null;
+  storefront_mode?: "services" | "products" | "both" | null;
 };
 
 export type PublicLocation = Pick<

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Badge } from "@ui/badge";
-import { ShoppingBag, Search, Clock, Package as PackageIcon, SlidersHorizontal } from "lucide-react";
+import { ShoppingBag, Calendar, Search, Clock, Package as PackageIcon, SlidersHorizontal } from "lucide-react";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
 
@@ -24,6 +24,7 @@ interface BookingThemePreviewProps {
   showContactOnBooking?: boolean;
   locations: PreviewLocation[];
   mode?: "card" | "dialog";
+  storefrontMode?: "services" | "products" | "both";
 }
 
 type PreviewItem = {
@@ -73,19 +74,29 @@ export function BookingThemePreview({
   showContactOnBooking = true,
   locations,
   mode = "card",
+  storefrontMode = "both",
 }: BookingThemePreviewProps) {
   const [typeFilter, setTypeFilter] = useState("all");
   const isDialog = mode === "dialog";
   const isEcommerceTheme = themeKey === "ecommerce";
+  const isModeRestricted = storefrontMode !== "both";
   const brand = brandColor?.startsWith("#") ? brandColor : "#111827";
 
   const slug = salonName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
   const displayUrl = `salonmagik.com/book/${slug || "your-salon"}`;
 
+  const modeItems = useMemo(() => {
+    if (storefrontMode === "services") return previewItems.filter((i) => i.type !== "product");
+    if (storefrontMode === "products") return previewItems.filter((i) => i.type !== "service");
+    return previewItems;
+  }, [storefrontMode]);
+
   const filteredItems = useMemo(() => {
-    if (typeFilter === "all") return previewItems;
-    return previewItems.filter((i) => i.type === typeFilter);
-  }, [typeFilter]);
+    if (typeFilter === "all") return modeItems;
+    return modeItems.filter((i) => i.type === typeFilter);
+  }, [modeItems, typeFilter]);
+
+  const isServiceFeel = (itemType: PreviewItem["type"]) => storefrontMode === "services" && itemType !== "product";
 
   const discountPct = (item: PreviewItem) =>
     item.originalPrice ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100) : 0;
@@ -176,7 +187,7 @@ export function BookingThemePreview({
           <div className="px-6 py-8">
             {/* Header row */}
             <div className="mb-6 flex items-center justify-between border-b border-black/8 pb-4">
-              <p className="text-[11px] text-gray-400">{previewItems.length} items</p>
+              <p className="text-[11px] text-gray-400">{filteredItems.length} items</p>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400" />
                 <div className="h-7 w-40 rounded border border-black/12 bg-white pl-7 text-[10px] leading-7 text-gray-400">Search…</div>
@@ -190,27 +201,29 @@ export function BookingThemePreview({
                   <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Sort By</p>
                   <div className="h-6 rounded border border-black/12 bg-white px-2 text-[10px] leading-6 text-gray-500">Name A–Z ▾</div>
                 </div>
-                <div className="border-t border-black/8 pt-4">
-                  <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Type</p>
-                  <ul className="space-y-2">
-                    {["All", "Services", "Packages", "Products"].map((t) => {
-                      const val = t === "All" ? "all" : t.toLowerCase().slice(0, -1);
-                      const active = typeFilter === val;
-                      return (
-                        <li key={t}>
-                          <button
-                            type="button"
-                            onClick={() => setTypeFilter(val)}
-                            className="text-[10px] transition-colors"
-                            style={{ color: active ? brand : "#9ca3af", fontWeight: active ? 600 : 400 }}
-                          >
-                            {t}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
+                {!isModeRestricted && (
+                  <div className="border-t border-black/8 pt-4">
+                    <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Type</p>
+                    <ul className="space-y-2">
+                      {["All", "Services", "Packages", "Products"].map((t) => {
+                        const val = t === "All" ? "all" : t.toLowerCase().slice(0, -1);
+                        const active = typeFilter === val;
+                        return (
+                          <li key={t}>
+                            <button
+                              type="button"
+                              onClick={() => setTypeFilter(val)}
+                              className="text-[10px] transition-colors"
+                              style={{ color: active ? brand : "#9ca3af", fontWeight: active ? 600 : 400 }}
+                            >
+                              {t}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
                 {locations.length > 0 && (
                   <div className="border-t border-black/8 pt-4">
                     <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Location</p>
@@ -245,7 +258,11 @@ export function BookingThemePreview({
                           )}
                         </div>
                         <div className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-white shadow opacity-0 transition-opacity group-hover:opacity-100">
-                          <ShoppingBag className="h-3 w-3" style={{ color: brand }} />
+                          {isServiceFeel(item.type) ? (
+                            <Calendar className="h-3 w-3" style={{ color: brand }} />
+                          ) : (
+                            <ShoppingBag className="h-3 w-3" style={{ color: brand }} />
+                          )}
                         </div>
                       </div>
                       {/* Text */}
@@ -322,7 +339,7 @@ export function BookingThemePreview({
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {previewItems.map((item) => {
+            {modeItems.map((item) => {
               const dp = discountPct(item);
               return (
                 <div key={item.id} className="flex gap-3 rounded-xl border bg-card p-3">
