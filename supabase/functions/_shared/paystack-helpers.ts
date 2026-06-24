@@ -159,7 +159,7 @@ export async function createPaystackSubaccount(
   payload: CreateSubaccountPayload
 ) {
   const { key, error: keyError } = getPaystackKeyForCurrency(currency);
-
+  
   if (keyError || !key) {
     throw new Error(keyError || "Failed to get Paystack key");
   }
@@ -168,7 +168,6 @@ export async function createPaystackSubaccount(
     ...payload,
     settlement_schedule: "manual",
   });
-
   const response = await fetch("https://api.paystack.co/subaccount", {
     method: "POST",
     headers: {
@@ -214,7 +213,7 @@ export async function updatePaystackSubaccount(
   payload: UpdateSubaccountPayload
 ) {
   const { key, error: keyError } = getPaystackKeyForCurrency(currency);
-
+  
   if (keyError || !key) {
     throw new Error(keyError || "Failed to get Paystack key");
   }

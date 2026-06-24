@@ -430,8 +430,8 @@ function DestinationCard({ destination, onDelete, onRetry }: DestinationCardProp
                   <p className="text-destructive/80 text-xs">{destination.paystack_subaccount_error}</p>
                 </div>
               </div>
-              <Button
-                variant="outline"
+              <Button 
+                variant="outline" 
                 size="sm"
                 className="h-8 text-xs border-destructive/20 hover:bg-destructive/20"
                 onClick={async () => {

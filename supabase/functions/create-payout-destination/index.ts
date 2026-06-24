@@ -167,7 +167,6 @@ Deno.serve(async (req) => {
 
       // Try to create Paystack subaccount
       try {
-        console.log('request for payout destination')
         const subaccountData = await createPaystackSubaccount(currency.toUpperCase(), {
           business_name: tenant.name || `Salon ${tenantId}`,
           settlement_bank: bankCode!,
