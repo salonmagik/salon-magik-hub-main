@@ -660,9 +660,9 @@ serve(async (req) => {
         }
 
         let storeSubaccountCode: string | null = null;
-        let customerChargedAmount = paymentAmount;
-        let processingFeeAmount = 0;
-        const processingFeeRate = 0.01;
+        // let customerChargedAmount = paymentAmount;
+        // let processingFeeAmount = 0;
+        // const processingFeeRate = 0.01;
 
         if (usePaystack) {
           const { data: payoutDest } = await supabase
@@ -674,8 +674,8 @@ serve(async (req) => {
 
           if (payoutDest?.paystack_subaccount_code) {
             storeSubaccountCode = payoutDest.paystack_subaccount_code;
-            processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
-            customerChargedAmount = paymentAmount + processingFeeAmount;
+            // processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
+            // customerChargedAmount = paymentAmount + processingFeeAmount;
           }
         }
 
@@ -726,7 +726,7 @@ serve(async (req) => {
 
         if (usePaystack && paystackSecretKey) {
           // Create Paystack transaction
-          const amountInMinorUnits = Math.round(customerChargedAmount * 100);
+          const amountInMinorUnits = Math.round(paymentAmount * 100);
 
           console.log("Creating Paystack transaction with split payment metadata:", {
             splitPurseAmount,
@@ -753,9 +753,9 @@ serve(async (req) => {
                 split_customer_id: splitCustomerId,
               } : {}),
               service_amount: paymentAmount,
-              processing_fee_rate: processingFeeRate,
-              processing_fee_amount: processingFeeAmount,
-              customer_charged_amount: customerChargedAmount,
+              // processing_fee_rate: processingFeeRate,
+              // processing_fee_amount: processingFeeAmount,
+              // customer_charged_amount: customerChargedAmount,
               store_subaccount_code: storeSubaccountCode || "",
             },
           };
