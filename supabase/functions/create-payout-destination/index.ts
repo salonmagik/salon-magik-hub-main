@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
           business_name: tenant.name || `Salon ${tenantId}`,
           settlement_bank: bankCode!,
           account_number: accountNumber!,
-          percentage_charge: tenant.platform_percentage_charge || 10,
+          percentage_charge: tenant.platform_percentage_charge || 0.5, // make sure percentage is in right format 0.5 is 0.5%
           primary_contact_email: user.email,
         });
 

@@ -114,9 +114,9 @@ export function PayoutDestinationsManager() {
 
   const isAccountNumberValid = () => {
     if (!accountNumber) return false;
-    // Nigeria bank accounts are 10 digits
+    // Nigeria bank accounts are 6 digits or more for testing
     if (country === "NG" && destinationType === "bank") {
-      return /^\d{3}$/.test(accountNumber);
+      return /^\d{6,}$/.test(accountNumber);
     }
     // For mobile money and Ghana, just check it's not empty
     return accountNumber.length > 0;
@@ -229,7 +229,7 @@ export function PayoutDestinationsManager() {
                           onChange={(e) => setAccountNumber(e.target.value)}
                           placeholder={
                             country === "NG" && destinationType === "bank"
-                              ? "10-digit account number"
+                              ? "Account number"
                               : "Enter number"
                           }
                         />
@@ -249,7 +249,7 @@ export function PayoutDestinationsManager() {
                         )}
                       </div>
                       {country === "NG" && destinationType === "bank" && accountNumber && !isAccountNumberValid() && (
-                        <p className="text-xs text-destructive">Account number must be 10 digits</p>
+                        <p className="text-xs text-destructive">Account number must be at least 6 digits</p>
                       )}
                     </div>
 
