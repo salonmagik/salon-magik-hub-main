@@ -163,6 +163,11 @@ serve(async (req) => {
         );
       }
 
+      // A real charge just succeeded, so this tenant is no longer just
+      // trialing — without this, paying customers kept seeing trial-ending
+      // banners forever.
+      await supabase.from("tenants").update({ subscription_status: "active" }).eq("id", tenantId);
+
       await supabase.from("audit_logs").insert({
         tenant_id: tenantId,
         actor_user_id: user.id,

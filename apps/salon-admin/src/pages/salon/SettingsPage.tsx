@@ -75,7 +75,7 @@ import { useMyReferralCodes, useMyReferralDiscounts, useGenerateReferralCode } f
 import { supabase } from "@/lib/supabase";
 import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { toast } from "@ui/ui/use-toast";
-import { differenceInDays, format } from "date-fns";
+import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
 import { WalletLedger } from "@/components/billing/WalletLedger";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
@@ -658,6 +658,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
   const purchaseThemeAddon = async () => {
     if (!currentTenant?.id) return;
+    if (currentTenant.subscription_status !== "active") {
+      toast({
+        title: "Upgrade required",
+        description: "Finish upgrading from your trial before purchasing a paid storefront theme.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsPurchasingTheme(true);
     try {
@@ -935,6 +943,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
   });
   const activeBookingTheme: BookingThemeKey = entitlements?.has_ecommerce_theme ? "ecommerce" : "default";
+  // Paid themes are an ongoing annual charge — a trialing tenant hasn't
+  // committed to paying for anything yet, so don't let them start a second
+  // bill before the base plan itself is active.
+  const canPurchasePaidTheme = currentTenant?.subscription_status === "active";
 
   const handleCopyUrl = () => {
     if (bookingUrl) {
@@ -2407,11 +2419,19 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                     <div className="mt-4 flex flex-wrap gap-2">
                       <Button type="button" variant="outline" onClick={() => openThemePreview("ecommerce")}><Eye className="mr-2 h-4 w-4" />Preview</Button>
                       <Button type="button" variant="ghost" onClick={() => openThemePreviewInNewTab("ecommerce")} disabled={!bookingUrl}><ExternalLink className="mr-2 h-4 w-4" />Open live preview</Button>
-                      <Button type="button" onClick={purchaseThemeAddon} disabled={isPurchasingTheme || activeBookingTheme === "ecommerce"}>
+                      <Button
+                        type="button"
+                        onClick={purchaseThemeAddon}
+                        disabled={isPurchasingTheme || activeBookingTheme === "ecommerce" || !canPurchasePaidTheme}
+                        title={!canPurchasePaidTheme && activeBookingTheme !== "ecommerce" ? "Upgrade from your trial first to purchase a paid theme" : undefined}
+                      >
                         {isPurchasingTheme ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                         {activeBookingTheme === "ecommerce" ? "Applied to booking page" : "Purchase & apply"}
                       </Button>
                     </div>
+                    {!canPurchasePaidTheme && activeBookingTheme !== "ecommerce" && (
+                      <p className="mt-2 text-xs text-muted-foreground">Upgrade from your trial first to purchase a paid theme.</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2430,11 +2450,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                 <div className="space-y-4">
                   {renderBookingThemePreview(themePreviewKey, "dialog")}
                   {themePreviewKey === "ecommerce" && activeBookingTheme !== "ecommerce" && (
-                    <div className="flex justify-end">
-                      <Button type="button" onClick={purchaseThemeAddon} disabled={isPurchasingTheme}>
+                    <div className="flex flex-col items-end gap-2">
+                      <Button type="button" onClick={purchaseThemeAddon} disabled={isPurchasingTheme || !canPurchasePaidTheme}>
                         {isPurchasingTheme ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                         Apply this theme to my booking page
                       </Button>
+                      {!canPurchasePaidTheme && (
+                        <p className="text-xs text-muted-foreground">Upgrade from your trial first to purchase a paid theme.</p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2546,7 +2569,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
   const renderSubscriptionTab = () => {
     const trialEndsAt = currentTenant?.trial_ends_at ? new Date(currentTenant.trial_ends_at) : null;
-    const daysRemaining = trialEndsAt ? Math.max(0, differenceInDays(trialEndsAt, new Date())) : 0;
+    // Math.ceil (not date-fns differenceInDays, which floors) to match the
+    // sidebar badge and trial-ending banner — otherwise the same trial_ends_at
+    // shows a different day count depending which part of the UI you're on.
+    const daysRemaining = trialEndsAt
+      ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+      : 0;
     const isTrialing = currentTenant?.subscription_status === "trialing";
 
     const branchesValue = Number(branchesInput);

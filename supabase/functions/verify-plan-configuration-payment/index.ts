@@ -147,17 +147,16 @@ serve(async (req) => {
     }
 
     // Capture the reusable card token now that we have one, for future changes.
+    // A real charge just succeeded, so this tenant is no longer just trialing —
+    // without this, paying customers kept seeing trial-ending banners forever.
     const authorization = txData?.authorization;
+    const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
     if (authorization?.reusable && authorization?.authorization_code) {
-      await supabase
-        .from("tenants")
-        .update({
-          paystack_authorization_code: authorization.authorization_code,
-          paystack_customer_code: txData?.customer?.customer_code || null,
-          paystack_authorization_email: txData?.customer?.email || null,
-        })
-        .eq("id", tenantId);
+      tenantUpdate.paystack_authorization_code = authorization.authorization_code;
+      tenantUpdate.paystack_customer_code = txData?.customer?.customer_code || null;
+      tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
+    await supabase.from("tenants").update(tenantUpdate).eq("id", tenantId);
 
     // Must run as the calling user, not the service role — apply_plan_configuration
     // checks auth.uid() internally, which is null for service-role calls.

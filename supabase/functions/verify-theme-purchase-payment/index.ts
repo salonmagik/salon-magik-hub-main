@@ -140,17 +140,15 @@ serve(async (req) => {
     const themeKey = String(meta.theme_key || "ecommerce");
 
     // Capture the reusable card token now that we have one, for future changes.
+    // A real charge just succeeded, so this tenant is no longer just trialing.
     const authorization = txData?.authorization;
+    const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
     if (authorization?.reusable && authorization?.authorization_code) {
-      await supabase
-        .from("tenants")
-        .update({
-          paystack_authorization_code: authorization.authorization_code,
-          paystack_customer_code: txData?.customer?.customer_code || null,
-          paystack_authorization_email: txData?.customer?.email || null,
-        })
-        .eq("id", tenantId);
+      tenantUpdate.paystack_authorization_code = authorization.authorization_code;
+      tenantUpdate.paystack_customer_code = txData?.customer?.customer_code || null;
+      tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
+    await supabase.from("tenants").update(tenantUpdate).eq("id", tenantId);
 
     const { error: activateError } = await userClient.rpc("purchase_tenant_theme_addon_and_log_billing", {
       p_tenant_id: tenantId,

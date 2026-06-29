@@ -70,7 +70,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, name, logo_url, country, currency, paystack_authorization_code, paystack_authorization_email")
+      .select("id, name, logo_url, country, currency, subscription_status, paystack_authorization_code, paystack_authorization_email")
       .eq("id", tenantId)
       .single();
 
@@ -79,6 +79,13 @@ serve(async (req) => {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    if (tenant.subscription_status !== "active") {
+      return new Response(
+        JSON.stringify({ error: "Upgrade from your trial before purchasing a paid storefront theme." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     const currency = (tenant.currency || "NGN").toUpperCase();
@@ -149,6 +156,9 @@ serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
+
+      // A real charge just succeeded, so this tenant is no longer just trialing.
+      await supabase.from("tenants").update({ subscription_status: "active" }).eq("id", tenantId);
 
       await supabase.from("audit_logs").insert({
         tenant_id: tenantId,

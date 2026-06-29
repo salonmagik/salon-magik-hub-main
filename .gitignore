@@ -44,3 +44,4 @@ ralph.sh
 .branches
 # Local destructive reset scripts
 supabase/scripts/reset*.sql
+.playwright-mcp/

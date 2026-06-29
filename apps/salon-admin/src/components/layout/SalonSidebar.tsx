@@ -235,7 +235,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       return { emoji: "⚠️", label: "Trial Ended" };
     }
     if (isActive) {
-      return { emoji: "✨", label: "Pro" };
+      const planLabel = currentTenant.plan
+        ? currentTenant.plan.charAt(0).toUpperCase() + currentTenant.plan.slice(1)
+        : "Pro";
+      return { emoji: "✨", label: planLabel };
     }
     return { emoji: "🎁", label: "Free" };
   };
