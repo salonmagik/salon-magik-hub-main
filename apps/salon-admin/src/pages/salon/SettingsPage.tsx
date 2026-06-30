@@ -2656,9 +2656,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
               <p className="text-sm text-muted-foreground">
                 Tell us how many branches and team seats you need. We'll automatically put you on the right plan for it.
               </p>
-              <p className="text-xs text-muted-foreground">
-                On the Chain plan, each branch you add here includes 12 team seats automatically — opening a new branch location elsewhere doesn't add seats on its own, only increasing the branch count here does.
-              </p>
+              {(currentTenant?.plan === "chain" || planConfigQuote?.required_plan_slug === "chain") && (
+                <p className="text-xs text-muted-foreground">
+                  On the Chain plan, each branch you add here includes 12 team seats automatically — opening a new branch location elsewhere doesn't add seats on its own, only increasing the branch count here does.
+                </p>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="config-branches">Branches</Label>

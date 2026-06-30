@@ -161,13 +161,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     currentRole: null,
     isAssignmentPending: false,
   });
-  const getVerifiedAuthUser = async (session: Session): Promise<User | null> => {
+  const getVerifiedAuthUser = async (
+    session: Session
+  ): Promise<{ user: User | null; retryable: boolean }> => {
     const { data, error } = await supabase.auth.getUser(session.access_token);
     if (error) {
-      console.error("Failed to verify auth session against server:", error);
-      return null;
+      // AuthRetryableFetchError means we couldn't reach the network at all —
+      // not that the session/token is actually invalid. Treating a transient
+      // connectivity blip the same as a real auth failure was forcing users
+      // offline on flaky wifi/mobile connections.
+      const isRetryable = error.name === "AuthRetryableFetchError";
+      if (!isRetryable) {
+        console.error("Failed to verify auth session against server:", error);
+      } else {
+        console.warn("Network error verifying auth session — keeping current session:", error.message);
+      }
+      return { user: null, retryable: isRetryable };
     }
-    return data.user ?? null;
+    return { user: data.user ?? null, retryable: false };
   };
 
   const parseStoredContext = (tenantId: string): { type: ActiveContextType; locationId: string | null } | null => {
@@ -515,14 +526,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastHydratedSessionRef.current = hydrationKey;
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
-              const verifiedUser = await getVerifiedAuthUser(session);
-              if (!verifiedUser) {
+              const { user: verifiedUserResult, retryable } = await getVerifiedAuthUser(session);
+              if (!verifiedUserResult && !retryable) {
                 await forceSignOut();
                 return;
               }
+              // On a retryable network error, fall back to the
+              // already-trusted local session user — we just couldn't
+              // re-verify against the server this tick.
+              const verifiedUser = verifiedUserResult ?? session.user;
 
               let profile = await fetchProfile(verifiedUser.id);
-              
+
               // If profile doesn't exist, try to create it from auth metadata
               if (!profile) {
                 console.log("Auth state change: profile not found - attempting to create");
@@ -617,13 +632,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
         lastHydratedSessionRef.current = hydrationKey;
-        const verifiedUser = await getVerifiedAuthUser(session);
-        if (!verifiedUser) {
+        const { user: verifiedUserResult, retryable } = await getVerifiedAuthUser(session);
+        if (!verifiedUserResult && !retryable) {
           await forceSignOut();
           return () => {
             subscription.unsubscribe();
           };
         }
+        // On a retryable network error, fall back to the already-trusted
+        // local session user instead of leaving the app stuck on its initial
+        // loading screen — we just couldn't re-verify against the server
+        // this tick, the session itself is still valid.
+        const verifiedUser = verifiedUserResult ?? session.user;
 
         let profile = await fetchProfile(verifiedUser.id);
         

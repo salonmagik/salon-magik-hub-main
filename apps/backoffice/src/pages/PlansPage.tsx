@@ -2265,10 +2265,11 @@ export default function PlansPage() {
                                             onClick={() => syncPaystackPlanPricing(row.id)}
                                           >
                                             {isSyncing ? (
-                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                                             ) : (
-                                              <RefreshCw className="h-3.5 w-3.5" />
+                                              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                                             )}
+                                            {isSyncing ? "Syncing" : "Sync to Paystack"}
                                           </Button>
                                         )}
                                       </div>
