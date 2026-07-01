@@ -2524,7 +2524,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Payout Account</CardTitle>
+            <CardTitle>Receiving Account</CardTitle>
             <CardDescription>
               Add your bank account or Mobile Money number so Salon Magik can send your earnings directly to you.
             </CardDescription>
