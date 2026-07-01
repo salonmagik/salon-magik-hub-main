@@ -17,7 +17,8 @@ export interface Notification {
   created_at: string;
 }
 
-const NOTIFICATIONS_TTL_MS = 20_000;
+const NOTIFICATIONS_TTL_MS = 15_000;
+const NOTIFICATIONS_POLL_MS = 15_000;
 const notificationsCache = new Map<
   string,
   { fetchedAt: number; data: Notification[] }
@@ -94,6 +95,13 @@ export function useNotifications(enabled = true) {
     if (!enabled) return;
     fetchNotifications();
   }, [enabled, fetchNotifications]);
+
+  // Poll as fallback for when the Realtime WebSocket drops (common in dev/flaky networks).
+  useEffect(() => {
+    if (!enabled || !currentTenant?.id) return;
+    const id = setInterval(() => fetchNotifications(true), NOTIFICATIONS_POLL_MS);
+    return () => clearInterval(id);
+  }, [enabled, currentTenant?.id, fetchNotifications]);
 
   // Subscribe to realtime notifications
   useEffect(() => {
