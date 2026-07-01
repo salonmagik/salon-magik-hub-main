@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { useClientAuth } from "@/hooks";
 import { supabase } from "@/lib/supabase";
@@ -95,6 +95,7 @@ type ClientApprovalBooking = ClientAppointmentWithDetails & {
 export default function ClientBookingDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { customers, isAuthenticated } = useClientAuth();
   const [booking, setBooking] = useState<ClientAppointmentWithDetails | null>(null);
   const [relatedBookings, setRelatedBookings] = useState<Array<{ id: string; status: string; scheduled_start: string | null; total_amount: number | null; amount_paid: number | null; payment_status: string }>>([]);
@@ -102,6 +103,9 @@ export default function ClientBookingDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isStartingPayment, setIsStartingPayment] = useState(false);
   const [isRespondingToProposal, setIsRespondingToProposal] = useState(false);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [paymentVerified, setPaymentVerified] = useState(false);
+  const verifyCalledRef = useRef(false);
 
   const customerIds = customers.map((c) => c.id);
 
@@ -154,6 +158,56 @@ export default function ClientBookingDetailPage() {
 
     fetchBooking();
   }, [id, isAuthenticated, customerIds.join(",")]);
+
+  // After a Paystack redirect (?reference= or ?trxref=), verify the payment and refetch.
+  useEffect(() => {
+    if (verifyCalledRef.current || !isAuthenticated) return;
+
+    const params = new URLSearchParams(location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (!reference) return;
+
+    verifyCalledRef.current = true;
+
+    const runVerify = async () => {
+      setIsVerifyingPayment(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+
+        const { data, error: fnError } = await supabase.functions.invoke("verify-booking-payment", {
+          body: { reference },
+        });
+
+        if (fnError) {
+          console.error("verify-booking-payment error:", fnError);
+        } else if (data?.verified) {
+          setPaymentVerified(true);
+        }
+      } catch (err) {
+        console.error("Payment verification failed:", err);
+      } finally {
+        setIsVerifyingPayment(false);
+        // Refetch the booking to reflect the updated payment status
+        if (id) {
+          const { data } = await supabase
+            .from("appointments")
+            .select(`*, services:appointment_services(*), products:appointment_products(*), tenant:tenants(*), location:locations(*)`)
+            .eq("id", id)
+            .single();
+          if (data) setBooking(data as ClientAppointmentWithDetails);
+        }
+        // Strip Paystack params from the URL without a page reload
+        const clean = new URLSearchParams(location.search);
+        clean.delete("reference");
+        clean.delete("trxref");
+        const newSearch = clean.toString();
+        window.history.replaceState({}, "", location.pathname + (newSearch ? `?${newSearch}` : ""));
+      }
+    };
+
+    void runVerify();
+  }, [isAuthenticated, location.search, id]);
 
   const handleActionComplete = async () => {
     // Refetch booking after action
@@ -321,6 +375,23 @@ export default function ClientBookingDetailPage() {
             </p>
           </div>
         </div>
+
+        {/* Payment verification banner */}
+        {isVerifyingPayment && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="pt-4 flex items-center gap-3">
+              <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
+              <p className="text-sm font-medium text-primary">Verifying your payment — please wait…</p>
+            </CardContent>
+          </Card>
+        )}
+        {paymentVerified && !isVerifyingPayment && (
+          <Card className="border-green-300 bg-green-50">
+            <CardContent className="pt-4">
+              <p className="text-sm font-medium text-green-800">Payment confirmed. Your booking is updated below.</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Status Cards */}
         <div className="flex flex-wrap gap-2">

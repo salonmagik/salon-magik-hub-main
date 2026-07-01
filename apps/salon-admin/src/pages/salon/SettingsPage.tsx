@@ -58,7 +58,6 @@ import {
   Share2,
   Ticket,
   Wallet,
-  Banknote,
   ArrowDownUp,
   CalendarX2,
   Globe,
@@ -108,7 +107,6 @@ const BASE_SETTINGS_TABS = [
   { id: "booking", label: "Booking Settings", icon: User },
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "wallet", label: "Wallet", icon: Wallet },
-  { id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
   { id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
@@ -2483,54 +2481,59 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
   const renderPaymentsTab = () => {
     const isPaystack = currentTenant?.country === "NG" || currentTenant?.country === "GH";
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Payments</CardTitle>
-          <CardDescription>
-            Payment processing is securely managed by Salon Magik.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
-              <div>
-                <p className="font-medium">Payments are processed securely</p>
-                <p className="text-sm text-muted-foreground">
-                  All online payments are processed through {isPaystack ? "Paystack" : "Stripe"} via Salon Magik.
-                </p>
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Payments</CardTitle>
+            <CardDescription>
+              How customers pay you, and where those funds are sent.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
+                <div>
+                  <p className="font-medium">Payments are processed securely</p>
+                  <p className="text-sm text-muted-foreground">
+                    All online payments are processed through {isPaystack ? "Paystack" : "Stripe"} via Salon Magik.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-4">
             <div>
               <p className="text-sm font-medium mb-2">Supported Payment Methods</p>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Card</Badge>
                 {isPaystack && <Badge variant="secondary">Mobile Money</Badge>}
-                <Badge variant="secondary">POS</Badge>
-                <Badge variant="secondary">Transfer</Badge>
+                <Badge variant="secondary">Bank Transfer</Badge>
               </div>
             </div>
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
-              <p className="font-medium">Booking payment configuration moved</p>
-              <p className="mt-1 text-muted-foreground">
-                Booking payment behavior now lives under Booking Settings → Booking Config and is enforced at the tenant level across the public booking flow.
-              </p>
-            </div>
-          </div>
 
-          <div className="pt-4 border-t">
-            <Button variant="outline" className="gap-2" asChild>
-              <a href="/salon/payments">
-                <CreditCard className="w-4 h-4" />
-                View Transactions
-              </a>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="pt-2 border-t">
+              <Button variant="outline" className="gap-2" asChild>
+                <a href="/salon/payments">
+                  <CreditCard className="w-4 h-4" />
+                  View Transactions
+                </a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Payout Account</CardTitle>
+            <CardDescription>
+              Add your bank account or Mobile Money number so Salon Magik can send your earnings directly to you.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PayoutDestinationsManager />
+          </CardContent>
+        </Card>
+      </div>
     );
   };
 
@@ -3014,10 +3017,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     </div>
   );
 
-  const renderPayoutDestinationsTab = () => (
-    <PayoutDestinationsManager />
-  );
-
   const renderWithdrawalsTab = () => (
     <WithdrawalHistory />
   );
@@ -3135,7 +3134,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             {activeTab === "booking" && renderBookingTab()}
             {activeTab === "payments" && renderPaymentsTab()}
             {activeTab === "wallet" && renderWalletTab()}
-            {activeTab === "payout-destinations" && renderPayoutDestinationsTab()}
             {activeTab === "withdrawals" && renderWithdrawalsTab()}
             {activeTab === "promotions" && renderPromotionsTab()}
             {activeTab === "notifications" && renderNotificationsTab()}
