@@ -73,10 +73,15 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
     fetchBookings();
   }, [fetchBookings]);
 
-  // Get next upcoming appointment
-  const nextAppointment = bookings.find(
-    (b) => b.status === "scheduled" && b.scheduled_start && new Date(b.scheduled_start) > new Date()
-  );
+  // Next appointment: prefer future-dated, fall back to the earliest still-scheduled one today.
+  // This prevents the dashboard showing "no appointment" when there's a today appointment
+  // whose time has already passed but the salon hasn't marked it completed yet.
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const nextAppointment =
+    bookings.find((b) => b.status === "scheduled" && b.scheduled_start && new Date(b.scheduled_start) > now) ||
+    bookings.find((b) => b.status === "scheduled" && b.scheduled_start && new Date(b.scheduled_start) >= todayStart);
 
   return {
     bookings,

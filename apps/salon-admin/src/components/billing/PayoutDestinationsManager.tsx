@@ -18,7 +18,8 @@ export function PayoutDestinationsManager() {
   const { destinations, isLoading, createDestination, deleteDestination, retrySubaccount } = usePayoutDestinations(currentTenant?.id);
 
   const [showForm, setShowForm] = useState(false);
-  const [country, setCountry] = useState<"NG" | "GH">("NG");
+  const tenantCountry: "NG" | "GH" = currentTenant?.country === "GH" ? "GH" : "NG";
+  const [country, setCountry] = useState<"NG" | "GH">(tenantCountry);
   const [destinationType, setDestinationType] = useState<"bank" | "mobile_money">("bank");
   const [selectedBank, setSelectedBank] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -41,9 +42,6 @@ export function PayoutDestinationsManager() {
     reset();
   }, [country, destinationType, reset]);
 
-  useEffect(() => {
-    setCountry(currency === "GHS" ? "GH" : "NG");
-  }, [currency]);
 
   const handleVerifyAccount = async () => {
     if (!accountNumber || !selectedBank) return;
@@ -135,14 +133,10 @@ export function PayoutDestinationsManager() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label htmlFor="country">Country</Label>
-              <Select value={country} onValueChange={(v) => setCountry(v as "NG" | "GH")}>
-                <SelectTrigger id="country"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NG">Nigeria</SelectItem>
-                  <SelectItem value="GH">Ghana</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Country</Label>
+              <div className="flex h-10 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                {country === "GH" ? "Ghana" : "Nigeria"}
+              </div>
             </div>
 
             <div className="space-y-1.5">
