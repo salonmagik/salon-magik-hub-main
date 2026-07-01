@@ -85,6 +85,7 @@ interface PlanPricing {
   effective_monthly: number;
   paystack_plan_code_monthly: string | null;
   paystack_plan_code_annual: string | null;
+  updated_at: string;
 }
 
 interface PlanLimit {
@@ -419,9 +420,36 @@ export default function PlansPage() {
         .select("*")
         .is("valid_until", null);
       if (error) throw error;
-      return (data || []) as PlanPricing[];
+      return (data || []) as unknown as PlanPricing[];
     },
   });
+
+  // Map of planPricingId → ISO timestamp of most-recent successful Paystack sync.
+  // Any row whose updated_at is AFTER its last sync timestamp needs to be flagged.
+  const { data: lastSyncedAt } = useQuery({
+    queryKey: ["backoffice-pricing-sync-status"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("audit_logs")
+        .select("metadata, created_at")
+        .eq("action", "paystack_plan_pricing_synced")
+        .order("created_at", { ascending: false });
+      const map: Record<string, string> = {};
+      for (const row of data || []) {
+        const id = (row.metadata as Record<string, unknown>)?.planPricingId as string | undefined;
+        if (id && !map[id]) map[id] = row.created_at as string;
+      }
+      return map;
+    },
+    staleTime: 30 * 1000,
+  });
+
+  const isOutOfSync = (row: PlanPricing) => {
+    if (!row.paystack_plan_code_monthly && !row.paystack_plan_code_annual) return false;
+    const syncedAt = lastSyncedAt?.[row.id];
+    if (!syncedAt) return true;
+    return new Date(row.updated_at) > new Date(syncedAt);
+  };
 
   const { data: limits, isLoading: limitsLoading } = useQuery({
     queryKey: ["backoffice-limits"],
@@ -2192,10 +2220,20 @@ export default function PlansPage() {
                                 const isRevealed = paystackCodeRevealedRows.has(row.id);
                                 const isSaving = paystackCodeSavingRows.has(row.id);
                                 const isSyncing = paystackSyncingRows.has(row.id);
+                                const outOfSync = isOutOfSync(row);
                                 const inputType = isRevealed ? "text" : "password";
                                 return (
-                                  <TableRow key={plan.id}>
-                                    <TableCell className="font-medium">{plan.name}</TableCell>
+                                  <TableRow key={plan.id} className={outOfSync ? "bg-amber-50/60" : ""}>
+                                    <TableCell className="font-medium">
+                                      <div className="flex flex-col gap-1">
+                                        <span>{plan.name}</span>
+                                        {outOfSync && (
+                                          <span className="inline-flex items-center gap-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 w-fit">
+                                            ⚠ Prices not synced
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TableCell>
                                     <TableCell className="min-w-[200px]">
                                       <Input
                                         type={inputType}
@@ -2263,13 +2301,14 @@ export default function PlansPage() {
                                             title="Push this plan's NGN/GHS price to its Paystack plan codes"
                                             disabled={isSyncing}
                                             onClick={() => syncPaystackPlanPricing(row.id)}
+                                            className={outOfSync ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100" : ""}
                                           >
                                             {isSyncing ? (
                                               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                                             ) : (
                                               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                                             )}
-                                            {isSyncing ? "Syncing" : "Sync to Paystack"}
+                                            {isSyncing ? "Syncing…" : "Sync to Paystack"}
                                           </Button>
                                         )}
                                       </div>

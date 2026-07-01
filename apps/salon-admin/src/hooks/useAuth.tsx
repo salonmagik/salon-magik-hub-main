@@ -589,6 +589,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
                   context_type: contextState.activeContextType,
                 });
+                // Touch the staff session record (geo+device tracking). Fire-and-forget.
+                supabase.functions.invoke("touch-staff-session", {
+                  body: { tenant_id: currentTenant.id },
+                }).catch((err) => console.warn("touch-staff-session failed:", err));
               }
 
               setState({

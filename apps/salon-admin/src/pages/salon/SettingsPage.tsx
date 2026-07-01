@@ -86,6 +86,7 @@ import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
+import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
 
 
@@ -112,6 +113,7 @@ const BASE_SETTINGS_TABS = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "subscription", label: "Subscription", icon: Zap },
   { id: "custom-domain", label: "Custom Domain", icon: Globe },
+  { id: "sessions", label: "Active Sessions", icon: Shield },
 ] as const;
 
 const weekDays = [
@@ -219,6 +221,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
       return [
         { id: "profile", label: "Branch Profile", icon: Building2 },
         { id: "hours", label: "Branch Hours", icon: Clock },
+        { id: "sessions", label: "Active Sessions", icon: Shield },
       ];
     }
     if (resolvedScope === "business") {
@@ -230,6 +233,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         { id: "notifications", label: "Notifications", icon: Bell },
         { id: "subscription", label: "Subscription", icon: Zap },
         { id: "custom-domain", label: "Custom Domain", icon: Globe },
+        { id: "sessions", label: "Active Sessions", icon: Shield },
       ];
     }
     return BASE_SETTINGS_TABS;
@@ -3138,6 +3142,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
             {activeTab === "roles" && renderRolesTab()}
             {activeTab === "subscription" && renderSubscriptionTab()}
             {activeTab === "custom-domain" && <CustomDomainManager />}
+            {activeTab === "sessions" && <ActiveSessionsTab />}
           </div>
         </div>
       </div>
