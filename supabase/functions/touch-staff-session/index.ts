@@ -7,6 +7,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Enforcement limits
+const MAX_BROWSERS_PER_DEVICE = 2;
+const MAX_DEVICES_PER_USER = 2;
+
 interface GeoResult {
   city?: string;
   region?: string;
@@ -14,7 +18,6 @@ interface GeoResult {
 }
 
 async function lookupGeo(ip: string): Promise<GeoResult> {
-  // Skip private/loopback addresses — geo lookup would be meaningless.
   if (!ip || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip === "::1") {
     return {};
   }
@@ -37,6 +40,19 @@ function parseDeviceType(ua: string): string {
   if (/mobile|android|iphone|ipod/.test(lower)) return "mobile";
   if (/tablet|ipad/.test(lower)) return "tablet";
   return "desktop";
+}
+
+function parseBrowserName(ua: string): string {
+  const lower = ua.toLowerCase();
+  // Order matters: Edge and Opera both contain "chrome", check them first.
+  if (/edg\/|edge\//.test(lower)) return "Edge";
+  if (/opr\/|opera/.test(lower)) return "Opera";
+  if (/chrome\//.test(lower) && !/chromium/.test(lower)) return "Chrome";
+  if (/chromium\//.test(lower)) return "Chromium";
+  if (/firefox\//.test(lower)) return "Firefox";
+  if (/safari\//.test(lower) && !/chrome/.test(lower)) return "Safari";
+  if (/msie|trident/.test(lower)) return "IE";
+  return "Unknown";
 }
 
 function getRealIp(req: Request): string {
@@ -78,7 +94,6 @@ serve(async (req) => {
       });
     }
 
-    // Resolve the tenant for this user (pick their first active role's tenant).
     const { data: roleRow } = await supabase
       .from("user_roles")
       .select("tenant_id")
@@ -99,13 +114,13 @@ serve(async (req) => {
     const ip = getRealIp(req);
     const ua = req.headers.get("user-agent") || "";
     const deviceType = parseDeviceType(ua);
+    const browserName = parseBrowserName(ua);
     const geo = await lookupGeo(ip);
     const now = new Date().toISOString();
 
-    // The session_token is the Supabase access_token — unique per auth session.
     const sessionToken = authHeader.replace("Bearer ", "");
 
-    // Upsert this session, mark old ones for the same user+tenant as replaced.
+    // Upsert current session — allows multiple concurrent sessions per user.
     await supabase.from("staff_sessions").upsert(
       {
         user_id: user.id,
@@ -117,6 +132,7 @@ serve(async (req) => {
         ip_address: ip || null,
         user_agent: ua || null,
         device_type: deviceType,
+        browser_name: browserName,
         city: geo.city || null,
         country: geo.country || null,
         region: geo.region || null,
@@ -124,16 +140,86 @@ serve(async (req) => {
       { onConflict: "session_token" },
     );
 
-    // Mark other active sessions for this user+tenant as replaced.
-    // Uses or() to also catch old rows where session_token IS NULL
-    // (neq alone skips NULLs in SQL comparison semantics).
+    // Also clean up any old NULL-token sessions left before the migration.
     await supabase
       .from("staff_sessions")
       .update({ ended_at: now, end_reason: "replaced" })
       .eq("user_id", user.id)
       .eq("tenant_id", tenantId)
-      .or(`session_token.neq.${sessionToken},session_token.is.null`)
+      .is("session_token", null)
       .is("ended_at", null);
+
+    // --- Enforce per-device and per-user session limits ---
+    // Fetch all active sessions for this user+tenant, oldest first.
+    const { data: activeSessions } = await supabase
+      .from("staff_sessions")
+      .select("id, session_token, ip_address, last_activity_at")
+      .eq("user_id", user.id)
+      .eq("tenant_id", tenantId)
+      .is("ended_at", null)
+      .order("last_activity_at", { ascending: true });
+
+    if (activeSessions && activeSessions.length > 0) {
+      const toRevoke: string[] = [];
+
+      // Group sessions by ip_address (proxy for "device").
+      const byIp = new Map<string, typeof activeSessions>();
+      for (const s of activeSessions) {
+        const key = s.ip_address || "unknown";
+        if (!byIp.has(key)) byIp.set(key, []);
+        byIp.get(key)!.push(s);
+      }
+
+      // Per-device limit: max MAX_BROWSERS_PER_DEVICE concurrent sessions per IP.
+      for (const [, sessions] of byIp) {
+        if (sessions.length > MAX_BROWSERS_PER_DEVICE) {
+          // Sessions are already sorted oldest-first. Skip the current session.
+          const candidates = sessions.filter((s) => s.session_token !== sessionToken);
+          const excess = sessions.length - MAX_BROWSERS_PER_DEVICE;
+          candidates.slice(0, excess).forEach((s) => {
+            if (!toRevoke.includes(s.id)) toRevoke.push(s.id);
+          });
+        }
+      }
+
+      // Per-user limit: max MAX_DEVICES_PER_USER distinct IPs (devices).
+      // Determine "most recently active" timestamp per IP to rank them.
+      const ipLatest = new Map<string, string>();
+      for (const s of activeSessions) {
+        const key = s.ip_address || "unknown";
+        if (!ipLatest.has(key) || s.last_activity_at > ipLatest.get(key)!) {
+          ipLatest.set(key, s.last_activity_at);
+        }
+      }
+
+      const currentIpKey = ip || "unknown";
+      const sortedIps = [...ipLatest.entries()]
+        .sort((a, b) => a[1].localeCompare(b[1])); // oldest activity first
+
+      if (sortedIps.length > MAX_DEVICES_PER_USER) {
+        // Revoke all sessions from excess (oldest) IPs, never the current IP.
+        const excess = sortedIps.length - MAX_DEVICES_PER_USER;
+        const ipsToRevoke = new Set(
+          sortedIps
+            .filter(([ipKey]) => ipKey !== currentIpKey)
+            .slice(0, excess)
+            .map(([ipKey]) => ipKey),
+        );
+        for (const s of activeSessions) {
+          const key = s.ip_address || "unknown";
+          if (ipsToRevoke.has(key) && !toRevoke.includes(s.id)) {
+            toRevoke.push(s.id);
+          }
+        }
+      }
+
+      if (toRevoke.length > 0) {
+        await supabase
+          .from("staff_sessions")
+          .update({ ended_at: now, end_reason: "replaced" })
+          .in("id", toRevoke);
+      }
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,

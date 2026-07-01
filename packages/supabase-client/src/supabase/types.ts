@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       additional_location_pricing: {
@@ -5480,46 +5505,70 @@ export type Database = {
         Row: {
           active_context_type: string | null
           active_location_id: string | null
+          browser_name: string | null
+          city: string | null
+          country: string | null
           created_at: string
           device_type: string | null
+          end_reason: string | null
           ended_at: string | null
           id: string
+          ip_address: string | null
           last_activity_at: string
           last_page_view_at: string | null
           last_route: string | null
           location_id: string | null
+          region: string | null
+          session_token: string | null
           started_at: string
           tenant_id: string
+          user_agent: string | null
           user_id: string
         }
         Insert: {
           active_context_type?: string | null
           active_location_id?: string | null
+          browser_name?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           device_type?: string | null
+          end_reason?: string | null
           ended_at?: string | null
           id?: string
+          ip_address?: string | null
           last_activity_at?: string
           last_page_view_at?: string | null
           last_route?: string | null
           location_id?: string | null
+          region?: string | null
+          session_token?: string | null
           started_at?: string
           tenant_id: string
+          user_agent?: string | null
           user_id: string
         }
         Update: {
           active_context_type?: string | null
           active_location_id?: string | null
+          browser_name?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           device_type?: string | null
+          end_reason?: string | null
           ended_at?: string | null
           id?: string
+          ip_address?: string | null
           last_activity_at?: string
           last_page_view_at?: string | null
           last_route?: string | null
           location_id?: string | null
+          region?: string | null
+          session_token?: string | null
           started_at?: string
           tenant_id?: string
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: [
@@ -6604,6 +6653,7 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          can_manage_staff_sessions: boolean
           created_at: string
           id: string
           is_active: boolean | null
@@ -6612,6 +6662,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          can_manage_staff_sessions?: boolean
           created_at?: string
           id?: string
           is_active?: boolean | null
@@ -6620,6 +6671,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          can_manage_staff_sessions?: boolean
           created_at?: string
           id?: string
           is_active?: boolean | null
@@ -7055,6 +7107,7 @@ export type Database = {
           show_contact_on_booking: boolean | null
           slot_capacity_default: number | null
           slug: string | null
+          storefront_mode: string | null
           theme_key: string | null
           timezone: string | null
         }
@@ -7085,6 +7138,7 @@ export type Database = {
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number | null
           slug?: string | null
+          storefront_mode?: string | null
           theme_key?: never
           timezone?: string | null
         }
@@ -7115,6 +7169,7 @@ export type Database = {
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number | null
           slug?: string | null
+          storefront_mode?: string | null
           theme_key?: never
           timezone?: string | null
         }
@@ -8319,6 +8374,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["owner", "manager", "supervisor", "receptionist", "staff"],

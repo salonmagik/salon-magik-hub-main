@@ -33,6 +33,7 @@ interface SessionRow {
   started_at: string;
   last_activity_at: string;
   device_type: string | null;
+  browser_name: string | null;
   city: string | null;
   country: string | null;
   region: string | null;
@@ -66,7 +67,7 @@ export function ActiveSessionsTab() {
       if (!currentTenantId) return [];
       const { data: sessionRows, error } = await supabase
         .from("staff_sessions")
-        .select("id, user_id, tenant_id, started_at, last_activity_at, device_type, city, country, region, user_agent, session_token")
+        .select("id, user_id, tenant_id, started_at, last_activity_at, device_type, browser_name, city, country, region, user_agent, session_token")
         .eq("tenant_id", currentTenantId)
         .is("ended_at", null)
         .order("last_activity_at", { ascending: false });
@@ -165,6 +166,7 @@ export function ActiveSessionsTab() {
                       <TableHead>Who</TableHead>
                       <TableHead>Location</TableHead>
                       <TableHead>Device</TableHead>
+                      <TableHead>Browser</TableHead>
                       <TableHead>Logged in</TableHead>
                       <TableHead>Last active</TableHead>
                       <TableHead />
@@ -198,6 +200,9 @@ export function ActiveSessionsTab() {
                               <DeviceIcon type={session.device_type} />
                               {session.device_type ?? "desktop"}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {session.browser_name ?? "—"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
@@ -247,6 +252,7 @@ export function ActiveSessionsTab() {
                   <TableRow>
                     <TableHead>Location</TableHead>
                     <TableHead>Device</TableHead>
+                    <TableHead>Browser</TableHead>
                     <TableHead>Logged in</TableHead>
                     <TableHead>Last active</TableHead>
                     <TableHead />
@@ -266,6 +272,9 @@ export function ActiveSessionsTab() {
                           <DeviceIcon type={session.device_type} />
                           {session.device_type ?? "desktop"}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {session.browser_name ?? "—"}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
