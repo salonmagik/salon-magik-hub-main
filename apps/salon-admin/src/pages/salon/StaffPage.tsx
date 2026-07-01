@@ -114,12 +114,14 @@ export default function StaffPage() {
     locations: false,
     permissions: false,
   });
+  const [editCanManageSessions, setEditCanManageSessions] = useState(false);
   const [initialEditSnapshot, setInitialEditSnapshot] = useState<{
     firstName: string;
     lastName: string;
     role: StaffMember["role"];
     selectedLocationIds: string[];
     overrideSelections: Record<string, boolean>;
+    canManageSessions: boolean;
   } | null>(null);
   const { staff, isLoading, refetch, updateStaffLocal } = useStaff();
   const {
@@ -167,7 +169,12 @@ export default function StaffPage() {
           (overrideSelections[moduleKey] ?? false) !== (initialEditSnapshot.overrideSelections[moduleKey] ?? false)
       )
   );
-  const isEditDirty = profileChanged || roleChanged || locationsChanged || (!roleChanged && overridesChanged);
+  const sessionsChanged = Boolean(
+    initialEditSnapshot &&
+      staffToEdit?.role === "manager" &&
+      editCanManageSessions !== initialEditSnapshot.canManageSessions
+  );
+  const isEditDirty = profileChanged || roleChanged || locationsChanged || (!roleChanged && overridesChanged) || sessionsChanged;
 
   const { data: tenantLocations = [] } = useQuery({
     queryKey: ["staff-assignment-locations", currentTenant?.id],
@@ -345,13 +352,34 @@ export default function StaffPage() {
       initialOverrides[moduleKey] = memberOverrideMap.get(moduleKey) ?? roleAllowed;
     });
     setOverrideSelections(initialOverrides);
+    setEditCanManageSessions(false);
     setInitialEditSnapshot({
       firstName: first,
       lastName: rest.join(" "),
       role: member.role,
       selectedLocationIds: member.assignedLocationIds,
       overrideSelections: initialOverrides,
+      canManageSessions: false,
     });
+
+    // For managers, load their current can_manage_staff_sessions flag.
+    // Update both the edit state and the snapshot baseline once resolved.
+    if (member.role === "manager" && currentTenant?.id) {
+      supabase
+        .from("user_roles")
+        .select("can_manage_staff_sessions")
+        .eq("user_id", member.userId)
+        .eq("tenant_id", currentTenant.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          const val = data?.can_manage_staff_sessions === true;
+          setEditCanManageSessions(val);
+          setInitialEditSnapshot((prev) =>
+            prev ? { ...prev, canManageSessions: val } : prev
+          );
+        });
+    }
+
     const resolvedTab = member.role === "owner" ? "profile" : tab;
     setMemberDialogTab(resolvedTab);
     setEditableTabs({
@@ -460,6 +488,15 @@ export default function StaffPage() {
             .insert(overrideRows);
           if (insertOverrideError) throw insertOverrideError;
         }
+      }
+
+      if (sessionsChanged && staffToEdit.role === "manager") {
+        const { error: sessionsError } = await supabase
+          .from("user_roles")
+          .update({ can_manage_staff_sessions: editCanManageSessions })
+          .eq("user_id", staffToEdit.userId)
+          .eq("tenant_id", currentTenant.id);
+        if (sessionsError) throw sessionsError;
       }
 
       if (isChainTenant && currentUserCanAssign && locationsChanged) {
@@ -1216,6 +1253,25 @@ export default function StaffPage() {
                   </p>
                 )}
               </div>
+              {staffToEdit?.role === "manager" && currentUserIsOwner && (
+                <div className="border-t pt-4 mt-2">
+                  <Label className="text-sm font-medium mb-2 block">Session management</Label>
+                  <label className="flex items-start gap-3 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={editCanManageSessions}
+                      disabled={!editableTabs.permissions}
+                      onCheckedChange={(checked: boolean | "indeterminate") => setEditCanManageSessions(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <span className="font-medium">View &amp; revoke all staff sessions</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Lets this manager see and end login sessions for all staff on the Sessions tab. Only grant to trusted managers.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
           <DialogFooter>
@@ -1247,6 +1303,9 @@ export default function StaffPage() {
             locationsChanged ? `Locations: ${selectedLocationIds.length} selected` : null,
             !roleChanged && overridesChanged ? "Permissions overrides: updated" : null,
             roleChanged ? "Overrides will be reset to the new role defaults." : null,
+            sessionsChanged
+              ? `Session management: ${editCanManageSessions ? "granted" : "revoked"}`
+              : null,
           ]
             .filter(Boolean)
             .join(" | ") || `Apply updates for ${staffToEdit?.profile?.full_name || "this staff member"}?`
