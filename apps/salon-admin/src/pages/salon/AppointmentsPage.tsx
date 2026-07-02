@@ -165,7 +165,8 @@ export default function AppointmentsPage() {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [approvalDialogAction, setApprovalDialogAction] = useState<"approve" | "decline" | "reschedule" | "review" | null>(null);
   const [approvalGroupAppointments, setApprovalGroupAppointments] = useState<AppointmentWithDetails[]>([]);
-  const [approvalDecisionMap, setApprovalDecisionMap] = useState<Record<string, "approve" | "decline">>({});
+  const [approvalDecisionMap, setApprovalDecisionMap] = useState<Record<string, "approve" | "decline" | "reschedule" | "cancel">>({});
+  const [rescheduleInputMap, setRescheduleInputMap] = useState<Record<string, { start: string; end: string; message: string }>>({});
   const [approvalReasonMap, setApprovalReasonMap] = useState<Record<string, string>>({});
   const [approvalMessage, setApprovalMessage] = useState("");
   const [proposedStartInput, setProposedStartInput] = useState("");
@@ -181,6 +182,7 @@ export default function AppointmentsPage() {
   const [bookingStatuses, setBookingStatuses] = useState<Set<AppointmentStatus | "all">>(new Set(["all"]));
   const [paymentStatuses, setPaymentStatuses] = useState<Set<PaymentStatus | "all">>(new Set(["all"]));
   const [giftedFilter, setGiftedFilter] = useState<string>("all");
+  const [customerSearch, setCustomerSearch] = useState("");
 
   // Handle preset change and sync with date pickers
   const handlePresetChange = useCallback((preset: DateRangePreset) => {
@@ -571,18 +573,18 @@ export default function AppointmentsPage() {
     setApprovalSubmitting(true);
     try {
       const nowIso = new Date().toISOString();
-      const approvedRows = approvalGroupAppointments.filter(
-        (row) => approvalDecisionMap[row.id] !== "decline",
-      );
-      const declinedRows = approvalGroupAppointments.filter(
-        (row) => approvalDecisionMap[row.id] === "decline",
-      );
 
-      if (approvalDialogAction === "reschedule") {
+      // Partition decisions across all four outcome types
+      const approvedRows = approvalGroupAppointments.filter((r) => (approvalDecisionMap[r.id] ?? "approve") === "approve");
+      const declinedRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "decline");
+      const cancelledRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "cancel");
+      const rescheduledRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "reschedule");
+
+      // Legacy single-appointment reschedule mode (from footer "Reschedule instead" path — still supported)
+      if (approvalDialogAction === "reschedule" && rescheduledRows.length === 0) {
         if (!proposedStartInput || !proposedEndInput) {
           throw new Error("Choose the proposed date and time range first.");
         }
-
         const { error } = await supabase
           .from("appointments")
           .update({
@@ -595,74 +597,82 @@ export default function AppointmentsPage() {
           } as any)
           .eq("id", selectedAppointment.id)
           .eq("tenant_id", currentTenant.id);
-
         if (error) throw error;
-
         await createCustomerNotification(
           selectedAppointment,
           "Reschedule requested",
           "The salon has proposed a new date and time for your booking. Review the request in your booking details.",
         );
-
-        await sendApprovalEmail(
-          "reschedule_proposed",
-          [selectedAppointment.id],
-          approvalMessage || undefined,
-        );
+        await sendApprovalEmail("reschedule_proposed", [selectedAppointment.id], approvalMessage || undefined);
       } else {
-        if (declinedRows.length > 0) {
-          for (const row of declinedRows) {
-            const reason = approvalReasonMap[row.id]?.trim();
-            if (!reason) {
-              throw new Error("Add a reason for each declined item.");
-            }
+        // ── Per-item reschedule ──────────────────────────────────────────────
+        for (const row of rescheduledRows) {
+          const ri = rescheduleInputMap[row.id];
+          if (!ri?.start || !ri?.end) {
+            throw new Error(`Choose proposed date/time for "${row.services[0]?.service_name || "item"}".`);
           }
-
           const { error } = await supabase
             .from("appointments")
             .update({
-              approval_status: "declined",
+              approval_status: "reschedule_proposed",
+              proposed_start: new Date(ri.start).toISOString(),
+              proposed_end: new Date(ri.end).toISOString(),
+              proposed_message: ri.message || null,
               approval_decided_at: nowIso,
-              confirmation_status: "rejected",
-              status: "cancelled",
+              customer_response_status: "pending",
             } as any)
-            .in("id", declinedRows.map((row) => row.id))
+            .eq("id", row.id)
             .eq("tenant_id", currentTenant.id);
           if (error) throw error;
-
-          for (const row of declinedRows) {
-            await supabase
-              .from("appointments")
-              .update({ approval_reason: approvalReasonMap[row.id] } as any)
-              .eq("id", row.id)
-              .eq("tenant_id", currentTenant.id);
-
-            await createCustomerNotification(
-              row,
-              "Booking item declined",
-              approvalReasonMap[row.id],
-            );
-          }
-
-          await sendApprovalEmail(
-            approvedRows.length > 0 ? "partially_declined" : "declined",
-            declinedRows.map((row) => row.id),
-            approvalMessage || undefined,
+          await createCustomerNotification(
+            row,
+            "Reschedule proposed",
+            "The salon has proposed a new date and time for your booking. Review the request in your booking details.",
           );
         }
+        if (rescheduledRows.length > 0) {
+          await sendApprovalEmail("reschedule_proposed", rescheduledRows.map((r) => r.id));
+        }
 
-        if (approvedRows.length > 0) {
-          const approvedIds = approvedRows.map((row) => row.id);
-          const nextStatus =
-            approvalDialogAction === "review" || declinedRows.length > 0 ? "approved" : "approved";
+        // ── Declined ─────────────────────────────────────────────────────────
+        if (declinedRows.length > 0) {
+          for (const row of declinedRows) {
+            if (!approvalReasonMap[row.id]?.trim()) throw new Error("Add a reason for each declined item.");
+          }
           const { error } = await supabase
             .from("appointments")
-            .update({
-              approval_status: nextStatus,
-              approval_decided_at: nowIso,
-              confirmation_status: "confirmed",
-              customer_response_status: "not_required",
-            } as any)
+            .update({ approval_status: "declined", approval_decided_at: nowIso, confirmation_status: "rejected", status: "cancelled" } as any)
+            .in("id", declinedRows.map((r) => r.id))
+            .eq("tenant_id", currentTenant.id);
+          if (error) throw error;
+          for (const row of declinedRows) {
+            await supabase.from("appointments").update({ approval_reason: approvalReasonMap[row.id] } as any).eq("id", row.id).eq("tenant_id", currentTenant.id);
+            await createCustomerNotification(row, "Booking item declined", approvalReasonMap[row.id]);
+          }
+          await sendApprovalEmail(approvedRows.length > 0 ? "partially_declined" : "declined", declinedRows.map((r) => r.id), approvalMessage || undefined);
+        }
+
+        // ── Cancelled (per-item salon cancel during review) ───────────────────
+        if (cancelledRows.length > 0) {
+          const { error } = await supabase
+            .from("appointments")
+            .update({ approval_status: "declined", approval_decided_at: nowIso, confirmation_status: "rejected", status: "cancelled" } as any)
+            .in("id", cancelledRows.map((r) => r.id))
+            .eq("tenant_id", currentTenant.id);
+          if (error) throw error;
+          for (const row of cancelledRows) {
+            const reason = approvalReasonMap[row.id]?.trim() || "Booking cancelled by salon.";
+            await supabase.from("appointments").update({ approval_reason: reason } as any).eq("id", row.id).eq("tenant_id", currentTenant.id);
+            await createCustomerNotification(row, "Booking cancelled", reason);
+          }
+        }
+
+        // ── Approved ─────────────────────────────────────────────────────────
+        if (approvedRows.length > 0) {
+          const approvedIds = approvedRows.map((r) => r.id);
+          const { error } = await supabase
+            .from("appointments")
+            .update({ approval_status: "approved", approval_decided_at: nowIso, confirmation_status: "confirmed", customer_response_status: "not_required" } as any)
             .in("id", approvedIds)
             .eq("tenant_id", currentTenant.id);
           if (error) throw error;
@@ -678,19 +688,11 @@ export default function AppointmentsPage() {
               p_notes: approvalMessage || null,
             },
           );
-
           if (invoiceError) throw invoiceError;
-
-          if (invoiceId) {
-            await supabase.functions.invoke("send-invoice", { body: { invoiceId } });
-          }
+          if (invoiceId) await supabase.functions.invoke("send-invoice", { body: { invoiceId } });
 
           for (const row of approvedRows) {
-            await createCustomerNotification(
-              row,
-              "Booking accepted",
-              "Your booking has been accepted. Your invoice is now available in the client portal and has been sent by email.",
-            );
+            await createCustomerNotification(row, "Booking accepted", "Your booking has been accepted. Your invoice is now available in the client portal and has been sent by email.");
           }
         }
       }
@@ -699,6 +701,7 @@ export default function AppointmentsPage() {
       setApprovalDialogAction(null);
       setApprovalGroupAppointments([]);
       setApprovalMessage("");
+      setRescheduleInputMap({});
       handleRefetch();
     } catch (error) {
       toast({
@@ -1248,6 +1251,23 @@ export default function AppointmentsPage() {
               </SelectContent>
             </Select>
           )}
+          <div className="relative w-[220px]">
+            <Bell className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none hidden" aria-hidden />
+            <Input
+              placeholder="Search customer or recipient…"
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              className="h-9 pr-8"
+            />
+            {customerSearch && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setCustomerSearch("")}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <div className="flex-1" />
           <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
@@ -1306,7 +1326,18 @@ export default function AppointmentsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  appointments.map((apt) => {
+                  appointments.filter((apt) => {
+                    if (!customerSearch.trim()) return true;
+                    const q = customerSearch.toLowerCase();
+                    const name = apt.customer?.full_name?.toLowerCase() || "";
+                    const phone = apt.customer?.phone?.toLowerCase() || "";
+                    const gift = (apt as any).booking_metadata?.gift?.recipient;
+                    const giftName = gift
+                      ? [gift.firstName, gift.lastName].filter(Boolean).join(" ").toLowerCase()
+                      : "";
+                    const giftEmail = gift?.email?.toLowerCase() || "";
+                    return name.includes(q) || phone.includes(q) || giftName.includes(q) || giftEmail.includes(q);
+                  }).map((apt) => {
                     const actions = getAvailableActions(apt.status, apt.is_unscheduled);
                     const amountDue = (apt.total_amount || 0) - (apt.amount_paid || 0);
                     const confirmationBadge = getConfirmationBadge(apt);
@@ -1336,9 +1367,31 @@ export default function AppointmentsPage() {
                                 {apt.customer?.phone || "No phone"}
                               </p>
                             </div>
-                            {apt.is_gifted && (
-                              <Gift className="w-4 h-4 text-amber-500" />
-                            )}
+                            {apt.is_gifted && (() => {
+                              const giftMeta = (apt as any).booking_metadata?.gift?.recipient;
+                              const recipientName = giftMeta
+                                ? [giftMeta.firstName, giftMeta.lastName].filter(Boolean).join(" ")
+                                : null;
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-default">
+                                        <Gift className="w-4 h-4 text-amber-500" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top">
+                                      <p className="text-xs font-medium">
+                                        {recipientName ? `Gift for ${recipientName}` : "Gifted booking"}
+                                      </p>
+                                      {giftMeta?.email && (
+                                        <p className="text-xs text-muted-foreground">{giftMeta.email}</p>
+                                      )}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1669,9 +1722,28 @@ export default function AppointmentsPage() {
                   <div key={appointment.id} className="rounded-xl border p-4 space-y-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="font-medium">
-                          {appointment.services[0]?.service_name || `Booking item ${appointment.id.slice(0, 8)}`}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium">
+                            {appointment.services[0]?.service_name || `Booking item ${appointment.id.slice(0, 8)}`}
+                          </p>
+                          {appointment.is_gifted && (() => {
+                            const gr = (appointment as any).booking_metadata?.gift?.recipient;
+                            const rn = gr ? [gr.firstName, gr.lastName].filter(Boolean).join(" ") : null;
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-default"><Gift className="w-3.5 h-3.5 text-amber-500" /></span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    <p className="text-xs">{rn ? `Gift for ${rn}` : "Gifted booking"}</p>
+                                    {gr?.email && <p className="text-xs text-muted-foreground">{gr.email}</p>}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           {appointment.customer?.full_name || "Unknown customer"} · {formatCurrency(Number(appointment.total_amount || 0), currency)}
                         </p>
@@ -1681,7 +1753,7 @@ export default function AppointmentsPage() {
                         onValueChange={(value) =>
                           setApprovalDecisionMap((prev) => ({
                             ...prev,
-                            [appointment.id]: value as "approve" | "decline",
+                            [appointment.id]: value as "approve" | "decline" | "reschedule" | "cancel",
                           }))
                         }
                       >
@@ -1690,14 +1762,57 @@ export default function AppointmentsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="approve">Accept</SelectItem>
+                          <SelectItem value="reschedule">Reschedule</SelectItem>
                           <SelectItem value="decline">Decline</SelectItem>
+                          <SelectItem value="cancel">Cancel</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
-                    {approvalDecisionMap[appointment.id] === "decline" && (
+                    {/* Inline reschedule datetime pickers */}
+                    {approvalDecisionMap[appointment.id] === "reschedule" && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Proposed start</Label>
+                          <Input
+                            type="datetime-local"
+                            value={rescheduleInputMap[appointment.id]?.start || ""}
+                            onChange={(e) => setRescheduleInputMap((prev) => ({
+                              ...prev,
+                              [appointment.id]: { ...prev[appointment.id], start: e.target.value, end: prev[appointment.id]?.end || "", message: prev[appointment.id]?.message || "" },
+                            }))}
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Proposed end</Label>
+                          <Input
+                            type="datetime-local"
+                            value={rescheduleInputMap[appointment.id]?.end || ""}
+                            onChange={(e) => setRescheduleInputMap((prev) => ({
+                              ...prev,
+                              [appointment.id]: { ...prev[appointment.id], end: e.target.value, start: prev[appointment.id]?.start || "", message: prev[appointment.id]?.message || "" },
+                            }))}
+                          />
+                        </div>
+                        <div className="sm:col-span-2 space-y-1.5">
+                          <Label className="text-xs">Message to customer (optional)</Label>
+                          <Textarea
+                            rows={2}
+                            placeholder="Reason for the proposed change…"
+                            value={rescheduleInputMap[appointment.id]?.message || ""}
+                            onChange={(e) => setRescheduleInputMap((prev) => ({
+                              ...prev,
+                              [appointment.id]: { ...prev[appointment.id], message: e.target.value, start: prev[appointment.id]?.start || "", end: prev[appointment.id]?.end || "" },
+                            }))}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Decline / Cancel reason */}
+                    {(approvalDecisionMap[appointment.id] === "decline" || approvalDecisionMap[appointment.id] === "cancel") && (
                       <div className="space-y-2">
-                        <Label>Decline reason</Label>
+                        <Label>{approvalDecisionMap[appointment.id] === "cancel" ? "Cancellation reason" : "Decline reason"}</Label>
                         <Select
                           value={approvalReasonMap[appointment.id] || ""}
                           onValueChange={(value) =>

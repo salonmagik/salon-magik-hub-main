@@ -227,7 +227,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
         { id: "profile", label: "Business Profile", icon: Building2 },
         { id: "branches", label: "Manage Branches", icon: CalendarX2 },
         { id: "booking", label: "Booking Settings", icon: User },
-        { id: "payments", label: "Payments", icon: CreditCard },
         { id: "notifications", label: "Notifications", icon: Bell },
         { id: "subscription", label: "Subscription", icon: Zap },
         { id: "custom-domain", label: "Custom Domain", icon: Globe },
