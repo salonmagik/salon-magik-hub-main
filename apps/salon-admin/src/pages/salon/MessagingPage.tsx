@@ -1937,10 +1937,6 @@ export default function MessagingPage() {
         <CreditPurchaseDialog
           open={creditPurchaseDialogOpen}
           onOpenChange={setCreditPurchaseDialogOpen}
-          tenantId={currentTenant?.id || ""}
-          balance={credits?.balance || 0}
-          currency={currentTenant?.currency || "USD"}
-          onSuccess={() => refetchCredits()}
         />
       </div>
     </SalonSidebar>

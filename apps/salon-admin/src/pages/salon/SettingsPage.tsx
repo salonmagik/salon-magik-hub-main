@@ -577,6 +577,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
     country: "",
     currency: "USD",
     website: "",
+    contactPhone: "",
+    showContactOnBooking: false,
   });
 
   const [hoursData, setHoursData] = useState({

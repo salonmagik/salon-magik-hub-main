@@ -14,15 +14,6 @@ export interface AppointmentWithDetails extends Appointment {
   customer: Customer | null;
   services: AppointmentService[];
   staff_name?: string;
-  booking_metadata?: Record<string, unknown> | null;
-  approval_status?: string | null;
-  booking_reference?: string | null;
-  approval_reason?: string | null;
-  proposed_start?: string | null;
-  proposed_end?: string | null;
-  proposed_message?: string | null;
-  customer_response_status?: string | null;
-  confirmation_status?: string | null;
 }
 
 type PaymentStatus = Enums<"payment_status">;

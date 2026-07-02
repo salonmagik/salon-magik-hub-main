@@ -316,7 +316,7 @@ export default function OnboardingPage() {
           closing_time: loc.closingTime,
           opening_days: loc.openingDays,
           is_default: loc.isDefault,
-          availability: "open",
+          availability: "open" as const,
         }));
 
         const { error: locationsError } = await supabase
@@ -379,7 +379,7 @@ export default function OnboardingPage() {
             closing_time: businessInfo.closingTime,
             opening_days: businessInfo.openingDays,
             is_default: true,
-            availability: "open",
+            availability: "open" as const,
           })
           .select("id")
           .single();

@@ -51,6 +51,7 @@ const templateVariables: Record<TemplateType, string[]> = {
   store_credit_restored: ["customer_name", "salon_name", "amount"],
   gift_received: ["recipient_name", "sender_name", "custom_message", "service_name", "view_link"],
   voucher_applied: ["customer_name", "salon_name"],
+  daily_digest: [],
 };
 
 // Validate that required variables are present

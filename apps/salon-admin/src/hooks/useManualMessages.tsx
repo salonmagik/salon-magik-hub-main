@@ -100,7 +100,7 @@ export function useManualMessages(options: UseManualMessagesOptions) {
           message: messageOptions.message,
           subject: messageOptions.subject || null,
           template_id: messageOptions.templateId || null,
-          template_variables: messageOptions.templateVariables || null,
+          template_variables: (messageOptions.templateVariables ?? null) as unknown as import("@supabase-client").Json,
           sent_by_user_id: user.id,
           status: "pending",
         })
