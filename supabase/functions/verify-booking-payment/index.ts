@@ -148,7 +148,7 @@ serve(async (req) => {
 
     const { data: appointments } = await supabase
       .from("appointments")
-      .select("id, total_amount, payment_status")
+      .select("id, total_amount, payment_status, customer_id, tenant_id")
       .in("id", appointmentIds)
       .in("customer_id", customerIds);
 
@@ -200,6 +200,30 @@ serve(async (req) => {
         .from("payment_intents")
         .update({ status: "completed", updated_at: now })
         .eq("id", intent.id);
+    }
+
+    // Create a transaction record so History page populates.
+    // Use the primary appointment's tenant + customer for the record.
+    const primaryApt = appointments[0];
+    const txTenantId = intent?.tenant_id || primaryApt.tenant_id;
+    const txCustomerId = primaryApt.customer_id;
+    if (txTenantId && txCustomerId) {
+      const { error: txError } = await supabase.from("transactions").insert({
+        tenant_id: txTenantId,
+        customer_id: txCustomerId,
+        appointment_id: primaryApt.id,
+        type: isDeposit ? "deposit" : "payment",
+        amount: amountInMajor,
+        currency,
+        method: "card",
+        provider: "paystack",
+        provider_reference: reference,
+        paystack_reference: reference,
+        status: "completed",
+      });
+      if (txError) {
+        console.error("Failed to insert transaction record:", txError);
+      }
     }
 
     return json({

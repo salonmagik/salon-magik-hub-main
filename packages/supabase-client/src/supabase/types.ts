@@ -2880,6 +2880,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string | null
           id: string
+          location_id: string | null
           read: boolean
           tenant_id: string
           title: string
@@ -2893,6 +2894,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
+          location_id?: string | null
           read?: boolean
           tenant_id: string
           title: string
@@ -2906,6 +2908,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
+          location_id?: string | null
           read?: boolean
           tenant_id?: string
           title?: string
@@ -2914,6 +2917,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -4664,6 +4674,7 @@ export type Database = {
           destination_type: Database["public"]["Enums"]["payout_destination_type"]
           id: string
           is_default: boolean | null
+          location_id: string | null
           momo_number: string | null
           momo_provider: string | null
           paystack_recipient_code: string | null
@@ -4686,6 +4697,7 @@ export type Database = {
           destination_type: Database["public"]["Enums"]["payout_destination_type"]
           id?: string
           is_default?: boolean | null
+          location_id?: string | null
           momo_number?: string | null
           momo_provider?: string | null
           paystack_recipient_code?: string | null
@@ -4708,6 +4720,7 @@ export type Database = {
           destination_type?: Database["public"]["Enums"]["payout_destination_type"]
           id?: string
           is_default?: boolean | null
+          location_id?: string | null
           momo_number?: string | null
           momo_provider?: string | null
           paystack_recipient_code?: string | null
@@ -4732,6 +4745,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salon_payout_destinations_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
