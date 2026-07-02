@@ -38,6 +38,7 @@ const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPending
 const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
 const SalonsOverviewPage = lazy(() => import("./pages/salon/SalonsOverviewPage"));
 const InvoicePaymentLinkDemo = lazy(() => import("./pages/salon/InvoicePaymentLinkDemo"));
+const AllNotificationsPage = lazy(() => import("./pages/salon/AllNotificationsPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // BackOffice (separate app; routes removed here)
@@ -345,6 +346,14 @@ const App = () => (
                     <ModuleProtectedRoute module="audit_log">
                       <AuditLogPage />
                     </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/all-notifications"
+                element={
+                  <ProtectedRoute>
+                    <AllNotificationsPage />
                   </ProtectedRoute>
                 }
               />

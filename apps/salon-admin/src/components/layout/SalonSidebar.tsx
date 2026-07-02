@@ -115,6 +115,7 @@ const mainNavItems: NavItem[] = [
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
   { label: "Journal", icon: BookOpen, path: "/salon/journal", module: "journal" },
   { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+  { label: "All Notifications", icon: Bell, path: "/salon/all-notifications", module: "notifications" },
   { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
   { label: "Settings", icon: Settings, path: "/salon/settings", module: "settings" },
 ];
@@ -183,6 +184,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       if (item.path === "/salon/overview/staff") {
         return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
       }
+      if (item.path === "/salon/all-notifications") {
+        const branchCount = availableContexts.filter((c) => c.type === "location").length;
+        return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && branchCount >= 2;
+      }
       if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
         return false;
       }
@@ -201,11 +206,16 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       return visibleItems;
     }
     return visibleItems.map((item) => {
-      if (item.path !== "/salon/settings") return item;
-      if (activeContextType === "owner_hub") {
-        return { ...item, label: "Business Settings", path: "/salon/business-settings" };
+      if (item.path === "/salon/settings") {
+        if (activeContextType === "owner_hub") {
+          return { ...item, label: "Business Settings", path: "/salon/business-settings" };
+        }
+        return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
       }
-      return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
+      if (item.path === "/salon/payments" && activeContextType === "owner_hub") {
+        return { ...item, label: "Transactions" };
+      }
+      return item;
     });
   }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
 
