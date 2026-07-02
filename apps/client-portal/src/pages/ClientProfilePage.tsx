@@ -29,6 +29,10 @@ export default function ClientProfilePage() {
   const [marketingOptIn, setMarketingOptIn] = useState(preferences?.marketing_opt_in ?? false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isPhoneVerifying, setIsPhoneVerifying] = useState(false);
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneOtpCode, setPhoneOtpCode] = useState("");
+  const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
 
   const primaryCustomer = customers[0];
   const userName = fullName || primaryCustomer?.full_name || user?.email?.split("@")[0] || "User";
@@ -94,6 +98,45 @@ export default function ClientProfilePage() {
       toast({ title: "Preferences updated" });
     } finally {
       setIsSavingPreferences(false);
+    }
+  };
+
+  const handleSendPhoneOtp = async () => {
+    const phoneNumber = profile?.phone || customers[0]?.phone || "";
+    if (!phoneNumber) {
+      toast({ title: "No phone number saved", description: "Add a phone number in your profile first.", variant: "destructive" });
+      return;
+    }
+    setIsPhoneVerifying(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ phone: phoneNumber });
+      if (error) {
+        toast({ title: "Could not send code", description: error.message, variant: "destructive" });
+        return;
+      }
+      setPhoneOtpSent(true);
+      toast({ title: "Verification code sent", description: `Check your SMS messages at ${phoneNumber}.` });
+    } finally {
+      setIsPhoneVerifying(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async () => {
+    const phoneNumber = profile?.phone || customers[0]?.phone || "";
+    if (!phoneOtpCode || !phoneNumber) return;
+    setIsSubmittingOtp(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({ phone: phoneNumber, token: phoneOtpCode, type: "sms" });
+      if (error) {
+        toast({ title: "Verification failed", description: error.message, variant: "destructive" });
+        return;
+      }
+      setPhoneOtpSent(false);
+      setPhoneOtpCode("");
+      await refreshAccount();
+      toast({ title: "Phone verified" });
+    } finally {
+      setIsSubmittingOtp(false);
     }
   };
 
@@ -219,9 +262,28 @@ export default function ClientProfilePage() {
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Email verification</p>
                       <p className="mt-2 font-medium">{emailVerified ? "Verified" : "Pending"}</p>
                     </div>
-                    <div className="rounded-xl border p-4">
+                    <div className="rounded-xl border p-4 space-y-2">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone verification</p>
-                      <p className="mt-2 font-medium">{phoneVerified ? "Verified" : "Not verified"}</p>
+                      <p className="font-medium">{phoneVerified ? "Verified" : "Not verified"}</p>
+                      {!phoneVerified && !phoneOtpSent && (
+                        <Button size="sm" variant="outline" onClick={handleSendPhoneOtp} disabled={isPhoneVerifying}>
+                          {isPhoneVerifying ? "Sending..." : "Verify phone"}
+                        </Button>
+                      )}
+                      {!phoneVerified && phoneOtpSent && (
+                        <div className="flex gap-2 items-center pt-1">
+                          <Input
+                            className="h-8 w-24 text-sm"
+                            placeholder="000000"
+                            value={phoneOtpCode}
+                            maxLength={6}
+                            onChange={(e) => setPhoneOtpCode(e.target.value)}
+                          />
+                          <Button size="sm" onClick={handleVerifyPhoneOtp} disabled={isSubmittingOtp || phoneOtpCode.length < 4}>
+                            {isSubmittingOtp ? "Verifying..." : "Confirm"}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
 

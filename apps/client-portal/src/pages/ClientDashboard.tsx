@@ -105,9 +105,13 @@ export default function ClientDashboard() {
                   {formatCurrency(totalOutstanding, customers[0]?.tenant?.currency || "USD")}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-1">
-                Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
-              </p>
+              {totalOutstanding > 0 ? (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">No outstanding fees</p>
+              )}
             </CardContent>
           </Card>
 
