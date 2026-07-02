@@ -25,7 +25,7 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { module: "audit_log", path: "/salon/audit-log", order: 130 },
 ];
 
-const HUB_ALLOWED_MODULES = new Set<string>(["salons_overview", "staff", "settings", "audit_log"]);
+const HUB_ALLOWED_MODULES = new Set<string>(["salons_overview", "staff", "settings", "audit_log", "payments", "notifications"]);
 
 export function isModuleAllowedInContext(
   module: string,

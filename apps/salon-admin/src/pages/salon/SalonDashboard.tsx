@@ -47,7 +47,7 @@ const activityIcons: Record<string, typeof Calendar> = {
 
 export default function SalonDashboard() {
   const navigate = useNavigate();
-  const { currentTenant, profile, currentRole } = useAuth();
+  const { currentTenant, profile, currentRole, activeContextType } = useAuth();
   const { hasPermission } = usePermissions();
   const {
     stats,
@@ -133,7 +133,7 @@ export default function SalonDashboard() {
         </div>
 
         {/* Onboarding Checklist Card - Only show if not complete */}
-        {!isChecklistComplete && (currentRole === "owner" || currentRole === "manager") && (
+        {!isChecklistComplete && (currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor") && (
           <Card className="bg-primary/5 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-start gap-3">
@@ -187,7 +187,8 @@ export default function SalonDashboard() {
           </Card>
         )}
 
-        {currentTenant?.payment_setup_status !== "ready" && (
+        {currentTenant?.payment_setup_status !== "ready" &&
+          (currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor") && (
           <Card className="border-destructive bg-destructive/10">
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-3">
@@ -202,11 +203,17 @@ export default function SalonDashboard() {
                     </p>
                   </div>
                 </div>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="border-destructive/30 hover:bg-destructive/20 text-destructive" 
-                  onClick={() => navigate("/salon/settings?tab=payments")}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-destructive/30 hover:bg-destructive/20 text-destructive"
+                  onClick={() =>
+                    navigate(
+                      activeContextType === "owner_hub"
+                        ? "/salon/payments?tab=payouts"
+                        : "/salon/settings?tab=payments"
+                    )
+                  }
                 >
                   Configure Payments
                 </Button>
