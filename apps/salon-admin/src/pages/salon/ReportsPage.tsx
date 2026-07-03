@@ -23,14 +23,14 @@ import {
   TrendingDown,
   Users,
   Calendar,
-  DollarSign,
   UserCheck,
   Clock,
   Star,
   Repeat2,
   XCircle,
   BarChart3,
-  Download,
+  Coins,
+  Upload,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
 import { useAuth } from "@/hooks/useAuth";
@@ -176,7 +176,7 @@ export default function ReportsPage() {
           <div>
             <h1 className="text-2xl font-bold">Reports</h1>
             <p className="text-sm text-muted-foreground">
-              How your business is doing — compared to {stats.prevPeriodLabel.toLowerCase()}.
+              How your business is doing compared to {stats.prevPeriodLabel.toLowerCase()}.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -193,7 +193,7 @@ export default function ReportsPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2">
-                  <Download className="w-4 h-4" />
+                  <Upload className="w-4 h-4" />
                   Export
                 </Button>
               </DropdownMenuTrigger>
@@ -212,7 +212,7 @@ export default function ReportsPage() {
             value={fmt(stats.totalRevenue)}
             changePercent={stats.revenueChangePercent}
             prevLabel={stats.prevPeriodLabel}
-            icon={DollarSign}
+            icon={Coins}
             color="bg-green-100 text-green-700"
             loading={isLoading}
           />
