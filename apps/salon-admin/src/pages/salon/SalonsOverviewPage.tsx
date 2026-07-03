@@ -40,7 +40,7 @@ import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatCurrency } from "@shared/currency";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 import {
   Dialog,
@@ -57,6 +57,7 @@ export default function SalonsOverviewPage() {
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const {
     currentTenant,
     currentRole,
@@ -64,6 +65,7 @@ export default function SalonsOverviewPage() {
     activeLocationId,
     availableContexts,
     refreshTenants,
+    setActiveContext,
   } = useAuth();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
@@ -397,7 +399,16 @@ export default function SalonsOverviewPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title={`View ${location.name} reports`}
+                              onClick={async () => {
+                                await setActiveContext("location", location.id);
+                                navigate("/salon/reports");
+                              }}
+                            >
                               <ChevronRight className="w-4 h-4" />
                             </Button>
                           </TableCell>
