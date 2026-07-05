@@ -2005,13 +2005,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	const renderHoursTab = () => (
 		<Card>
-			<CardHeader>
-				<CardTitle>Business Hours</CardTitle>
-				<CardDescription>
-					Set your salon's operating hours. These will be used for online
-					booking availability.
-				</CardDescription>
-			</CardHeader>
+			{!isChainScope && (
+				<CardHeader>
+					<CardTitle>Business Hours</CardTitle>
+					<CardDescription>
+						Set your salon's operating hours. These will be used for online
+						booking availability.
+					</CardDescription>
+				</CardHeader>
+			)}
 			<CardContent className="space-y-6">
 				{locationsLoading ? (
 					<div className="space-y-4">
@@ -2114,12 +2116,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	const renderNotificationsTab = () => (
 		<Card>
-			<CardHeader>
-				<CardTitle>Notifications</CardTitle>
-				<CardDescription>
-					Configure how you and your customers receive notifications.
-				</CardDescription>
-			</CardHeader>
+			{!isChainScope && (
+				<CardHeader>
+					<CardTitle>Notifications</CardTitle>
+					<CardDescription>
+						Configure how you and your customers receive notifications.
+					</CardDescription>
+				</CardHeader>
+			)}
 			<CardContent className="space-y-4">
 				<div className="flex items-center justify-between py-2">
 					<div>
@@ -2288,12 +2292,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		return (
 			<>
 				<Card>
-					<CardHeader>
-						<CardTitle>Manage Branches</CardTitle>
-						<CardDescription>
-							Pause bookings for a branch during breaks, closures, or downtime.
-						</CardDescription>
-					</CardHeader>
+					{!isChainScope && (
+						<CardHeader>
+							<CardTitle>Manage Branches</CardTitle>
+							<CardDescription>
+								Pause bookings for a branch during breaks, closures, or downtime.
+							</CardDescription>
+						</CardHeader>
+					)}
 					<CardContent>
 						{branchWindowsLoading ? (
 							<div className="space-y-2">
@@ -2466,13 +2472,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	const renderBookingTab = () => (
 		<Card>
-			<CardHeader>
-				<CardTitle>Booking Settings</CardTitle>
-				<CardDescription>
-					Manage booking behavior, payment rules, and the customer-facing
-					styling of your booking page.
-				</CardDescription>
-			</CardHeader>
+			{!isChainScope && (
+				<CardHeader>
+					<CardTitle>Booking Settings</CardTitle>
+					<CardDescription>
+						Manage booking behavior, payment rules, and the customer-facing
+						styling of your booking page.
+					</CardDescription>
+				</CardHeader>
+			)}
 			<CardContent className="space-y-6">
 					<div className="space-y-6">
 						{bookingUrl ? (
@@ -3048,16 +3056,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 		return (
 			<Card>
-				<CardHeader>
-					<CardTitle>Subscription</CardTitle>
-					<CardDescription>
-						Your business is on the{" "}
-						<span className="font-medium capitalize">
-							{currentTenant?.plan || "Solo"}
-						</span>{" "}
-						plan.
-					</CardDescription>
-				</CardHeader>
+				{!isChainScope && (
+					<CardHeader>
+						<CardTitle>Subscription</CardTitle>
+						<CardDescription>
+							Your business is on the{" "}
+							<span className="font-medium capitalize">
+								{currentTenant?.plan || "Solo"}
+							</span>{" "}
+							plan.
+						</CardDescription>
+					</CardHeader>
+				)}
 				<CardContent className="space-y-6">
 					<div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
 						<div className="flex items-center justify-between mb-2">
@@ -3646,6 +3656,21 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		</Card>
 	);
 
+	const isChainScope = resolvedScope === "business" || resolvedScope === "branch";
+
+	const chainTabHeaders: Record<string, { title: string; subtitle: string }> = {
+		profile:
+			resolvedScope === "branch"
+				? { title: "Branch Profile", subtitle: "Manage this branch's name, contact, and location." }
+				: { title: "Business Profile", subtitle: "Manage your business name, contact, and owner details." },
+		hours: { title: "Branch Hours", subtitle: "Set the operating hours for this branch." },
+		branches: { title: "Manage Branches", subtitle: "Pause or configure bookings per branch location." },
+		booking: { title: "Booking Settings", subtitle: "Manage booking behaviour, payment rules, and scheduling capacity." },
+		notifications: { title: "Notifications", subtitle: "Configure email and SMS notifications for appointments and updates." },
+		subscription: { title: "Subscription", subtitle: "Manage your plan, billing, and add-ons." },
+		"custom-domain": { title: "Custom Domain", subtitle: "Connect your own domain to your public booking page." },
+	};
+
 	const settingsContent = (
 		<>
 			{activeTab === "profile" && renderProfileTab()}
@@ -3664,12 +3689,21 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		</>
 	);
 
-	// Business and branch scopes: sidebar handles navigation, so no in-page
-	// nav list or shared page header is needed — each tab card has its own title.
-	if (resolvedScope === "business" || resolvedScope === "branch") {
+	// Business and branch scopes: sidebar handles navigation — each tab renders
+	// its own page-level header above the card content.
+	if (isChainScope) {
+		const header = chainTabHeaders[activeTab];
 		return (
 			<SalonSidebar>
-				<div className="space-y-6">{settingsContent}</div>
+				<div className="space-y-6">
+					{header && (
+						<div>
+							<h1 className="text-2xl font-semibold">{header.title}</h1>
+							<p className="text-muted-foreground">{header.subtitle}</p>
+						</div>
+					)}
+					{settingsContent}
+				</div>
 			</SalonSidebar>
 		);
 	}
