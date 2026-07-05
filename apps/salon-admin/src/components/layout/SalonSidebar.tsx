@@ -18,10 +18,17 @@ import {
   Menu,
   X,
   ChevronLeft,
+  ChevronDown,
   Bell,
   Plus,
   FileText,
   Loader2,
+  Palette,
+  CalendarX2,
+  Globe,
+  Shield,
+  Zap,
+  User,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
@@ -100,7 +107,8 @@ interface NavItem {
   icon: React.ElementType;
   path: string;
   badge?: string | number;
-  module?: string; // Permission module key
+  module?: string;
+  children?: Omit<NavItem, "children">[];
 }
 
 const mainNavItems: NavItem[] = [
@@ -150,6 +158,7 @@ interface SalonSidebarProps {
 export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
@@ -221,9 +230,32 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     return visibleItems.map((item) => {
       if (item.path === "/salon/settings") {
         if (activeContextType === "owner_hub") {
-          return { ...item, label: "Business Settings", path: "/salon/business-settings" };
+          return {
+            ...item,
+            label: "Business Settings",
+            path: "/salon/business-settings",
+            children: [
+              { label: "Business Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
+              { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
+              { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
+              { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
+              { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
+              { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
+              { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
+              { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+            ],
+          };
         }
-        return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
+        return {
+          ...item,
+          label: "Branch Settings",
+          path: "/salon/branch-settings",
+          children: [
+            { label: "Branch Profile", icon: Building2, path: "/salon/branch-settings?tab=profile" },
+            { label: "Branch Hours", icon: CalendarX2, path: "/salon/branch-settings?tab=hours" },
+            { label: "Active Sessions", icon: Shield, path: "/salon/branch-settings?tab=sessions" },
+          ],
+        };
       }
       if (item.path === "/salon/transactions" && activeContextType === "owner_hub") {
         return { ...item, label: "Cashflow & Payouts" };
@@ -278,6 +310,27 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   useEffect(() => {
     setIsMobileOpen(false);
   }, [location.pathname]);
+
+  // Auto-expand any nav group whose child matches the current route
+  useEffect(() => {
+    for (const item of filteredMainNavItems) {
+      if (!item.children) continue;
+      const hasActiveChild = item.children.some((child) => {
+        const [childPathname, childSearch] = child.path.split("?");
+        if (location.pathname !== childPathname) return false;
+        if (!childSearch) return true;
+        const childParams = new URLSearchParams(childSearch);
+        const currentParams = new URLSearchParams(location.search);
+        for (const [key, val] of childParams) {
+          if (currentParams.get(key) !== val) return false;
+        }
+        return true;
+      });
+      if (hasActiveChild) {
+        setExpandedGroups((prev) => new Set([...prev, item.path]));
+      }
+    }
+  }, [location.pathname, location.search, filteredMainNavItems]);
 
   // Handle escape key
   useEffect(() => {
@@ -456,6 +509,106 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     return false;
   };
 
+  const isChildActive = (childPath: string) => {
+    const [childPathname, childSearch] = childPath.split("?");
+    if (location.pathname !== childPathname) return false;
+    if (!childSearch) return true;
+    const childParams = new URLSearchParams(childSearch);
+    const currentParams = new URLSearchParams(location.search);
+    for (const [key, val] of childParams) {
+      if (currentParams.get(key) !== val) return false;
+    }
+    return true;
+  };
+
+  const ExpandableNavItemComponent = ({ item }: { item: NavItem }) => {
+    const Icon = item.icon;
+    const isOpen = expandedGroups.has(item.path);
+    const anyChildActive = item.children?.some((c) => isChildActive(c.path)) ?? false;
+
+    const toggle = () => {
+      setExpandedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(item.path)) next.delete(item.path);
+        else next.add(item.path);
+        return next;
+      });
+    };
+
+    const trigger = (
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+          anyChildActive
+            ? "bg-white/15 text-white"
+            : "text-white/80 hover:bg-white/10 hover:text-white",
+        )}
+      >
+        <Icon className="w-5 h-5 flex-shrink-0" />
+        {(isExpanded || isMobileOpen) && (
+          <>
+            <span className="flex-1 text-left">{item.label}</span>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 shrink-0 transition-transform duration-200",
+                isOpen ? "rotate-180" : "",
+              )}
+            />
+          </>
+        )}
+      </button>
+    );
+
+    return (
+      <div>
+        {!isExpanded && !isMobileOpen ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+            <TooltipContent side="right" sideOffset={10}>
+              {item.label}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          trigger
+        )}
+
+        {isOpen && (isExpanded || isMobileOpen) && item.children && (
+          <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/15 pl-3">
+            {item.children.map((child) => {
+              const ChildIcon = child.icon;
+              const active = isChildActive(child.path);
+              return (
+                <Link
+                  key={child.path}
+                  to={child.path}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(child.path);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
+                    active
+                      ? "bg-white/15 text-white"
+                      : "text-white/70 hover:bg-white/10 hover:text-white",
+                  )}
+                >
+                  <ChildIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>{child.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const NavItemComponent = ({ item }: { item: NavItem }) => {
     const active = isActive(item.path);
     const Icon = item.icon;
@@ -588,9 +741,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             ))}
           </div>
         ) : (
-          filteredMainNavItems.map((item) => (
-            <NavItemComponent key={item.path} item={item} />
-          ))
+          filteredMainNavItems.map((item) =>
+            item.children ? (
+              <ExpandableNavItemComponent key={item.path} item={item} />
+            ) : (
+              <NavItemComponent key={item.path} item={item} />
+            )
+          )
         )}
       </nav>
 

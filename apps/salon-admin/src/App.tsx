@@ -39,6 +39,7 @@ const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
 const SalonsOverviewPage = lazy(() => import("./pages/salon/SalonsOverviewPage"));
 const InvoicePaymentLinkDemo = lazy(() => import("./pages/salon/InvoicePaymentLinkDemo"));
 const AllNotificationsPage = lazy(() => import("./pages/salon/AllNotificationsPage"));
+const ThemesSettingsPage = lazy(() => import("./pages/salon/ThemesSettingsPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // BackOffice (separate app; routes removed here)
@@ -303,6 +304,16 @@ const App = () => (
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="settings">
                       <BranchSettingsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/themes-settings"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="settings">
+                      <ThemesSettingsPage />
                     </ModuleProtectedRoute>
                   </ProtectedRoute>
                 }

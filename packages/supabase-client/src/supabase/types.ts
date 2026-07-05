@@ -6273,6 +6273,7 @@ export type Database = {
       tenants: {
         Row: {
           about_text: string | null
+          active_theme_key: string
           allow_staff_selection: boolean
           auto_assign_staff: boolean
           auto_confirm_bookings: boolean | null
@@ -6343,6 +6344,7 @@ export type Database = {
         }
         Insert: {
           about_text?: string | null
+          active_theme_key?: string
           allow_staff_selection?: boolean
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
@@ -6413,6 +6415,7 @@ export type Database = {
         }
         Update: {
           about_text?: string | null
+          active_theme_key?: string
           allow_staff_selection?: boolean
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
