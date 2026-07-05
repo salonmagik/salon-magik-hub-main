@@ -144,7 +144,7 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       return;
     }
     if (notification.type === "payment") {
-      navigate("/salon/payments");
+      navigate("/salon/transactions");
       return;
     }
     if (notification.type === "customer") {

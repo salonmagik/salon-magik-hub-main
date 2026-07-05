@@ -88,9 +88,9 @@ const refundStatusStyles: Record<string, { bg: string; text: string }> = {
 };
 
 const typeChips: Record<string, { label: string; className: string }> = {
-  payment: { label: "Revenue", className: "bg-success/10 text-success" },
+  payment: { label: "Inflow", className: "bg-success/10 text-success" },
   deposit: { label: "Deposit", className: "bg-teal-100 text-teal-700" },
-  refund: { label: "Refund", className: "bg-orange-100 text-orange-700" },
+  refund: { label: "Outflow", className: "bg-orange-100 text-orange-700" },
   purse_topup: { label: "Purse Top-up", className: "bg-blue-100 text-blue-700" },
   purse_redemption: { label: "Purse Credit", className: "bg-purple-100 text-purple-700" },
 };
@@ -120,22 +120,41 @@ export default function PaymentsPage() {
   const [assignDestId, setAssignDestId] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
 
-  const { currentTenant, activeContextType } = useAuth();
+  const { currentTenant, activeContextType, currentRole } = useAuth();
   const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
   const { refunds, pendingRefunds, isLoading: refundsLoading, refetch: refetchRefunds, approveRefund, rejectRefund } = useRefunds();
   const { locations, isLoading: locationsLoading } = useSalonsOverview("today");
-  const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
-  const { wallet, isLoading: walletLoading } = useSalonWallet(currentTenant?.id);
-  const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(currentTenant?.id);
 
   const isOwnerHub = activeContextType === "owner_hub";
-  const pageTitle = isOwnerHub ? "Transactions" : "Payments";
+  // Payouts management (accounts, withdrawals, assignments) is restricted to
+  // owner/manager/supervisor — stylists and receptionists never see or access it.
+  const canManagePayouts = isOwnerHub && (
+    currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor"
+  );
+
+  const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(
+    canManagePayouts ? currentTenant?.id : undefined
+  );
+  const { wallet, isLoading: walletLoading } = useSalonWallet(
+    canManagePayouts ? currentTenant?.id : undefined
+  );
+  const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
+    canManagePayouts ? currentTenant?.id : undefined
+  );
+
+  const pageTitle = isOwnerHub ? "Cashflow & Payouts" : "Transactions";
   const currency = currentTenant?.currency || "USD";
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab) setActiveTab(tab);
-  }, [searchParams]);
+    if (!tab) return;
+    // Block URL-based access to payouts tab for unauthorised roles
+    if (tab === "payouts" && !canManagePayouts) {
+      setActiveTab("all");
+      return;
+    }
+    setActiveTab(tab);
+  }, [searchParams, canManagePayouts]);
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = { USD: "$", GHS: "₵", NGN: "₦", EUR: "€", GBP: "£" };
@@ -327,7 +346,7 @@ export default function PaymentsPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { title: "Today's Revenue", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
+          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
           { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
           { title: "Total Purse Balance", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
         ].map((s) => {
@@ -390,7 +409,7 @@ export default function PaymentsPage() {
           <SelectTrigger className="w-[140px]"><SelectValue placeholder="Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="revenue">Revenue</SelectItem>
+            <SelectItem value="revenue">Inflow</SelectItem>
             <SelectItem value="refunds">Refunds</SelectItem>
             <SelectItem value="purse">Purse</SelectItem>
           </SelectContent>
@@ -570,7 +589,7 @@ export default function PaymentsPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { title: "Today's Revenue", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
+          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
           { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
           { title: "Total Purse Balance", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
         ].map((s) => {
@@ -622,7 +641,7 @@ export default function PaymentsPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="revenue" className="gap-2"><ArrowUpRight className="w-4 h-4" />Revenue</TabsTrigger>
+          <TabsTrigger value="revenue" className="gap-2"><ArrowUpRight className="w-4 h-4" />Inflow</TabsTrigger>
           <TabsTrigger value="refunds" className="gap-2"><ArrowDownLeft className="w-4 h-4" />Refunds</TabsTrigger>
           <TabsTrigger value="purse" className="gap-2"><Wallet className="w-4 h-4" />Purse</TabsTrigger>
         </TabsList>
@@ -677,10 +696,16 @@ export default function PaymentsPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all">All Transactions</TabsTrigger>
-              <TabsTrigger value="payouts" className="gap-2"><Wallet className="w-4 h-4" />Payouts</TabsTrigger>
+              {canManagePayouts && (
+                <TabsTrigger value="payouts" className="gap-2">
+                  <Wallet className="w-4 h-4" />Payouts
+                </TabsTrigger>
+              )}
             </TabsList>
             <TabsContent value="all" className="mt-6">{renderHubAllTransactions()}</TabsContent>
-            <TabsContent value="payouts" className="mt-6">{renderHubPayouts()}</TabsContent>
+            {canManagePayouts && (
+              <TabsContent value="payouts" className="mt-6">{renderHubPayouts()}</TabsContent>
+            )}
           </Tabs>
         ) : (
           renderBranchView()

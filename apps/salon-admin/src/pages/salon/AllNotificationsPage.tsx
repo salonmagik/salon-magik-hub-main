@@ -50,7 +50,7 @@ export default function AllNotificationsPage() {
     if (n.type === "appointment" && n.entity_id) {
       navigate(`/salon/appointments?appointmentId=${n.entity_id}&open=details`);
     } else if (n.type === "payment") {
-      navigate("/salon/payments");
+      navigate("/salon/transactions");
     } else if (n.type === "customer") {
       navigate("/salon/customers");
     }

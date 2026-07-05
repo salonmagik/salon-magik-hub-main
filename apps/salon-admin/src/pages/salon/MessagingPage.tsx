@@ -427,6 +427,8 @@ export default function MessagingPage() {
     return audienceCustomers.filter((customer) => overrideIds.has(customer.id));
   }, [audienceCustomers, selectedCustomerOverrides]);
 
+  const effectiveChannel: BroadcastChannel = selectedChannel ?? "sms";
+
   const eligibleRecipients = useMemo(() => {
     if (audienceMode === "single") {
       const customer = activeCustomers.find((c) => c.id === singleCustomerId);
@@ -551,7 +553,6 @@ export default function MessagingPage() {
     };
   }, [activeContextType, activeLocationId, currentTenant?.id]);
 
-  const effectiveChannel: BroadcastChannel = selectedChannel ?? "sms";
   const messageCharacterCount = message.length;
   const smsSegments = Math.max(1, Math.ceil(Math.max(messageCharacterCount, 1) / 160));
   const estimatedCost = selectedRecipientCount * CREDIT_COST[effectiveChannel] * (effectiveChannel === "sms" ? smsSegments : 1);

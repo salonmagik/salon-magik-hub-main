@@ -169,7 +169,7 @@ export const MODULE_LABELS: Record<string, string> = {
   payments: "Payments",
   reports: "Reports",
   messaging: "Messaging",
-  journal: "Journal",
+  journal: "Cash Tracker",
   staff: "Staff Management",
   audit_log: "Audit Log",
   settings: "Settings",

@@ -316,9 +316,9 @@ export function useDashboardStats() {
         },
         {
           id: "payments",
-          label: "Configure payments",
+          label: "Set up payouts",
           completed: currentTenant.payment_setup_status === "ready",
-          href: "/salon/settings?tab=payments",
+          href: "/salon/transactions?tab=payouts",
         },
         {
           id: "booking",

@@ -197,9 +197,9 @@ export default function SalonDashboard() {
                     <AlertCircle className="w-5 h-5 text-destructive" />
                   </div>
                   <div>
-                    <h3 className="font-medium text-destructive">Payment Setup Incomplete</h3>
+                    <h3 className="font-medium text-destructive">Payout Setup Incomplete</h3>
                     <p className="text-sm text-destructive/80 mt-1">
-                      You must configure your bank account to receive online payments. Online bookings with deposits are currently disabled.
+                      Add a payout account so you can receive withdrawals. Until then, online deposits can't be settled to you.
                     </p>
                   </div>
                 </div>
@@ -207,15 +207,9 @@ export default function SalonDashboard() {
                   size="sm"
                   variant="outline"
                   className="border-destructive/30 hover:bg-destructive/20 text-destructive"
-                  onClick={() =>
-                    navigate(
-                      activeContextType === "owner_hub"
-                        ? "/salon/payments?tab=payouts"
-                        : "/salon/settings?tab=payments"
-                    )
-                  }
+                  onClick={() => navigate("/salon/transactions?tab=payouts")}
                 >
-                  Configure Payments
+                  Set Up Payouts
                 </Button>
               </div>
             </CardContent>
@@ -403,7 +397,7 @@ export default function SalonDashboard() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate("/salon/journal")}
+                  onClick={() => navigate("/salon/cash-tracker")}
                   className="text-primary"
                 >
                   View All

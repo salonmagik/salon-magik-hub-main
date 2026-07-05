@@ -34,6 +34,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
+import { TimePicker } from "@ui/time-picker";
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { Input } from "@ui/input";
@@ -170,8 +171,10 @@ export default function AppointmentsPage() {
   const [rescheduleInputMap, setRescheduleInputMap] = useState<Record<string, { start: string; end: string; message: string }>>({});
   const [approvalReasonMap, setApprovalReasonMap] = useState<Record<string, string>>({});
   const [approvalMessage, setApprovalMessage] = useState("");
-  const [proposedStartInput, setProposedStartInput] = useState("");
-  const [proposedEndInput, setProposedEndInput] = useState("");
+  const [proposedStartDate, setProposedStartDate] = useState("");
+  const [proposedStartTime, setProposedStartTime] = useState("");
+  const [proposedEndDate, setProposedEndDate] = useState("");
+  const [proposedEndTime, setProposedEndTime] = useState("");
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
   // Date range state
@@ -423,12 +426,10 @@ export default function AppointmentsPage() {
     );
     setApprovalReasonMap({});
     setApprovalMessage("");
-    setProposedStartInput(
-      appointment.scheduled_start ? appointment.scheduled_start.slice(0, 16) : "",
-    );
-    setProposedEndInput(
-      appointment.scheduled_end ? appointment.scheduled_end.slice(0, 16) : "",
-    );
+    setProposedStartDate(appointment.scheduled_start ? appointment.scheduled_start.slice(0, 10) : "");
+    setProposedStartTime(appointment.scheduled_start ? appointment.scheduled_start.slice(11, 16) : "");
+    setProposedEndDate(appointment.scheduled_end ? appointment.scheduled_end.slice(0, 10) : "");
+    setProposedEndTime(appointment.scheduled_end ? appointment.scheduled_end.slice(11, 16) : "");
     setApprovalDialogOpen(true);
   };
 
@@ -583,15 +584,17 @@ export default function AppointmentsPage() {
 
       // Legacy single-appointment reschedule mode (from footer "Reschedule instead" path — still supported)
       if (approvalDialogAction === "reschedule" && rescheduledRows.length === 0) {
-        if (!proposedStartInput || !proposedEndInput) {
+        if (!proposedStartDate || !proposedStartTime || !proposedEndDate || !proposedEndTime) {
           throw new Error("Choose the proposed date and time range first.");
         }
+        const proposedStart = `${proposedStartDate}T${proposedStartTime}:00`;
+        const proposedEnd = `${proposedEndDate}T${proposedEndTime}:00`;
         const { error } = await supabase
           .from("appointments")
           .update({
             approval_status: "reschedule_proposed",
-            proposed_start: new Date(proposedStartInput).toISOString(),
-            proposed_end: new Date(proposedEndInput).toISOString(),
+            proposed_start: new Date(proposedStart).toISOString(),
+            proposed_end: new Date(proposedEnd).toISOString(),
             proposed_message: approvalMessage || null,
             approval_decided_at: nowIso,
             customer_response_status: "pending",
@@ -604,7 +607,12 @@ export default function AppointmentsPage() {
           "Reschedule requested",
           "The salon has proposed a new date and time for your booking. Review the request in your booking details.",
         );
-        await sendApprovalEmail("reschedule_proposed", [selectedAppointment.id], approvalMessage || undefined);
+        // Email sending is best-effort — if it fails the DB record is already saved
+        try {
+          await sendApprovalEmail("reschedule_proposed", [selectedAppointment.id], approvalMessage || undefined);
+        } catch (emailErr) {
+          console.warn("Reschedule email failed (non-fatal):", emailErr);
+        }
       } else {
         // ── Per-item reschedule ──────────────────────────────────────────────
         for (const row of rescheduledRows) {
@@ -1693,14 +1701,38 @@ export default function AppointmentsPage() {
           <div className="space-y-4">
             {approvalDialogAction === "reschedule" ? (
               <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Proposed start</Label>
-                    <Input type="datetime-local" value={proposedStartInput} onChange={(e) => setProposedStartInput(e.target.value)} />
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Proposed start</Label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <DatePicker
+                        value={stringToDate(proposedStartDate)}
+                        onChange={(d) => setProposedStartDate(dateToString(d))}
+                        minDate={new Date()}
+                        placeholder="Pick date"
+                      />
+                      <TimePicker
+                        value={proposedStartTime}
+                        onChange={setProposedStartTime}
+                        placeholder="Pick time"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Proposed end</Label>
-                    <Input type="datetime-local" value={proposedEndInput} onChange={(e) => setProposedEndInput(e.target.value)} />
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Proposed end</Label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <DatePicker
+                        value={stringToDate(proposedEndDate)}
+                        onChange={(d) => setProposedEndDate(dateToString(d))}
+                        minDate={new Date()}
+                        placeholder="Pick date"
+                      />
+                      <TimePicker
+                        value={proposedEndTime}
+                        onChange={setProposedEndTime}
+                        placeholder="Pick time"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">

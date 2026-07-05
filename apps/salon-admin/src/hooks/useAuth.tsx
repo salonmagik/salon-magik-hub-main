@@ -62,10 +62,10 @@ const FALLBACK_ROUTE_ORDER: Array<{ module: string; path: string }> = [
   { module: "calendar", path: "/salon/calendar" },
   { module: "customers", path: "/salon/customers" },
   { module: "services", path: "/salon/services" },
-  { module: "payments", path: "/salon/payments" },
+  { module: "payments", path: "/salon/transactions" },
   { module: "reports", path: "/salon/reports" },
   { module: "messaging", path: "/salon/messaging" },
-  { module: "journal", path: "/salon/journal" },
+  { module: "journal", path: "/salon/cash-tracker" },
   { module: "staff", path: "/salon/staff" },
   { module: "settings", path: "/salon/settings" },
   { module: "audit_log", path: "/salon/audit-log" },
@@ -88,7 +88,7 @@ const FALLBACK_ROUTE_MODULES_BY_ROLE: Record<UserRole["role"], string[]> = {
   ],
   supervisor: ["dashboard", "appointments", "calendar", "customers", "services", "messaging"],
   receptionist: ["dashboard", "appointments", "calendar", "customers", "messaging"],
-  staff: [],
+  staff: ["appointments"],
 };
 
 const normalizeUserRoles = (rows: UserRole[]) => {
@@ -595,7 +595,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }).catch((err) => console.warn("touch-staff-session failed:", err));
               }
 
-              setState({
+              setState((prev) => ({
                 user: verifiedUser,
                 session,
                 profile,
@@ -604,7 +604,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 currentTenant,
                 isLoading: false,
                 isAuthenticated: true,
-                hasCompletedOnboarding: tenants.length > 0,
+                // Preserve true once earned — a transient fetch error (empty tenants) must not redirect back to onboarding
+                hasCompletedOnboarding: tenants.length > 0 || prev.hasCompletedOnboarding,
                 requiresPasswordChange: session.user.user_metadata?.requires_password_change === true,
                 activeContextType: contextState.activeContextType,
                 activeLocationId: contextState.activeLocationId,
@@ -616,7 +617,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   contextState.currentRole,
                   contextState.assignedLocationIds
                 ),
-              });
+              }));
             }, 0);
           }
         }
@@ -885,7 +886,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tenants,
       roles,
       currentTenant,
-      hasCompletedOnboarding: tenants.length > 0,
+      hasCompletedOnboarding: tenants.length > 0 || prev.hasCompletedOnboarding,
       activeContextType: contextState.activeContextType,
       activeLocationId: contextState.activeLocationId,
       assignedLocationIds: contextState.assignedLocationIds,

@@ -34,13 +34,16 @@ export function SalonHeader({
 
   if (isEcommerceTheme) {
     const brandColor = salon.brand_color || "#111827";
-
-    // Split bio into headline accent + body for the editorial layout
     const bio = salon.booking_page_bio || "";
-    // Use salon name as the large headline; bio as sub-copy
-    // Split salon name at "&" or "and" for a two-line treatment if possible
-    const nameParts = salon.name.split(/\s*[&+]\s*/);
-    const hasMultiNameParts = nameParts.length > 1;
+
+    const heroHeading = salon.hero_heading || salon.name;
+    const heroTagline = salon.hero_tagline || (bio ? bio.split(/[.!,]/)[0] : "");
+    const heroCTAPrimary = salon.hero_cta_primary || "Book Now";
+    const heroCTASecondary = salon.hero_cta_secondary || "Our Services";
+
+    const scrollToCatalog = () => {
+      document.getElementById("ecom-catalog")?.scrollIntoView({ behavior: "smooth" });
+    };
 
     return (
       <>
@@ -60,25 +63,19 @@ export function SalonHeader({
 
             {/* Headline */}
             <h1 className="text-5xl font-black leading-[1.05] tracking-tight text-gray-900 sm:text-6xl xl:text-7xl">
-              {hasMultiNameParts ? (
+              {heroHeading}
+              {heroTagline && (
                 <>
-                  {nameParts[0]}
                   <br />
-                  <span style={{ color: brandColor }}>&amp; {nameParts.slice(1).join(" & ")}</span>
-                </>
-              ) : (
-                <>
-                  {salon.name}
-                  <br />
-                  <span style={{ color: brandColor }}>{bio ? bio.split(/[.!,]/)[0] : "Studio"}</span>
+                  <span style={{ color: brandColor }}>{heroTagline}</span>
                 </>
               )}
             </h1>
 
-            {/* Sub-copy */}
+            {/* Sub-copy from bio */}
             {bio && (
               <p className="mt-6 max-w-sm text-base leading-relaxed text-gray-500">
-                {hasMultiNameParts ? bio : bio.split(/[.!]/).slice(1).join(". ").trim() || bio}
+                {bio}
               </p>
             )}
 
@@ -88,23 +85,17 @@ export function SalonHeader({
                 type="button"
                 className="px-8 py-3.5 text-[12px] font-bold uppercase tracking-[0.2em] text-white transition-opacity hover:opacity-90"
                 style={{ backgroundColor: brandColor }}
-                onClick={() => {
-                  const catalog = document.getElementById("ecom-catalog");
-                  catalog?.scrollIntoView({ behavior: "smooth" });
-                }}
+                onClick={scrollToCatalog}
               >
-                Book Now
+                {heroCTAPrimary}
               </button>
               <button
                 type="button"
                 className="border px-8 py-3.5 text-[12px] font-bold uppercase tracking-[0.2em] transition-colors hover:bg-gray-50"
                 style={{ borderColor: brandColor, color: brandColor }}
-                onClick={() => {
-                  const catalog = document.getElementById("ecom-catalog");
-                  catalog?.scrollIntoView({ behavior: "smooth" });
-                }}
+                onClick={scrollToCatalog}
               >
-                Our Services
+                {heroCTASecondary}
               </button>
             </div>
 
@@ -162,11 +153,9 @@ export function SalonHeader({
                 <BannerCarousel
                   bannerUrls={salon.banner_urls}
                   salonName={salon.name}
-                  autoPlayInterval={6000}
+                  autoPlayInterval={5000}
                   variant="ecommerce"
                 />
-                {/* Subtle image overlay at edges */}
-                <div className="pointer-events-none absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-white to-transparent lg:block hidden" />
               </div>
             ) : (
               <div

@@ -205,7 +205,7 @@ export default function SalonsOverviewPage() {
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                         <Coins className="w-3 h-3" />
-                        Total Revenue
+                        Total Inflow
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -279,7 +279,7 @@ export default function SalonsOverviewPage() {
                           <div>
                             <p className="font-semibold text-lg">{aggregateStats.bestPerforming.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} revenue
+                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} inflow
                             </p>
                           </div>
                           <Badge variant="secondary" className="bg-success/10 text-success">
@@ -316,7 +316,7 @@ export default function SalonsOverviewPage() {
                           <div>
                             <p className="font-semibold text-lg">{aggregateStats.worstPerforming.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} revenue
+                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} inflow
                             </p>
                           </div>
                           <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
@@ -358,7 +358,7 @@ export default function SalonsOverviewPage() {
                         <TableRow>
                           <TableHead>Branches</TableHead>
                           {canViewRevenueAnalytics && (
-                            <TableHead className="text-right">Revenue</TableHead>
+                            <TableHead className="text-right">Inflow</TableHead>
                           )}
                           <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
                           <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>

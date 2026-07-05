@@ -403,15 +403,10 @@ async function processBulkSMS(
           message,
         });
 
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-
-        await supabase
-          .from("communication_credits")
-          .update({
-            balance: supabase.raw(`balance - ${creditsPerMessage}`),
-          })
-          .eq("tenant_id", tenant.id);
+        await supabase.rpc("deduct_communication_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+        });
 
         await supabase
           .from("manual_messages")
@@ -437,6 +432,9 @@ async function processBulkSMS(
           credits_used: creditsPerMessage,
           error_message: null,
         });
+
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
         result.failed++;
         result.failedMessages.push({
@@ -521,17 +519,11 @@ async function processBulkEmail(
           throw new Error(emailData.message || "Failed to send email");
         }
 
-        // Success - deduct credits
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-
-        // Deduct credits from tenant
-        await supabase
-          .from("communication_credits")
-          .update({
-            balance: supabase.raw(`balance - ${creditsPerMessage}`),
-          })
-          .eq("tenant_id", tenant.id);
+        // Deduct credits from tenant (atomic RPC)
+        await supabase.rpc("deduct_communication_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+        });
 
         // Update manual_messages
         await supabase
@@ -559,6 +551,10 @@ async function processBulkEmail(
           credits_used: creditsPerMessage,
           error_message: null,
         });
+
+        // Success - increment after accounting succeeds
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
         console.error(`Failed to send email to ${customer.full_name}:`, error);
 
@@ -673,17 +669,11 @@ async function processBulkWhatsApp(
           throw new Error("Either template or message is required for WhatsApp");
         }
 
-        // Success - deduct credits
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-
-        // Deduct credits from tenant
-        await supabase
-          .from("communication_credits")
-          .update({
-            balance: supabase.raw(`balance - ${creditsPerMessage}`),
-          })
-          .eq("tenant_id", tenant.id);
+        // Deduct credits from tenant (atomic RPC)
+        await supabase.rpc("deduct_communication_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+        });
 
         // Update manual_messages
         await supabase
@@ -711,6 +701,9 @@ async function processBulkWhatsApp(
           credits_used: creditsPerMessage,
           error_message: null,
         });
+
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
         console.error(`Failed to send WhatsApp to ${customer.full_name}:`, error);
 

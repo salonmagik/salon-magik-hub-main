@@ -218,7 +218,7 @@ const App = () => (
                 }
               />
               <Route
-                path="/salon/payments"
+                path="/salon/transactions"
                 element={
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="payments">
@@ -248,7 +248,7 @@ const App = () => (
                 }
               />
               <Route
-                path="/salon/journal"
+                path="/salon/cash-tracker"
                 element={
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="journal">

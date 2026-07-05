@@ -31,6 +31,11 @@ export type PublicTenant = Pick<
   auto_confirm_bookings?: boolean;
   theme_key?: string | null;
   storefront_mode?: "services" | "products" | "both" | null;
+  hero_heading?: string | null;
+  hero_tagline?: string | null;
+  hero_cta_primary?: string | null;
+  hero_cta_secondary?: string | null;
+  about_text?: string | null;
 };
 
 export type PublicLocation = Pick<

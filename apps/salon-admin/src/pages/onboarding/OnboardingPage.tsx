@@ -475,6 +475,32 @@ export default function OnboardingPage() {
         }
       }
 
+      // Send welcome email (fire-and-forget — don't block onboarding on delivery)
+      if (!isOwner && ownerInvite.email) {
+        // Staff set up the salon on behalf of the owner — send a "setup complete" email
+        supabase.functions.invoke("send-welcome-email", {
+          body: {
+            tenantId,
+            type: "staff_setup_for_owner",
+            ownerName: `${firstName} ${lastName}`.trim() || "there",
+            salonName: businessInfo.name,
+            invitedOwnerName: ownerInvite.name || ownerInvite.email,
+          },
+        }).catch((err) => console.warn("Welcome email (staff_setup_for_owner) failed:", err));
+      } else {
+        // Standard owner onboarding
+        supabase.functions.invoke("send-welcome-email", {
+          body: {
+            tenantId,
+            type: "owner",
+            ownerName: `${firstName} ${lastName}`.trim() || "there",
+            salonName: businessInfo.name,
+            plan: selectedPlan,
+            trialDays: onboardingTrialDays,
+          },
+        }).catch((err) => console.warn("Welcome email (owner) failed:", err));
+      }
+
       await refreshTenants();
       clearGoogleOAuthIntent();
       clearPendingSalesPromoCode();

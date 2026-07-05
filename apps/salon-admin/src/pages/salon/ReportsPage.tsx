@@ -142,8 +142,8 @@ export default function ReportsPage() {
   const handleExport = (fileFormat: "csv" | "xlsx") => {
     const data = stats.dailyRevenue.map((d) => ({
       Date: d.date,
-      Revenue: d.revenue,
-      [`Revenue (${stats.prevPeriodLabel})`]: d.prevRevenue,
+      Inflow: d.revenue,
+      [`Inflow (${stats.prevPeriodLabel})`]: d.prevRevenue,
     }));
 
     if (fileFormat === "csv") {
@@ -153,14 +153,14 @@ export default function ReportsPage() {
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `revenue-report-${period}.csv`;
+      link.download = `inflow-report-${period}.csv`;
       link.click();
       URL.revokeObjectURL(link.href);
     } else {
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Revenue");
-      XLSX.writeFile(wb, `revenue-report-${period}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, "Inflow");
+      XLSX.writeFile(wb, `inflow-report-${period}.xlsx`);
     }
 
     toast({ title: "Exported", description: "Report downloaded successfully." });
@@ -208,7 +208,7 @@ export default function ReportsPage() {
         {/* Stat Chips */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <StatChip
-            label="Revenue"
+            label="Inflow"
             value={fmt(stats.totalRevenue)}
             changePercent={stats.revenueChangePercent}
             prevLabel={stats.prevPeriodLabel}
@@ -263,7 +263,7 @@ export default function ReportsPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold">Revenue Over Time</CardTitle>
+                <CardTitle className="text-base font-semibold">Inflow Over Time</CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {stats.periodLabel} (bars) vs {stats.prevPeriodLabel} (line)
                 </p>
@@ -276,7 +276,7 @@ export default function ReportsPage() {
             ) : stats.dailyRevenue.length === 0 ? (
               <div className="h-[260px] flex flex-col items-center justify-center text-muted-foreground gap-2">
                 <BarChart3 className="w-8 h-8 opacity-40" />
-                <p className="text-sm">No revenue data for this period yet.</p>
+                <p className="text-sm">No inflow data for this period yet.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
@@ -333,7 +333,7 @@ export default function ReportsPage() {
                       <TableHead className="w-8">#</TableHead>
                       <TableHead>Service</TableHead>
                       <TableHead className="text-right">Bookings</TableHead>
-                      <TableHead className="text-right">Revenue</TableHead>
+                      <TableHead className="text-right">Inflow</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

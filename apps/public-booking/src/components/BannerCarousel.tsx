@@ -40,7 +40,7 @@ export function BannerCarousel({
 
   return (
     <div
-      className={isEcommerceTheme ? "relative h-64 md:h-[22rem] overflow-hidden" : "relative h-48 md:h-64 rounded-xl overflow-hidden"}
+      className={isEcommerceTheme ? "relative h-full w-full overflow-hidden" : "relative h-48 md:h-64 rounded-xl overflow-hidden"}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
@@ -57,13 +57,16 @@ export function BannerCarousel({
         />
       ))}
 
-      {/* Gradient overlay */}
-      <div className={isEcommerceTheme ? "absolute inset-0 bg-gradient-to-r from-[#1f1b17]/75 via-[#1f1b17]/30 to-transparent" : "absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"} />
+      {/* Gradient overlay — only for default theme (text contrast) */}
+      {!isEcommerceTheme && (
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+      )}
 
-      <div className={isEcommerceTheme ? "absolute bottom-0 left-0 right-0 p-6 text-white md:p-8" : "absolute bottom-4 left-4 right-16 text-white"}>
-        {isEcommerceTheme && <p className="text-xs uppercase tracking-[0.22em] text-white/75">Curated booking storefront</p>}
-        <h1 className={isEcommerceTheme ? "mt-2 text-3xl font-semibold md:text-4xl" : "text-2xl md:text-3xl font-bold"}>{salonName}</h1>
-      </div>
+      {!isEcommerceTheme && (
+        <div className="absolute bottom-4 left-4 right-16 text-white">
+          <h1 className="text-2xl md:text-3xl font-bold">{salonName}</h1>
+        </div>
+      )}
 
       {/* Navigation arrows - only visible on hover when multiple banners */}
       {bannerUrls.length > 1 && isHovering && (

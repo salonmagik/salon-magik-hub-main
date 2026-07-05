@@ -38,6 +38,11 @@ export default function ClientCompleteAccountPage() {
 
     setIsLoading(true);
     try {
+      // Capture email before calling the edge function — updateUserById invalidates the
+      // current refresh token as a security measure, so we must re-sign in afterwards.
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const userEmail = currentUser?.email;
+
       const { data, error: invokeError } = await supabase.functions.invoke("auth-set-client-password", {
         body: { password },
       });
@@ -47,7 +52,23 @@ export default function ClientCompleteAccountPage() {
         return;
       }
 
-      await supabase.auth.refreshSession();
+      // Re-sign in with the new password to establish a fresh session
+      // (the old refresh token was revoked by the password change)
+      if (userEmail) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password,
+        });
+        if (signInError) {
+          toast({
+            title: "Password set",
+            description: "Your password has been created. Please sign in to continue.",
+          });
+          navigate("/login", { replace: true });
+          return;
+        }
+      }
+
       await refreshAccount();
       toast({
         title: "Account secured",

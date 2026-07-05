@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       additional_location_pricing: {
@@ -3241,6 +3216,36 @@ export type Database = {
           },
         ]
       }
+      phone_otp_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          otp_hash: string
+          phone: string
+          used: boolean
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          otp_hash: string
+          phone: string
+          used?: boolean
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          otp_hash?: string
+          phone?: string
+          used?: boolean
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       plan_change_batches: {
         Row: {
           created_at: string
@@ -6267,6 +6272,7 @@ export type Database = {
       }
       tenants: {
         Row: {
+          about_text: string | null
           allow_staff_selection: boolean
           auto_assign_staff: boolean
           auto_confirm_bookings: boolean | null
@@ -6289,6 +6295,10 @@ export type Database = {
           deposits_enabled: boolean
           dotlet_domain_id: string | null
           dotlet_origin_rule_id: string | null
+          hero_cta_primary: string
+          hero_cta_secondary: string
+          hero_heading: string | null
+          hero_tagline: string | null
           id: string
           legal_name: string | null
           logo_url: string | null
@@ -6332,6 +6342,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          about_text?: string | null
           allow_staff_selection?: boolean
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
@@ -6354,6 +6365,10 @@ export type Database = {
           deposits_enabled?: boolean
           dotlet_domain_id?: string | null
           dotlet_origin_rule_id?: string | null
+          hero_cta_primary?: string
+          hero_cta_secondary?: string
+          hero_heading?: string | null
+          hero_tagline?: string | null
           id?: string
           legal_name?: string | null
           logo_url?: string | null
@@ -6397,6 +6412,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          about_text?: string | null
           allow_staff_selection?: boolean
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
@@ -6419,6 +6435,10 @@ export type Database = {
           deposits_enabled?: boolean
           dotlet_domain_id?: string | null
           dotlet_origin_rule_id?: string | null
+          hero_cta_primary?: string
+          hero_cta_secondary?: string
+          hero_heading?: string | null
+          hero_tagline?: string | null
           id?: string
           legal_name?: string | null
           logo_url?: string | null
@@ -7101,6 +7121,7 @@ export type Database = {
     Views: {
       public_booking_tenants: {
         Row: {
+          about_text: string | null
           allow_staff_selection: boolean | null
           auto_assign_staff: boolean | null
           auto_confirm_bookings: boolean | null
@@ -7115,6 +7136,10 @@ export type Database = {
           default_buffer_minutes: number | null
           default_deposit_percentage: number | null
           deposits_enabled: boolean | null
+          hero_cta_primary: string | null
+          hero_cta_secondary: string | null
+          hero_heading: string | null
+          hero_tagline: string | null
           id: string | null
           logo_url: string | null
           name: string | null
@@ -7132,6 +7157,7 @@ export type Database = {
           timezone: string | null
         }
         Insert: {
+          about_text?: string | null
           allow_staff_selection?: boolean | null
           auto_assign_staff?: boolean | null
           auto_confirm_bookings?: boolean | null
@@ -7146,6 +7172,10 @@ export type Database = {
           default_buffer_minutes?: number | null
           default_deposit_percentage?: number | null
           deposits_enabled?: boolean | null
+          hero_cta_primary?: string | null
+          hero_cta_secondary?: string | null
+          hero_heading?: string | null
+          hero_tagline?: string | null
           id?: string | null
           logo_url?: string | null
           name?: string | null
@@ -7163,6 +7193,7 @@ export type Database = {
           timezone?: string | null
         }
         Update: {
+          about_text?: string | null
           allow_staff_selection?: boolean | null
           auto_assign_staff?: boolean | null
           auto_confirm_bookings?: boolean | null
@@ -7177,6 +7208,10 @@ export type Database = {
           default_buffer_minutes?: number | null
           default_deposit_percentage?: number | null
           deposits_enabled?: boolean | null
+          hero_cta_primary?: string | null
+          hero_cta_secondary?: string | null
+          hero_heading?: string | null
+          hero_tagline?: string | null
           id?: string | null
           logo_url?: string | null
           name?: string | null
@@ -7809,6 +7844,10 @@ export type Database = {
         }
         Returns: string
       }
+      deduct_communication_credits: {
+        Args: { p_amount: number; p_tenant_id: string }
+        Returns: undefined
+      }
       ensure_sales_agent_profile: {
         Args: { p_backoffice_user_id?: string }
         Returns: string
@@ -8394,9 +8433,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["owner", "manager", "supervisor", "receptionist", "staff"],

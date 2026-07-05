@@ -138,13 +138,13 @@ export default function JournalPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `journal-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `cash-tracker-export-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
     } else {
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Journal");
-      XLSX.writeFile(workbook, `journal-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Cash Tracker");
+      XLSX.writeFile(workbook, `cash-tracker-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
   };
 
@@ -154,7 +154,7 @@ export default function JournalPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Journal</h1>
+            <h1 className="text-2xl font-semibold">Cash Tracker</h1>
             <p className="text-muted-foreground">
               Track cash, POS, and transfer transactions
             </p>
@@ -307,7 +307,7 @@ export default function JournalPage() {
             ) : entries.length === 0 ? (
               <div className="text-center py-12">
                 <Wallet className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                <p className="text-muted-foreground">No journal entries found</p>
+                <p className="text-muted-foreground">No entries found</p>
                 <Button variant="link" onClick={() => setAddDialogOpen(true)}>
                   Add your first entry
                 </Button>

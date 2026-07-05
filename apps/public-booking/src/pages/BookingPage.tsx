@@ -283,6 +283,7 @@ function BookingPageWithCart({
   const [modalCountryCode, setModalCountryCode] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
+  const [ecomSearchQuery, setEcomSearchQuery] = useState("");
 
   // Detect payment return from Paystack
   useEffect(() => {
@@ -325,6 +326,8 @@ function BookingPageWithCart({
         themeKey={themeKey}
         isThemePreview={isThemePreview}
         onCartClick={() => setCheckoutOpen(true)}
+        searchQuery={ecomSearchQuery}
+        onSearchChange={setEcomSearchQuery}
       >
         {themeKey === "ecommerce" ? (
           <>
@@ -350,6 +353,8 @@ function BookingPageWithCart({
                 strictScopedLocationIds={scopedLocationIds}
                 selectedLocationIds={selectedLocationIds}
                 onLocationFilterChange={onLocationFilterChange}
+                externalSearch={ecomSearchQuery}
+                onExternalSearchChange={setEcomSearchQuery}
               />
             ) : (
               <div className="mx-auto max-w-7xl px-6 py-20 text-center lg:px-8">

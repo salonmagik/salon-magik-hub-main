@@ -41,6 +41,7 @@ import { TrialBanner } from "@/components/billing/TrialBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
+import { NewDeviceReviewModal } from "@/components/session/NewDeviceReviewModal";
 import { isModuleAllowedInContext } from "@/lib/contextAccess";
 import {
   Tooltip,
@@ -59,7 +60,7 @@ import {
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
   const { user, profile } = useAuth();
-  
+
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
   const initials = displayName
@@ -110,10 +111,10 @@ const mainNavItems: NavItem[] = [
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
   { label: "Services and Products", icon: Scissors, path: "/salon/services", module: "services" },
-  { label: "Payments", icon: CreditCard, path: "/salon/payments", module: "payments" },
+  { label: "Transactions", icon: CreditCard, path: "/salon/transactions", module: "payments" },
   { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
-  { label: "Journal", icon: BookOpen, path: "/salon/journal", module: "journal" },
+  { label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" },
   { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
   { label: "All Notifications", icon: Bell, path: "/salon/all-notifications", module: "notifications" },
   { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
@@ -154,8 +155,20 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
   const [refreshingAccess, setRefreshingAccess] = useState(false);
+  const [reviewSessionsOpen, setReviewSessionsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Open the new-device review modal when redirected from the security email CTA
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("review-sessions") === "true") {
+      setReviewSessionsOpen(true);
+      // Remove the param from the URL without a page reload
+      const cleanUrl = location.pathname + location.search.replace(/[?&]review-sessions=true/, "").replace(/^\?$/, "");
+      navigate(cleanUrl, { replace: true });
+    }
+  }, [location.search, location.pathname, navigate]);
   const { toast } = useToast();
   const notificationsData = useNotifications();
   const { unreadCount } = notificationsData;
@@ -170,7 +183,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     getFirstAllowedRoute,
     refreshTenants,
   } = useAuth();
-  
+
   // Start staff session on mount
   const { startSession } = useStaffSessions();
   useEffect(() => {
@@ -212,8 +225,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         }
         return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
       }
-      if (item.path === "/salon/payments" && activeContextType === "owner_hub") {
-        return { ...item, label: "Transactions" };
+      if (item.path === "/salon/transactions" && activeContextType === "owner_hub") {
+        return { ...item, label: "Cashflow & Payouts" };
       }
       return item;
     });
@@ -227,11 +240,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Get plan display info
   const getPlanDisplay = () => {
     if (!currentTenant) return { emoji: "🎁", label: "Free" };
-    
+
     const isTrialing = currentTenant.subscription_status === "trialing";
     const isPastDue = currentTenant.subscription_status === "past_due";
     const isActive = currentTenant.subscription_status === "active";
-    
+
     if (isPastDue) {
       return { emoji: "⚠️", label: "Past Due" };
     }
@@ -791,6 +804,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      <NewDeviceReviewModal
+        open={reviewSessionsOpen}
+        onClose={() => setReviewSessionsOpen(false)}
+      />
       </InactivityGuard>
     </BannerProvider>
     </SidebarContext.Provider>

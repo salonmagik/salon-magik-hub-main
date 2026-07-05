@@ -30,6 +30,9 @@ interface CatalogViewProps {
   strictScopedLocationIds?: string[];
   selectedLocationIds: string[];
   onLocationFilterChange: (locationIds: string[]) => void;
+  /** When provided, the header search bar is controlled externally (ecommerce header search) */
+  externalSearch?: string;
+  onExternalSearchChange?: (q: string) => void;
 }
 
 type SortOption = "name" | "price-asc" | "price-desc";
@@ -65,12 +68,17 @@ export function CatalogView({
   strictScopedLocationIds = [],
   selectedLocationIds,
   onLocationFilterChange,
+  externalSearch,
+  onExternalSearchChange,
 }: CatalogViewProps) {
   const isEcommerceTheme = themeKey === "ecommerce";
   const isModeRestricted = storefrontMode !== "both";
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  // In ecommerce mode the header controls search externally; fall back to internal
+  const searchQuery = isEcommerceTheme && externalSearch !== undefined ? externalSearch : internalSearchQuery;
+  const setSearchQuery = isEcommerceTheme && onExternalSearchChange ? onExternalSearchChange : setInternalSearchQuery;
   const [sortBy, setSortBy] = useState<SortOption>("name");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 

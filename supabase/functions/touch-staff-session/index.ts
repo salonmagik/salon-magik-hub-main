@@ -120,6 +120,29 @@ serve(async (req) => {
 
     const sessionToken = authHeader.replace("Bearer ", "");
 
+    // Detect new-device login BEFORE upserting so we can compare against
+    // existing sessions. A "new device" means: this session token has never
+    // been seen before AND no other active session from this IP exists.
+    const { data: existingToken } = await supabase
+      .from("staff_sessions")
+      .select("id")
+      .eq("session_token", sessionToken)
+      .maybeSingle();
+
+    const isNewSession = !existingToken;
+
+    let isNewDevice = false;
+    if (isNewSession && ip) {
+      const { data: sessionsFromIp } = await supabase
+        .from("staff_sessions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("ip_address", ip)
+        .is("ended_at", null)
+        .limit(1);
+      isNewDevice = !sessionsFromIp || sessionsFromIp.length === 0;
+    }
+
     // Upsert current session — allows multiple concurrent sessions per user.
     await supabase.from("staff_sessions").upsert(
       {
@@ -221,7 +244,89 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
+    // Send new-device security email (fire-and-forget — never block the login)
+    if (isNewDevice && user.email) {
+      const resendApiKey = Deno.env.get("RESEND_API_KEY");
+      const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "security@salonmagik.com";
+      const appBaseUrl = Deno.env.get("APP_BASE_URL") || "https://app.salonmagik.com";
+
+      if (resendApiKey) {
+        const locationLabel = [geo.city, geo.country].filter(Boolean).join(", ") || "Unknown location";
+        const deviceLabel = `${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)} · ${browserName}`;
+        const signInTime = new Date(now).toLocaleString("en-US", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        });
+        const reviewUrl = `${appBaseUrl}/login?review-sessions=true`;
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#f1f4f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 20px;">
+      <div style="max-width:560px;background:#fff;border-radius:8px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,.1);">
+        <div style="text-align:center;margin-bottom:28px;">
+          <p style="margin:0;font-size:12px;color:#9ca3af;">Salon Magik Security</p>
+        </div>
+        <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 16px;">New sign-in to your account</h1>
+        <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          We noticed a new sign-in to your Salon Magik account. If this was you, no action is needed.
+        </p>
+        <div style="background:#f1f4f9;border-radius:8px;padding:16px 20px;margin:0 0 24px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="color:#6b7280;font-size:13px;padding:4px 0;width:120px;">Device</td>
+              <td style="color:#111827;font-size:13px;font-weight:500;padding:4px 0;">${deviceLabel}</td>
+            </tr>
+            <tr>
+              <td style="color:#6b7280;font-size:13px;padding:4px 0;">Location</td>
+              <td style="color:#111827;font-size:13px;font-weight:500;padding:4px 0;">${locationLabel}</td>
+            </tr>
+            <tr>
+              <td style="color:#6b7280;font-size:13px;padding:4px 0;">Time</td>
+              <td style="color:#111827;font-size:13px;font-weight:500;padding:4px 0;">${signInTime}</td>
+            </tr>
+            <tr>
+              <td style="color:#6b7280;font-size:13px;padding:4px 0;">IP address</td>
+              <td style="color:#111827;font-size:13px;font-weight:500;padding:4px 0;">${ip || "Unknown"}</td>
+            </tr>
+          </table>
+        </div>
+        <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          If you <strong>don't recognise this sign-in</strong>, you can review and end active sessions immediately.
+        </p>
+        <div style="text-align:center;margin:0 0 32px;">
+          <a href="${reviewUrl}" style="display:inline-block;background:#dc2626;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:6px;text-decoration:none;">
+            Review my sessions
+          </a>
+        </div>
+        <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">
+          © 2026 Salon Magik. All rights reserved.
+        </p>
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+        fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: `Salon Magik Security <${fromEmail}>`,
+            to: [user.email],
+            subject: "New sign-in to your Salon Magik account",
+            html,
+          }),
+        }).catch((err) => console.warn("New device email failed:", err));
+      }
+    }
+
+    return new Response(JSON.stringify({ ok: true, isNewDevice }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

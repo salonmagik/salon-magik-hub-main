@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Lock, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ export function ForcePasswordChangeDialog({
   onPasswordChanged,
 }: ForcePasswordChangeDialogProps) {
   const { toast } = useToast();
+  const { currentTenant } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -61,10 +63,11 @@ export function ForcePasswordChangeDialog({
     setIsLoading(true);
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      
+      const [{ data: { session } }, { data: { user: currentUser } }] = await Promise.all([
+        supabase.auth.getSession(),
+        supabase.auth.getUser(),
+      ]);
+
       if (!session?.access_token) {
         toast({
           title: "Session expired",
@@ -73,6 +76,10 @@ export function ForcePasswordChangeDialog({
         });
         return;
       }
+
+      // Capture email before the edge function — admin.updateUserById revokes
+      // the current refresh token as a side effect, so we must re-sign in after.
+      const userEmail = currentUser?.email;
 
       const { data, error } = await supabase.functions.invoke("complete-password-change", {
         body: { newPassword: password },
@@ -95,11 +102,28 @@ export function ForcePasswordChangeDialog({
         description: "Your password has been changed successfully.",
       });
 
-      // Refresh the session so the user's metadata (requires_password_change:
-      // false) is picked up locally — no need to sign out and log back in,
-      // the current session is still valid since changing a password via the
-      // admin API doesn't revoke existing sessions.
-      await supabase.auth.refreshSession();
+      // Re-sign in with the new password to establish a fresh session
+      // (the old refresh token was revoked by the admin password change).
+      if (userEmail) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password,
+        });
+        if (signInError) {
+          toast({
+            title: "Please sign in",
+            description: "Your password has been set. Sign in to continue.",
+          });
+          return;
+        }
+
+        // Send staff welcome email now that the session is fresh
+        if (currentTenant?.id) {
+          supabase.functions.invoke("send-welcome-email", {
+            body: { tenantId: currentTenant.id, type: "staff" },
+          }).catch((err) => console.warn("Staff welcome email failed:", err));
+        }
+      }
       onPasswordChanged();
     } catch (error: any) {
       toast({
