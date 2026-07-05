@@ -3646,24 +3646,42 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		</Card>
 	);
 
+	const settingsContent = (
+		<>
+			{activeTab === "profile" && renderProfileTab()}
+			{activeTab === "hours" && renderHoursTab()}
+			{activeTab === "branches" && renderBranchesTab()}
+			{activeTab === "booking" && renderBookingTab()}
+			{activeTab === "payments" && renderPaymentsTab()}
+			{activeTab === "wallet" && renderWalletTab()}
+			{activeTab === "withdrawals" && renderWithdrawalsTab()}
+			{activeTab === "promotions" && renderPromotionsTab()}
+			{activeTab === "notifications" && renderNotificationsTab()}
+			{activeTab === "roles" && renderRolesTab()}
+			{activeTab === "subscription" && renderSubscriptionTab()}
+			{activeTab === "custom-domain" && <CustomDomainManager />}
+			{activeTab === "sessions" && <ActiveSessionsTab />}
+		</>
+	);
+
+	// Business and branch scopes: sidebar handles navigation, so no in-page
+	// nav list or shared page header is needed — each tab card has its own title.
+	if (resolvedScope === "business" || resolvedScope === "branch") {
+		return (
+			<SalonSidebar>
+				<div className="space-y-6">{settingsContent}</div>
+			</SalonSidebar>
+		);
+	}
+
+	// Legacy (non-chain) scope: keep the classic header + in-page sidebar nav.
 	return (
 		<SalonSidebar>
 			<div className="space-y-6">
-				{/* Page Header */}
 				<div>
-					<h1 className="text-2xl font-semibold">
-						{resolvedScope === "business"
-							? "Business Settings"
-							: resolvedScope === "branch"
-								? "Branch Settings"
-								: "Settings"}
-					</h1>
+					<h1 className="text-2xl font-semibold">Settings</h1>
 					<p className="text-muted-foreground">
-						{resolvedScope === "business"
-							? "Manage business-level configuration and owner details"
-							: resolvedScope === "branch"
-								? "Manage this branch profile and operating hours"
-								: "Manage your salon's configuration and preferences"}
+						Manage your salon's configuration and preferences
 					</p>
 				</div>
 
@@ -3729,21 +3747,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</div>
 
 					{/* Settings Content */}
-					<div className="flex-1">
-						{activeTab === "profile" && renderProfileTab()}
-						{activeTab === "hours" && renderHoursTab()}
-						{activeTab === "branches" && renderBranchesTab()}
-						{activeTab === "booking" && renderBookingTab()}
-						{activeTab === "payments" && renderPaymentsTab()}
-						{activeTab === "wallet" && renderWalletTab()}
-						{activeTab === "withdrawals" && renderWithdrawalsTab()}
-						{activeTab === "promotions" && renderPromotionsTab()}
-						{activeTab === "notifications" && renderNotificationsTab()}
-						{activeTab === "roles" && renderRolesTab()}
-						{activeTab === "subscription" && renderSubscriptionTab()}
-						{activeTab === "custom-domain" && <CustomDomainManager />}
-						{activeTab === "sessions" && <ActiveSessionsTab />}
-					</div>
+					<div className="flex-1">{settingsContent}</div>
 				</div>
 			</div>
 		</SalonSidebar>
