@@ -10,6 +10,7 @@ import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@shared/utils";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 
 const getIcon = (type: Notification["type"]) => {
   switch (type) {
@@ -35,6 +36,7 @@ type FilterType = "all" | "unread" | "urgent";
 export default function AllNotificationsPage() {
   const navigate = useNavigate();
   const { notifications, isLoading, markAsRead, markAllAsRead } = useNotifications();
+  const { activeContextType, setActiveContext, assignedLocationIds } = useAuth();
   const [filter, setFilter] = useState<FilterType>("all");
 
   const filtered = notifications.filter((n) => {
@@ -45,13 +47,22 @@ export default function AllNotificationsPage() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  const switchToLocationIfNeeded = async () => {
+    if (activeContextType !== "owner_hub") return;
+    const targetLocation = assignedLocationIds[0] ?? null;
+    if (targetLocation) await setActiveContext("location", targetLocation);
+  };
+
   const handleNotificationClick = async (n: Notification) => {
     if (!n.read) await markAsRead(n.id);
     if (n.type === "appointment" && n.entity_id) {
+      await switchToLocationIfNeeded();
       navigate(`/salon/appointments?appointmentId=${n.entity_id}&open=details`);
     } else if (n.type === "payment") {
+      await switchToLocationIfNeeded();
       navigate("/salon/transactions");
     } else if (n.type === "customer") {
+      await switchToLocationIfNeeded();
       navigate("/salon/customers");
     }
   };

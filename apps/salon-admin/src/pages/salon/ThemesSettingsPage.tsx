@@ -61,6 +61,7 @@ export default function ThemesSettingsPage() {
     storefrontMode: (currentTenant?.storefront_mode as "services" | "products" | "both") || "both",
     heroHeading: (currentTenant as any)?.hero_heading || "",
     heroTagline: (currentTenant as any)?.hero_tagline || "",
+    heroBgColor: (currentTenant as any)?.hero_bg_color || "",
     heroCTAPrimary: (currentTenant as any)?.hero_cta_primary || "Book Now",
     heroCTASecondary: (currentTenant as any)?.hero_cta_secondary || "Our Services",
     aboutText: (currentTenant as any)?.about_text || "",
@@ -89,6 +90,7 @@ export default function ThemesSettingsPage() {
       storefrontMode: (currentTenant.storefront_mode as "services" | "products" | "both") || "both",
       heroHeading: (currentTenant as any)?.hero_heading || "",
       heroTagline: (currentTenant as any)?.hero_tagline || "",
+      heroBgColor: (currentTenant as any)?.hero_bg_color || "",
       heroCTAPrimary: (currentTenant as any)?.hero_cta_primary || "Book Now",
       heroCTASecondary: (currentTenant as any)?.hero_cta_secondary || "Our Services",
       aboutText: (currentTenant as any)?.about_text || "",
@@ -248,6 +250,7 @@ export default function ThemesSettingsPage() {
           storefront_mode: settings.storefrontMode,
           hero_heading: settings.heroHeading || null,
           hero_tagline: settings.heroTagline || null,
+          hero_bg_color: settings.heroBgColor || null,
           hero_cta_primary: settings.heroCTAPrimary || "Book Now",
           hero_cta_secondary: settings.heroCTASecondary || "Our Services",
           about_text: settings.aboutText || null,
@@ -672,6 +675,39 @@ export default function ThemesSettingsPage() {
                     <p className="text-xs text-muted-foreground">
                       Hero copy and about section — shown when the e-commerce theme is active.
                     </p>
+
+                    {hasPurchasedEcommerce && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Hero Panel Background</Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            type="color"
+                            value={settings.heroBgColor || "#ffffff"}
+                            onChange={(e) => setSettings((p) => ({ ...p, heroBgColor: e.target.value }))}
+                            className="h-9 w-14 cursor-pointer p-1"
+                          />
+                          <Input
+                            type="text"
+                            value={settings.heroBgColor}
+                            onChange={(e) => setSettings((p) => ({ ...p, heroBgColor: e.target.value }))}
+                            placeholder="#ffffff (leave blank for white)"
+                            className="flex-1 font-mono text-sm"
+                          />
+                          {settings.heroBgColor && (
+                            <button
+                              type="button"
+                              onClick={() => setSettings((p) => ({ ...p, heroBgColor: "" }))}
+                              className="text-xs text-muted-foreground underline hover:text-foreground"
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Background color of the left panel in the e-commerce hero. Leave blank for white.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1">

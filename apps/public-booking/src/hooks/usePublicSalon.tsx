@@ -35,6 +35,7 @@ export type PublicTenant = Pick<
   hero_tagline?: string | null;
   hero_cta_primary?: string | null;
   hero_cta_secondary?: string | null;
+  hero_bg_color?: string | null;
   about_text?: string | null;
 };
 

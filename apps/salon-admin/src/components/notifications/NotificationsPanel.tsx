@@ -73,7 +73,7 @@ const getIconColor = (type: Notification["type"]) => {
 
 export function NotificationsPanel({ open, onOpenChange, notificationsData }: NotificationsPanelProps) {
   const navigate = useNavigate();
-  useAuth(); // keep auth context alive; individual fields unused here
+  const { activeContextType, setActiveContext, assignedLocationIds } = useAuth();
   const notificationsHook = useNotifications(!notificationsData);
   const { notifications, isLoading, markAsRead, markAllAsRead, refetch } =
     notificationsData || notificationsHook;
@@ -138,16 +138,31 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     }
     onOpenChange(false);
 
+    // When in owner_hub context, switch to the appropriate branch context first
+    // so the sidebar and active context correctly reflect the destination page.
+    const switchToLocationIfNeeded = async (locationId?: string | null) => {
+      if (activeContextType !== "owner_hub") return;
+      const targetLocation = locationId && assignedLocationIds.includes(locationId)
+        ? locationId
+        : (assignedLocationIds[0] ?? null);
+      if (targetLocation) {
+        await setActiveContext("location", targetLocation);
+      }
+    };
+
     if (notification.type === "appointment" && notification.entity_id) {
-      // Use react-router navigate — no full page reload, no auth disruption.
+      const appointmentMeta = appointmentMetaById[notification.entity_id];
+      await switchToLocationIfNeeded(appointmentMeta?.location_id);
       navigate(`/salon/appointments?appointmentId=${notification.entity_id}&open=details`);
       return;
     }
     if (notification.type === "payment") {
+      await switchToLocationIfNeeded();
       navigate("/salon/transactions");
       return;
     }
     if (notification.type === "customer") {
+      await switchToLocationIfNeeded();
       navigate("/salon/customers");
       return;
     }
@@ -161,11 +176,18 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       await markAsRead(notification.id);
     }
     onOpenChange(false);
-    // Navigate directly to the appointments page with the action query params.
-    // Previously used window.location.assign() + setActiveContext() which caused
-    // a full page reload → auth disruption → appeared as logout. navigate() keeps
-    // the SPA session alive and lets AppointmentsPage open the approval dialog.
     if (notification.entity_id) {
+      // Switch branch context if currently in owner_hub before navigating.
+      if (activeContextType === "owner_hub") {
+        const appointmentMeta = appointmentMetaById[notification.entity_id];
+        const locationId = appointmentMeta?.location_id;
+        const targetLocation = locationId && assignedLocationIds.includes(locationId)
+          ? locationId
+          : (assignedLocationIds[0] ?? null);
+        if (targetLocation) {
+          await setActiveContext("location", targetLocation);
+        }
+      }
       navigate(`/salon/appointments?appointmentId=${notification.entity_id}&approvalAction=${action}`);
     }
   };

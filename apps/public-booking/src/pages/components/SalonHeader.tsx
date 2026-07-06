@@ -50,7 +50,10 @@ export function SalonHeader({
         {/* ── Editorial split hero ───────────────────────────── */}
         <section className="grid min-h-[88vh] lg:grid-cols-2">
           {/* Left: copy panel */}
-          <div className="flex flex-col justify-center px-8 py-20 lg:px-16 xl:px-24">
+          <div
+            className="flex flex-col justify-center px-8 py-20 lg:px-16 xl:px-24"
+            style={salon.hero_bg_color ? { backgroundColor: salon.hero_bg_color } : undefined}
+          >
             {/* Eyebrow badge */}
             <div className="mb-6">
               <span

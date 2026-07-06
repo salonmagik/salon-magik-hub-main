@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
@@ -19,7 +19,7 @@ import { Alert, AlertDescription } from "@ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { Textarea } from "@ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@ui/command";
@@ -36,6 +36,7 @@ import {
   CreditCard,
   Eye,
   Filter,
+  Info,
   Italic,
   Link2,
   Loader2,
@@ -152,6 +153,48 @@ const CREDIT_COST: Record<BroadcastChannel, number> = {
   sms: 2,
   email: 0,
 };
+
+// Tailwind classes must appear in source so they're included in the CSS bundle
+const VAR_CHIP_CLASSES =
+  "inline-flex items-center bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-medium mx-0.5 align-middle select-none cursor-default";
+
+// Zero-width space used as cursor guards adjacent to contenteditable=false chip spans.
+// Without these, browsers can't position the cursor before/after a chip.
+const ZWS = "​";
+
+function messageToHtml(msg: string, chips: VariableChip[]): string {
+  const escaped = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const withChips = escaped.replace(/\{\{(\w+)\}\}/g, (match) => {
+    const chip = chips.find((c) => c.token === match);
+    const label = chip?.label ?? match.slice(2, -2).replace(/_/g, " ");
+    // ZWS guards on both sides let the cursor navigate to/from the chip
+    return `${ZWS}<span data-token="${match}" contenteditable="false" class="${VAR_CHIP_CLASSES}">${label}</span>${ZWS}`;
+  });
+  return withChips.replace(/\n/g, "<br>");
+}
+
+function domToMessage(el: HTMLElement): string {
+  let result = "";
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Strip ZWS cursor guards — they're visual aids, not part of the message
+      result += (node.textContent ?? "").replace(/​/g, "");
+    } else if (node instanceof HTMLElement) {
+      const token = node.dataset.token;
+      if (token) {
+        result += token;
+      } else if (node.tagName === "BR") {
+        result += "\n";
+      } else if (node.tagName === "DIV" || node.tagName === "P") {
+        if (result.length > 0 && !result.endsWith("\n")) result += "\n";
+        result += domToMessage(node);
+      } else {
+        result += domToMessage(node);
+      }
+    }
+  }
+  return result;
+}
 
 const variableChips: VariableChip[] = [
   { label: "Customer's name", token: "{{customer_name}}", channels: ["sms", "email"] },
@@ -294,7 +337,10 @@ export default function MessagingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(0);
   const [activeLocation, setActiveLocation] = useState<SenderLocation | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  const lastMessageFromDom = useRef<string>("");
+  const subjectRef = useRef<HTMLDivElement | null>(null);
+  const lastSubjectFromDom = useRef<string>("");
   const channelSectionRef = useRef<HTMLDivElement>(null);
   const composeSectionRef = useRef<HTMLDivElement>(null);
 
@@ -359,6 +405,24 @@ export default function MessagingPage() {
     setEmailSubject(activeDraft.subject || "");
     setMessage(activeDraft.body || "");
   }, [activeDraft, sendResult]);
+
+  // Sync external message state changes (template load, draft load, reset) to the DOM editor
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    if (message === lastMessageFromDom.current) return;
+    lastMessageFromDom.current = message;
+    el.innerHTML = messageToHtml(message, variableChips);
+  }, [message]);
+
+  // Sync external emailSubject state to the subject contenteditable editor
+  useEffect(() => {
+    const el = subjectRef.current;
+    if (!el) return;
+    if (emailSubject === lastSubjectFromDom.current) return;
+    lastSubjectFromDom.current = emailSubject;
+    el.innerHTML = messageToHtml(emailSubject, variableChips);
+  }, [emailSubject]);
 
   const activeCustomers = useMemo(
     () => customers.filter((customer) => customer.status !== "deleted" && customer.status !== "blocked"),
@@ -696,22 +760,65 @@ export default function MessagingPage() {
     );
   };
 
-  const insertVariableChip = (token: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      setMessage((current) => `${current}${current.endsWith(" ") || current.length === 0 ? "" : " "}${token}`);
-      return;
+  const makeChipSpan = useCallback((token: string, label: string): HTMLSpanElement => {
+    const span = document.createElement("span");
+    span.dataset.token = token;
+    span.contentEditable = "false";
+    span.className = VAR_CHIP_CLASSES;
+    span.textContent = label;
+    return span;
+  }, []);
+
+  const insertChipIntoEditor = useCallback((
+    el: HTMLElement,
+    token: string,
+    label: string,
+    onSync: (value: string) => void,
+  ) => {
+    el.focus();
+    const sel = window.getSelection();
+    const span = makeChipSpan(token, label);
+    const zwsBefore = document.createTextNode(ZWS);
+    const zwsAfter = document.createTextNode(ZWS);
+
+    if (sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      // Insert in reverse order (each insertNode goes before the previous)
+      range.insertNode(zwsAfter);
+      range.insertNode(span);
+      range.insertNode(zwsBefore);
+      range.setStartAfter(zwsAfter);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      el.appendChild(zwsBefore);
+      el.appendChild(span);
+      el.appendChild(zwsAfter);
     }
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const nextValue = `${message.slice(0, start)}${token}${message.slice(end)}`;
-    setMessage(nextValue);
-    requestAnimationFrame(() => {
-      textarea.focus();
-      const nextCursor = start + token.length;
-      textarea.setSelectionRange(nextCursor, nextCursor);
+    onSync(domToMessage(el));
+  }, [makeChipSpan]);
+
+  const insertVariableChip = useCallback((token: string) => {
+    const el = composerRef.current;
+    const chip = variableChips.find((c) => c.token === token);
+    if (!el || !chip) return;
+    insertChipIntoEditor(el, token, chip.label, (value) => {
+      lastMessageFromDom.current = value;
+      setMessage(value);
     });
-  };
+  }, [insertChipIntoEditor]);
+
+  const insertSubjectChip = useCallback((token: string) => {
+    const el = subjectRef.current;
+    const chip = variableChips.find((c) => c.token === token);
+    if (!el || !chip) return;
+    insertChipIntoEditor(el, token, chip.label, (value) => {
+      lastSubjectFromDom.current = value;
+      setEmailSubject(value);
+    });
+  }, [insertChipIntoEditor]);
 
   const handlePickTemplate = (templateId: string) => {
     const template = currentTemplatePool.find((item) => item.id === templateId);
@@ -879,11 +986,26 @@ export default function MessagingPage() {
   };
 
   const applyEmailFormat = (before: string, after = before) => {
-    const el = textareaRef.current;
+    const el = composerRef.current;
     if (!el) return;
-    const { nextValue, nextCursor } = wrapSelection(message, el.selectionStart, el.selectionEnd, before, after);
-    setMessage(nextValue);
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(nextCursor, nextCursor); });
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!el.contains(range.commonAncestorContainer)) return;
+    const selectedText = range.toString();
+    const textNode = document.createTextNode(`${before}${selectedText}${after}`);
+    range.deleteContents();
+    range.insertNode(textNode);
+    const cursorPos = selectedText.length > 0 ? textNode.length : before.length;
+    const newRange = document.createRange();
+    newRange.setStart(textNode, cursorPos);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+    const value = domToMessage(el);
+    lastMessageFromDom.current = value;
+    setMessage(value);
   };
 
   const renderEmailPreview = (body: string) =>
@@ -937,8 +1059,11 @@ export default function MessagingPage() {
             <CardContent className="flex items-start justify-between p-4">
               <div>
                 <p className="text-sm text-muted-foreground">SMS Credits</p>
-                <p className="mt-1 text-3xl font-semibold">{stats.creditsRemaining}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Used for SMS sends.</p>
+                <p className="mt-1 text-3xl font-semibold">
+                  {stats.smsCreditsUsedThisMonth}
+                  <span className="text-lg font-normal text-muted-foreground">/{stats.freeAllocation}</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">{stats.creditsRemaining} remaining this month</p>
               </div>
               <div className="rounded-xl bg-primary/10 p-2.5">
                 <CreditCard className="h-5 w-5 text-primary" />
@@ -949,9 +1074,22 @@ export default function MessagingPage() {
           <Card className={compactTintedMetricCardClass.success}>
             <CardContent className="flex items-start justify-between p-4">
               <div>
-                <p className="text-sm text-muted-foreground">Email</p>
-                <p className="mt-1 text-3xl font-semibold">Free</p>
-                <p className="mt-1 text-xs text-muted-foreground">Included with your plan.</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">Email This Month</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-56 text-xs">
+                      Your plan includes unlimited emails every month — broadcasts, booking reminders, and all automated customer communication.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <p className="mt-1 text-3xl font-semibold">
+                  {stats.emailsSentThisMonth}
+                  <span className="text-lg font-normal text-muted-foreground">/∞</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Unlimited emails included.</p>
               </div>
               <div className="rounded-xl bg-success/10 p-2.5">
                 <Mail className="h-5 w-5 text-success" />
@@ -964,7 +1102,7 @@ export default function MessagingPage() {
               <div>
                 <p className="text-sm text-muted-foreground">WhatsApp</p>
                 <p className="mt-1 text-3xl font-semibold">Soon</p>
-                <p className="mt-1 text-xs text-muted-foreground">Stay locked in for updates!</p>
+                <p className="mt-1 text-xs text-muted-foreground">Stay tuned for updates!</p>
               </div>
               <div className="rounded-xl bg-muted/60 p-2.5">
                 <MessageCircle className="h-5 w-5 text-muted-foreground" />
@@ -1365,7 +1503,7 @@ export default function MessagingPage() {
                               id: "whatsapp",
                               title: "WhatsApp",
                               helper: "Coming soon",
-                              description: "Stay locked in for updates!",
+                              description: "Stay tuned for updates!",
                               icon: MessageCircle,
                               disabled: true,
                             },
@@ -1467,13 +1605,55 @@ export default function MessagingPage() {
 
                         {selectedChannel === "email" ? (
                           <div className="space-y-2">
-                            <Label htmlFor="broadcast-subject">Subject line</Label>
-                            <Input
-                              id="broadcast-subject"
-                              value={emailSubject}
-                              onChange={(event) => setEmailSubject(event.target.value)}
-                              placeholder="The subject your customers will see in their inbox"
-                            />
+                            <Label>Subject line</Label>
+                            <div className="relative">
+                              {emailSubject === "" && (
+                                <div
+                                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground"
+                                  aria-hidden
+                                >
+                                  The subject your customers will see in their inbox
+                                </div>
+                              )}
+                              <div
+                                ref={subjectRef}
+                                contentEditable
+                                suppressContentEditableWarning
+                                onInput={() => {
+                                  const el = subjectRef.current;
+                                  if (!el) return;
+                                  const value = domToMessage(el);
+                                  lastSubjectFromDom.current = value;
+                                  setEmailSubject(value);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") e.preventDefault();
+                                }}
+                                onPaste={(e) => {
+                                  e.preventDefault();
+                                  const text = e.clipboardData.getData("text/plain").replace(/\n/g, " ");
+                                  document.execCommand("insertText", false, text);
+                                }}
+                                className="min-h-[38px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm leading-tight outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 [&>span]:align-middle"
+                              />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-muted-foreground font-medium">Add to subject:</span>
+                              {[
+                                variableChips.find((c) => c.token === "{{customer_name}}"),
+                                variableChips.find((c) => c.token === "{{salon_name}}"),
+                                variableChips.find((c) => c.token === "{{appointment_date}}"),
+                              ].filter(Boolean).map((chip) => (
+                                <button
+                                  key={chip!.token}
+                                  type="button"
+                                  onClick={() => insertSubjectChip(chip!.token)}
+                                  className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+                                >
+                                  + {chip!.label}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         ) : null}
 
@@ -1508,30 +1688,43 @@ export default function MessagingPage() {
                         ) : null}
 
                         <div className="space-y-2">
-                          <Label htmlFor="broadcast-body">Your message</Label>
-                          <Textarea
-                            id="broadcast-body"
-                            ref={textareaRef}
-                            value={message}
-                            onChange={(event) => setMessage(event.target.value)}
-                            className="min-h-[160px] resize-none"
-                            placeholder={selectedChannel === "sms"
-                              ? "Hi {{customer_name}}, just a quick message from {{salon_name}}..."
-                              : "Write your email here..."}
-                          />
-                          <div className="flex flex-wrap gap-2 rounded-2xl border bg-muted/20 p-2.5">
-                            <div className="mr-2 text-xs font-medium text-muted-foreground">Personalise:</div>
+                          <Label>Your message</Label>
+                          <div className="relative">
+                            {message === "" && (
+                              <div
+                                className="pointer-events-none absolute left-3 top-3 text-sm text-muted-foreground"
+                                aria-hidden
+                              >
+                                {selectedChannel === "sms"
+                                  ? "Hi [Customer's name], just a quick message from [Salon name]..."
+                                  : "Write your email here..."}
+                              </div>
+                            )}
+                            <div
+                              ref={composerRef}
+                              contentEditable
+                              suppressContentEditableWarning
+                              onInput={() => {
+                                const el = composerRef.current;
+                                if (!el) return;
+                                const value = domToMessage(el);
+                                lastMessageFromDom.current = value;
+                                setMessage(value);
+                              }}
+                              className="min-h-[160px] w-full rounded-md border border-input bg-background px-3 py-3 text-sm leading-relaxed outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 empty:before:text-muted-foreground"
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-muted/20 p-2.5">
+                            <div className="mr-1 text-xs font-medium text-muted-foreground">Personalise:</div>
                             {availableVariables.map((chip) => (
-                              <Button
+                              <button
                                 key={chip.token}
                                 type="button"
-                                variant="outline"
-                                size="sm"
-                                className="rounded-full"
                                 onClick={() => insertVariableChip(chip.token)}
+                                className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors"
                               >
                                 + {chip.label}
-                              </Button>
+                              </button>
                             ))}
                           </div>
                           <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">

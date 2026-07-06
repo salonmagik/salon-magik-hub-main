@@ -471,16 +471,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (role === "owner") return fallbackFirstRoute(contextType);
 
     const allowedModules = new Set(FALLBACK_ROUTE_MODULES_BY_ROLE[role] || []);
-    const matchingRoute = FALLBACK_ROUTE_ORDER.find((route) => {
-      if (!allowedModules.has(route.module)) return false;
-      if (contextType === "owner_hub") {
-        return route.path === "/salon/overview" || route.path === "/salon/overview/staff";
-      }
-      return route.path !== "/salon/overview" && route.path !== "/salon/overview/staff";
-    });
 
-    if (matchingRoute) return matchingRoute.path;
-    return contextType === "owner_hub" ? "/salon/overview" : "/salon/access-denied";
+    // When in owner_hub context, prefer overview routes if the role has access.
+    if (contextType === "owner_hub") {
+      const overviewRoute = FALLBACK_ROUTE_ORDER.find(
+        (route) =>
+          allowedModules.has(route.module) &&
+          (route.path === "/salon/overview" || route.path === "/salon/overview/staff"),
+      );
+      if (overviewRoute) return overviewRoute.path;
+    }
+
+    // Fall back to first accessible non-overview route regardless of context.
+    const anyRoute = FALLBACK_ROUTE_ORDER.find(
+      (route) =>
+        allowedModules.has(route.module) &&
+        route.path !== "/salon/overview" &&
+        route.path !== "/salon/overview/staff",
+    );
+    if (anyRoute) return anyRoute.path;
+    return "/salon/access-denied";
   };
 
   // Initialize auth state

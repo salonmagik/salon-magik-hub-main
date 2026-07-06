@@ -297,12 +297,15 @@ serve(async (req) => {
           If you <strong>don't recognise this sign-in</strong>, you can review and end active sessions immediately.
         </p>
         <div style="text-align:center;margin:0 0 32px;">
-          <a href="${reviewUrl}" style="display:inline-block;background:#dc2626;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:6px;text-decoration:none;">
+          <a href="${reviewUrl}" style="display:inline-block;background:#2563EB;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:6px;text-decoration:none;">
             Review my sessions
           </a>
         </div>
+        <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0 0 4px;">
+          © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.
+        </p>
         <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">
-          © 2026 Salon Magik. All rights reserved.
+          You're receiving this email because you use Salon Magik. We never share your data without consent.
         </p>
       </div>
     </td></tr>

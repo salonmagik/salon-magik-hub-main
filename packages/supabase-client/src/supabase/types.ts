@@ -6296,6 +6296,7 @@ export type Database = {
           deposits_enabled: boolean
           dotlet_domain_id: string | null
           dotlet_origin_rule_id: string | null
+          hero_bg_color: string | null
           hero_cta_primary: string
           hero_cta_secondary: string
           hero_heading: string | null
@@ -6367,6 +6368,7 @@ export type Database = {
           deposits_enabled?: boolean
           dotlet_domain_id?: string | null
           dotlet_origin_rule_id?: string | null
+          hero_bg_color?: string | null
           hero_cta_primary?: string
           hero_cta_secondary?: string
           hero_heading?: string | null
@@ -6438,6 +6440,7 @@ export type Database = {
           deposits_enabled?: boolean
           dotlet_domain_id?: string | null
           dotlet_origin_rule_id?: string | null
+          hero_bg_color?: string | null
           hero_cta_primary?: string
           hero_cta_secondary?: string
           hero_heading?: string | null
@@ -7139,6 +7142,7 @@ export type Database = {
           default_buffer_minutes: number | null
           default_deposit_percentage: number | null
           deposits_enabled: boolean | null
+          hero_bg_color: string | null
           hero_cta_primary: string | null
           hero_cta_secondary: string | null
           hero_heading: string | null
@@ -7175,6 +7179,7 @@ export type Database = {
           default_buffer_minutes?: number | null
           default_deposit_percentage?: number | null
           deposits_enabled?: boolean | null
+          hero_bg_color?: string | null
           hero_cta_primary?: string | null
           hero_cta_secondary?: string | null
           hero_heading?: string | null
@@ -7211,6 +7216,7 @@ export type Database = {
           default_buffer_minutes?: number | null
           default_deposit_percentage?: number | null
           deposits_enabled?: boolean | null
+          hero_bg_color?: string | null
           hero_cta_primary?: string | null
           hero_cta_secondary?: string | null
           hero_heading?: string | null

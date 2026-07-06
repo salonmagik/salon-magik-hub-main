@@ -118,7 +118,7 @@ serve(async (req) => {
           <p style="margin: 0; color: ${EMAIL_STYLES.textMuted}; font-size: 14px;">Sign in to view your schedule, manage appointments, and stay on top of your day.</p>
         </div>
         <div style="text-align: center; margin: 32px 0;">
-          ${createButton("Sign in to ${salonName}", `${appBaseUrl}/login`)}
+          ${createButton(`Sign in to ${salonName}`, `${appBaseUrl}/login`)}
         </div>
         ${paragraph(`If you have any questions, reach out to your manager directly or contact your salon.`)}
         ${smallText(`This email was sent because you were added as a team member at ${salonName}, powered by Salon Magik.`)}
@@ -147,7 +147,7 @@ serve(async (req) => {
           ${createButton("Go to Dashboard", `${appBaseUrl}/salon`)}
         </div>
         ${paragraph(`If you need any help, our support team is here — just reply to this email.`)}
-        ${smallText(`You received this because you set up ${salonName} on Salon Magik. © 2026 Salon Magik. All rights reserved.`)}
+        ${smallText(`You received this because you set up ${salonName} on Salon Magik as a business. © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.`)}
       `;
     } else {
       // Owner welcome
@@ -188,7 +188,7 @@ serve(async (req) => {
           ${createButton("Go to My Dashboard", `${appBaseUrl}/salon`)}
         </div>
         ${paragraph(`Need help getting started? Reply to this email — we're here for you.`)}
-        ${smallText(`You're receiving this because you created a Salon Magik account. © 2026 Salon Magik. All rights reserved.`)}
+        ${smallText(`You're receiving this email because you use Salon Magik as a business. © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.`)}
       `;
     }
 

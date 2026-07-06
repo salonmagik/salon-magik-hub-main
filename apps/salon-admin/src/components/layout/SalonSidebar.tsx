@@ -49,7 +49,7 @@ import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
 import { NewDeviceReviewModal } from "@/components/session/NewDeviceReviewModal";
-import { isModuleAllowedInContext } from "@/lib/contextAccess";
+import { isModuleAllowedInContext, ROUTE_DEFINITIONS } from "@/lib/contextAccess";
 import {
   Tooltip,
   TooltipContent,
@@ -310,6 +310,20 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   useEffect(() => {
     setIsMobileOpen(false);
   }, [location.pathname]);
+
+  // Auto-switch to location context when navigating to a route that is not
+  // available in owner_hub (e.g. Messaging, Appointments, Calendar).
+  useEffect(() => {
+    if (permissionsLoading || isAssignmentPending) return;
+    if (activeContextType !== "owner_hub") return;
+    const currentRoute = ROUTE_DEFINITIONS.find((r) => r.path === location.pathname);
+    if (!currentRoute?.module) return;
+    if (isModuleAllowedInContext(currentRoute.module, "owner_hub")) return;
+    const targetLocationId = availableContexts.find((c) => c.type === "location")?.locationId ?? null;
+    if (targetLocationId) {
+      void setActiveContext("location", targetLocationId);
+    }
+  }, [location.pathname, activeContextType, availableContexts, permissionsLoading, isAssignmentPending, setActiveContext]);
 
   // Auto-expand any nav group whose child matches the current route
   useEffect(() => {

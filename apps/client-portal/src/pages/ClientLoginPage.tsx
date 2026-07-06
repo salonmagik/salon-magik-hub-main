@@ -195,13 +195,16 @@ export default function ClientLoginPage() {
         data?.verificationType === "magiclink" ? "magiclink" : "email",
       );
     } else {
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        phone: targetIdentifier,
-        options: { shouldCreateUser: false },
-      } as never);
+      const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-phone-otp", {
+        body: { phone: targetIdentifier },
+      });
 
-      if (otpError) {
-        setError(otpError.message);
+      if (phoneOtpError || phoneOtpData?.error) {
+        if (phoneOtpData?.error === "cooldown") {
+          setError("Please wait 60 seconds before requesting another code.");
+        } else {
+          setError("We're having trouble sending your verification code. Please try again.");
+        }
         return false;
       }
     }
@@ -252,26 +255,34 @@ export default function ClientLoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!resolution || otp.length !== 8) {
-      setError("Please enter the 8-digit code");
+    const otpLength = resolution?.identifierType === "phone" ? 6 : 8;
+    if (!resolution || otp.length !== otpLength) {
+      setError(`Please enter the ${otpLength}-digit code`);
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const verificationPayload =
-        resolution.identifierType === "email"
-          ? { email: resolution.identifier, token: otp, type: emailOtpVerificationType }
-          : { phone: resolution.identifier, token: otp, type: "sms" as const };
-      const { data, error: verifyError } = await supabase.auth.verifyOtp(verificationPayload);
+      if (resolution.identifierType === "phone") {
+        const { data: phoneVerifyData, error: phoneVerifyError } = await supabase.functions.invoke("verify-phone-otp", {
+          body: { phone: resolution.identifier, otp },
+        });
 
-      if (verifyError) {
-        setError("Invalid or expired code. Please try again.");
-        return;
-      }
+        if (phoneVerifyError || phoneVerifyData?.error) {
+          setError(phoneVerifyData?.error || "Invalid or expired code. Please try again.");
+          return;
+        }
 
-      if (data.session) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: phoneVerifyData.access_token,
+          refresh_token: phoneVerifyData.refresh_token,
+        });
+        if (sessionError) {
+          setError("Failed to create session. Please try again.");
+          return;
+        }
+
         if (!resolution.hasPassword) {
           toast({
             title: "Identity verified",
@@ -283,6 +294,31 @@ export default function ClientLoginPage() {
 
         const routeState = location.state as RouteState | null;
         navigate(routeState?.from?.pathname || "/", { replace: true });
+      } else {
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+          email: resolution.identifier,
+          token: otp,
+          type: emailOtpVerificationType,
+        });
+
+        if (verifyError) {
+          setError("Invalid or expired code. Please try again.");
+          return;
+        }
+
+        if (data.session) {
+          if (!resolution.hasPassword) {
+            toast({
+              title: "Identity verified",
+              description: "Create a password to finish securing your account.",
+            });
+            navigate("/complete-account", { replace: true });
+            return;
+          }
+
+          const routeState = location.state as RouteState | null;
+          navigate(routeState?.from?.pathname || "/", { replace: true });
+        }
       }
     } catch (err) {
       console.error("OTP verification error:", err);
@@ -391,18 +427,18 @@ export default function ClientLoginPage() {
                 <ShieldCheck className="h-6 w-6 text-primary" />
               </div>
 
-              <InputOTP maxLength={8} value={otp} onChange={setOtp} className="justify-center">
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                  <InputOTPSlot index={6} />
-                  <InputOTPSlot index={7} />
-                </InputOTPGroup>
-              </InputOTP>
+              {(() => {
+                const otpSlotCount = resolution?.identifierType === "phone" ? 6 : 8;
+                return (
+                  <InputOTP maxLength={otpSlotCount} value={otp} onChange={setOtp} className="justify-center">
+                    <InputOTPGroup>
+                      {Array.from({ length: otpSlotCount }, (_, i) => (
+                        <InputOTPSlot key={i} index={i} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                );
+              })()}
 
               {error && <p className="text-center text-sm text-destructive">{error}</p>}
             </div>

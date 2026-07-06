@@ -96,8 +96,11 @@ function buildEmailWrapper(
           
           <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
           
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily};">
-            © 2026 Salon Magik. All rights reserved.
+          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily}; margin: 0 0 4px;">
+            © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.
+          </p>
+          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily}; margin: 0;">
+            You're receiving this email because you've booked a salon partner or use Salon Magik as a business. We never share your data without consent.
           </p>
         </div>
       </td>
