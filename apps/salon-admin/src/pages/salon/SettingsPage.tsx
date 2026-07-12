@@ -65,6 +65,7 @@ import {
 	Share2,
 	Ticket,
 	Wallet,
+	Banknote,
 	ArrowDownUp,
 	CalendarX2,
 	Globe,
@@ -120,6 +121,7 @@ const BASE_SETTINGS_TABS = [
 	{ id: "booking", label: "Booking Settings", icon: User },
 	{ id: "payments", label: "Payments", icon: CreditCard },
 	{ id: "wallet", label: "Wallet", icon: Wallet },
+	{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 	{ id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
@@ -270,6 +272,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "profile", label: "Business Profile", icon: Building2 },
 				{ id: "branches", label: "Manage Branches", icon: CalendarX2 },
 				{ id: "booking", label: "Booking Settings", icon: User },
+				{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 				{ id: "notifications", label: "Notifications", icon: Bell },
 				{ id: "subscription", label: "Subscription", icon: Zap },
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
@@ -3679,6 +3682,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "booking" && renderBookingTab()}
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
+			{activeTab === "payout-destinations" && <PayoutDestinationsManager />}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}
 			{activeTab === "promotions" && renderPromotionsTab()}
 			{activeTab === "notifications" && renderNotificationsTab()}
