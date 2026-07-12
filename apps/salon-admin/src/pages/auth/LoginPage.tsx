@@ -211,11 +211,11 @@ export default function LoginPage() {
       } else {
         persistLastAuthMethod("email");
         setLastAuthMethod("email");
+        navigate(postLoginDestination);
         toast({
           title: "Welcome back!",
           description: "You have successfully signed in.",
         });
-        navigate(postLoginDestination);
       }
     } catch (error) {
       toast({
@@ -314,11 +314,11 @@ export default function LoginPage() {
 
       persistLastAuthMethod("phone");
       setLastAuthMethod("phone");
+      navigate(postLoginDestination);
       toast({
         title: "Welcome back!",
         description: "You have successfully signed in.",
       });
-      navigate(postLoginDestination);
     } catch (error) {
       toast({
         title: "Error",

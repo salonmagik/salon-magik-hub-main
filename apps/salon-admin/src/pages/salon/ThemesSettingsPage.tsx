@@ -18,6 +18,7 @@ import { cn } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useLocations } from "@/hooks/useLocations";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { useToast } from "@ui/ui/use-toast";
@@ -325,6 +326,7 @@ export default function ThemesSettingsPage() {
 
   // ── render ────────────────────────────────────────────────────────────
   return (
+    <SalonSidebar>
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Themes Settings</h1>
@@ -904,5 +906,6 @@ export default function ThemesSettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </SalonSidebar>
   );
 }
