@@ -45,26 +45,6 @@ export default function BackofficeDashboardPage() {
     },
   });
 
-  if (backofficeUser?.role !== "super_admin") {
-    const routeCandidates: Array<{ route: string; pageKey: string; permissionKey?: string }> = [
-      { route: "/customers/waitlists", pageKey: "customers_waitlists", permissionKey: "customers.view_waitlists" },
-      { route: "/customers/tenants", pageKey: "customers_tenants", permissionKey: "customers.view_tenants" },
-      { route: "/customers/ops-monitor", pageKey: "customers_ops_monitor", permissionKey: "customers.view_ops_monitor" },
-      { route: "/sales/campaigns", pageKey: "sales_campaigns", permissionKey: "sales.manage_campaigns" },
-      { route: "/sales/capture-client", pageKey: "sales_capture_client", permissionKey: "sales.capture_client" },
-      { route: "/sales/conversions", pageKey: "sales_conversions", permissionKey: "sales.view_conversions" },
-      { route: "/settings", pageKey: "settings", permissionKey: "settings.view" },
-    ];
-    const firstAllowed = routeCandidates.find(
-      (candidate) =>
-        hasBackofficePageAccess(candidate.pageKey) &&
-        (!candidate.permissionKey || hasBackofficePermission(candidate.permissionKey)),
-    );
-    if (firstAllowed) {
-      return <Navigate to={firstAllowed.route} replace />;
-    }
-  }
-
   const pendingCount = pendingLeads?.length || 0;
 
   const {
@@ -138,6 +118,26 @@ export default function BackofficeDashboardPage() {
       })),
     };
   }, [tenants, marketCountries]);
+
+  if (backofficeUser?.role !== "super_admin") {
+    const routeCandidates: Array<{ route: string; pageKey: string; permissionKey?: string }> = [
+      { route: "/customers/waitlists", pageKey: "customers_waitlists", permissionKey: "customers.view_waitlists" },
+      { route: "/customers/tenants", pageKey: "customers_tenants", permissionKey: "customers.view_tenants" },
+      { route: "/customers/ops-monitor", pageKey: "customers_ops_monitor", permissionKey: "customers.view_ops_monitor" },
+      { route: "/sales/campaigns", pageKey: "sales_campaigns", permissionKey: "sales.manage_campaigns" },
+      { route: "/sales/capture-client", pageKey: "sales_capture_client", permissionKey: "sales.capture_client" },
+      { route: "/sales/conversions", pageKey: "sales_conversions", permissionKey: "sales.view_conversions" },
+      { route: "/settings", pageKey: "settings", permissionKey: "settings.view" },
+    ];
+    const firstAllowed = routeCandidates.find(
+      (candidate) =>
+        hasBackofficePageAccess(candidate.pageKey) &&
+        (!candidate.permissionKey || hasBackofficePermission(candidate.permissionKey)),
+    );
+    if (firstAllowed) {
+      return <Navigate to={firstAllowed.route} replace />;
+    }
+  }
 
   const stats = [
     {
