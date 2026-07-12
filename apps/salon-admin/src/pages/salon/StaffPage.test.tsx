@@ -35,12 +35,25 @@ vi.mock("@/hooks/useAuth", () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock("@/lib/supabase", () => ({
-  supabase: {
-    rpc: vi.fn(),
-    from: vi.fn(),
-  },
-}));
+vi.mock("@/lib/supabase", () => {
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+    update: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+  };
+  return {
+    supabase: {
+      rpc: vi.fn().mockResolvedValue({ data: [], error: null }),
+      from: vi.fn().mockReturnValue(chain),
+    },
+  };
+});
 
 vi.mock("@tanstack/react-query", async () => {
   const actual = await vi.importActual("@tanstack/react-query");
