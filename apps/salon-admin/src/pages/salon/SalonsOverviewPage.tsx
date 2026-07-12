@@ -28,13 +28,16 @@ import {
   Calendar,
   MapPin,
   Clock,
-  ArrowUpRight,
   ChevronRight,
   Activity,
   Star,
   AlertCircle,
   Plus,
   Coins,
+  CalendarPlus,
+  ClockAlert,
+  CreditCard,
+  MessageSquare,
 } from "lucide-react";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,6 +52,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@ui/popover";
 
 type DateRange = "today" | "week" | "month";
 
@@ -57,6 +65,7 @@ export default function SalonsOverviewPage() {
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
+  const [quickActionPopover, setQuickActionPopover] = useState<string | null>(null);
   const navigate = useNavigate();
   const {
     currentTenant,
@@ -81,6 +90,8 @@ export default function SalonsOverviewPage() {
     const totalBookings = locations.reduce((sum, loc) => sum + loc.bookingCount, 0);
     const totalStaffOnline = locations.reduce((sum, loc) => sum + loc.staffOnline, 0);
     const totalOutstanding = locations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
+    const totalPendingApprovals = locations.reduce((sum, loc) => sum + loc.pendingApprovals, 0);
+    const totalUnpaidBalances = locations.reduce((sum, loc) => sum + loc.unpaidBalances, 0);
     const avgSatisfaction = locations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / locations.length;
 
     const bestPerforming = [...locations].sort((a, b) => b.revenue - a.revenue)[0];
@@ -91,12 +102,30 @@ export default function SalonsOverviewPage() {
       totalBookings,
       totalStaffOnline,
       totalOutstanding,
+      totalPendingApprovals,
+      totalUnpaidBalances,
       avgSatisfaction,
       bestPerforming,
       worstPerforming,
       locationCount: locations.length,
     };
   }, [locations]);
+
+  const branchContexts = availableContexts.filter((c) => c.type === "location");
+
+  const handleBranchAction = async (locationId: string, destination: string) => {
+    setQuickActionPopover(null);
+    await setActiveContext("location", locationId);
+    navigate(destination);
+  };
+
+  const triggerQuickAction = (actionKey: string, destination: string) => {
+    if (branchContexts.length === 1) {
+      handleBranchAction(branchContexts[0].locationId!, destination);
+    } else {
+      setQuickActionPopover(quickActionPopover === actionKey ? null : actionKey);
+    }
+  };
 
   const currency = currentTenant?.currency || "USD";
   const canViewRevenueAnalytics =
@@ -157,6 +186,64 @@ export default function SalonsOverviewPage() {
             </Button>
           </div>
         </div>
+
+        {/* Quick Actions — hub context only */}
+        {activeContextType === "owner_hub" && branchContexts.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+                { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null },
+                { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments", count: aggregateStats?.totalPendingApprovals ?? null },
+                { key: "unpaid-balances", label: "Unpaid Balances", icon: CreditCard, destination: "/salon/appointments", count: aggregateStats?.totalUnpaidBalances ?? null },
+                { key: "messages", label: "Messages", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null },
+              ].map(({ key, label, icon: Icon, destination, count }) => {
+              const urgent = count !== null && count > 0;
+              return (
+              <Popover
+                key={key}
+                open={quickActionPopover === key}
+                onOpenChange={(open) => setQuickActionPopover(open ? key : null)}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left hover:bg-accent transition-colors"
+                    onClick={() => triggerQuickAction(key, destination)}
+                  >
+                    <div className="flex w-full items-center justify-between">
+                      <div className={`rounded-md p-2 ${urgent ? "bg-destructive/10" : "bg-muted"}`}>
+                        <Icon className={`h-4 w-4 ${urgent ? "text-destructive" : "text-muted-foreground"}`} />
+                      </div>
+                      {count !== null && count > 0 && (
+                        <span className="text-xs font-semibold tabular-nums rounded-full bg-destructive text-destructive-foreground px-2 py-0.5">
+                          {count}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-sm font-medium leading-tight">{label}</span>
+                  </button>
+                </PopoverTrigger>
+                {branchContexts.length > 1 && (
+                  <PopoverContent className="w-52 p-1" align="start">
+                    <p className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Select branch</p>
+                    {branchContexts.map((ctx) => (
+                      <button
+                        key={ctx.locationId}
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                        onClick={() => handleBranchAction(ctx.locationId!, destination)}
+                      >
+                        <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        {ctx.label}
+                      </button>
+                    ))}
+                  </PopoverContent>
+                )}
+              </Popover>
+            );
+          })}
+          </div>
+
+        )}
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

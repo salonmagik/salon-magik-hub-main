@@ -14,6 +14,8 @@ export interface LocationPerformance {
   bookingCount: number;
   staffOnline: number;
   outstandingAppointments: number;
+  pendingApprovals: number;
+  unpaidBalances: number;
   customerSatisfaction: number | null;
 }
 
@@ -90,13 +92,37 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
       // Fetch appointments for booking counts
       let appointmentsQuery = supabase
         .from("appointments")
-        .select("id, location_id, status, scheduled_start")
+        .select("id, location_id, status, payment_status, scheduled_start")
         .eq("tenant_id", currentTenant.id)
         .gte("scheduled_start", start.toISOString())
         .lte("scheduled_start", end.toISOString());
 
       if (hasScope) {
         appointmentsQuery = appointmentsQuery.in("location_id", scopedLocationIds);
+      }
+
+      // Pending approvals (not date-scoped — always show current backlog)
+      let pendingApprovalsQuery = supabase
+        .from("appointments")
+        .select("location_id")
+        .eq("tenant_id", currentTenant.id)
+        .in("approval_status", ["pending", "reschedule_proposed"])
+        .neq("status", "cancelled");
+
+      if (hasScope) {
+        pendingApprovalsQuery = pendingApprovalsQuery.in("location_id", scopedLocationIds);
+      }
+
+      // Unpaid balances (not date-scoped — always show current backlog)
+      let unpaidBalancesQuery = supabase
+        .from("appointments")
+        .select("location_id")
+        .eq("tenant_id", currentTenant.id)
+        .not("payment_status", "in", '("fully_paid","refunded_full","refunded_partial")')
+        .not("status", "in", '("cancelled","completed")');
+
+      if (hasScope) {
+        unpaidBalancesQuery = unpaidBalancesQuery.in("location_id", scopedLocationIds);
       }
 
       // Fetch active staff sessions for real-time online count
@@ -125,17 +151,23 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         { data: appointments, error: appointmentsError },
         { data: staffSessions, error: sessionsError },
         { data: revenueTransactions, error: revenueError },
+        { data: pendingApprovalRows, error: pendingApprovalsError },
+        { data: unpaidBalanceRows, error: unpaidBalancesError },
       ] = await Promise.all([
         appointmentsQuery,
         staffSessionsQuery,
         canViewRevenueAnalytics
           ? revenueTransactionsQuery
           : Promise.resolve({ data: [] as { amount: number; appointment: { location_id: string } | null }[], error: null }),
+        pendingApprovalsQuery,
+        unpaidBalancesQuery,
       ]);
 
       if (appointmentsError) throw appointmentsError;
       if (sessionsError) throw sessionsError;
       if (revenueError) throw revenueError;
+      if (pendingApprovalsError) throw pendingApprovalsError;
+      if (unpaidBalancesError) throw unpaidBalancesError;
 
       // Group revenue by location
       const revenueByLocation: Record<string, number> = {};
@@ -152,6 +184,20 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
       staffSessions?.forEach((session) => {
         const locId = session.location_id || "unassigned";
         staffByLocation[locId] = (staffByLocation[locId] || 0) + 1;
+      });
+
+      const pendingApprovalsByLocation: Record<string, number> = {};
+      pendingApprovalRows?.forEach((row) => {
+        if (row.location_id) {
+          pendingApprovalsByLocation[row.location_id] = (pendingApprovalsByLocation[row.location_id] || 0) + 1;
+        }
+      });
+
+      const unpaidBalancesByLocation: Record<string, number> = {};
+      unpaidBalanceRows?.forEach((row) => {
+        if (row.location_id) {
+          unpaidBalancesByLocation[row.location_id] = (unpaidBalancesByLocation[row.location_id] || 0) + 1;
+        }
       });
 
       // Build performance data for each location
@@ -175,6 +221,8 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
           bookingCount: locationAppointments.length,
           staffOnline,
           outstandingAppointments: outstandingAppointments.length,
+          pendingApprovals: pendingApprovalsByLocation[loc.id] || 0,
+          unpaidBalances: unpaidBalancesByLocation[loc.id] || 0,
           customerSatisfaction: null, // Would come from reviews table
         };
       });
