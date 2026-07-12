@@ -138,7 +138,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
       }
 
       // Fetch revenue from transactions table (payment + deposit, completed, in date range)
-      let revenueTransactionsQuery = supabase
+      const revenueTransactionsQuery = supabase
         .from("transactions")
         .select("amount, appointment:appointments!inner(location_id)")
         .eq("tenant_id", currentTenant.id)

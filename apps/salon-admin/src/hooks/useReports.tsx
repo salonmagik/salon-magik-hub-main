@@ -228,7 +228,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
       let busiestDay: string | null = null;
       let topServiceName: string | null = null;
       let peakHour: string | null = null;
-      let retentionRate: number | null = retentionPercent;
+      const retentionRate: number | null = retentionPercent;
 
       if (completedAppointments >= 10) {
         const dayCount: Record<string, number> = {};

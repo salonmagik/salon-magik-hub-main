@@ -160,7 +160,7 @@ const VAR_CHIP_CLASSES =
 
 // Zero-width space used as cursor guards adjacent to contenteditable=false chip spans.
 // Without these, browsers can't position the cursor before/after a chip.
-const ZWS = "​";
+const ZWS = "\u200b";
 
 function messageToHtml(msg: string, chips: VariableChip[]): string {
   const escaped = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -178,7 +178,7 @@ function domToMessage(el: HTMLElement): string {
   for (const node of el.childNodes) {
     if (node.nodeType === Node.TEXT_NODE) {
       // Strip ZWS cursor guards — they're visual aids, not part of the message
-      result += (node.textContent ?? "").replace(/​/g, "");
+      result += (node.textContent ?? "").replace(/\u200b/g, "");
     } else if (node instanceof HTMLElement) {
       const token = node.dataset.token;
       if (token) {

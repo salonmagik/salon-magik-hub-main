@@ -121,7 +121,7 @@ export function useDashboardStats() {
       }
 
       // Build today's revenue query: sum from transactions (payment + deposit), not appointments
-      let todayRevenueQuery = supabase
+      const todayRevenueQuery = supabase
         .from("transactions")
         .select("amount")
         .eq("tenant_id", currentTenant.id)
