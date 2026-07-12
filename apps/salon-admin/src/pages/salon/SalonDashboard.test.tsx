@@ -5,6 +5,8 @@ import SalonDashboard from "./SalonDashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 
+vi.mock("@/lib/supabase", () => ({ supabase: { from: vi.fn(), auth: { getSession: vi.fn() } } }));
+
 vi.mock("@/components/layout/SalonSidebar", () => ({
   SalonSidebar: ({ children }: { children: any }) => <div>{children}</div>,
 }));
