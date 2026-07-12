@@ -14,6 +14,8 @@ export interface LocationPerformance {
   bookingCount: number;
   staffOnline: number;
   outstandingAppointments: number;
+  pendingApprovals: number;
+  unpaidBalances: number;
   customerSatisfaction: number | null;
 }
 
@@ -87,14 +89,10 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         return;
       }
 
-      // Fetch appointments for revenue and booking counts
+      // Fetch appointments for booking counts
       let appointmentsQuery = supabase
         .from("appointments")
-        .select(
-          canViewRevenueAnalytics
-            ? "id, location_id, total_amount, amount_paid, status, scheduled_start"
-            : "id, location_id, status, scheduled_start"
-        )
+        .select("id, location_id, status, payment_status, scheduled_start")
         .eq("tenant_id", currentTenant.id)
         .gte("scheduled_start", start.toISOString())
         .lte("scheduled_start", end.toISOString());
@@ -103,9 +101,29 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         appointmentsQuery = appointmentsQuery.in("location_id", scopedLocationIds);
       }
 
-      const { data: appointments, error: appointmentsError } = await appointmentsQuery;
+      // Pending approvals (not date-scoped — always show current backlog)
+      let pendingApprovalsQuery = supabase
+        .from("appointments")
+        .select("location_id")
+        .eq("tenant_id", currentTenant.id)
+        .in("approval_status", ["pending", "reschedule_proposed"])
+        .neq("status", "cancelled");
 
-      if (appointmentsError) throw appointmentsError;
+      if (hasScope) {
+        pendingApprovalsQuery = pendingApprovalsQuery.in("location_id", scopedLocationIds);
+      }
+
+      // Unpaid balances (not date-scoped — always show current backlog)
+      let unpaidBalancesQuery = supabase
+        .from("appointments")
+        .select("location_id")
+        .eq("tenant_id", currentTenant.id)
+        .not("payment_status", "in", '("fully_paid","refunded_full","refunded_partial")')
+        .not("status", "in", '("cancelled","completed")');
+
+      if (hasScope) {
+        unpaidBalancesQuery = unpaidBalancesQuery.in("location_id", scopedLocationIds);
+      }
 
       // Fetch active staff sessions for real-time online count
       let staffSessionsQuery = supabase
@@ -119,9 +137,47 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         staffSessionsQuery = staffSessionsQuery.in("location_id", scopedLocationIds);
       }
 
-      const { data: staffSessions, error: sessionsError } = await staffSessionsQuery;
+      // Fetch revenue from transactions table (payment + deposit, completed, in date range)
+      const revenueTransactionsQuery = supabase
+        .from("transactions")
+        .select("amount, appointment:appointments!inner(location_id)")
+        .eq("tenant_id", currentTenant.id)
+        .in("type", ["payment", "deposit"])
+        .eq("status", "completed")
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString());
 
+      const [
+        { data: appointments, error: appointmentsError },
+        { data: staffSessions, error: sessionsError },
+        { data: revenueTransactions, error: revenueError },
+        { data: pendingApprovalRows, error: pendingApprovalsError },
+        { data: unpaidBalanceRows, error: unpaidBalancesError },
+      ] = await Promise.all([
+        appointmentsQuery,
+        staffSessionsQuery,
+        canViewRevenueAnalytics
+          ? revenueTransactionsQuery
+          : Promise.resolve({ data: [] as { amount: number; appointment: { location_id: string } | null }[], error: null }),
+        pendingApprovalsQuery,
+        unpaidBalancesQuery,
+      ]);
+
+      if (appointmentsError) throw appointmentsError;
       if (sessionsError) throw sessionsError;
+      if (revenueError) throw revenueError;
+      if (pendingApprovalsError) throw pendingApprovalsError;
+      if (unpaidBalancesError) throw unpaidBalancesError;
+
+      // Group revenue by location
+      const revenueByLocation: Record<string, number> = {};
+      (revenueTransactions || []).forEach((txn) => {
+        const apt = txn.appointment as { location_id: string } | null;
+        const locId = apt?.location_id;
+        if (locId) {
+          revenueByLocation[locId] = (revenueByLocation[locId] || 0) + Number(txn.amount);
+        }
+      });
 
       // Count staff online by location
       const staffByLocation: Record<string, number> = {};
@@ -130,17 +186,28 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         staffByLocation[locId] = (staffByLocation[locId] || 0) + 1;
       });
 
+      const pendingApprovalsByLocation: Record<string, number> = {};
+      pendingApprovalRows?.forEach((row) => {
+        if (row.location_id) {
+          pendingApprovalsByLocation[row.location_id] = (pendingApprovalsByLocation[row.location_id] || 0) + 1;
+        }
+      });
+
+      const unpaidBalancesByLocation: Record<string, number> = {};
+      unpaidBalanceRows?.forEach((row) => {
+        if (row.location_id) {
+          unpaidBalancesByLocation[row.location_id] = (unpaidBalancesByLocation[row.location_id] || 0) + 1;
+        }
+      });
+
       // Build performance data for each location
       const performanceData: LocationPerformance[] = locationsData.map((loc) => {
         const locationAppointments = appointments?.filter((a) => a.location_id === loc.id) || [];
-        const completedAppointments = locationAppointments.filter((a) => a.status === "completed");
         const outstandingAppointments = locationAppointments.filter(
           (a) => a.status === "scheduled" || a.status === "started" || a.status === "paused"
         );
-        
-        const revenue = canViewRevenueAnalytics
-          ? completedAppointments.reduce((sum, a) => sum + Number(a.amount_paid || 0), 0)
-          : 0;
+
+        const revenue = canViewRevenueAnalytics ? (revenueByLocation[loc.id] || 0) : 0;
         
         // Use real staff session data
         const staffOnline = staffByLocation[loc.id] || 0;
@@ -154,6 +221,8 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
           bookingCount: locationAppointments.length,
           staffOnline,
           outstandingAppointments: outstandingAppointments.length,
+          pendingApprovals: pendingApprovalsByLocation[loc.id] || 0,
+          unpaidBalances: unpaidBalancesByLocation[loc.id] || 0,
           customerSatisfaction: null, // Would come from reviews table
         };
       });

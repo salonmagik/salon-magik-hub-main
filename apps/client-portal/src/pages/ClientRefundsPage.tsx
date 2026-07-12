@@ -162,7 +162,7 @@ export default function ClientRefundsPage() {
                       </div>
                     ))}
 
-                    {totalBalance > 0 && (
+                    {totalBalance !== null && totalBalance > 0 && (
                       <div className="pt-4 border-t flex justify-between items-center">
                         <span className="font-medium">Total Store Credits</span>
                         <span className="font-semibold text-lg text-primary">

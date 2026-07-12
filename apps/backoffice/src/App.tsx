@@ -21,6 +21,7 @@ import SalesOpsPage from "@/pages/SalesOpsPage";
 import CampaignsPage from "@/pages/sales/CampaignsPage";
 import CaptureClientPage from "@/pages/sales/CaptureClientPage";
 import ConversionsPage from "@/pages/sales/ConversionsPage";
+import CommsPage from "@/pages/CommsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -207,6 +208,15 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="sales_conversions" requiredPermissionKey="sales.view_conversions">
                   <ConversionsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/comms"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="comms" requiredPermissionKey="comms.view">
+                  <CommsPage />
                 </BackofficeProtectedRoute>
               }
           />

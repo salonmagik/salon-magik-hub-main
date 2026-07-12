@@ -18,7 +18,7 @@ export interface MessageLog {
   tenant_id: string;
   customer_id: string | null;
   template_type: string | null;
-  channel: "email" | "sms";
+  channel: "email" | "sms" | "whatsapp";
   recipient: string;
   subject: string | null;
   status: "pending" | "sent" | "delivered" | "failed";
@@ -82,10 +82,18 @@ export function useMessagingCredits() {
   }, [fetchCredits]);
 
   // Statistics
+  const cycleStart = credits?.last_reset_at
+    ? credits.last_reset_at
+    : new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+
   const totalSent = messageLogs.filter((m) => m.status === "sent" || m.status === "delivered").length;
   const totalFailed = messageLogs.filter((m) => m.status === "failed").length;
-  const emailsSent = messageLogs.filter((m) => m.channel === "email" && (m.status === "sent" || m.status === "delivered")).length;
-  const smsSent = messageLogs.filter((m) => m.channel === "sms" && (m.status === "sent" || m.status === "delivered")).length;
+  const emailsSentThisMonth = messageLogs.filter(
+    (m) => m.channel === "email" && (m.status === "sent" || m.status === "delivered") && m.created_at >= cycleStart,
+  ).length;
+  const smsCreditsUsedThisMonth = messageLogs
+    .filter((m) => m.channel === "sms" && m.created_at >= cycleStart)
+    .reduce((sum, m) => sum + (m.credits_used || 0), 0);
 
   return {
     credits,
@@ -93,8 +101,8 @@ export function useMessagingCredits() {
     stats: {
       totalSent,
       totalFailed,
-      emailsSent,
-      smsSent,
+      emailsSentThisMonth,
+      smsCreditsUsedThisMonth,
       creditsRemaining: credits?.balance || 0,
       freeAllocation: credits?.free_monthly_allocation || 30,
     },

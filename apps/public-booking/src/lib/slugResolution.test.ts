@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolvePublicBookingSlug, resolveSlugFromHostname, resolveSlugFromQuery } from "./slugResolution";
+
+vi.mock("@/lib/supabase", () => ({ supabase: { from: vi.fn() } }));
 
 describe("slug resolution", () => {
   it("resolves slug from subdomain for prod base domain", () => {

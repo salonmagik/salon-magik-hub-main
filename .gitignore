@@ -34,7 +34,7 @@ supabase/**/.temp
 # Agents
 AGENTS.md
 daemon
-ralph
+# ralph
 
 .turbo
 
@@ -44,3 +44,4 @@ ralph.sh
 .branches
 # Local destructive reset scripts
 supabase/scripts/reset*.sql
+.playwright-mcp/

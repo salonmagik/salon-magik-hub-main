@@ -107,6 +107,16 @@ Deno.serve(async (req) => {
           is_deposit?: boolean | string;
           split_purse_amount?: string | number;
           split_customer_id?: string;
+          intent?: string;
+          service_amount?: string | number;
+          processing_fee_amount?: string | number;
+        };
+        // Transfer-specific fields
+        transfer_code?: string;
+        recipient?: {
+          recipient_code?: string;
+          account_number?: string;
+          bank_code?: string;
         };
       };
     };
@@ -131,6 +141,9 @@ Deno.serve(async (req) => {
         isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",
         splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
         splitCustomerId: metadata?.split_customer_id,
+        intent: metadata?.intent,
+        serviceAmount: metadata?.service_amount ? parseFloat(String(metadata.service_amount)) : undefined,
+        processingFeeAmount: metadata?.processing_fee_amount ? parseFloat(String(metadata.processing_fee_amount)) : undefined,
       },
     };
 

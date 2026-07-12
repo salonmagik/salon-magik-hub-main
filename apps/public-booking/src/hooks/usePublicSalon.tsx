@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { Tables } from "@/lib/supabase";
+import type { Tables } from "@supabase-client/supabase/types";
 
 export type PublicTenant = Pick<
   Tables<"tenants">,
@@ -16,18 +16,27 @@ export type PublicTenant = Pick<
   | "deposits_enabled"
   | "default_deposit_percentage"
   | "cancellation_grace_hours"
+  | "booking_page_bio"
   | "booking_status_message"
   | "slot_capacity_default"
   | "default_buffer_minutes"
-  | "pay_at_salon_enabled"
   | "allow_staff_selection"
   | "require_staff_selection"
   | "auto_assign_staff"
+  | "payment_setup_status"
 > & {
   brand_color?: string | null;
   contact_phone?: string | null;
   show_contact_on_booking?: boolean;
   auto_confirm_bookings?: boolean;
+  theme_key?: string | null;
+  storefront_mode?: "services" | "products" | "both" | null;
+  hero_heading?: string | null;
+  hero_tagline?: string | null;
+  hero_cta_primary?: string | null;
+  hero_cta_secondary?: string | null;
+  hero_bg_color?: string | null;
+  about_text?: string | null;
 };
 
 export type PublicLocation = Pick<

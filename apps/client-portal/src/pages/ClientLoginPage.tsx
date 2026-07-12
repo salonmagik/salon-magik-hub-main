@@ -6,11 +6,15 @@ import { AuthCard } from "@/components/auth/AuthCard";
 import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
+import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
+import { PhoneInput } from "@ui/phone-input";
 import { useToast } from "@ui/ui/use-toast";
 import { ArrowLeft, Lock, Mail, Phone, ShieldCheck } from "lucide-react";
 import { Button } from "@ui/button";
+import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
 
 type LoginStep = "identifier" | "otp" | "password";
+type IdentifierTab = "email" | "phone";
 type IdentifierType = "email" | "phone";
 type EmailOtpVerificationType = "email" | "magiclink";
 type RouteState = {
@@ -18,19 +22,6 @@ type RouteState = {
     pathname?: string;
   };
 };
-
-function isEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-}
-
-function isPhone(value: string) {
-  return /^\+?[\d\s()-]{10,}$/.test(value.trim());
-}
-
-function toPhone(value: string) {
-  const digits = value.replace(/[^\d+]/g, "");
-  return digits.startsWith("+") ? `+${digits.slice(1).replace(/\D/g, "")}` : `+${digits.replace(/\D/g, "")}`;
-}
 
 type Resolution = {
   exists: boolean;
@@ -46,7 +37,9 @@ export default function ClientLoginPage() {
   const { toast } = useToast();
 
   const [step, setStep] = useState<LoginStep>("identifier");
-  const [identifier, setIdentifier] = useState("");
+  const [activeTab, setActiveTab] = useState<IdentifierTab>("email");
+  const [emailValue, setEmailValue] = useState("");
+  const [phoneValue, setPhoneValue] = useState("");
   const [identifierType, setIdentifierType] = useState<IdentifierType | null>(null);
   const [resolvedIdentifier, setResolvedIdentifier] = useState("");
   const [otp, setOtp] = useState("");
@@ -58,13 +51,15 @@ export default function ClientLoginPage() {
   const [countdown, setCountdown] = useState(0);
   const [emailOtpVerificationType, setEmailOtpVerificationType] =
     useState<EmailOtpVerificationType>("email");
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+
+  const allowedCountryCodes = PRODUCT_LIVE_COUNTRIES.map((c) => c.code);
 
   useEffect(() => {
     if (!resendAvailableAt) {
       setCountdown(0);
       return;
     }
-
     const updateCountdown = () => {
       const remainingSeconds = Math.max(
         0,
@@ -72,7 +67,6 @@ export default function ClientLoginPage() {
       );
       setCountdown(remainingSeconds);
     };
-
     updateCountdown();
     const interval = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(interval);
@@ -80,31 +74,29 @@ export default function ClientLoginPage() {
 
   const identifierHint = useMemo(() => {
     if (identifierType === "phone") return "We sent a code to your phone number";
-    return `We sent a code to ${resolvedIdentifier || identifier}`;
-  }, [identifier, identifierType, resolvedIdentifier]);
+    return `We sent a code to ${resolvedIdentifier}`;
+  }, [identifierType, resolvedIdentifier]);
 
   const handleIdentifierSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    const trimmedIdentifier = identifier.trim();
-    if (!trimmedIdentifier) {
-      setError("Please enter your email or phone number");
-      return;
-    }
-
-    let nextIdentifierType: IdentifierType;
     let normalizedIdentifier: string;
+    const nextIdentifierType: IdentifierType = activeTab;
 
-    if (isEmail(trimmedIdentifier)) {
-      nextIdentifierType = "email";
-      normalizedIdentifier = trimmedIdentifier.toLowerCase();
-    } else if (isPhone(trimmedIdentifier)) {
-      nextIdentifierType = "phone";
-      normalizedIdentifier = toPhone(trimmedIdentifier);
+    if (activeTab === "email") {
+      const trimmed = emailValue.trim().toLowerCase();
+      if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        setError("Please enter a valid email address");
+        return;
+      }
+      normalizedIdentifier = trimmed;
     } else {
-      setError("Please enter a valid email address or phone number");
-      return;
+      if (!phoneValue || phoneValue.replace(/\D/g, "").length < 7) {
+        setError("Please enter your phone number");
+        return;
+      }
+      normalizedIdentifier = phoneValue;
     }
 
     setIsLoading(true);
@@ -119,7 +111,7 @@ export default function ClientLoginPage() {
       }
 
       if (!data?.exists) {
-        setError("No customer account was found for this email or phone number yet.");
+        setError("No account was found. Please check your details or contact the salon.");
         return;
       }
 
@@ -185,9 +177,7 @@ export default function ClientLoginPage() {
 
       if (emailOtpError || data?.error) {
         console.error("Email OTP send failed:", { emailOtpError, dataError: data?.error });
-        setError(
-          "We're having trouble sending your verification email. Please try again in a moment or contact support if this continues."
-        );
+        setError("We're having trouble sending your verification email. Please try again.");
         return false;
       }
 
@@ -195,13 +185,16 @@ export default function ClientLoginPage() {
         data?.verificationType === "magiclink" ? "magiclink" : "email",
       );
     } else {
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        phone: targetIdentifier,
-        options: { shouldCreateUser: false },
-      } as never);
+      const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-phone-otp", {
+        body: { phone: targetIdentifier },
+      });
 
-      if (otpError) {
-        setError(otpError.message);
+      if (phoneOtpError || phoneOtpData?.error) {
+        if (phoneOtpData?.error === "cooldown") {
+          setError("Please wait 60 seconds before requesting another code.");
+        } else {
+          setError("We're having trouble sending your verification code. Please try again.");
+        }
         return false;
       }
     }
@@ -248,34 +241,60 @@ export default function ClientLoginPage() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!resolution) return;
+    setError("");
+    setForgotPasswordMode(true);
+    setIsLoading(true);
+    try {
+      const sent = await requestOtp(resolution.identifier, resolution.identifierType);
+      if (sent) {
+        setOtp("");
+        setStep("otp");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!resolution || otp.length !== 8) {
-      setError("Please enter the 8-digit code");
+    const otpLength = resolution?.identifierType === "phone" ? 6 : 8;
+    if (!resolution || otp.length !== otpLength) {
+      setError(`Please enter the ${otpLength}-digit code`);
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const verificationPayload =
-        resolution.identifierType === "email"
-          ? { email: resolution.identifier, token: otp, type: emailOtpVerificationType }
-          : { phone: resolution.identifier, token: otp, type: "sms" as const };
-      const { data, error: verifyError } = await supabase.auth.verifyOtp(verificationPayload);
+      if (resolution.identifierType === "phone") {
+        const { data: phoneVerifyData, error: phoneVerifyError } = await supabase.functions.invoke("verify-phone-otp", {
+          body: { phone: resolution.identifier, otp },
+        });
 
-      if (verifyError) {
-        setError("Invalid or expired code. Please try again.");
-        return;
-      }
+        if (phoneVerifyError || phoneVerifyData?.error) {
+          setError(phoneVerifyData?.error || "Invalid or expired code. Please try again.");
+          return;
+        }
 
-      if (data.session) {
-        if (!resolution.hasPassword) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: phoneVerifyData.access_token,
+          refresh_token: phoneVerifyData.refresh_token,
+        });
+        if (sessionError) {
+          setError("Failed to create session. Please try again.");
+          return;
+        }
+
+        if (!resolution.hasPassword || forgotPasswordMode) {
           toast({
             title: "Identity verified",
-            description: "Create a password to finish securing your account.",
+            description: forgotPasswordMode
+              ? "Set a new password to secure your account."
+              : "Create a password to finish securing your account.",
           });
           navigate("/complete-account", { replace: true });
           return;
@@ -283,6 +302,33 @@ export default function ClientLoginPage() {
 
         const routeState = location.state as RouteState | null;
         navigate(routeState?.from?.pathname || "/", { replace: true });
+      } else {
+        const { data, error: verifyError } = await supabase.auth.verifyOtp({
+          email: resolution.identifier,
+          token: otp,
+          type: emailOtpVerificationType,
+        });
+
+        if (verifyError) {
+          setError("Invalid or expired code. Please try again.");
+          return;
+        }
+
+        if (data.session) {
+          if (!resolution.hasPassword || forgotPasswordMode) {
+            toast({
+              title: "Identity verified",
+              description: forgotPasswordMode
+                ? "Set a new password to secure your account."
+                : "Create a password to finish securing your account.",
+            });
+            navigate("/complete-account", { replace: true });
+            return;
+          }
+
+          const routeState = location.state as RouteState | null;
+          navigate(routeState?.from?.pathname || "/", { replace: true });
+        }
       }
     } catch (err) {
       console.error("OTP verification error:", err);
@@ -299,6 +345,7 @@ export default function ClientLoginPage() {
       setPassword("");
       setError("");
       setResolution(null);
+      setForgotPasswordMode(false);
       setEmailOtpVerificationType("email");
     }
   };
@@ -341,16 +388,50 @@ export default function ClientLoginPage() {
 
         {step === "identifier" && (
           <form onSubmit={handleIdentifierSubmit} className="space-y-4">
-            <AuthInput
-              label="Email or Phone"
-              type="text"
-              placeholder="Enter your email or phone number"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              error={error}
-              autoComplete="email"
-              autoFocus
-            />
+            <Tabs
+              value={activeTab}
+              onValueChange={(v) => {
+                setActiveTab(v as IdentifierTab);
+                setError("");
+              }}
+              className="w-full"
+            >
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="email" className="gap-2">
+                  <Mail size={16} />
+                  Email
+                </TabsTrigger>
+                <TabsTrigger value="phone" className="gap-2">
+                  <Phone size={16} />
+                  Phone
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {activeTab === "email" ? (
+              <AuthInput
+                label="Email address"
+                type="email"
+                placeholder="Enter your email"
+                value={emailValue}
+                onChange={(e) => setEmailValue(e.target.value)}
+                error={error}
+                autoComplete="email"
+                autoFocus
+              />
+            ) : (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">Phone number</label>
+                <PhoneInput
+                  value={phoneValue}
+                  onChange={setPhoneValue}
+                  defaultCountry="GH"
+                  allowedCountryCodes={allowedCountryCodes}
+                  hasError={!!error}
+                />
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </div>
+            )}
 
             <AuthButton type="submit" isLoading={isLoading}>
               Continue
@@ -378,6 +459,17 @@ export default function ClientLoginPage() {
               icon={<Lock className="h-4 w-4" />}
             />
 
+            <div className="text-right -mt-2">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isLoading}
+                className="text-sm text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Forgot password?
+              </button>
+            </div>
+
             <AuthButton type="submit" isLoading={isLoading}>
               Sign in
             </AuthButton>
@@ -391,18 +483,18 @@ export default function ClientLoginPage() {
                 <ShieldCheck className="h-6 w-6 text-primary" />
               </div>
 
-              <InputOTP maxLength={8} value={otp} onChange={setOtp} className="justify-center">
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                  <InputOTPSlot index={6} />
-                  <InputOTPSlot index={7} />
-                </InputOTPGroup>
-              </InputOTP>
+              {(() => {
+                const otpSlotCount = resolution?.identifierType === "phone" ? 6 : 8;
+                return (
+                  <InputOTP maxLength={otpSlotCount} value={otp} onChange={setOtp} className="justify-center">
+                    <InputOTPGroup>
+                      {Array.from({ length: otpSlotCount }, (_, i) => (
+                        <InputOTPSlot key={i} index={i} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                );
+              })()}
 
               {error && <p className="text-center text-sm text-destructive">{error}</p>}
             </div>

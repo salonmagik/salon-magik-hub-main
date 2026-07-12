@@ -140,12 +140,36 @@ export function usePayoutDestinations(tenantId?: string) {
     }
   };
 
+  const retrySubaccount = async (id: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase.functions.invoke("retry-paystack-subaccount", {
+        body: { destinationId: id }
+      });
+      if (error) throw error;
+      toast({
+        title: "Success",
+        description: "Successfully retried Paystack subaccount creation",
+      });
+      await fetchDestinations();
+      return true;
+    } catch (err: any) {
+      console.error("Error retrying subaccount:", err);
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to retry subaccount creation",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   return {
     destinations,
     isLoading,
     error,
     createDestination,
     deleteDestination,
+    retrySubaccount,
     refetch: fetchDestinations,
   };
 }

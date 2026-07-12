@@ -62,10 +62,10 @@ const FALLBACK_ROUTE_ORDER: Array<{ module: string; path: string }> = [
   { module: "calendar", path: "/salon/calendar" },
   { module: "customers", path: "/salon/customers" },
   { module: "services", path: "/salon/services" },
-  { module: "payments", path: "/salon/payments" },
+  { module: "payments", path: "/salon/transactions" },
   { module: "reports", path: "/salon/reports" },
   { module: "messaging", path: "/salon/messaging" },
-  { module: "journal", path: "/salon/journal" },
+  { module: "journal", path: "/salon/cash-tracker" },
   { module: "staff", path: "/salon/staff" },
   { module: "settings", path: "/salon/settings" },
   { module: "audit_log", path: "/salon/audit-log" },
@@ -88,7 +88,7 @@ const FALLBACK_ROUTE_MODULES_BY_ROLE: Record<UserRole["role"], string[]> = {
   ],
   supervisor: ["dashboard", "appointments", "calendar", "customers", "services", "messaging"],
   receptionist: ["dashboard", "appointments", "calendar", "customers", "messaging"],
-  staff: [],
+  staff: ["appointments"],
 };
 
 const normalizeUserRoles = (rows: UserRole[]) => {
@@ -161,13 +161,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     currentRole: null,
     isAssignmentPending: false,
   });
-  const getVerifiedAuthUser = async (session: Session): Promise<User | null> => {
+  const getVerifiedAuthUser = async (
+    session: Session
+  ): Promise<{ user: User | null; retryable: boolean }> => {
     const { data, error } = await supabase.auth.getUser(session.access_token);
     if (error) {
-      console.error("Failed to verify auth session against server:", error);
-      return null;
+      // AuthRetryableFetchError means we couldn't reach the network at all —
+      // not that the session/token is actually invalid. Treating a transient
+      // connectivity blip the same as a real auth failure was forcing users
+      // offline on flaky wifi/mobile connections.
+      const isRetryable = error.name === "AuthRetryableFetchError";
+      if (!isRetryable) {
+        console.error("Failed to verify auth session against server:", error);
+      } else {
+        console.warn("Network error verifying auth session — keeping current session:", error.message);
+      }
+      return { user: null, retryable: isRetryable };
     }
-    return data.user ?? null;
+    return { user: data.user ?? null, retryable: false };
   };
 
   const parseStoredContext = (tenantId: string): { type: ActiveContextType; locationId: string | null } | null => {
@@ -460,16 +471,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (role === "owner") return fallbackFirstRoute(contextType);
 
     const allowedModules = new Set(FALLBACK_ROUTE_MODULES_BY_ROLE[role] || []);
-    const matchingRoute = FALLBACK_ROUTE_ORDER.find((route) => {
-      if (!allowedModules.has(route.module)) return false;
-      if (contextType === "owner_hub") {
-        return route.path === "/salon/overview" || route.path === "/salon/overview/staff";
-      }
-      return route.path !== "/salon/overview" && route.path !== "/salon/overview/staff";
-    });
 
-    if (matchingRoute) return matchingRoute.path;
-    return contextType === "owner_hub" ? "/salon/overview" : "/salon/access-denied";
+    // When in owner_hub context, prefer overview routes if the role has access.
+    if (contextType === "owner_hub") {
+      const overviewRoute = FALLBACK_ROUTE_ORDER.find(
+        (route) =>
+          allowedModules.has(route.module) &&
+          (route.path === "/salon/overview" || route.path === "/salon/overview/staff"),
+      );
+      if (overviewRoute) return overviewRoute.path;
+    }
+
+    // Fall back to first accessible non-overview route regardless of context.
+    const anyRoute = FALLBACK_ROUTE_ORDER.find(
+      (route) =>
+        allowedModules.has(route.module) &&
+        route.path !== "/salon/overview" &&
+        route.path !== "/salon/overview/staff",
+    );
+    if (anyRoute) return anyRoute.path;
+    return "/salon/access-denied";
   };
 
   // Initialize auth state
@@ -515,14 +536,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastHydratedSessionRef.current = hydrationKey;
             // Use setTimeout to prevent Supabase deadlocks
             setTimeout(async () => {
-              const verifiedUser = await getVerifiedAuthUser(session);
-              if (!verifiedUser) {
+              const { user: verifiedUserResult, retryable } = await getVerifiedAuthUser(session);
+              if (!verifiedUserResult && !retryable) {
                 await forceSignOut();
                 return;
               }
+              // On a retryable network error, fall back to the
+              // already-trusted local session user — we just couldn't
+              // re-verify against the server this tick.
+              const verifiedUser = verifiedUserResult ?? session.user;
 
               let profile = await fetchProfile(verifiedUser.id);
-              
+
               // If profile doesn't exist, try to create it from auth metadata
               if (!profile) {
                 console.log("Auth state change: profile not found - attempting to create");
@@ -574,9 +599,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 await logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
                   context_type: contextState.activeContextType,
                 });
+                // Touch the staff session record (geo+device tracking). Fire-and-forget.
+                supabase.functions.invoke("touch-staff-session", {
+                  body: { tenant_id: currentTenant.id },
+                }).catch((err) => console.warn("touch-staff-session failed:", err));
               }
 
-              setState({
+              setState((prev) => ({
                 user: verifiedUser,
                 session,
                 profile,
@@ -585,7 +614,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 currentTenant,
                 isLoading: false,
                 isAuthenticated: true,
-                hasCompletedOnboarding: tenants.length > 0,
+                // Preserve true once earned — a transient fetch error (empty tenants) must not redirect back to onboarding
+                hasCompletedOnboarding: tenants.length > 0 || prev.hasCompletedOnboarding,
                 requiresPasswordChange: session.user.user_metadata?.requires_password_change === true,
                 activeContextType: contextState.activeContextType,
                 activeLocationId: contextState.activeLocationId,
@@ -597,7 +627,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   contextState.currentRole,
                   contextState.assignedLocationIds
                 ),
-              });
+              }));
             }, 0);
           }
         }
@@ -617,13 +647,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
         }
         lastHydratedSessionRef.current = hydrationKey;
-        const verifiedUser = await getVerifiedAuthUser(session);
-        if (!verifiedUser) {
+        const { user: verifiedUserResult, retryable } = await getVerifiedAuthUser(session);
+        if (!verifiedUserResult && !retryable) {
           await forceSignOut();
           return () => {
             subscription.unsubscribe();
           };
         }
+        // On a retryable network error, fall back to the already-trusted
+        // local session user instead of leaving the app stuck on its initial
+        // loading screen — we just couldn't re-verify against the server
+        // this tick, the session itself is still valid.
+        const verifiedUser = verifiedUserResult ?? session.user;
 
         let profile = await fetchProfile(verifiedUser.id);
         
@@ -861,7 +896,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tenants,
       roles,
       currentTenant,
-      hasCompletedOnboarding: tenants.length > 0,
+      hasCompletedOnboarding: tenants.length > 0 || prev.hasCompletedOnboarding,
       activeContextType: contextState.activeContextType,
       activeLocationId: contextState.activeLocationId,
       assignedLocationIds: contextState.assignedLocationIds,

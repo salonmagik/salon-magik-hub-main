@@ -34,6 +34,7 @@ import {
  import { Loader2, MoreHorizontal, Search, Eye, Building2, Users } from "lucide-react";
  import { format } from "date-fns";
 import { toast } from "sonner";
+import { EmptyState } from "@ui/empty-state";
 
 interface ChainUnlockRequestRow {
   id: string;
@@ -100,15 +101,15 @@ export default function TenantsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
-        return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Active</Badge>;
+        return <Badge variant="success">Active</Badge>;
       case "trialing":
-        return <Badge className="bg-blue-100 text-blue-700 border-blue-200">Trial</Badge>;
+        return <Badge variant="info">Trial</Badge>;
       case "past_due":
-        return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Past Due</Badge>;
+        return <Badge variant="warning">Past Due</Badge>;
       case "canceled":
-        return <Badge className="bg-red-100 text-red-700 border-red-200">Canceled</Badge>;
+        return <Badge variant="destructive">Canceled</Badge>;
       case "permanently_deactivated":
-        return <Badge className="bg-zinc-100 text-zinc-500 border-zinc-200">Deactivated</Badge>;
+        return <Badge variant="neutral">Deactivated</Badge>;
       case "inactive":
         return <Badge variant="secondary">Inactive</Badge>;
       default:
@@ -162,9 +163,11 @@ export default function TenantsPage() {
                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                    </div>
                  ) : filteredTenants?.length === 0 ? (
-                   <div className="text-center py-12 text-muted-foreground">
-                     No tenants found.
-                   </div>
+                   <EmptyState
+                     icon={Building2}
+                     title="No tenants found"
+                     description="Salons will appear here once they sign up or are added to the platform."
+                   />
                  ) : (
                    <div className="rounded-md border">
                      <Table>

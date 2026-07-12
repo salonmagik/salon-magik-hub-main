@@ -64,8 +64,8 @@ export function useTrialEnforcement() {
     };
   }, [currentTenant]);
 
-  // Initiate card collection checkout
-  const collectCard = useCallback(async (): Promise<{ success: boolean; checkoutUrl: string | null }> => {
+  // Initiate Paystack subscription checkout (used from trial expiry blocking modal)
+  const startUpgradeCheckout = useCallback(async (): Promise<{ success: boolean; checkoutUrl: string | null }> => {
     if (!currentTenant?.id) {
       return { success: false, checkoutUrl: null };
     }
@@ -74,8 +74,8 @@ export function useTrialEnforcement() {
       const { data, error } = await supabase.functions.invoke("create-checkout-session", {
         body: {
           tenantId: currentTenant.id,
-          mode: "setup", // Setup mode for card collection only
-          returnUrl: `${window.location.origin}/salon/settings?tab=subscription`,
+          successUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=success`,
+          cancelUrl: `${window.location.origin}/salon/settings?tab=subscription`,
         },
       });
 
@@ -108,7 +108,7 @@ export function useTrialEnforcement() {
 
   return {
     trialStatus,
-    collectCard,
+    startUpgradeCheckout,
     shouldBlockAccess,
     shouldShowWarning,
     shouldShowUrgent,

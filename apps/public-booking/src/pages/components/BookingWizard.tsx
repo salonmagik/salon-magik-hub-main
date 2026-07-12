@@ -174,7 +174,7 @@ export function BookingWizard({
     deliveryAddress: emptyDeliveryAddress,
   });
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
-  const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_at_salon");
+  const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_now");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack"); // default is paystack
   const [purseAmount, setPurseAmount] = useState(0);
@@ -263,6 +263,7 @@ export function BookingWizard({
     items,
     salon.deposits_enabled ? (salon.default_deposit_percentage || 0) : 0,
   );
+  const requiresApproval = salon.auto_confirm_bookings === false;
 
   const subtotal = getTotal();
   const voucherDiscount = appliedVoucher?.discountAmount || 0;
@@ -271,7 +272,9 @@ export function BookingWizard({
   const depositAmount = Math.min(depositCalc.depositAmount, afterPurse);
 
   const amountDueNow =
-    afterPurse === 0
+    requiresApproval
+      ? 0
+      : afterPurse === 0
       ? 0
       : paymentOption === "pay_now"
         ? afterPurse
@@ -673,7 +676,6 @@ export function BookingWizard({
         tenantId: salon.id,
         customer: bookerInfo,
         items: buildSubmissionItems(),
-        payAtSalon: paymentOption === "pay_at_salon",
         voucherCode: appliedVoucher?.code || null,
         voucherDiscount,
         purseAmount: purseAmountForBackend,
@@ -769,6 +771,10 @@ export function BookingWizard({
   };
 
   const handleProceedToPayment = () => {
+    if (requiresApproval) {
+      void handleSubmitBooking();
+      return;
+    }
     if (amountDueNow > 0) {
       setStep("payment");
       return;
@@ -844,12 +850,8 @@ export function BookingWizard({
     setIsSubmitting(true);
     try {
       // Check if purse is being used to pay the full amount
-      const isPursePayment = purseAmount > 0 && afterPurse === 0 && customerId;
-
       const booking = await handleCreateBooking(false);
 
-      // If paying with purse, the backend handles everything
-      // Otherwise, it's a pay-at-salon booking
       setBookingReference(booking.reference || "CONFIRMED");
       setStep("confirmation");
       clearCart();
@@ -881,7 +883,7 @@ export function BookingWizard({
       setBookingReference(null);
       setAppliedVoucher(null);
       setPurseAmount(0);
-      setPaymentOption("pay_at_salon");
+      setPaymentOption("pay_now");
       updateMeta({ giftsBelongToSamePerson: true });
     }
     onOpenChange(false);
@@ -998,7 +1000,7 @@ export function BookingWizard({
                 salon={{
                   id: salon.id,
                   currency: salon.currency,
-                  pay_at_salon_enabled: salon.pay_at_salon_enabled,
+                  auto_confirm_bookings: salon.auto_confirm_bookings,
                   deposits_enabled: salon.deposits_enabled,
                   default_deposit_percentage: salon.default_deposit_percentage,
                 }}
@@ -1034,6 +1036,7 @@ export function BookingWizard({
                 customerEmail={bookerInfo.email}
                 tenantId={salon.id}
                 onPaymentModeChange={handlePaymentModeChange}
+                isPaymentReady={salon.payment_setup_status === "ready"}
               />
             )}
 
@@ -1042,8 +1045,12 @@ export function BookingWizard({
                 <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
                   <CheckCircle className="h-8 w-8 text-primary" />
                 </div>
-                <h2 className="text-2xl font-bold">Booking Confirmed!</h2>
-                <p className="text-muted-foreground">Your booking has been successfully submitted.</p>
+                <h2 className="text-2xl font-bold">{requiresApproval ? "Booking Submitted" : "Booking Confirmed!"}</h2>
+                <p className="text-muted-foreground">
+                  {requiresApproval
+                    ? "Your booking has been sent to the salon for review. Payment will only be requested after the salon accepts it."
+                    : "Your booking has been successfully submitted."}
+                </p>
                 {bookingReference && (
                   <div className="p-4 bg-muted rounded-lg">
                     <p className="text-sm text-muted-foreground">Reference Number</p>
@@ -1051,7 +1058,9 @@ export function BookingWizard({
                   </div>
                 )}
                 <p className="text-sm text-muted-foreground">
-                  A confirmation email has been sent to {bookerInfo.email}
+                  {requiresApproval
+                    ? `A review update will be sent to ${bookerInfo.email}`
+                    : `A confirmation email has been sent to ${bookerInfo.email}`}
                 </p>
               </div>
             )}
@@ -1076,7 +1085,13 @@ export function BookingWizard({
                     color: "var(--brand-foreground, white)",
                   }}
                 >
-                  {isSubmitting ? "Submitting..." : amountDueNow > 0 ? "Continue to Payment" : "Confirm Booking"}
+                  {isSubmitting
+                    ? "Submitting..."
+                    : requiresApproval
+                      ? "Submit for Review"
+                      : amountDueNow > 0
+                        ? "Continue to Payment"
+                        : "Confirm Booking"}
                 </Button>
               ) : (
                 <Button

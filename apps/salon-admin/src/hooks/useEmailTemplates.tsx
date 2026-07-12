@@ -39,10 +39,10 @@ export interface EmailTemplate {
 }
 
 export const templateTypeLabels: Record<TemplateType, string> = {
-  appointment_confirmation: "Appointment Confirmation",
-  appointment_reminder: "Appointment Reminder",
-  appointment_cancelled: "Appointment Cancelled",
-  booking_confirmation: "Booking Confirmation",
+  appointment_confirmation: "Confirmed booking email",
+  appointment_reminder: "Appointment reminder email",
+  appointment_cancelled: "Cancelled booking email",
+  booking_confirmation: "Booking received email",
   payment_receipt: "Payment Receipt",
   refund_confirmation: "Refund Confirmation",
   staff_invitation: "Staff Invitation",
@@ -51,9 +51,9 @@ export const templateTypeLabels: Record<TemplateType, string> = {
   password_changed: "Password Changed",
   email_verification: "Email Verification",
   welcome_owner: "Welcome (Salon Owner)",
-  service_started: "Service Started",
-  buffer_requested: "Buffer Requested",
-  service_change_approval: "Service Change Approval",
+  service_started: "Service started email",
+  buffer_requested: "Extra time request email",
+  service_change_approval: "Service change approval email",
   trial_ending_7d: "Trial Ending (7 Days)",
   trial_ending_3h: "Trial Ending (3 Hours)",
   payment_failed: "Payment Failed",

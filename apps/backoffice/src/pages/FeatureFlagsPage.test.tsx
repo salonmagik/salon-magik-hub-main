@@ -19,6 +19,10 @@ vi.mock("@/components/BackofficeLayout", () => ({
   BackofficeLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+vi.mock("@/lib/supabase", () => ({
+  supabase: { from: vi.fn() },
+}));
+
 describe("FeatureFlagsPage", () => {
   it("renders feature flag management sections", () => {
     render(<FeatureFlagsPage />);

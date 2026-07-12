@@ -100,7 +100,7 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
         <CardContent>
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-start gap-4 p-4 border rounded-lg">
+              <div key={i} className="flex items-start gap-4 rounded-2xl border bg-muted/20 p-3.5">
                 <Skeleton className="h-10 w-10 rounded-full" />
                 <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-1/4" />
@@ -193,7 +193,7 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
 
       <CardContent>
         {filteredMessages.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="rounded-2xl border border-dashed bg-muted/20 py-10 text-center">
             <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-lg font-medium text-muted-foreground">No messages sent yet</p>
             <p className="text-sm text-muted-foreground mt-1">
@@ -211,9 +211,9 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
 
               return (
                 <Collapsible key={message.id} open={isExpanded} onOpenChange={() => toggleExpanded(message.id)}>
-                  <div className="border rounded-lg hover:bg-accent/50 transition-colors">
+                  <div className="rounded-2xl border bg-muted/10 transition-colors hover:bg-accent/50">
                     <CollapsibleTrigger asChild>
-                      <button className="w-full p-4 text-left flex items-start gap-4 cursor-pointer">
+                      <button className="flex w-full cursor-pointer items-start gap-4 p-3.5 text-left">
                         {/* Channel Icon */}
                         <div className={cn(
                           "flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center",
@@ -280,7 +280,7 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
 
                     {/* Expanded Content */}
                     <CollapsibleContent>
-                      <div className="px-4 pb-4 pt-2 border-t space-y-3">
+                      <div className="space-y-3 border-t px-4 pb-4 pt-3">
                         {/* Full Message Content */}
                         {message.message && (
                           <div>

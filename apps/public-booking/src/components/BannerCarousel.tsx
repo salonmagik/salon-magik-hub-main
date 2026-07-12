@@ -6,12 +6,14 @@ interface BannerCarouselProps {
   bannerUrls: string[];
   salonName: string;
   autoPlayInterval?: number; // Default 30000ms (30 seconds)
+  variant?: "default" | "ecommerce";
 }
 
 export function BannerCarousel({ 
   bannerUrls, 
   salonName, 
-  autoPlayInterval = 30000 
+  autoPlayInterval = 30000,
+  variant = "default",
 }: BannerCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
@@ -34,9 +36,11 @@ export function BannerCarousel({
 
   if (!bannerUrls || bannerUrls.length === 0) return null;
 
+  const isEcommerceTheme = variant === "ecommerce";
+
   return (
     <div
-      className="relative h-48 md:h-64 rounded-xl overflow-hidden"
+      className={isEcommerceTheme ? "relative h-full w-full overflow-hidden" : "relative h-48 md:h-64 rounded-xl overflow-hidden"}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
@@ -53,13 +57,16 @@ export function BannerCarousel({
         />
       ))}
 
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+      {/* Gradient overlay — only for default theme (text contrast) */}
+      {!isEcommerceTheme && (
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+      )}
 
-      {/* Salon name */}
-      <div className="absolute bottom-4 left-4 right-16 text-white">
-        <h1 className="text-2xl md:text-3xl font-bold">{salonName}</h1>
-      </div>
+      {!isEcommerceTheme && (
+        <div className="absolute bottom-4 left-4 right-16 text-white">
+          <h1 className="text-2xl md:text-3xl font-bold">{salonName}</h1>
+        </div>
+      )}
 
       {/* Navigation arrows - only visible on hover when multiple banners */}
       {bannerUrls.length > 1 && isHovering && (

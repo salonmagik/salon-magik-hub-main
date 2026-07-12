@@ -13,8 +13,11 @@ import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 
 type BookingFilter = "upcoming" | "completed" | "cancelled";
+type ApprovalAwareBooking = ClientAppointmentWithDetails & {
+  approval_status?: string | null;
+};
 
-function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
+function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
   const navigate = useNavigate();
   
   const statusColors: Record<string, string> = {
@@ -26,21 +29,44 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
   };
 
   const paymentColors: Record<string, string> = {
+    unpaid: "bg-gray-100 text-gray-800",
     deposit_paid: "bg-yellow-100 text-yellow-800",
     fully_paid: "bg-green-100 text-green-800",
-    pay_at_salon: "bg-blue-100 text-blue-800",
     refunded_full: "bg-purple-100 text-purple-800",
     refunded_partial: "bg-purple-100 text-purple-800",
   };
 
+  const approvalColors: Record<string, string> = {
+    pending: "bg-amber-100 text-amber-900",
+    approved: "bg-emerald-100 text-emerald-900",
+    reschedule_proposed: "bg-sky-100 text-sky-900",
+    declined: "bg-rose-100 text-rose-900",
+    not_required: "bg-slate-100 text-slate-800",
+  };
+
   const getPaymentLabel = (status: string) => {
     switch (status) {
+      case "unpaid": return "Unpaid";
       case "deposit_paid": return "Deposit Paid";
       case "fully_paid": return "Paid";
-      case "pay_at_salon": return "Pay at Salon";
       case "refunded_full": return "Refunded";
       case "refunded_partial": return "Partially Refunded";
       default: return status;
+    }
+  };
+
+  const getApprovalLabel = (status: string | null | undefined) => {
+    switch (status) {
+      case "pending": return "Awaiting approval";
+      case "approved": return "Approved";
+      case "reschedule_proposed": return "Reschedule proposed";
+      case "declined": return "Declined";
+      case "not_required":
+      case undefined:
+      case null:
+        return "Confirmed";
+      default:
+        return status.replace(/_/g, " ");
     }
   };
 
@@ -48,7 +74,8 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
   const canCompletePayment =
     balanceDue > 0 &&
     booking.status !== "cancelled" &&
-    !["fully_paid", "refunded_full", "pay_at_salon"].includes(booking.payment_status);
+    !["fully_paid", "refunded_full"].includes(booking.payment_status) &&
+    ["approved", "reschedule_accepted", "not_required", undefined, null].includes(booking.approval_status as any);
 
   return (
     <Card 
@@ -65,6 +92,9 @@ function BookingCard({ booking }: { booking: ClientAppointmentWithDetails }) {
               </Badge>
               <Badge className={paymentColors[booking.payment_status] || "bg-muted"}>
                 {getPaymentLabel(booking.payment_status)}
+              </Badge>
+              <Badge className={approvalColors[booking.approval_status || "not_required"] || "bg-muted"}>
+                {getApprovalLabel(booking.approval_status)}
               </Badge>
             </div>
 

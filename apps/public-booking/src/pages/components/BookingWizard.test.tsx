@@ -2,6 +2,14 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BookingWizard } from "./BookingWizard";
 
+vi.mock("@/lib/supabase", () => ({
+  supabase: {
+    from: vi.fn(),
+    auth: { verifyOtp: vi.fn(), setSession: vi.fn(), signInWithPassword: vi.fn() },
+    functions: { invoke: vi.fn() },
+  },
+}));
+
 vi.mock("@/hooks", () => ({
   useBookingCart: () => ({
     items: [

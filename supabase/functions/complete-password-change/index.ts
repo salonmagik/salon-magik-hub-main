@@ -63,6 +63,22 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Reject if new password matches the stored temp password
+    const serviceRoleClientEarly = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: invitation } = await serviceRoleClientEarly
+      .from("staff_invitations")
+      .select("temp_password")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .maybeSingle();
+
+    if (invitation?.temp_password && newPassword === invitation.temp_password) {
+      return new Response(
+        JSON.stringify({ error: "You cannot reuse your temporary password. Please choose a new password." }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     // Validate password strength
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]).{8,}$/;
     if (!passwordRegex.test(newPassword)) {

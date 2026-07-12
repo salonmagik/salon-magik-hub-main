@@ -25,6 +25,10 @@ vi.mock("@/components/BackofficeLayout", () => ({
   BackofficeLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+vi.mock("@/lib/supabase", () => ({
+  supabase: { from: vi.fn() },
+}));
+
 describe("SettingsPage", () => {
   it("renders settings and market management tab", () => {
     render(<SettingsPage />);

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { AddSalonDialog } from "./AddSalonDialog";
 
@@ -41,6 +42,8 @@ vi.mock("@tanstack/react-query", () => ({
     }
     return { data: null };
   },
+  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
 vi.mock("@/lib/supabase", () => ({ supabase: { rpc: vi.fn(), from: vi.fn() } }));
@@ -48,8 +51,13 @@ vi.mock("@ui/ui/use-toast", () => ({ toast: vi.fn() }));
 
 describe("AddSalonDialog", () => {
   it("shows pending unlock message when chain request exceeds allowed locations", () => {
-    render(<AddSalonDialog open onOpenChange={vi.fn()} />);
-    expect(screen.getByText(/add a new branch \(2 \/ 2 used\)/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add branch/i })).toBeDisabled();
+    render(
+      <MemoryRouter>
+        <AddSalonDialog open onOpenChange={vi.fn()} />
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/unlock request pending/i)).toBeInTheDocument();
+    expect(screen.getByText(/still pending approval/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add branch/i })).not.toBeInTheDocument();
   });
 });

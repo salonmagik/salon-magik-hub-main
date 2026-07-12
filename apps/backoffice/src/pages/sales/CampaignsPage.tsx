@@ -6,6 +6,8 @@ import { Label } from "@ui/label";
 import { Input } from "@ui/input";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
+import { EmptyState } from "@ui/empty-state";
+import { Megaphone } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Textarea } from "@ui/textarea";
 import {
@@ -210,14 +212,16 @@ export default function CampaignsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={campaign.is_active ? "default" : "secondary"}>{campaign.is_active ? "Active" : "Inactive"}</Badge>
+                  <Badge variant={campaign.is_active ? "success" : "neutral"}>{campaign.is_active ? "Active" : "Inactive"}</Badge>
                   <Button size="sm" variant="outline" onClick={() => toggleCampaign.mutate({ id: campaign.id, isActive: !campaign.is_active })}>
                     {campaign.is_active ? "Deactivate" : "Activate"}
                   </Button>
                 </div>
               </div>
             ))}
-            {!campaigns.length && <p className="text-sm text-muted-foreground">No campaigns yet.</p>}
+            {!campaigns.length && (
+              <EmptyState icon={Megaphone} title="No campaigns yet" description="Create a campaign to start tracking promo performance." />
+            )}
           </CardContent>
         </Card>
       </div>

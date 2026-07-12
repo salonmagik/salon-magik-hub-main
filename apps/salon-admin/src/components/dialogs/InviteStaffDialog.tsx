@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +21,7 @@ import {
 import { UserCog, Mail, User, Loader2, Send } from "lucide-react";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 
 interface InviteStaffDialogProps {
   open: boolean;
@@ -34,6 +37,8 @@ const roleOptions = [
 ] as const;
 
 export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaffDialogProps) {
+  const navigate = useNavigate();
+  const { currentTenant } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -51,8 +56,33 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
     });
   };
 
+  const { data: seatGate } = useQuery({
+    queryKey: ["invite-staff-seat-gate", currentTenant?.id, open],
+    enabled: Boolean(open && currentTenant?.id),
+    queryFn: async () => {
+      if (!currentTenant?.id) return null;
+      const { data, error } = await (supabase.rpc as any)("assert_tenant_can_add_staff", {
+        p_tenant_id: currentTenant.id,
+      });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      return row || null;
+    },
+    staleTime: 1000 * 15,
+  });
+
+  const isSeatBlocked = seatGate?.can_add === false;
+  const seatMessage = isSeatBlocked
+    ? String(seatGate?.required_plan || "").toLowerCase() === "studio"
+      ? "Your next active team member requires a Studio upgrade."
+      : "No staff seats are available right now. Add more seats from Subscription."
+    : currentTenant?.id && seatGate
+      ? `Seats used: ${seatGate.used}/${seatGate.allowed}`
+      : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSeatBlocked) return;
     setIsSubmitting(true);
 
     try {
@@ -111,6 +141,25 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          {seatMessage && (
+            <div className={`rounded-lg border p-3 text-sm ${isSeatBlocked ? "border-amber-300 bg-amber-50 text-amber-900" : "border-border bg-muted/50 text-muted-foreground"}`}>
+              <p>{seatMessage}</p>
+              {isSeatBlocked && (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="mt-1 h-auto p-0 text-amber-900"
+                  onClick={() => {
+                    onOpenChange(false);
+                    navigate("/salon/settings?tab=subscription");
+                  }}
+                >
+                  Go to Subscription
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Name Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -206,7 +255,7 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting}>
+            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || isSeatBlocked}>
               {isSubmitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (

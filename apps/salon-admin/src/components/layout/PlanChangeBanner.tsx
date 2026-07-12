@@ -1,77 +1,107 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
 import { usePlanChangeNotifications } from "@/hooks/usePlanChangeNotifications";
+import { getCurrencySymbol } from "@/hooks/usePlanPricing";
+
+type PriceDelta = {
+  currency: string;
+  previous_monthly_price: number | null;
+  new_monthly_price: number;
+  previous_annual_price: number | null;
+  new_annual_price: number;
+};
+
+function formatMoney(currency: string, amount: number) {
+  return `${getCurrencySymbol(currency)}${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function describePriceDeltas(deltas: PriceDelta[]): string[] {
+  return deltas
+    .filter((d) => d.previous_monthly_price !== null && d.previous_monthly_price !== d.new_monthly_price)
+    .map(
+      (d) =>
+        `${d.currency}: ${formatMoney(d.currency, d.previous_monthly_price as number)} → ${formatMoney(d.currency, d.new_monthly_price)}/mo`,
+    );
+}
 
 export function PlanChangeBanner() {
   const [open, setOpen] = useState(false);
-  const { latestUnseen, markOpened, dismiss, isLoading } = usePlanChangeNotifications();
+  const { latestUnseen, markSeen, markOpened, dismiss } = usePlanChangeNotifications();
+  const announcedRef = useRef<string | null>(null);
 
-  const summary = useMemo(() => {
-    if (!latestUnseen?.change_summary_json) return "Your subscription plan has been updated.";
-    const changes = latestUnseen.change_summary_json.changes;
-    if (!Array.isArray(changes) || changes.length === 0) {
-      return "Your subscription plan has been updated.";
-    }
-    return `Updated: ${changes.join(", ")}.`;
-  }, [latestUnseen]);
+  const priceDeltas = (latestUnseen?.change_summary_json?.price_deltas as PriceDelta[] | undefined) || [];
+  const priceLines = useMemo(() => describePriceDeltas(priceDeltas), [priceDeltas]);
+  const effectiveAt = latestUnseen?.rolled_out_at || latestUnseen?.rollout_at;
 
-  if (isLoading || !latestUnseen) return null;
+  const description = priceLines.length > 0 ? priceLines.join(" · ") : "Your subscription plan has been updated.";
+
+  useEffect(() => {
+    if (!latestUnseen || announcedRef.current === latestUnseen.notification_id) return;
+    announcedRef.current = latestUnseen.notification_id;
+
+    toast("Your plan pricing has changed", {
+      description: effectiveAt
+        ? `${description} — effective ${new Date(effectiveAt).toLocaleDateString()}`
+        : description,
+      duration: 10000,
+      action: {
+        label: "View details",
+        onClick: () => {
+          void markOpened(latestUnseen.notification_id);
+          setOpen(true);
+        },
+      },
+      onDismiss: () => {
+        void markSeen(latestUnseen.notification_id);
+      },
+      onAutoClose: () => {
+        void markSeen(latestUnseen.notification_id);
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestUnseen?.notification_id]);
+
+  if (!latestUnseen) return null;
 
   return (
-    <>
-      <div className="mx-4 mt-4 rounded-lg border border-primary/20 bg-primary/5 p-4 lg:mx-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-[720px]">
+        <DialogHeader>
+          <DialogTitle>Plan Change Details</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
           <div>
-            <p className="text-sm font-semibold">Your plan has been updated</p>
-            <p className="text-xs text-muted-foreground">{summary}</p>
+            <strong>Reason:</strong> {latestUnseen.reason || "No reason provided"}
           </div>
-          <div className="flex gap-2">
+          <div>
+            <strong>Effective:</strong> {effectiveAt ? new Date(effectiveAt).toLocaleString() : "Immediate"}
+          </div>
+          {priceLines.length > 0 && (
+            <div>
+              <strong>Price change:</strong>
+              <ul className="ml-4 mt-1 list-disc">
+                {priceLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end">
             <Button
               size="sm"
               variant="outline"
               onClick={async () => {
                 await dismiss(latestUnseen.notification_id);
+                setOpen(false);
               }}
             >
               Dismiss
             </Button>
-            <Button
-              size="sm"
-              onClick={async () => {
-                await markOpened(latestUnseen.notification_id);
-                setOpen(true);
-              }}
-            >
-              View changelog
-            </Button>
           </div>
         </div>
-      </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[720px]">
-          <DialogHeader>
-            <DialogTitle>Plan Change Changelog</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 text-sm">
-            <div>
-              <strong>Reason:</strong> {latestUnseen.reason || "No reason provided"}
-            </div>
-            <div>
-              <strong>Effective:</strong>{" "}
-              {latestUnseen.rolled_out_at
-                ? new Date(latestUnseen.rolled_out_at).toLocaleString()
-                : latestUnseen.rollout_at
-                  ? new Date(latestUnseen.rollout_at).toLocaleString()
-                  : "Immediate"}
-            </div>
-            <pre className="max-h-80 overflow-auto rounded-md bg-muted p-3 text-xs">
-              {JSON.stringify(latestUnseen.change_summary_json || {}, null, 2)}
-            </pre>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -14,9 +14,10 @@ const ToggleGroup = React.forwardRef<
   React.ElementRef<typeof ToggleGroupPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof ToggleGroupPrimitive.Root> & VariantProps<typeof toggleVariants>
 >(({ className, variant = "default", size = "default", children, type = "single", ...props }, ref) => (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   <ToggleGroupPrimitive.Root
     ref={ref}
-    type={type as "single" | "multiple"}
+    type={type as any}
     className={cn("flex items-center justify-center gap-1", className)}
     {...props}
   >

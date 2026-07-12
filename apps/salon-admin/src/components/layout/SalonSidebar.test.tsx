@@ -44,6 +44,10 @@ vi.mock("@/hooks/useStaffSessions", () => ({
   useStaffSessions: () => ({ startSession: vi.fn() }),
 }));
 
+vi.mock("@/components/session/NewDeviceReviewModal", () => ({
+  NewDeviceReviewModal: () => null,
+}));
+
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: vi.fn(),
 }));
