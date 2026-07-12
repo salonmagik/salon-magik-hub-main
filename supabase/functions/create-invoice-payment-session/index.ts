@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
 
     // Determine effective currency and validate
     const effectiveCurrency = determineEffectiveCurrency(invoice.currency, (invoice.tenants as any).currency);
-    
+
     if (!effectiveCurrency) {
       return new Response(
         JSON.stringify({ error: "Currency is required" }),
@@ -147,9 +147,9 @@ Deno.serve(async (req) => {
     }
 
     let storeSubaccountCode: string | null = null;
-    let customerChargedAmount = invoice.total;
-    let processingFeeAmount = 0;
-    const processingFeeRate = 0.01;
+    // let customerChargedAmount = invoice.total;
+    // let processingFeeAmount = 0;
+    // const processingFeeRate = 0.01;
 
     const { data: payoutDest } = await supabase
       .from("salon_payout_destinations")
@@ -160,12 +160,12 @@ Deno.serve(async (req) => {
 
     if (payoutDest?.paystack_subaccount_code) {
       storeSubaccountCode = payoutDest.paystack_subaccount_code;
-      processingFeeAmount = parseFloat((invoice.total * processingFeeRate).toFixed(2));
-      customerChargedAmount = invoice.total + processingFeeAmount;
+      // processingFeeAmount = parseFloat((invoice.total * processingFeeRate).toFixed(2));
+      // customerChargedAmount = invoice.total + processingFeeAmount;
     }
 
     // Convert amount to minor units (e.g. kobo for NGN)
-    const amountInMinorUnits = Math.round(customerChargedAmount * 100);
+    const amountInMinorUnits = Math.round(invoice.total * 100);
 
     const paystackPayload: any = {
       email: customerEmail,
@@ -179,9 +179,9 @@ Deno.serve(async (req) => {
         intent_type: "invoice_payment",
         customer_name: customerName,
         service_amount: invoice.total,
-        processing_fee_rate: processingFeeRate,
-        processing_fee_amount: processingFeeAmount,
-        customer_charged_amount: customerChargedAmount,
+        // processing_fee_rate: processingFeeRate,
+        // processing_fee_amount: processingFeeAmount,
+        // customer_charged_amount: customerChargedAmount,
         store_subaccount_code: storeSubaccountCode || "",
       },
     };

@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
@@ -117,8 +117,8 @@ Deno.serve(async (req) => {
     const paystackKeyResult = getPaystackKeyForCurrency(currency);
     if (paystackKeyResult.error || !paystackKeyResult.key) {
       return new Response(
-        JSON.stringify({ 
-          error: paystackKeyResult.error || `Paystack not configured for currency ${currency}` 
+        JSON.stringify({
+          error: paystackKeyResult.error || `Paystack not configured for currency ${currency}`
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
           business_name: tenant.name || `Salon ${tenantId}`,
           settlement_bank: bankCode!,
           account_number: accountNumber!,
-          percentage_charge: tenant.platform_percentage_charge || 10,
+          percentage_charge: tenant.platform_percentage_charge || 0.5, // make sure percentage is in right format 0.5 is 0.5%
           primary_contact_email: user.email,
         });
 

@@ -86,9 +86,7 @@ async function debitWalletWithRetry(
     // This ensures that if first attempt succeeds but we don't get response, 
     // subsequent attempts will return the same ledger entry ID
     const idempotencyKey = `webhook_debit_${withdrawalId}`;
-    
     console.log(`[Wallet Debit] Attempt ${attempt}/${maxRetries} for withdrawal ${withdrawalId}`);
-    
     const { data: ledgerEntryId, error } = await supabase.rpc(
       "debit_salon_purse_for_withdrawal",
       {
@@ -115,9 +113,9 @@ async function debitWalletWithRetry(
     }
   }
 
-  return { 
-    success: false, 
-    error: `Failed to debit wallet after ${maxRetries} attempts` 
+  return {
+    success: false,
+    error: `Failed to debit wallet after ${maxRetries} attempts`
   };
 }
 
@@ -690,7 +688,7 @@ export async function processWebhook(
                 if (creditError) {
                   console.error("Error crediting salon purse:", creditError);
                 } else {
-                  console.log(`Salon purse credited: ${amount} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
                 }
               } catch (purseError) {
                 console.error("Exception crediting salon purse:", purseError);
@@ -1093,10 +1091,9 @@ export async function processWebhook(
         if (!debitResult.success) {
           // Wallet debit failed after retries - mark as failed
           console.error(`[CRITICAL] Failed to debit wallet for successful transfer ${withdrawalId}`);
-          
           const { error: updateError } = await supabase
             .from("salon_withdrawals")
-            .update({ 
+            .update({
               status: "failed",
               failure_reason: `CRITICAL: Transfer successful but wallet debit failed after retries. Error: ${debitResult.error}. Requires manual reconciliation.`
             })

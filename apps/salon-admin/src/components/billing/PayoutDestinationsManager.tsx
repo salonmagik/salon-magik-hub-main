@@ -265,14 +265,23 @@ function DestinationRow({ destination, onDelete, onRetry }: DestinationRowProps)
           <p className="text-sm font-mono text-muted-foreground">{isBank ? destination.account_number : destination.momo_number}</p>
           <p className="text-xs text-muted-foreground">{destination.country} · {destination.currency}</p>
           {isBank && hasError && (
-            <div className="mt-2 flex items-center gap-2 text-sm text-destructive">
-              <XCircle className="h-3.5 w-3.5 shrink-0" />
-              <span className="text-xs">{destination.paystack_subaccount_error}</span>
-              <Button
-                variant="ghost"
+            <div className="mt-2 flex items-center justify-between rounded-md bg-destructive/10 p-3">
+              <div className="flex items-start gap-2">
+                <XCircle className="h-4 w-4 text-destructive mt-0.5" />
+                <div className="space-y-1 text-sm">
+                  <p className="font-medium text-destructive">Online Payments Unavailable</p>
+                  <p className="text-destructive/80 text-xs">{destination.paystack_subaccount_error}</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
                 size="sm"
-                className="h-6 px-2 text-xs text-destructive hover:bg-destructive/10"
-                onClick={async () => { setIsRetrying(true); await onRetry(destination.id); setIsRetrying(false); }}
+                className="h-8 text-xs border-destructive/20 hover:bg-destructive/20"
+                onClick={async () => {
+                  setIsRetrying(true);
+                  await onRetry(destination.id);
+                  setIsRetrying(false);
+                }}
                 disabled={isRetrying}
               >
                 {isRetrying ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
