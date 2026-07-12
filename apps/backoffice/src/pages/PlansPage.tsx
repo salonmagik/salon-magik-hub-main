@@ -52,8 +52,13 @@ import {
   AlertTriangle,
   CheckCircle2,
   Coins,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
   Pencil,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
@@ -78,6 +83,9 @@ interface PlanPricing {
   monthly_price: number;
   annual_price: number;
   effective_monthly: number;
+  paystack_plan_code_monthly: string | null;
+  paystack_plan_code_annual: string | null;
+  updated_at: string;
 }
 
 interface PlanLimit {
@@ -150,11 +158,81 @@ interface ChainTierRowDraft {
   is_custom: boolean;
 }
 
+interface MarketCountry {
+  country_code: string;
+  country_name: string;
+  is_selectable: boolean;
+}
+
+interface MarketCountryCurrency {
+  country_code: string;
+  currency_code: string;
+  is_default: boolean;
+  is_enabled: boolean;
+}
+
+interface StaffAddonPricingRow {
+  id: string;
+  country_code: string;
+  currency: string;
+  unit_price_per_extra_seat: number;
+  status: "draft" | "active" | "retired";
+  notes: string | null;
+  effective_from: string;
+}
+
+interface ThemeCatalogRow {
+  theme_key: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+}
+
+interface ThemeAddonPricingRow {
+  id: string;
+  theme_key: string;
+  country_code: string;
+  currency: string;
+  billing_interval: "annual";
+  unit_price: number;
+  status: "draft" | "active" | "retired";
+  notes: string | null;
+  effective_from: string;
+}
+
+interface SeatPricingDraft {
+  rowId: string | null;
+  country_code: string;
+  country_name: string;
+  currency: string;
+  unit_price: string;
+  status: "draft" | "active" | "retired";
+  notes: string;
+}
+
+interface ThemePricingDraft {
+  rowId: string | null;
+  theme_key: string;
+  country_code: string;
+  country_name: string;
+  currency: string;
+  billing_interval: "annual";
+  unit_price: string;
+  status: "draft" | "active" | "retired";
+  notes: string;
+}
+
 type RolloutMode = "now" | "schedule";
+type PricingStatus = "draft" | "active" | "retired";
 
 const CURRENCIES: CurrencyCode[] = ["USD", "NGN", "GHS"];
 const MAX_PLANS = 4;
 const MAX_BATCH_ITEMS = 3;
+const PRICING_STATUS_OPTIONS: Array<{ value: PricingStatus; label: string }> = [
+  { value: "active", label: "Active" },
+  { value: "draft", label: "Draft" },
+  { value: "retired", label: "Retired" },
+];
 
 const sanitizeSlug = (value: string) =>
   value
@@ -274,8 +352,9 @@ const errorToMessage = (error: unknown) => {
 
 export default function PlansPage() {
   const queryClient = useQueryClient();
-  const { backofficeUser } = useBackofficeAuth();
+  const { backofficeUser, hasBackofficePermission } = useBackofficeAuth();
   const isSuperAdmin = backofficeUser?.role === "super_admin";
+  const canManagePaystackCodes = isSuperAdmin || hasBackofficePermission("plans.manage_paystack_codes");
 
   const [createPlanOpen, setCreatePlanOpen] = useState(false);
   const [createPlanDrafts, setCreatePlanDrafts] = useState<PlanDraft[]>([]);
@@ -296,6 +375,8 @@ export default function PlansPage() {
   const [editPricingPlanId, setEditPricingPlanId] = useState<string | null>(null);
   const [editPricingRows, setEditPricingRows] = useState<EditPricingRow[]>([]);
   const [editPricingReason, setEditPricingReason] = useState("");
+  const [editPricingRolloutMode, setEditPricingRolloutMode] = useState<RolloutMode>("now");
+  const [editPricingRolloutAt, setEditPricingRolloutAt] = useState("");
   const editPlanSaveRef = useRef(false);
   const [deletePlanOpen, setDeletePlanOpen] = useState(false);
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
@@ -308,6 +389,19 @@ export default function PlansPage() {
     GHS: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
   });
   const [chainTierDirty, setChainTierDirty] = useState(false);
+  const [seatPricingReason, setSeatPricingReason] = useState("");
+  const [seatPricingDrafts, setSeatPricingDrafts] = useState<Record<string, SeatPricingDraft>>({});
+  const [seatPricingDirty, setSeatPricingDirty] = useState(false);
+  const [themePricingReason, setThemePricingReason] = useState("");
+  const [themePricingDrafts, setThemePricingDrafts] = useState<Record<string, ThemePricingDraft>>({});
+  const [themePricingDirty, setThemePricingDirty] = useState(false);
+
+  // Paystack plan codes — per pricing-row drafts (NGN/GHS only)
+  interface PaystackCodeDraft { monthly: string; annual: string; dirty: boolean; }
+  const [paystackCodeDrafts, setPaystackCodeDrafts] = useState<Record<string, PaystackCodeDraft>>({});
+  const [paystackCodeRevealedRows, setPaystackCodeRevealedRows] = useState<Set<string>>(new Set());
+  const [paystackCodeSavingRows, setPaystackCodeSavingRows] = useState<Set<string>>(new Set());
+  const [paystackSyncingRows, setPaystackSyncingRows] = useState<Set<string>>(new Set());
 
   const { data: plans, isLoading: plansLoading } = useQuery({
     queryKey: ["backoffice-plans"],
@@ -326,9 +420,36 @@ export default function PlansPage() {
         .select("*")
         .is("valid_until", null);
       if (error) throw error;
-      return (data || []) as PlanPricing[];
+      return (data || []) as unknown as PlanPricing[];
     },
   });
+
+  // Map of planPricingId → ISO timestamp of most-recent successful Paystack sync.
+  // Any row whose updated_at is AFTER its last sync timestamp needs to be flagged.
+  const { data: lastSyncedAt } = useQuery({
+    queryKey: ["backoffice-pricing-sync-status"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("audit_logs")
+        .select("metadata, created_at")
+        .eq("action", "paystack_plan_pricing_synced")
+        .order("created_at", { ascending: false });
+      const map: Record<string, string> = {};
+      for (const row of data || []) {
+        const id = (row.metadata as Record<string, unknown>)?.planPricingId as string | undefined;
+        if (id && !map[id]) map[id] = row.created_at as string;
+      }
+      return map;
+    },
+    staleTime: 30 * 1000,
+  });
+
+  const isOutOfSync = (row: PlanPricing) => {
+    if (!row.paystack_plan_code_monthly && !row.paystack_plan_code_annual) return false;
+    const syncedAt = lastSyncedAt?.[row.id];
+    if (!syncedAt) return true;
+    return new Date(row.updated_at) > new Date(syncedAt);
+  };
 
   const { data: limits, isLoading: limitsLoading } = useQuery({
     queryKey: ["backoffice-limits"],
@@ -351,10 +472,112 @@ export default function PlansPage() {
     },
   });
 
+  const { data: marketCountries } = useQuery({
+    queryKey: ["backoffice-market-countries-compact"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("market_countries")
+        .select("country_code,country_name,is_selectable")
+        .order("country_name", { ascending: true });
+      if (error) throw error;
+      return (data || []) as MarketCountry[];
+    },
+  });
+
+  const { data: marketCurrencies } = useQuery({
+    queryKey: ["backoffice-market-country-currencies-compact"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("market_country_currency")
+        .select("country_code,currency_code,is_default,is_enabled");
+      if (error) throw error;
+      return (data || []) as MarketCountryCurrency[];
+    },
+  });
+
+  const { data: seatPricingRows } = useQuery({
+    queryKey: ["backoffice-seat-addon-pricing"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("staff_addon_pricing")
+        .select("id,country_code,currency,unit_price_per_extra_seat,status,notes,effective_from")
+        .order("country_code", { ascending: true })
+        .order("effective_from", { ascending: false });
+      if (error) throw error;
+      return (data || []) as StaffAddonPricingRow[];
+    },
+  });
+
+  const { data: themeCatalog } = useQuery({
+    queryKey: ["backoffice-theme-catalog", "ecommerce"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("theme_catalog")
+        .select("theme_key,name,description,is_active")
+        .eq("theme_key", "ecommerce")
+        .maybeSingle();
+      if (error) throw error;
+      return (data || null) as ThemeCatalogRow | null;
+    },
+  });
+
+  const { data: themePricingRows } = useQuery({
+    queryKey: ["backoffice-theme-addon-pricing", "ecommerce"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("theme_addon_pricing")
+        .select("id,theme_key,country_code,currency,billing_interval,unit_price,status,notes,effective_from")
+        .eq("theme_key", "ecommerce")
+        .order("country_code", { ascending: true })
+        .order("effective_from", { ascending: false });
+      if (error) throw error;
+      return (data || []) as ThemeAddonPricingRow[];
+    },
+  });
+
   const chainPlan = useMemo(
     () => (plans || []).find((plan) => plan.slug.trim().toLowerCase() === "chain") || null,
     [plans],
   );
+
+  const defaultCurrencyByCountry = useMemo(() => {
+    const map = new Map<string, string>();
+    (marketCurrencies || [])
+      .filter((row) => row.is_default || row.is_enabled)
+      .forEach((row) => {
+        if (!map.has(row.country_code) || row.is_default) {
+          map.set(row.country_code, row.currency_code);
+        }
+      });
+    return map;
+  }, [marketCurrencies]);
+
+  const pricingMarkets = useMemo(() => {
+    const selectableMarkets = (marketCountries || []).filter((country) => country.is_selectable);
+    const source = selectableMarkets.length > 0 ? selectableMarkets : marketCountries || [];
+    return source
+      .map((country) => ({
+        country_code: country.country_code,
+        country_name: country.country_name,
+        currency: defaultCurrencyByCountry.get(country.country_code) || "USD",
+      }))
+      .sort((a, b) => a.country_name.localeCompare(b.country_name));
+  }, [defaultCurrencyByCountry, marketCountries]);
+
+  const latestSeatPricingByCountry = useMemo(() => {
+    const map = new Map<string, StaffAddonPricingRow>();
+    (seatPricingRows || []).forEach((row) => {
+      if (!map.has(row.country_code)) {
+        map.set(row.country_code, row);
+      }
+    });
+    return map;
+  }, [seatPricingRows]);
+
+  const latestThemePricingByCountry = useMemo(() => {
+    const map = new Map<string, ThemeAddonPricingRow>();
+    (themePricingRows || []).forEach((row) => {
+      if (!map.has(row.country_code)) {
+        map.set(row.country_code, row);
+      }
+    });
+    return map;
+  }, [themePricingRows]);
 
   const { data: chainTierPricing } = useQuery({
     queryKey: ["backoffice-chain-tier-pricing", chainPlan?.id],
@@ -404,6 +627,63 @@ export default function PlansPage() {
     });
     setChainTierDrafts(grouped);
   }, [chainPlan?.id, chainTierDirty, chainTierPricing]);
+
+  useEffect(() => {
+    if (seatPricingDirty || pricingMarkets.length === 0) return;
+    const nextDrafts: Record<string, SeatPricingDraft> = {};
+    pricingMarkets.forEach((market) => {
+      const row = latestSeatPricingByCountry.get(market.country_code);
+      nextDrafts[market.country_code] = {
+        rowId: row?.id || null,
+        country_code: market.country_code,
+        country_name: market.country_name,
+        currency: row?.currency || market.currency,
+        unit_price:
+          row?.unit_price_per_extra_seat == null ? "" : String(row.unit_price_per_extra_seat),
+        status: row?.status || "active",
+        notes: row?.notes || "",
+      };
+    });
+    setSeatPricingDrafts(nextDrafts);
+  }, [latestSeatPricingByCountry, pricingMarkets, seatPricingDirty]);
+
+  useEffect(() => {
+    if (themePricingDirty || pricingMarkets.length === 0) return;
+    const nextDrafts: Record<string, ThemePricingDraft> = {};
+    pricingMarkets.forEach((market) => {
+      const row = latestThemePricingByCountry.get(market.country_code);
+      nextDrafts[market.country_code] = {
+        rowId: row?.id || null,
+        theme_key: row?.theme_key || "ecommerce",
+        country_code: market.country_code,
+        country_name: market.country_name,
+        currency: row?.currency || market.currency,
+        billing_interval: "annual",
+        unit_price: row?.unit_price == null ? "" : String(row.unit_price),
+        status: row?.status || "active",
+        notes: row?.notes || "",
+      };
+    });
+    setThemePricingDrafts(nextDrafts);
+  }, [latestThemePricingByCountry, pricingMarkets, themePricingDirty]);
+
+  useEffect(() => {
+    if (!pricing) return;
+    setPaystackCodeDrafts((prev) => {
+      const next = { ...prev };
+      pricing.forEach((row) => {
+        if (row.currency !== "NGN" && row.currency !== "GHS") return;
+        if (!next[row.id]?.dirty) {
+          next[row.id] = {
+            monthly: row.paystack_plan_code_monthly ?? "",
+            annual: row.paystack_plan_code_annual ?? "",
+            dirty: false,
+          };
+        }
+      });
+      return next;
+    });
+  }, [pricing]);
 
   const limitsByPlan = useMemo(() => {
     const map = new Map<string, PlanLimit>();
@@ -462,6 +742,8 @@ export default function PlansPage() {
       effective_monthly: number;
       annual_price: number;
     }>,
+    rolloutMode: RolloutMode = "now",
+    rolloutAt: string | null = null,
   ) => {
     const plan = (plans || []).find((item) => item.id === planId);
     if (!plan) return;
@@ -470,6 +752,17 @@ export default function PlansPage() {
       feature_text: feature.feature_text,
       sort_order: feature.sort_order,
     }));
+    const previousByCurrency = activePricingByPlan.get(planId);
+    const priceDeltas = pricingRows.map((row) => {
+      const previous = previousByCurrency?.get(row.currency);
+      return {
+        currency: row.currency,
+        previous_monthly_price: previous ? Number(previous.monthly_price) : null,
+        new_monthly_price: row.monthly_price,
+        previous_annual_price: previous ? Number(previous.annual_price) : null,
+        new_annual_price: row.annual_price,
+      };
+    });
     await (supabase.rpc as any)("backoffice_create_plan_change_batch", {
       p_plan_id: planId,
       p_reason: reason,
@@ -494,9 +787,10 @@ export default function PlansPage() {
         plan_name: plan.name,
         changes: ["pricing"],
         features: planFeatures,
+        price_deltas: priceDeltas,
       },
-      p_rollout_mode: "now",
-      p_rollout_at: null,
+      p_rollout_mode: rolloutMode,
+      p_rollout_at: rolloutAt,
     });
   };
 
@@ -698,6 +992,48 @@ export default function PlansPage() {
     });
     return { isValid: errors.length === 0, errors };
   }, [chainPlan?.id, chainTierDrafts, chainTierReason]);
+
+  const seatPricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!seatPricingReason.trim()) {
+      errors.push("Seat pricing reason is required.");
+    }
+    const drafts = Object.values(seatPricingDrafts);
+    if (!drafts.length) {
+      errors.push("No seat pricing rows available.");
+    }
+    drafts.forEach((draft) => {
+      if (!draft.currency.trim() || draft.currency.trim().length !== 3) {
+        errors.push(`${draft.country_name}: currency must be a 3-letter code.`);
+      }
+      const unitPrice = parseNumericInput(draft.unit_price);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        errors.push(`${draft.country_name}: unit price must be 0 or greater.`);
+      }
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [seatPricingDrafts, seatPricingReason]);
+
+  const themePricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!themePricingReason.trim()) {
+      errors.push("Theme pricing reason is required.");
+    }
+    const drafts = Object.values(themePricingDrafts);
+    if (!drafts.length) {
+      errors.push("No theme pricing rows available.");
+    }
+    drafts.forEach((draft) => {
+      if (!draft.currency.trim() || draft.currency.trim().length !== 3) {
+        errors.push(`${draft.country_name}: currency must be a 3-letter code.`);
+      }
+      const unitPrice = parseNumericInput(draft.unit_price);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        errors.push(`${draft.country_name}: annual price must be 0 or greater.`);
+      }
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [themePricingDrafts, themePricingReason]);
 
   const createPlansMutation = useMutation({
     mutationFn: async (drafts: PlanDraft[]) => {
@@ -1005,42 +1341,34 @@ export default function PlansPage() {
       planId,
       rows,
       reason,
+      rolloutMode = "now",
+      rolloutAt = null,
     }: {
       planId: string;
       rows: EditPricingRow[];
       reason: string;
+      rolloutMode?: RolloutMode;
+      rolloutAt?: string | null;
     }) => {
-      const changedRows: Array<{
-        currency: CurrencyCode;
-        monthly_price: number;
-        effective_monthly: number;
-        annual_price: number;
-      }> = [];
-      for (const row of rows) {
+      // The actual plan_pricing write (closing the old row, inserting the new one)
+      // happens inside backoffice_create_plan_change_batch / backoffice_apply_plan_change_batch.
+      // We only compute the target values here — writing them directly first would make
+      // scheduled rollouts take effect immediately, defeating the rollout date.
+      const changedRows = rows.map((row) => {
         const monthly = parseNumericInput(row.monthly_price);
         const annualDiscountPct = parseNumericInput(row.annual_discount_pct || "0");
         const effectiveMonthly = deriveEffectiveMonthly(monthly, annualDiscountPct);
         const annualTotal = deriveAnnualTotal(effectiveMonthly);
 
-        const { error } = await supabase
-          .from("plan_pricing")
-          .update({
-            monthly_price: toFixedNumber(monthly),
-            effective_monthly: effectiveMonthly,
-            annual_price: annualTotal,
-          })
-          .eq("id", row.id);
-        if (error) throw error;
-
-        changedRows.push({
+        return {
           currency: row.currency,
           monthly_price: toFixedNumber(monthly),
           effective_monthly: effectiveMonthly,
           annual_price: annualTotal,
-        });
-      }
+        };
+      });
 
-      await createPlanChangeBatchForPricing(planId, reason.trim(), changedRows);
+      await createPlanChangeBatchForPricing(planId, reason.trim(), changedRows, rolloutMode, rolloutAt);
 
       const { error: auditError } = await supabase.from("audit_logs").insert({
         action: "pricing_updated",
@@ -1050,18 +1378,23 @@ export default function PlansPage() {
           reason: reason.trim(),
           plan_id: planId,
           currencies: rows.map((row) => row.currency),
+          rollout_mode: rolloutMode,
+          rollout_at: rolloutAt,
         },
       });
       if (auditError) throw auditError;
+      return { rolloutMode };
     },
-    onSuccess: () => {
+    onSuccess: ({ rolloutMode }) => {
       queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
       queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
-      toast.success("Pricing updated successfully.");
+      toast.success(rolloutMode === "schedule" ? "Pricing change scheduled." : "Pricing updated successfully.");
       setEditPricingOpen(false);
       setEditPricingPlanId(null);
       setEditPricingRows([]);
       setEditPricingReason("");
+      setEditPricingRolloutMode("now");
+      setEditPricingRolloutAt("");
     },
     onError: (error) => {
       toast.error(errorToMessage(error));
@@ -1103,6 +1436,173 @@ export default function PlansPage() {
       toast.error(errorToMessage(error));
     },
   });
+
+  const saveSeatPricingMutation = useMutation({
+    mutationFn: async () => {
+      for (const draft of Object.values(seatPricingDrafts)) {
+        const payload = {
+          country_code: draft.country_code,
+          currency: draft.currency.trim().toUpperCase(),
+          unit_price_per_extra_seat: Number(draft.unit_price),
+          status: draft.status,
+          notes: draft.notes.trim() || null,
+        };
+
+        if (draft.rowId) {
+          const { error } = await (supabase.from as any)("staff_addon_pricing")
+            .update(payload)
+            .eq("id", draft.rowId);
+          if (error) throw error;
+        } else {
+          const { error } = await (supabase.from as any)("staff_addon_pricing").insert({
+            ...payload,
+            created_by: backofficeUser?.user_id || null,
+          });
+          if (error) throw error;
+        }
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "staff_addon_pricing_updated",
+        entity_type: "staff_addon_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: seatPricingReason.trim(),
+          rows: Object.values(seatPricingDrafts).map((draft) => ({
+            country_code: draft.country_code,
+            currency: draft.currency.trim().toUpperCase(),
+            unit_price_per_extra_seat: Number(draft.unit_price),
+            status: draft.status,
+          })),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Seat add-on pricing updated.");
+      setSeatPricingReason("");
+      setSeatPricingDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-seat-addon-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const saveThemePricingMutation = useMutation({
+    mutationFn: async () => {
+      for (const draft of Object.values(themePricingDrafts)) {
+        const payload = {
+          theme_key: draft.theme_key,
+          country_code: draft.country_code,
+          currency: draft.currency.trim().toUpperCase(),
+          billing_interval: "annual" as const,
+          unit_price: Number(draft.unit_price),
+          status: draft.status,
+          notes: draft.notes.trim() || null,
+        };
+
+        if (draft.rowId) {
+          const { error } = await (supabase.from as any)("theme_addon_pricing")
+            .update(payload)
+            .eq("id", draft.rowId);
+          if (error) throw error;
+        } else {
+          const { error } = await (supabase.from as any)("theme_addon_pricing").insert({
+            ...payload,
+            created_by: backofficeUser?.user_id || null,
+          });
+          if (error) throw error;
+        }
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "theme_addon_pricing_updated",
+        entity_type: "theme_addon_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: themePricingReason.trim(),
+          theme_key: "ecommerce",
+          rows: Object.values(themePricingDrafts).map((draft) => ({
+            country_code: draft.country_code,
+            currency: draft.currency.trim().toUpperCase(),
+            unit_price: Number(draft.unit_price),
+            status: draft.status,
+            billing_interval: draft.billing_interval,
+          })),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Theme pricing updated.");
+      setThemePricingReason("");
+      setThemePricingDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-theme-addon-pricing", "ecommerce"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
+  const savePaystackCodeRow = async (rowId: string) => {
+    const draft = paystackCodeDrafts[rowId];
+    if (!draft) return;
+    setPaystackCodeSavingRows((prev) => new Set([...prev, rowId]));
+    try {
+      const { error } = await supabase
+        .from("plan_pricing")
+        .update({
+          paystack_plan_code_monthly: draft.monthly.trim() || null,
+          paystack_plan_code_annual: draft.annual.trim() || null,
+        })
+        .eq("id", rowId);
+      if (error) throw error;
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "paystack_plan_code_updated",
+        entity_type: "plan_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          rowId,
+          hasMonthly: Boolean(draft.monthly.trim()),
+          hasAnnual: Boolean(draft.annual.trim()),
+        },
+      });
+      if (auditError) throw auditError;
+      setPaystackCodeDrafts((prev) => ({ ...prev, [rowId]: { ...prev[rowId], dirty: false } }));
+      toast.success("Plan codes saved.");
+      queryClient.invalidateQueries({ queryKey: ["backoffice-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    } catch (err) {
+      toast.error(errorToMessage(err));
+    } finally {
+      setPaystackCodeSavingRows((prev) => { const n = new Set(prev); n.delete(rowId); return n; });
+    }
+  };
+
+  const syncPaystackPlanPricing = async (rowId: string) => {
+    setPaystackSyncingRows((prev) => new Set([...prev, rowId]));
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-paystack-plan-pricing", {
+        body: { planPricingId: rowId },
+      });
+      if (error) throw error;
+      const results = (data?.results || []) as Array<{ cycle: string; status: string; detail?: string }>;
+      const errors = results.filter((r) => r.status === "error");
+      if (errors.length > 0) {
+        toast.error(`Paystack sync failed for ${errors.map((e) => e.cycle).join(", ")}: ${errors[0].detail}`);
+      } else {
+        toast.success("Paystack plan amounts synced.");
+      }
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    } catch (err) {
+      toast.error(errorToMessage(err));
+    } finally {
+      setPaystackSyncingRows((prev) => { const n = new Set(prev); n.delete(rowId); return n; });
+    }
+  };
 
   const openCreatePlansDialog = () => {
     if (remainingPlanSlots <= 0) {
@@ -1265,6 +1765,8 @@ export default function PlansPage() {
     setEditPricingPlanId(plan.id);
     setEditPricingRows(rows);
     setEditPricingReason("");
+    setEditPricingRolloutMode("now");
+    setEditPricingRolloutAt("");
     setEditPricingOpen(true);
   };
 
@@ -1344,12 +1846,32 @@ export default function PlansPage() {
     }));
   };
 
+  const updateSeatPricingDraft = (countryCode: string, patch: Partial<SeatPricingDraft>) => {
+    setSeatPricingDirty(true);
+    setSeatPricingDrafts((prev) => ({
+      ...prev,
+      [countryCode]: { ...prev[countryCode], ...patch },
+    }));
+  };
+
+  const updateThemePricingDraft = (countryCode: string, patch: Partial<ThemePricingDraft>) => {
+    setThemePricingDirty(true);
+    setThemePricingDrafts((prev) => ({
+      ...prev,
+      [countryCode]: { ...prev[countryCode], ...patch },
+    }));
+  };
+
   const canSubmitCreatePlans =
     isSuperAdmin && createPlansValidation.isValid && !createPlansMutation.isPending;
   const canSubmitCreatePricing =
     isSuperAdmin && createPricingValidation.isValid && !createPricingMutation.isPending;
   const canSubmitChainTiers =
     isSuperAdmin && chainTierValidation.isValid && !saveChainTiersMutation.isPending;
+  const canSubmitSeatPricing =
+    isSuperAdmin && seatPricingValidation.isValid && !saveSeatPricingMutation.isPending;
+  const canSubmitThemePricing =
+    isSuperAdmin && themePricingValidation.isValid && !saveThemePricingMutation.isPending;
 
   const validateEditPlan = () => {
     const errors: string[] = [];
@@ -1400,6 +1922,9 @@ export default function PlansPage() {
     const errors: string[] = [];
     if (!editPricingPlanId) errors.push("Missing plan.");
     if (!editPricingReason.trim()) errors.push("Reason is required.");
+    if (editPricingRolloutMode === "schedule" && !editPricingRolloutAt) {
+      errors.push("Scheduled rollout requires a go-live date and time.");
+    }
 
     editPricingRows.forEach((row) => {
       const monthly = parseNumericInput(row.monthly_price);
@@ -1413,7 +1938,7 @@ export default function PlansPage() {
     });
 
     return { isValid: errors.length === 0, errors };
-  }, [editPricingPlanId, editPricingReason, editPricingRows]);
+  }, [editPricingPlanId, editPricingReason, editPricingRows, editPricingRolloutMode, editPricingRolloutAt]);
 
   return (
     <BackofficeLayout>
@@ -1463,9 +1988,9 @@ export default function PlansPage() {
         </Card>
 
         {!isSuperAdmin && (
-          <Card className="border-amber-200 bg-amber-50/50">
+          <Card className="border-warning-bg bg-warning-bg/50">
             <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-amber-700">
+              <div className="flex items-center gap-2 text-warning">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="text-sm">
                   You have read-only access. Super Admin role is required for changes.
@@ -1636,6 +2161,170 @@ export default function PlansPage() {
                 </CardContent>
               </Card>
 
+              {canManagePaystackCodes && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle>Paystack Plan Codes</CardTitle>
+                        <CardDescription>
+                          Monthly and annual PLN codes per plan, per Paystack account. Find codes in each
+                          dashboard under Products → Plans. Format:{" "}
+                          <span className="font-mono text-xs">PLN_xxxxxx</span>. Each row saves independently.
+                        </CardDescription>
+                      </div>
+                      <Badge variant="outline" className="shrink-0 gap-1 border-amber-300 text-amber-600">
+                        <Lock className="h-3 w-3" />
+                        Sensitive
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    {(
+                      [
+                        { currency: "NGN" as CurrencyCode, label: "Nigeria", flag: "🇳🇬" },
+                        { currency: "GHS" as CurrencyCode, label: "Ghana", flag: "🇬🇭" },
+                      ] as const
+                    ).map(({ currency, label, flag }) => (
+                      <div key={currency} className="overflow-hidden rounded-md border">
+                        <div className="border-b bg-muted/40 px-4 py-2.5">
+                          <p className="text-sm font-semibold">
+                            {flag} {label}{" "}
+                            <span className="font-normal text-muted-foreground">({currency} Paystack account)</span>
+                          </p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[160px]">Plan</TableHead>
+                                <TableHead>Monthly PLN code</TableHead>
+                                <TableHead>Annual PLN code</TableHead>
+                                <TableHead className="w-[110px]" />
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {(plans || []).map((plan) => {
+                                const row = activePricingByPlan.get(plan.id)?.get(currency);
+                                if (!row) {
+                                  return (
+                                    <TableRow key={plan.id}>
+                                      <TableCell className="font-medium">{plan.name}</TableCell>
+                                      <TableCell colSpan={3} className="text-xs text-muted-foreground">
+                                        No {currency} pricing row — add pricing first
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                }
+                                const draft = paystackCodeDrafts[row.id] ?? { monthly: "", annual: "", dirty: false };
+                                const isRevealed = paystackCodeRevealedRows.has(row.id);
+                                const isSaving = paystackCodeSavingRows.has(row.id);
+                                const isSyncing = paystackSyncingRows.has(row.id);
+                                const outOfSync = isOutOfSync(row);
+                                const inputType = isRevealed ? "text" : "password";
+                                return (
+                                  <TableRow key={plan.id} className={outOfSync ? "bg-amber-50/60" : ""}>
+                                    <TableCell className="font-medium">
+                                      <div className="flex flex-col gap-1">
+                                        <span>{plan.name}</span>
+                                        {outOfSync && (
+                                          <span className="inline-flex items-center gap-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 w-fit">
+                                            ⚠ Prices not synced
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="min-w-[200px]">
+                                      <Input
+                                        type={inputType}
+                                        placeholder="PLN_xxxxxx"
+                                        autoComplete="off"
+                                        value={draft.monthly}
+                                        onChange={(e) =>
+                                          setPaystackCodeDrafts((prev) => ({
+                                            ...prev,
+                                            [row.id]: { ...prev[row.id] ?? { monthly: "", annual: "", dirty: false }, monthly: e.target.value, dirty: true },
+                                          }))
+                                        }
+                                      />
+                                    </TableCell>
+                                    <TableCell className="min-w-[200px]">
+                                      <Input
+                                        type={inputType}
+                                        placeholder="PLN_xxxxxx"
+                                        autoComplete="off"
+                                        value={draft.annual}
+                                        onChange={(e) =>
+                                          setPaystackCodeDrafts((prev) => ({
+                                            ...prev,
+                                            [row.id]: { ...prev[row.id] ?? { monthly: "", annual: "", dirty: false }, annual: e.target.value, dirty: true },
+                                          }))
+                                        }
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex items-center gap-1.5">
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 shrink-0"
+                                          title={isRevealed ? "Hide" : "Reveal"}
+                                            onClick={() =>
+                                            setPaystackCodeRevealedRows((prev) => {
+                                              const n = new Set(prev);
+                                              if (n.has(row.id)) {
+                                                n.delete(row.id);
+                                              } else {
+                                                n.add(row.id);
+                                              }
+                                              return n;
+                                            })
+                                          }
+                                        >
+                                          {isRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          disabled={!draft.dirty || isSaving}
+                                          onClick={() => savePaystackCodeRow(row.id)}
+                                        >
+                                          {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                                          {isSaving ? "Saving" : "Save"}
+                                        </Button>
+                                        {isSuperAdmin && (row.paystack_plan_code_monthly || row.paystack_plan_code_annual) && (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            title="Push this plan's NGN/GHS price to its Paystack plan codes"
+                                            disabled={isSyncing}
+                                            onClick={() => syncPaystackPlanPricing(row.id)}
+                                            className={outOfSync ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100" : ""}
+                                          >
+                                            {isSyncing ? (
+                                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                                            )}
+                                            {isSyncing ? "Syncing…" : "Sync to Paystack"}
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
               {chainPlan && isSuperAdmin && (
                 <Card>
                   <CardHeader>
@@ -1770,6 +2459,268 @@ export default function PlansPage() {
                   </CardContent>
                 </Card>
               )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Seat Add-on Pricing</CardTitle>
+                  <CardDescription>
+                    Manage monthly per-seat add-on pricing by market for Studio and Chain seat expansion.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {seatPricingValidation.errors.length > 0 && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                        {seatPricingValidation.errors.slice(0, 8).map((error) => (
+                          <li key={error}>{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Market</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Monthly Price</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pricingMarkets.map((market) => {
+                          const draft = seatPricingDrafts[market.country_code];
+                          return (
+                            <TableRow key={market.country_code}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="font-medium">{market.country_name}</p>
+                                  <p className="text-xs text-muted-foreground">{market.country_code}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="min-w-[120px]">
+                                <Input
+                                  value={draft?.currency || market.currency}
+                                  maxLength={3}
+                                  onChange={(event) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      currency: event.target.value.toUpperCase(),
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={draft?.unit_price || ""}
+                                  onChange={(event) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      unit_price: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Select
+                                  value={draft?.status || "active"}
+                                  onValueChange={(value) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      status: value as PricingStatus,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PRICING_STATUS_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="min-w-[240px]">
+                                <Input
+                                  value={draft?.notes || ""}
+                                  placeholder="Optional internal note"
+                                  onChange={(event) =>
+                                    updateSeatPricingDraft(market.country_code, {
+                                      notes: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div>
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={seatPricingReason}
+                      onChange={(event) => {
+                        setSeatPricingDirty(true);
+                        setSeatPricingReason(event.target.value);
+                      }}
+                      placeholder="Why are you updating seat add-on pricing?"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={() => saveSeatPricingMutation.mutate()} disabled={!canSubmitSeatPricing}>
+                      {saveSeatPricingMutation.isPending ? "Saving..." : "Save Seat Pricing"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>E-commerce Theme Pricing</CardTitle>
+                      <CardDescription>
+                        Manage annual storefront theme pricing by market for the purchasable e-commerce theme add-on.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={themeCatalog?.is_active === false ? "secondary" : "default"}>
+                        {themeCatalog?.is_active === false ? "Catalog inactive" : "Catalog active"}
+                      </Badge>
+                      <Badge variant="outline">Annual only</Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {themeCatalog?.description && (
+                    <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                      {themeCatalog.description}
+                    </div>
+                  )}
+
+                  {themePricingValidation.errors.length > 0 && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                        {themePricingValidation.errors.slice(0, 8).map((error) => (
+                          <li key={error}>{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Market</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Annual Price</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pricingMarkets.map((market) => {
+                          const draft = themePricingDrafts[market.country_code];
+                          return (
+                            <TableRow key={market.country_code}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="font-medium">{market.country_name}</p>
+                                  <p className="text-xs text-muted-foreground">{market.country_code}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="min-w-[120px]">
+                                <Input
+                                  value={draft?.currency || market.currency}
+                                  maxLength={3}
+                                  onChange={(event) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      currency: event.target.value.toUpperCase(),
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={draft?.unit_price || ""}
+                                  onChange={(event) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      unit_price: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Select
+                                  value={draft?.status || "active"}
+                                  onValueChange={(value) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      status: value as PricingStatus,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PRICING_STATUS_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="min-w-[240px]">
+                                <Input
+                                  value={draft?.notes || ""}
+                                  placeholder="Optional internal note"
+                                  onChange={(event) =>
+                                    updateThemePricingDraft(market.country_code, {
+                                      notes: event.target.value,
+                                    })
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div>
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={themePricingReason}
+                      onChange={(event) => {
+                        setThemePricingDirty(true);
+                        setThemePricingReason(event.target.value);
+                      }}
+                      placeholder="Why are you updating e-commerce theme pricing?"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={() => saveThemePricingMutation.mutate()} disabled={!canSubmitThemePricing}>
+                      {saveThemePricingMutation.isPending ? "Saving..." : "Save Theme Pricing"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>
@@ -2841,6 +3792,41 @@ export default function PlansPage() {
                 placeholder="Why are you changing pricing?"
               />
             </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <Label>Go live</Label>
+                <Select
+                  value={editPricingRolloutMode}
+                  onValueChange={(value) => setEditPricingRolloutMode(value as RolloutMode)}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="now">Take effect now</SelectItem>
+                    <SelectItem value="schedule">Schedule for a future date</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {editPricingRolloutMode === "schedule" && (
+                <div>
+                  <Label>Go-live date</Label>
+                  <Input
+                    className="mt-2"
+                    type="datetime-local"
+                    value={editPricingRolloutAt}
+                    onChange={(event) => setEditPricingRolloutAt(event.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+            {editPricingRolloutMode === "schedule" && (
+              <p className="text-xs text-muted-foreground">
+                Existing subscribers keep today&apos;s price until this date. They&apos;ll see a notice in their
+                dashboard once the change is scheduled.
+              </p>
+            )}
           </div>
 
           <DialogFooter>
@@ -2854,11 +3840,20 @@ export default function PlansPage() {
                   planId: editPricingPlanId,
                   rows: editPricingRows,
                   reason: editPricingReason,
+                  rolloutMode: editPricingRolloutMode,
+                  rolloutAt:
+                    editPricingRolloutMode === "schedule" && editPricingRolloutAt
+                      ? new Date(editPricingRolloutAt).toISOString()
+                      : null,
                 });
               }}
               disabled={!isSuperAdmin || !editPricingValidation.isValid || updatePricingMutation.isPending}
             >
-              {updatePricingMutation.isPending ? "Saving..." : "Save Pricing"}
+              {updatePricingMutation.isPending
+                ? "Saving..."
+                : editPricingRolloutMode === "schedule"
+                  ? "Schedule Pricing Change"
+                  : "Save Pricing"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { useClientAuth, useClientBookings, useClientPurse, useClientNotifications } from "@/hooks";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
@@ -7,20 +8,48 @@ import { Link } from "react-router-dom";
 import { Skeleton } from "@ui/skeleton";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@ui/select";
 
 export default function ClientDashboard() {
   const { customers, isLoading: authLoading } = useClientAuth();
-  const { nextAppointment, isLoading: bookingsLoading } = useClientBookings("upcoming");
-  const { purses, totalBalance, isLoading: purseLoading } = useClientPurse();
+  const { bookings, nextAppointment, isLoading: bookingsLoading } = useClientBookings("upcoming");
+  const { purses, purseGroups, hasMultipleCountries, totalBalance, isLoading: purseLoading } = useClientPurse();
   const { unreadCount, isLoading: notificationsLoading } = useClientNotifications();
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
 
   const isLoading = authLoading || bookingsLoading || purseLoading || notificationsLoading;
+  const activePurseGroup = useMemo(() => {
+    if (!purseGroups.length) return null;
+    return purseGroups.find((group) => group.countryCode === selectedCountryCode) || purseGroups[0];
+  }, [purseGroups, selectedCountryCode]);
+
+  useEffect(() => {
+    if (!purseGroups.length) {
+      setSelectedCountryCode(null);
+      return;
+    }
+    setSelectedCountryCode((prev) => (prev && purseGroups.some((group) => group.countryCode === prev) ? prev : purseGroups[0].countryCode));
+  }, [purseGroups]);
 
   // Get the first customer's name for greeting (they may have multiple salon accounts)
   const customerName = customers[0]?.full_name?.split(" ")[0] || "there";
 
-  // Calculate total outstanding balance across all salons
-  const totalOutstanding = customers.reduce((sum, c) => sum + Number(c.outstanding_balance || 0), 0);
+  // Compute outstanding balance from live appointment data.
+  // customers.outstanding_balance is a cached column that isn't maintained by the
+  // booking/payment flow, so computing directly from appointments is more accurate.
+  const totalOutstanding = useMemo(() => {
+    return bookings.reduce((sum, b) => {
+      if (b.status === "cancelled") return sum;
+      if (["fully_paid", "refunded_full"].includes(b.payment_status)) return sum;
+      return sum + Math.max(Number(b.total_amount || 0) - Number(b.amount_paid || 0), 0);
+    }, 0);
+  }, [bookings]);
 
   return (
     <ClientSidebar>
@@ -76,9 +105,13 @@ export default function ClientDashboard() {
                   {formatCurrency(totalOutstanding, customers[0]?.tenant?.currency || "USD")}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-1">
-                Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
-              </p>
+              {totalOutstanding > 0 ? (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">No outstanding fees</p>
+              )}
             </CardContent>
           </Card>
 
@@ -102,7 +135,9 @@ export default function ClientDashboard() {
           <CardHeader>
             <CardTitle>Store Credits</CardTitle>
             <CardDescription>
-              Your purse balance at each salon
+              {hasMultipleCountries
+                ? "View your purse balance by country and salon"
+                : "Your purse balance at each salon"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -117,7 +152,33 @@ export default function ClientDashboard() {
               </p>
             ) : (
               <div className="space-y-3">
-                {customers.map((customer) => {
+                {hasMultipleCountries && activePurseGroup && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">Country</span>
+                    <Select value={activePurseGroup.countryCode} onValueChange={setSelectedCountryCode}>
+                      <SelectTrigger className="w-[220px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {purseGroups.map((group) => (
+                          <SelectItem key={group.countryCode} value={group.countryCode}>
+                            {group.countryLabel}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {customers
+                  .filter((customer) => {
+                    if (!activePurseGroup) return true;
+                    const purse = purses.find((entry) => entry.customer_id === customer.id);
+                    return purse
+                      ? String(purse.tenant.country || "").toUpperCase() === activePurseGroup.countryCode
+                      : false;
+                  })
+                  .map((customer) => {
                   const purse = purses.find((p) => p.customer_id === customer.id);
                   const balance = purse?.balance || 0;
 
@@ -139,13 +200,30 @@ export default function ClientDashboard() {
                   );
                 })}
 
-                {totalBalance > 0 && (
+                {((hasMultipleCountries ? activePurseGroup?.totalBalance : totalBalance) || 0) > 0 && (
                   <div className="pt-3 border-t flex justify-between items-center">
-                    <span className="font-medium">Total Balance</span>
-                    <span className="font-semibold text-lg">
-                      {formatCurrency(totalBalance, customers[0]?.tenant?.currency || "USD")}
+                    <span className="font-medium">
+                      {hasMultipleCountries && activePurseGroup
+                        ? `${activePurseGroup.countryLabel} Total`
+                        : "Total Balance"}
                     </span>
+                    {((hasMultipleCountries ? activePurseGroup?.totalBalance : totalBalance) !== null) && (
+                      <span className="font-semibold text-lg">
+                        {formatCurrency(
+                          Number(hasMultipleCountries ? activePurseGroup?.totalBalance : totalBalance),
+                          hasMultipleCountries
+                            ? activePurseGroup?.currency || customers[0]?.tenant?.currency || "USD"
+                            : customers[0]?.tenant?.currency || "USD",
+                        )}
+                      </span>
+                    )}
                   </div>
+                )}
+
+                {hasMultipleCountries && activePurseGroup?.totalBalance === null && (
+                  <p className="text-xs text-muted-foreground">
+                    Total balance is hidden because this country group contains multiple currencies.
+                  </p>
                 )}
               </div>
             )}

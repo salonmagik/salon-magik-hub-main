@@ -1,5 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
+import { fetchPlatformTemplate } from "../_shared/platform-templates.ts";
+import { createButton } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +126,7 @@ Deno.serve(async (req) => {
         paymentsResult,
         outstandingResult,
         templateResult,
+        platformTemplateResult,
       ] = await Promise.all([
         admin
           .from("appointments")
@@ -151,6 +154,7 @@ Deno.serve(async (req) => {
           .eq("tenant_id", tenant.id)
           .eq("template_type", "daily_digest")
           .maybeSingle(),
+        fetchPlatformTemplate(admin, "daily_digest", "email"),
       ]);
 
       if (appointmentsResult.error) throw appointmentsResult.error;
@@ -161,7 +165,7 @@ Deno.serve(async (req) => {
       const upcomingAppointmentsCount = appointmentsResult.count || 0;
       const paymentsReceived = (paymentsResult.data || []).reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
       const outstandingBalances = (outstandingResult.data || []).reduce((sum, appointment) => {
-        if (["fully_paid", "refunded_full", "pay_at_salon"].includes(appointment.payment_status)) {
+        if (["fully_paid", "refunded_full"].includes(appointment.payment_status)) {
           return sum;
         }
         return sum + Math.max(Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0), 0);
@@ -178,9 +182,7 @@ Deno.serve(async (req) => {
           <p style="margin: 0 0 8px 0;"><strong>Payments received:</strong> {{payments_received}}</p>
           <p style="margin: 0;"><strong>Outstanding balances:</strong> {{outstanding_balances}}</p>
         </div>
-        <div style="text-align: center; margin: 32px 0;">
-          <a href="{{cta_link}}" style="background-color: #E11D48; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 500;">Open Dashboard</a>
-        </div>
+        {{cta_link_button}}
       `;
 
       for (const recipient of recipients) {
@@ -192,14 +194,26 @@ Deno.serve(async (req) => {
           payments_received: `${tenant.currency || "USD"} ${paymentsReceived.toFixed(2)}`,
           outstanding_balances: `${tenant.currency || "USD"} ${outstandingBalances.toFixed(2)}`,
           cta_link: `${dashboardBaseUrl}/salon`,
+          cta_link_button: createButton("Open Dashboard", `${dashboardBaseUrl}/salon`),
         };
 
+        const activePlatformSubject =
+          platformTemplateResult?.is_active === false ? null : platformTemplateResult?.subject;
+        const activePlatformBody =
+          platformTemplateResult?.is_active === false ? null : platformTemplateResult?.body;
+
         const subject = replaceTokens(
-          templateResult.data?.is_active === false ? defaultSubject : templateResult.data?.subject || defaultSubject,
+          activePlatformSubject ||
+            (templateResult.data?.is_active === false
+              ? defaultSubject
+              : templateResult.data?.subject || defaultSubject),
           values,
         );
         const htmlContent = replaceTokens(
-          templateResult.data?.is_active === false ? defaultBody : templateResult.data?.body_html || defaultBody,
+          activePlatformBody ||
+            (templateResult.data?.is_active === false
+              ? defaultBody
+              : templateResult.data?.body_html || defaultBody),
           values,
         );
 

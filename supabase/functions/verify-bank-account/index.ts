@@ -1,3 +1,5 @@
+import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -6,6 +8,7 @@ const corsHeaders = {
 interface VerifyBankAccountRequest {
   accountNumber: string;
   bankCode: string;
+  currency?: string; // NGN or GHS
 }
 
 interface VerifyBankAccountResponse {
@@ -22,18 +25,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-
-    if (!paystackSecretKey) {
-      return new Response(
-        JSON.stringify({ error: "Paystack not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     // Parse request body
     const body: VerifyBankAccountRequest = await req.json();
-    const { accountNumber, bankCode } = body;
+    const { accountNumber, bankCode, currency = "NGN" } = body;
 
     // Validate required parameters
     if (!accountNumber || !bankCode) {
@@ -42,6 +36,18 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Get currency-specific Paystack key
+    const paystackKeyResult = getPaystackKeyForCurrency(currency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return new Response(
+        JSON.stringify({ 
+          error: paystackKeyResult.error || "Paystack not configured for this currency" 
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const paystackSecretKey = paystackKeyResult.key;
 
     // Build Paystack API URL
     const paystackUrl = new URL("https://api.paystack.co/bank/resolve");

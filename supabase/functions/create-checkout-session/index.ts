@@ -1,11 +1,19 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+interface CheckoutRequest {
+  tenantId: string;
+  successUrl: string;
+  cancelUrl: string;
+  billingCycle?: "monthly" | "annual";
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -13,52 +21,40 @@ serve(async (req) => {
   }
 
   try {
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) {
-      console.error("STRIPE_SECRET_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "Stripe not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: "2023-10-16",
-      httpClient: Stripe.createFetchHttpClient(),
-    });
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get auth user
+    // Verify caller JWT
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(
-        JSON.stringify({ error: "No authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Missing bearer token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
       return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Invalid or expired session" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    const { priceId, tenantId, billingCycle, successUrl, cancelUrl } = await req.json();
-
-    if (!priceId || !tenantId || !successUrl || !cancelUrl) {
+    const { tenantId, successUrl, cancelUrl, billingCycle = "monthly" }: CheckoutRequest = await req.json();
+    if (!tenantId || !successUrl || !cancelUrl) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Missing required fields: tenantId, successUrl, cancelUrl" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Verify user is owner of tenant
+    // Only owners may initiate subscription checkout
     const { data: userRole } = await supabase
       .from("user_roles")
       .select("role")
@@ -69,152 +65,122 @@ serve(async (req) => {
     if (userRole?.role !== "owner") {
       return new Response(
         JSON.stringify({ error: "Only owners can manage billing" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Get or create Stripe customer
-    let stripeCustomerId: string;
-
-    const { data: existingCustomer } = await supabase
-      .from("stripe_customers")
-      .select("stripe_customer_id")
-      .eq("tenant_id", tenantId)
+    // Load tenant — need currency and plan slug
+    const { data: tenant, error: tenantError } = await supabase
+      .from("tenants")
+      .select("id, name, currency, plan")
+      .eq("id", tenantId)
       .single();
 
-    if (existingCustomer?.stripe_customer_id) {
-      stripeCustomerId = existingCustomer.stripe_customer_id;
-    } else {
-      // Get tenant info
-      const { data: tenant } = await supabase
-        .from("tenants")
-        .select("name, currency")
-        .eq("id", tenantId)
-        .single();
-
-      // Get user profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("user_id", user.id)
-        .single();
-
-      // Create Stripe customer
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: profile?.full_name || tenant?.name || "Salon",
-        metadata: {
-          tenant_id: tenantId,
-          user_id: user.id,
-        },
-      });
-
-      stripeCustomerId = customer.id;
-
-      // Save to database
-      await supabase.from("stripe_customers").insert({
-        tenant_id: tenantId,
-        stripe_customer_id: customer.id,
-      });
+    if (tenantError || !tenant) {
+      return new Response(
+        JSON.stringify({ error: "Tenant not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    let appliedPromo: Record<string, unknown> | null = null;
-    let couponId: string | undefined;
-    const normalizedBillingCycle = billingCycle === "annual" ? "annual" : "monthly";
+    const currency = (tenant.currency || "NGN").toUpperCase();
 
-    const { data: promoData, error: promoError } = await (supabase.rpc as any)("get_tenant_sales_promo_summary", {
-      p_tenant_id: tenantId,
-      p_surface: "subscription",
-    });
-
-    if (promoError) {
-      console.error("Failed to load tenant subscription promo summary:", promoError);
-    } else if (promoData) {
-      const remainingUses = Math.max(1, Number(promoData.remaining_uses || 1));
-      const durationMonths = normalizedBillingCycle === "annual" ? remainingUses * 12 : remainingUses;
-      const couponPayload: Record<string, unknown> = {
-        duration: remainingUses > 1 ? "repeating" : "once",
-        metadata: {
-          tenant_id: tenantId,
-          promo_code_id: String(promoData.promo_code_id || ""),
-          redemption_id: String(promoData.redemption_id || ""),
-          billing_surface: "subscription",
-        },
-      };
-
-      if (remainingUses > 1) {
-        couponPayload.duration_in_months = durationMonths;
-      }
-
-      if (promoData.discount_type === "fixed") {
-        couponPayload.currency = "usd";
-        couponPayload.amount_off = 0;
-
-        try {
-          const priceData = await stripe.prices.retrieve(priceId);
-          if (priceData.currency) {
-            couponPayload.currency = priceData.currency;
-          }
-        } catch (priceError) {
-          console.error("Failed to resolve Stripe price currency for promo coupon:", priceError);
-        }
-
-        couponPayload.amount_off = Math.max(0, Math.round(Number(promoData.discount_value || 0) * 100));
-      } else {
-        couponPayload.percent_off = Number(promoData.discount_value || 0);
-      }
-
-      const coupon = await stripe.coupons.create(couponPayload as Stripe.CouponCreateParams);
-      couponId = coupon.id;
-      appliedPromo = {
-        promo_code_id: promoData.promo_code_id,
-        redemption_id: promoData.redemption_id,
-        discount_type: promoData.discount_type,
-        discount_value: promoData.discount_value,
-        remaining_uses: promoData.remaining_uses,
-        coupon_id: coupon.id,
-      };
+    // Resolve Paystack secret key for this currency
+    const { key: paystackKey, error: keyError } = getPaystackKeyForCurrency(currency);
+    if (!paystackKey) {
+      return new Response(
+        JSON.stringify({ error: keyError || `Paystack not configured for currency ${currency}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
-    // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId,
-      mode: "subscription",
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
-      ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+    // Look up the Paystack plan code for this plan + currency combination
+    let paystackPlanCode: string | null = null;
+    let localPlanAmount: number = 0; // the amount to be paid stored in our records
+    if (tenant.plan) {
+      const { data: planRow } = await supabase
+        .from("plans")
+        .select("id")
+        .eq("slug", tenant.plan)
+        .maybeSingle();
+
+      if (planRow?.id) {
+        const { data: pricingRow } = await supabase
+          .from("plan_pricing")
+          .select("paystack_plan_code_monthly, paystack_plan_code_annual, annual_price, monthly_price")
+          .eq("plan_id", planRow.id)
+          .eq("currency", currency)
+          .is("valid_until", null)
+          .maybeSingle();
+        paystackPlanCode = billingCycle === "annual"
+          ? (pricingRow?.paystack_plan_code_annual ?? null)
+          : (pricingRow?.paystack_plan_code_monthly ?? null);
+        localPlanAmount = billingCycle === "annual"
+          ? (pricingRow?.annual_price ?? 0)
+          : (pricingRow?.monthly_price ?? 0);
+      }
+    }
+
+    // Build Paystack transaction initialization payload.
+    // Providing a `plan` code causes Paystack to automatically create a recurring
+    // subscription after the first successful payment — no separate API call needed.
+    const paystackBody: Record<string, unknown> = {
+      email: user.email,
+      callback_url: successUrl,
       metadata: {
         tenant_id: tenantId,
-        billing_cycle: normalizedBillingCycle,
-        promo_redemption_id: String(appliedPromo?.redemption_id || ""),
-        promo_code_id: String(appliedPromo?.promo_code_id || ""),
+        tenant_name: tenant.name,
+        cancel_action: cancelUrl,
+        intent: "subscription_activation",
       },
-      subscription_data: {
-        metadata: {
-          tenant_id: tenantId,
-          billing_cycle: normalizedBillingCycle,
-          promo_redemption_id: String(appliedPromo?.redemption_id || ""),
-          promo_code_id: String(appliedPromo?.promo_code_id || ""),
-        },
+    };
+
+    if (paystackPlanCode && localPlanAmount > 0) {
+      // Paystack requires `amount` even when a plan code is provided — it
+      // validates the two match (or uses it as the charge amount). Both are
+      // now kept in sync via backoffice → "Sync to Paystack", so they agree.
+      paystackBody.plan = paystackPlanCode;
+      paystackBody.amount = Math.round(localPlanAmount * 100);
+      paystackBody.currency = currency;
+    } else {
+      // No plan code configured yet — fall back to a small authorization charge.
+      // Amount in lowest unit (kobo / pesewas): 100 = ₦1 / GH₵1.
+      paystackBody.amount = 100;
+      paystackBody.currency = currency;
+      console.warn(
+        `No Paystack plan code for tenant ${tenantId} (plan: ${tenant.plan}, currency: ${currency}). Falling back to ₦1/GH₵1 authorization.`,
+      );
+    }
+
+    const paystackRes = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify(paystackBody),
     });
 
+    const paystackData = await paystackRes.json();
+
+    if (!paystackRes.ok || !paystackData.status) {
+      console.error("Paystack initialization error:", paystackData);
+      return new Response(
+        JSON.stringify({ error: paystackData.message || "Failed to initialize payment" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(
-      JSON.stringify({ sessionId: session.id, url: session.url, appliedPromo }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ url: paystackData.data.authorization_url }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (error) {
-    console.error("Checkout session error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    console.error("create-checkout-session error:", error);
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

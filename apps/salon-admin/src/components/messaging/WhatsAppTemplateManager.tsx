@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useWhatsAppTemplates, type CreateTemplateOptions, type UpdateTemplateOptions } from "@/hooks/useWhatsAppTemplates";
+import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
@@ -26,9 +26,7 @@ interface TemplateFormData {
 
 export function WhatsAppTemplateManager() {
   const { currentTenant } = useAuth();
-  const { templates, isLoading, createTemplate, updateTemplate, deleteTemplate, checkStatus } = useWhatsAppTemplates({
-    tenantId: currentTenant?.id || "",
-  });
+  const { templates, isLoading, createTemplate, updateTemplate, deleteTemplate, refetch } = useWhatsAppTemplates();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -61,8 +59,8 @@ export function WhatsAppTemplateManager() {
     setSelectedTemplate(template);
     setFormData({
       templateName: template.template_name,
-      templateContent: template.template_content,
-      variables: template.variables || [],
+      templateContent: template.template_content as string,
+      variables: (template.variables as string[]) || [],
       provider: template.provider as "termii" | "meta",
     });
     setVariableInput("");
@@ -128,12 +126,11 @@ export function WhatsAppTemplateManager() {
     if (!validateForm()) return;
 
     setIsSaving(true);
-    const result = await createTemplate({
-      templateName: formData.templateName,
-      templateContent: formData.templateContent,
-      variables: formData.variables,
-      provider: formData.provider,
-    });
+    const result = await createTemplate(
+      formData.templateName,
+      formData.templateContent,
+      formData.variables,
+    );
     setIsSaving(false);
 
     if (result) {
@@ -146,10 +143,9 @@ export function WhatsAppTemplateManager() {
     if (!validateForm()) return;
 
     setIsSaving(true);
-    const result = await updateTemplate({
-      id: selectedTemplate.id,
+    const result = await updateTemplate(selectedTemplate.id, {
       templateName: formData.templateName,
-      templateContent: formData.templateContent,
+      message: formData.templateContent,
       variables: formData.variables,
     });
     setIsSaving(false);
@@ -171,9 +167,9 @@ export function WhatsAppTemplateManager() {
     }
   };
 
-  const handleCheckStatus = async (template: WhatsAppTemplate) => {
-    setCheckingStatus(template.id);
-    await checkStatus(template.id);
+  const handleCheckStatus = async (_template: WhatsAppTemplate) => {
+    setCheckingStatus(_template.id);
+    await refetch();
     setCheckingStatus(null);
   };
 

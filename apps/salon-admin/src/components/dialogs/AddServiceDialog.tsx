@@ -5,9 +5,7 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import { Scissors, Clock, Loader2, Plus } from "lucide-react";
-import { cn } from "@shared/utils";
 import { useServices } from "@/hooks/useServices";
 import { useAuth } from "@/hooks/useAuth";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
@@ -23,24 +21,6 @@ interface AddServiceDialogProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }
-
-const paymentOptions = [
-  {
-    value: "full",
-    label: "Full payment only",
-    description: "Collect the entire amount online.",
-  },
-  {
-    value: "deposit",
-    label: "Deposit only",
-    description: "Collect a deposit online; remainder in person.",
-  },
-  {
-    value: "both",
-    label: "Full or deposit",
-    description: "Let customers choose full or deposit.",
-  },
-];
 
 const formatAmountInput = (value: string) => {
   const cleaned = value.replace(/[^0-9.]/g, "");
@@ -68,7 +48,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     category: "",
     price: "",
     duration: "60",
-    paymentOption: "full",
     buffer: "15",
     description: "",
     images: [] as string[],
@@ -133,7 +112,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       category: "",
       price: "",
       duration: "60",
-      paymentOption: "full",
       buffer: "15",
       description: "",
       images: [],
@@ -166,7 +144,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
         durationMinutes: parseInt(formData.duration),
         description: formData.description || undefined,
         categoryId: formData.category || undefined,
-        depositRequired: formData.paymentOption === "deposit" || formData.paymentOption === "both",
         imageUrls: moveThumbnailToFront(formData.images, thumbnailIndex),
         locationIds: selectedLocationIds,
       });
@@ -299,35 +276,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
                 />
               </div>
             </div>
-          </div>
-
-          {/* Payment Options */}
-          <div className="space-y-2">
-            <Label>Payment options</Label>
-            <p className="text-xs text-muted-foreground">Choose whether customers pay in full or a deposit online.</p>
-            <RadioGroup
-              value={formData.paymentOption}
-              onValueChange={(v) => setFormData((prev) => ({ ...prev, paymentOption: v }))}
-              className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2"
-            >
-              {paymentOptions.map((option) => (
-                <label
-                  key={option.value}
-                  className={cn(
-                    "flex flex-col items-start p-3 rounded-lg border cursor-pointer transition-all",
-                    formData.paymentOption === option.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <RadioGroupItem value={option.value} />
-                    <span className="text-sm font-medium">{option.label}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 ml-6">{option.description}</p>
-                </label>
-              ))}
-            </RadioGroup>
           </div>
 
           {/* Buffer */}

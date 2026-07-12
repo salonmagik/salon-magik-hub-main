@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Sheet,
@@ -14,6 +14,24 @@ import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
+
+type AppointmentNotificationMeta = {
+  id: string;
+  location_id: string | null;
+  status: string;
+  approval_status: string | null;
+  confirmation_status: string | null;
+  booking_reference: string | null;
+  booking_metadata: {
+    line_item?: {
+      type?: string | null;
+      fulfillment_type?: string | null;
+    } | null;
+  } | null;
+  services: Array<{ id: string }>;
+};
 
 type NotificationsHookData = ReturnType<typeof useNotifications>;
 
@@ -55,15 +73,56 @@ const getIconColor = (type: Notification["type"]) => {
 
 export function NotificationsPanel({ open, onOpenChange, notificationsData }: NotificationsPanelProps) {
   const navigate = useNavigate();
+  const { activeContextType, setActiveContext, assignedLocationIds } = useAuth();
   const notificationsHook = useNotifications(!notificationsData);
   const { notifications, isLoading, markAsRead, markAllAsRead, refetch } =
     notificationsData || notificationsHook;
+  const [appointmentMetaById, setAppointmentMetaById] = useState<Record<string, AppointmentNotificationMeta>>({});
 
   useEffect(() => {
     if (open) {
       refetch();
     }
   }, [open, refetch]);
+
+  const appointmentNotificationIds = useMemo(
+    () =>
+      notifications
+        .filter((notification) => notification.type === "appointment" && notification.entity_id)
+        .map((notification) => notification.entity_id as string),
+    [notifications],
+  );
+
+  useEffect(() => {
+    if (!open || appointmentNotificationIds.length === 0) return;
+
+    let cancelled = false;
+
+    const loadAppointmentMeta = async () => {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select("id, location_id, status, approval_status, confirmation_status, booking_reference, booking_metadata, services:appointment_services(id)")
+        .in("id", appointmentNotificationIds);
+
+      if (error) {
+        console.error("Failed to load appointment notification metadata:", error);
+        return;
+      }
+
+      if (cancelled) return;
+
+      const map = Object.fromEntries(
+        ((data as AppointmentNotificationMeta[]) || []).map((appointment) => [appointment.id, appointment]),
+      );
+      setAppointmentMetaById(map);
+    };
+
+    void loadAppointmentMeta();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, appointmentNotificationIds]);
 
   const handleViewSettings = () => {
     onOpenChange(false);
@@ -72,6 +131,66 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const urgentCount = notifications.filter((n) => n.urgent).length;
+
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    onOpenChange(false);
+
+    // When in owner_hub context, switch to the appropriate branch context first
+    // so the sidebar and active context correctly reflect the destination page.
+    const switchToLocationIfNeeded = async (locationId?: string | null) => {
+      if (activeContextType !== "owner_hub") return;
+      const targetLocation = locationId && assignedLocationIds.includes(locationId)
+        ? locationId
+        : (assignedLocationIds[0] ?? null);
+      if (targetLocation) {
+        await setActiveContext("location", targetLocation);
+      }
+    };
+
+    if (notification.type === "appointment" && notification.entity_id) {
+      const appointmentMeta = appointmentMetaById[notification.entity_id];
+      await switchToLocationIfNeeded(appointmentMeta?.location_id);
+      navigate(`/salon/appointments?appointmentId=${notification.entity_id}&open=details`);
+      return;
+    }
+    if (notification.type === "payment") {
+      await switchToLocationIfNeeded();
+      navigate("/salon/transactions");
+      return;
+    }
+    if (notification.type === "customer") {
+      await switchToLocationIfNeeded();
+      navigate("/salon/customers");
+      return;
+    }
+  };
+
+  const handleAppointmentAction = async (
+    notification: Notification,
+    action: "approve" | "decline" | "reschedule" | "review",
+  ) => {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    onOpenChange(false);
+    if (notification.entity_id) {
+      // Switch branch context if currently in owner_hub before navigating.
+      if (activeContextType === "owner_hub") {
+        const appointmentMeta = appointmentMetaById[notification.entity_id];
+        const locationId = appointmentMeta?.location_id;
+        const targetLocation = locationId && assignedLocationIds.includes(locationId)
+          ? locationId
+          : (assignedLocationIds[0] ?? null);
+        if (targetLocation) {
+          await setActiveContext("location", targetLocation);
+        }
+      }
+      navigate(`/salon/appointments?appointmentId=${notification.entity_id}&approvalAction=${action}`);
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -143,6 +262,9 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
                       key={notification.id}
                       notification={notification}
                       onMarkRead={() => markAsRead(notification.id)}
+                      onClick={() => void handleNotificationClick(notification)}
+                      appointmentMeta={notification.entity_id ? appointmentMetaById[notification.entity_id] : undefined}
+                      onAppointmentAction={(action) => void handleAppointmentAction(notification, action)}
                     />
                   ))}
                 </TabsContent>
@@ -158,6 +280,9 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
                           key={notification.id}
                           notification={notification}
                           onMarkRead={() => markAsRead(notification.id)}
+                          onClick={() => void handleNotificationClick(notification)}
+                          appointmentMeta={notification.entity_id ? appointmentMetaById[notification.entity_id] : undefined}
+                          onAppointmentAction={(action) => void handleAppointmentAction(notification, action)}
                         />
                       ))
                   )}
@@ -174,6 +299,9 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
                           key={notification.id}
                           notification={notification}
                           onMarkRead={() => markAsRead(notification.id)}
+                          onClick={() => void handleNotificationClick(notification)}
+                          appointmentMeta={notification.entity_id ? appointmentMetaById[notification.entity_id] : undefined}
+                          onAppointmentAction={(action) => void handleAppointmentAction(notification, action)}
                         />
                       ))
                   )}
@@ -199,14 +327,61 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
 function NotificationItem({
   notification,
   onMarkRead,
+  onClick,
+  appointmentMeta,
+  onAppointmentAction,
 }: {
   notification: Notification;
   onMarkRead: () => void;
+  onClick: () => void;
+  appointmentMeta?: AppointmentNotificationMeta;
+  onAppointmentAction: (action: "approve" | "decline" | "reschedule" | "review") => void;
 }) {
   const Icon = getIcon(notification.type);
   const iconColor = getIconColor(notification.type);
 
   const timeAgo = formatDistanceToNow(new Date(notification.created_at), { addSuffix: true });
+  const isActionableAppointment =
+    notification.type === "appointment" &&
+    appointmentMeta &&
+    (appointmentMeta.approval_status === "pending" || appointmentMeta.approval_status === "reschedule_proposed");
+  const canRescheduleAppointment =
+    !!appointmentMeta &&
+    (() => {
+      const lineItemType = appointmentMeta.booking_metadata?.line_item?.type || null;
+      const fulfillmentType = appointmentMeta.booking_metadata?.line_item?.fulfillment_type || null;
+      if (lineItemType === "service") return true;
+      if (lineItemType === "product" || lineItemType === "package") return false;
+      if (fulfillmentType === "pickup" || fulfillmentType === "delivery") return false;
+      return appointmentMeta.services.length > 0;
+    })();
+  const reviewActionLabel =
+    appointmentMeta?.booking_metadata?.line_item?.type === "product" ||
+    appointmentMeta?.booking_metadata?.line_item?.type === "package"
+      ? "Review order"
+      : "Review booking";
+  const confirmationBadge = (() => {
+    if (!appointmentMeta) return null;
+    switch (appointmentMeta.approval_status) {
+      case "pending":
+        return { label: "Unconfirmed", className: "bg-amber-100 text-amber-800" };
+      case "approved":
+        return { label: "Accepted", className: "bg-emerald-100 text-emerald-800" };
+      case "declined":
+        return { label: "Declined", className: "bg-rose-100 text-rose-800" };
+      case "reschedule_proposed":
+        return { label: "Reschedule Proposed", className: "bg-sky-100 text-sky-800" };
+      case "reschedule_accepted":
+        return { label: "Reschedule Accepted", className: "bg-emerald-100 text-emerald-800" };
+      case "reschedule_declined":
+        return { label: "Reschedule Declined", className: "bg-orange-100 text-orange-800" };
+      default:
+        return {
+          label: appointmentMeta.confirmation_status === "auto" ? "Auto-confirmed" : "Confirmed",
+          className: "bg-slate-100 text-slate-800",
+        };
+    }
+  })();
 
   return (
     <div
@@ -215,6 +390,7 @@ function NotificationItem({
         notification.read ? "bg-background" : "bg-primary/5 border-primary/20",
         "hover:bg-muted/50"
       )}
+      onClick={onClick}
     >
       <div className={cn("p-2 rounded-lg", iconColor)}>
         <Icon className="w-4 h-4" />
@@ -231,7 +407,66 @@ function NotificationItem({
         <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
           {notification.description}
         </p>
+        {appointmentMeta && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="bg-muted text-foreground capitalize">
+              {appointmentMeta.status}
+            </Badge>
+            {confirmationBadge && (
+              <Badge variant="secondary" className={confirmationBadge.className}>
+                {confirmationBadge.label}
+              </Badge>
+            )}
+          </div>
+        )}
         <p className="text-xs text-muted-foreground mt-1">{timeAgo}</p>
+        {isActionableAppointment && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAppointmentAction("approve");
+              }}
+            >
+              Accept
+            </Button>
+            {canRescheduleAppointment && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAppointmentAction("reschedule");
+                }}
+              >
+                Reschedule
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAppointmentAction("decline");
+              }}
+            >
+              Decline
+            </Button>
+            {appointmentMeta.booking_reference && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAppointmentAction("review");
+                }}
+              >
+                {reviewActionLabel}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       {!notification.read && (
         <Button

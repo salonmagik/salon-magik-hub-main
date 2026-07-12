@@ -18,7 +18,7 @@ export function useMarketCountries() {
 
       if (error) throw error;
 
-      const countries = ((data ?? []) as MarketCountryRow[])
+      const countries = ((data ?? []) as unknown as MarketCountryRow[])
         .map((row) => getCountryByCode(row.country_code))
         .filter(Boolean);
 

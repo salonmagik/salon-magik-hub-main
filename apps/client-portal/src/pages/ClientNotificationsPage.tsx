@@ -1,5 +1,7 @@
+import { useNavigate } from "react-router-dom";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { useClientNotifications } from "@/hooks";
+import type { ClientNotification } from "@/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -8,8 +10,23 @@ import { Bell, Calendar, CreditCard, AlertTriangle, Info } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@shared/utils";
 
+function getNotificationRoute(notification: ClientNotification): string | null {
+  if (notification.entity_type === "appointment" && notification.entity_id) {
+    return `/bookings/${notification.entity_id}`;
+  }
+  if (notification.type === "payment") return "/history";
+  return null;
+}
+
 export default function ClientNotificationsPage() {
+  const navigate = useNavigate();
   const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } = useClientNotifications();
+
+  const handleNotificationClick = async (notification: ClientNotification) => {
+    if (!notification.read) await markAsRead(notification.id);
+    const route = getNotificationRoute(notification);
+    if (route) navigate(route);
+  };
 
   const typeIcons: Record<string, React.ReactNode> = {
     appointment: <Calendar className="h-4 w-4" />,
@@ -73,7 +90,7 @@ export default function ClientNotificationsPage() {
                       "flex items-start gap-3 p-3 rounded-lg transition-colors cursor-pointer hover:bg-muted/50",
                       !notification.read && "bg-primary/5"
                     )}
-                    onClick={() => !notification.read && markAsRead(notification.id)}
+                    onClick={() => handleNotificationClick(notification)}
                   >
                     <div
                       className={cn(

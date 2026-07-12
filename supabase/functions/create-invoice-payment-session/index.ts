@@ -1,4 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getPaystackKeyForCurrency,
+  validateCurrencyMatch,
+  determineEffectiveCurrency,
+} from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,7 +22,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body: InvoicePaymentRequest = await req.json();
@@ -40,7 +44,7 @@ Deno.serve(async (req) => {
         total,
         currency,
         status,
-        tenants!inner(id, name, currency, country)
+        tenants!inner(id, name, currency, country, payment_setup_status)
       `)
       .eq("id", invoiceId)
       .single();
@@ -61,11 +65,39 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Verify Paystack is configured
-    if (!paystackSecretKey) {
+    // Determine effective currency and validate
+    const effectiveCurrency = determineEffectiveCurrency(invoice.currency, (invoice.tenants as any).currency);
+
+    if (!effectiveCurrency) {
       return new Response(
-        JSON.stringify({ error: "Paystack not configured" }),
+        JSON.stringify({ error: "Currency is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate currency consistency
+    const currencyValidation = validateCurrencyMatch((invoice.tenants as any).currency, effectiveCurrency);
+    if (!currencyValidation.isValid) {
+      return new Response(
+        JSON.stringify({ error: currencyValidation.error }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Get currency-specific Paystack key
+    const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return new Response(
+        JSON.stringify({ error: paystackKeyResult.error || "Paystack not configured for this currency" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const paystackSecretKey = paystackKeyResult.key;
+
+    if ((invoice.tenants as any).payment_setup_status !== "ready") {
+      return new Response(
+        JSON.stringify({ error: "The salon is not ready to accept online payments at this time. Please contact them or try again later." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -94,7 +126,7 @@ Deno.serve(async (req) => {
       .insert({
         tenant_id: invoice.tenant_id,
         amount: invoice.total,
-        currency: invoice.currency.toUpperCase(),
+        currency: effectiveCurrency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
         gateway: "paystack",
@@ -114,8 +146,49 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Convert amount to kobo (for NGN) or pesewas (for GHS)
+    let storeSubaccountCode: string | null = null;
+    // let customerChargedAmount = invoice.total;
+    // let processingFeeAmount = 0;
+    // const processingFeeRate = 0.01;
+
+    const { data: payoutDest } = await supabase
+      .from("salon_payout_destinations")
+      .select("paystack_subaccount_code")
+      .eq("tenant_id", invoice.tenant_id)
+      .eq("is_default", true)
+      .single();
+
+    if (payoutDest?.paystack_subaccount_code) {
+      storeSubaccountCode = payoutDest.paystack_subaccount_code;
+      // processingFeeAmount = parseFloat((invoice.total * processingFeeRate).toFixed(2));
+      // customerChargedAmount = invoice.total + processingFeeAmount;
+    }
+
+    // Convert amount to minor units (e.g. kobo for NGN)
     const amountInMinorUnits = Math.round(invoice.total * 100);
+
+    const paystackPayload: any = {
+      email: customerEmail,
+      amount: amountInMinorUnits,
+      currency: effectiveCurrency.toUpperCase(),
+      reference: reference,
+      metadata: {
+        tenant_id: invoice.tenant_id,
+        invoice_id: invoiceId,
+        payment_intent_id: paymentIntent.id,
+        intent_type: "invoice_payment",
+        customer_name: customerName,
+        service_amount: invoice.total,
+        // processing_fee_rate: processingFeeRate,
+        // processing_fee_amount: processingFeeAmount,
+        // customer_charged_amount: customerChargedAmount,
+        store_subaccount_code: storeSubaccountCode || "",
+      },
+    };
+
+    if (storeSubaccountCode) {
+      paystackPayload.subaccount = storeSubaccountCode;
+    }
 
     // Initialize Paystack transaction
     const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -124,19 +197,7 @@ Deno.serve(async (req) => {
         "Authorization": `Bearer ${paystackSecretKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        email: customerEmail,
-        amount: amountInMinorUnits,
-        currency: invoice.currency.toUpperCase(),
-        reference: reference,
-        metadata: {
-          tenant_id: invoice.tenant_id,
-          invoice_id: invoiceId,
-          payment_intent_id: paymentIntent.id,
-          intent_type: "invoice_payment",
-          customer_name: customerName,
-        },
-      }),
+      body: JSON.stringify(paystackPayload),
     });
 
     const paystackData = await paystackResponse.json();

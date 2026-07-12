@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,9 @@ import { Textarea } from "@ui/textarea";
 import { Badge } from "@ui/badge";
 import { Switch } from "@ui/switch";
 import { Alert, AlertDescription } from "@ui/alert";
-import { Mail, MessageSquare, Loader2, Info, AlertTriangle } from "lucide-react";
+import { Mail, Loader2, Info, AlertTriangle, Bold, Italic, Underline, List, ListOrdered, Link2, Minus, RectangleHorizontal } from "lucide-react";
 import { useEmailTemplates, type TemplateType, defaultTemplates, templateTypeLabels } from "@/hooks/useEmailTemplates";
-import { cn } from "@shared/utils";
+import { htmlToEditableText, prettifyTokenLabel, replaceTemplateTokens, textToBasicEmailHtml, wrapSelection } from "@/components/messaging/templateEditorUtils";
 
 interface EditTemplateDialogProps {
   open: boolean;
@@ -51,6 +51,7 @@ const templateVariables: Record<TemplateType, string[]> = {
   store_credit_restored: ["customer_name", "salon_name", "amount"],
   gift_received: ["recipient_name", "sender_name", "custom_message", "service_name", "view_link"],
   voucher_applied: ["customer_name", "salon_name"],
+  daily_digest: [],
 };
 
 // Validate that required variables are present
@@ -64,36 +65,69 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
   const { getTemplate, upsertTemplate } = useEmailTemplates();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [subject, setSubject] = useState("");
-  const [bodyHtml, setBodyHtml] = useState("");
+  const [bodyDraft, setBodyDraft] = useState("");
   const [isActive, setIsActive] = useState(true);
-  const [channel, setChannel] = useState<"email" | "sms">("email");
   const [missingVariables, setMissingVariables] = useState<string[]>([]);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const previewValues = useMemo(
+    () => ({
+      customer_name: "Ama",
+      appointment_date: "Tuesday, May 12",
+      appointment_time: "2:30 PM",
+      service_name: "Silk Press",
+      salon_name: "Glamour House",
+      location_name: "East Legon",
+      cta_link: "https://salonmagik.com/book/glamour-house",
+      amount: "GHS 200",
+      transaction_id: "TXN-1024",
+      refund_method: "Mobile Money",
+      staff_name: "Naana",
+      role: "Manager",
+      invitation_link: "https://app.salonmagik.com/login",
+      first_name: "Ama",
+      reset_link: "https://app.salonmagik.com/reset",
+      verification_link: "https://app.salonmagik.com/verify",
+      buffer_duration: "20 minutes",
+      accept_link: "https://app.salonmagik.com/approve",
+      reschedule_link: "https://app.salonmagik.com/reschedule",
+      old_service: "Basic Pedicure",
+      new_service: "Spa Pedicure",
+      recipient_name: "Akosua",
+      sender_name: "Esi",
+      custom_message: "Enjoy this treat!",
+      view_link: "https://app.salonmagik.com/voucher",
+      voucher_code: "MAGIK20",
+    }),
+    [],
+  );
+  const bodyHtml = useMemo(() => textToBasicEmailHtml(bodyDraft), [bodyDraft]);
+  const previewSubject = useMemo(() => replaceTemplateTokens(subject, previewValues), [subject, previewValues]);
+  const previewBody = useMemo(() => replaceTemplateTokens(bodyDraft, previewValues), [bodyDraft, previewValues]);
 
   useEffect(() => {
     if (templateType && open) {
       const existingTemplate = getTemplate(templateType);
       if (existingTemplate) {
         setSubject(existingTemplate.subject);
-        setBodyHtml(existingTemplate.body_html);
+        setBodyDraft(htmlToEditableText(existingTemplate.body_html));
         setIsActive(existingTemplate.is_active);
       } else {
         const defaults = defaultTemplates[templateType];
         setSubject(defaults.subject);
-        setBodyHtml(defaults.body_html);
+        setBodyDraft(htmlToEditableText(defaults.body_html));
         setIsActive(true);
       }
-      setChannel("email");
       setMissingVariables([]);
     }
   }, [templateType, open, getTemplate]);
 
   // Validate on body change
   useEffect(() => {
-    if (templateType && bodyHtml) {
-      const missing = validateTemplate(templateType, bodyHtml);
+    if (templateType && bodyDraft) {
+      const missing = validateTemplate(templateType, bodyDraft);
       setMissingVariables(missing);
     }
-  }, [templateType, bodyHtml]);
+  }, [templateType, bodyDraft]);
 
   const handleSubmit = async () => {
     if (!templateType) return;
@@ -115,15 +149,43 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
     if (!templateType) return;
     const defaults = defaultTemplates[templateType];
     setSubject(defaults.subject);
-    setBodyHtml(defaults.body_html);
+    setBodyDraft(htmlToEditableText(defaults.body_html));
   };
 
   const insertVariable = (variable: string) => {
-    setBodyHtml((prev) => prev + `{{${variable}}}`);
+    const token = `{{${variable}}}`;
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setBodyDraft((prev) => `${prev}${prev ? " " : ""}${token}`);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextValue = `${bodyDraft.slice(0, start)}${token}${bodyDraft.slice(end)}`;
+    setBodyDraft(nextValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = start + token.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
   };
 
-  const charCount = bodyHtml.length;
-  const smsSegments = Math.ceil(charCount / 160);
+  const applyFormat = (before: string, after = before) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const { nextValue, nextCursor } = wrapSelection(
+      bodyDraft,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      before,
+      after,
+    );
+    setBodyDraft(nextValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   if (!templateType) return null;
 
@@ -131,37 +193,20 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Mail className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <DialogTitle className="text-xl">Edit Template</DialogTitle>
+            <DialogTitle className="text-xl">Edit email template</DialogTitle>
             <p className="text-sm text-muted-foreground">
               {templateTypeLabels[templateType]}
             </p>
           </div>
         </DialogHeader>
 
-        <div className="space-y-5 mt-4">
-          {/* Channel Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Channel</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={channel === "email" ? "default" : "secondary"} className="cursor-pointer" onClick={() => setChannel("email")}>
-                <Mail className="w-3 h-3 mr-1" />
-                Email
-              </Badge>
-              <Badge variant={channel === "sms" ? "default" : "secondary"} className="cursor-pointer opacity-50" title="SMS coming soon">
-                <MessageSquare className="w-3 h-3 mr-1" />
-                SMS
-              </Badge>
-            </div>
-          </div>
-
+        <div className="mt-4 space-y-4.5">
           {/* Active Toggle */}
           <div className="flex items-center justify-between">
             <Label htmlFor="is-active">Enable this template</Label>
@@ -183,7 +228,7 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Available Variables (click to insert)</span>
+                <span className="text-sm text-muted-foreground">Add customer info</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {variables.map((v) => (
@@ -193,7 +238,7 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
                     className="cursor-pointer hover:bg-primary/10 transition-colors"
                     onClick={() => insertVariable(v)}
                   >
-                    {`{{${v}}}`}
+                    + {prettifyTokenLabel(v)}
                   </Badge>
                 ))}
               </div>
@@ -205,39 +250,56 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Missing required variables: {missingVariables.map(v => `{{${v}}}`).join(", ")}
+                Add these details before saving: {missingVariables.map((v) => prettifyTokenLabel(v)).join(", ")}
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Body */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Email Body (HTML)</Label>
-              {channel === "sms" && (
-                <span className={cn(
-                  "text-xs",
-                  charCount > 160 ? "text-warning-foreground" : "text-muted-foreground"
-                )}>
-                  {charCount}/160 ({smsSegments} segment{smsSegments !== 1 ? "s" : ""})
-                </span>
-              )}
+              <Label>Email message</Label>
+              <Badge variant="secondary">Email editor</Badge>
+            </div>
+            <div className="flex flex-wrap gap-2 rounded-xl border bg-muted/30 p-2">
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("**", "**")}><Bold className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("_", "_")}><Italic className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("__", "__")}><Underline className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("• ", "")}><List className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("1. ", "")}><ListOrdered className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("[", "]({{cta_link}})")}><Link2 className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat('[Button: ', ']')}><RectangleHorizontal className="h-4 w-4" /></Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => applyFormat("\n---\n", "")}><Minus className="h-4 w-4" /></Button>
             </div>
             <Textarea
-              value={bodyHtml}
-              onChange={(e) => setBodyHtml(e.target.value)}
-              placeholder="Enter email content..."
-              rows={12}
-              className="font-mono text-sm"
+              ref={textareaRef}
+              value={bodyDraft}
+              onChange={(e) => setBodyDraft(e.target.value)}
+              placeholder="Write the email the same way you want your customer to read it."
+              rows={10}
+              className="font-sans text-sm"
             />
           </div>
 
-          {/* Preview Info */}
-          <div className="p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
-            <p>
-              <strong>Tip:</strong> Use HTML tags for formatting. Variables like{" "}
-              <code className="bg-muted px-1 rounded">{"{{customer_name}}"}</code> will be replaced with actual values when the email is sent.
-            </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border bg-muted/10 p-3.5">
+              <div className="text-sm font-medium">What the customer will see</div>
+              <div className="mt-3 text-xs text-muted-foreground">Subject</div>
+              <div className="mt-1 font-medium">{previewSubject || "No subject yet"}</div>
+              <div className="mt-3 rounded-2xl bg-background p-3.5 whitespace-pre-wrap text-sm leading-7">
+                {previewBody || "Your customer-facing email preview will appear here."}
+              </div>
+            </div>
+            <div className="rounded-2xl border bg-muted/20 p-3.5 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <Info className="h-4 w-4" />
+                Email writing tips
+              </div>
+              <ul className="mt-3 space-y-2">
+                <li>Lead with the salon name so customers know who the email is from.</li>
+                <li>Use short paragraphs and one clear call to action.</li>
+                <li>Buttons and links should point customers to the next step, like booking or approving.</li>
+              </ul>
+            </div>
           </div>
         </div>
 

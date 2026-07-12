@@ -22,7 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Ticket } from "lucide-react";
+import { EmptyState } from "@ui/empty-state";
 
 export default function CaptureClientPage() {
   const { backofficeUser } = useBackofficeAuth();
@@ -236,8 +237,8 @@ export default function CaptureClientPage() {
                 ))}
                 {!promoCodes.length ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-muted-foreground text-center py-8">
-                      No promo codes generated yet.
+                    <TableCell colSpan={5}>
+                      <EmptyState icon={Ticket} title="No promo codes generated yet" />
                     </TableCell>
                   </TableRow>
                 ) : null}

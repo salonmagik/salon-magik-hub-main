@@ -7,17 +7,19 @@ import { cn } from "@shared/utils";
 const InputOTP = React.forwardRef<
   React.ElementRef<typeof OTPInput>,
   React.ComponentPropsWithoutRef<typeof OTPInput> & { maxLength?: number }
->(({ className, containerClassName, maxLength = 6, children, render, ...props }, ref) => (
-  <OTPInput
-    ref={ref}
-    maxLength={maxLength}
-    containerClassName={cn("flex items-center gap-2 has-[:disabled]:opacity-50", containerClassName)}
-    className={cn("disabled:cursor-not-allowed", className)}
-    {...props}
-  >
-    {render ?? children}
-  </OTPInput>
-));
+>(({ className, containerClassName, maxLength = 6, children, render, ...props }, ref) => {
+  const sharedProps = {
+    ref,
+    maxLength,
+    containerClassName: cn("flex items-center gap-2 has-[:disabled]:opacity-50", containerClassName),
+    className: cn("disabled:cursor-not-allowed", className),
+    ...props,
+  };
+  if (render) {
+    return <OTPInput {...sharedProps} render={render} />;
+  }
+  return <OTPInput {...sharedProps}>{children}</OTPInput>;
+});
 InputOTP.displayName = "InputOTP";
 
 const InputOTPGroup = React.forwardRef<React.ElementRef<"div">, React.ComponentPropsWithoutRef<"div">>(

@@ -17,6 +17,8 @@ export interface TransactionWithDetails extends Transaction {
     payment_status: string;
     amount_paid: number;
     total_amount: number;
+    location_id: string | null;
+    location?: { id: string; name: string } | null;
   } | null;
   // For grouped split payments
   is_split_payment?: boolean;
@@ -56,7 +58,7 @@ export function useTransactions(filters?: {
         .select(`
           *,
           customer:customers(id, full_name),
-          appointment:appointments(id, status, payment_status, amount_paid, total_amount)
+          appointment:appointments(id, status, payment_status, amount_paid, total_amount, location_id, location:locations(id, name))
         `)
         .eq("tenant_id", currentTenant.id)
         .order("created_at", { ascending: false });
@@ -126,7 +128,7 @@ export function useTransactions(filters?: {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayRevenue = groupedTransactions
-        .filter((t) => new Date(t.created_at) >= today && t.type === "payment" && t.status === "completed")
+        .filter((t) => new Date(t.created_at) >= today && (t.type === "payment" || t.type === "deposit") && t.status === "completed")
         .reduce((sum, t) => sum + Number(t.amount), 0);
 
       // Get pending refunds count

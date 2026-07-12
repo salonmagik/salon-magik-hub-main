@@ -1,12 +1,6 @@
 import { useMemo } from "react";
 import type { CartItem } from "./useBookingCart";
 
-interface DepositRule {
-  depositRequired: boolean;
-  depositType: "percentage" | "fixed";
-  depositValue: number;
-}
-
 interface DepositCalculationResult {
   subtotal: number;
   depositRequired: number;
@@ -26,27 +20,16 @@ const DEFAULT_DEPOSIT_PERCENTAGE = 0; // No deposit by default
 
 export function useDepositCalculation(
   items: CartItem[],
-  depositPercentage: number = DEFAULT_DEPOSIT_PERCENTAGE,
-  serviceDepositRules?: Record<string, DepositRule>
+  depositPercentage: number = DEFAULT_DEPOSIT_PERCENTAGE
 ): DepositCalculationResult {
   return useMemo(() => {
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     
     const itemBreakdown = items.map((item) => {
       const itemTotal = item.price * item.quantity;
-      
-      // Check for item-specific deposit rules (from services table)
-      const itemRule = serviceDepositRules?.[item.itemId];
-      
+
       let depositAmount = 0;
-      if (itemRule?.depositRequired) {
-        if (itemRule.depositType === "percentage") {
-          depositAmount = (itemTotal * itemRule.depositValue) / 100;
-        } else {
-          depositAmount = Math.min(itemRule.depositValue, itemTotal);
-        }
-      } else if (depositPercentage > 0) {
-        // Apply default tenant deposit percentage
+      if (depositPercentage > 0) {
         depositAmount = (itemTotal * depositPercentage) / 100;
       }
       
@@ -69,7 +52,7 @@ export function useDepositCalculation(
       balanceDueAtSalon: Math.round((subtotal - totalDeposit) * 100) / 100,
       itemBreakdown,
     };
-  }, [items, depositPercentage, serviceDepositRules]);
+  }, [items, depositPercentage]);
 }
 
 // Calculate cancellation fee based on time until appointment

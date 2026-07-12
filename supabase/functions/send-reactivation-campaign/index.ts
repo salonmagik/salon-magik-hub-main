@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
+import { sendArkeselSMS } from "../_shared/arkesel-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +12,7 @@ const corsHeaders = {
 type Channel = "email" | "sms" | "whatsapp";
 
 const CREDIT_COST: Record<Channel, number> = {
-  email: 1,
+  email: 0,
   sms: 2,
   whatsapp: 2,
 };
@@ -30,22 +31,9 @@ async function sendEmail(resendApiKey: string, from: string, to: string, subject
   }
 }
 
-async function sendSms(termiiApiKey: string, senderId: string, to: string, text: string) {
-  const response = await fetch("https://api.ng.termii.com/api/sms/send", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: termiiApiKey,
-      to,
-      from: senderId,
-      sms: text,
-      type: "plain",
-      channel: "generic",
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Termii failed with status ${response.status}`);
-  }
+async function sendSms(senderId: string, to: string, text: string) {
+  await sendArkeselSMS({ to, from: senderId, message: text });
+  return "arkesel_sms";
 }
 
 async function sendWhatsApp(metaToken: string, phoneNumberId: string, to: string, text: string) {
@@ -133,10 +121,10 @@ serve(async (req) => {
       });
     }
 
-    // Fetch tenant configuration for Termii settings
+    // Fetch tenant messaging configuration
     const { data: tenant } = await adminClient
       .from("tenants")
-      .select("termii_device_id, termii_sender_id")
+      .select("country, termii_device_id, termii_sender_id, sms_sender_name")
       .eq("id", campaign.tenant_id)
       .single();
 
@@ -162,7 +150,8 @@ serve(async (req) => {
       .in("id", recipientCustomerIds)
       .eq("tenant_id", campaign.tenant_id);
 
-    const customerMap = new Map((customers || []).map((customer) => [customer.id, customer]));
+    type CustomerRow = { id: string; email: string | null; phone: string | null; full_name: string | null };
+    const customerMap = new Map((customers || []).map((c: CustomerRow) => [c.id, c]));
 
     const { data: creditWallet, error: creditsError } = await adminClient
       .from("communication_credits")
@@ -184,8 +173,7 @@ serve(async (req) => {
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-    const termiiApiKey = Deno.env.get("TERMII_API_KEY") || "";
-    const termiiSenderId = Deno.env.get("TERMII_SENDER_ID") || "SalonMagik";
+    const smsSenderName = tenant?.sms_sender_name || tenant?.termii_sender_id || "SalonMagik";
     const whatsappToken = Deno.env.get("META_WHATSAPP_TOKEN") || "";
     const whatsappPhoneId = Deno.env.get("META_WHATSAPP_PHONE_NUMBER_ID") || "";
 
@@ -213,15 +201,14 @@ serve(async (req) => {
           if (!resendApiKey) throw new Error("RESEND_API_KEY not configured");
           await sendEmail(
             resendApiKey,
-            buildFromAddress({ mode: "product", fromEmail: resendFromEmail }),
+            buildFromAddress({ mode: "salon", salonName: tenant?.name, fromEmail: resendFromEmail }),
             customer.email,
             subject,
-            `<p>${message}</p>`,
+            wrapEmailTemplate(`<p>${message}</p>`, { mode: "salon", salonName: tenant?.name }),
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
-          if (!termiiApiKey) throw new Error("TERMII_API_KEY not configured");
-          await sendSms(termiiApiKey, termiiSenderId, customer.phone, message);
+          await sendSms(smsSenderName, customer.phone, message);
         } else if (channel === "whatsapp") {
           if (!customer.phone) throw new Error("Customer has no phone number");
           
@@ -271,7 +258,7 @@ serve(async (req) => {
         if (channel === "email") {
           provider = "resend";
         } else if (channel === "sms") {
-          provider = "termii_sms";
+          provider = "arkesel_sms";
         } else if (channel === "whatsapp") {
           const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
           provider = whatsappProvider === "termii" ? "termii_whatsapp" : "meta_whatsapp";

@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({ currentTenant: { id: "tenant-1" } }),
+}));
+
 vi.mock("@ui/ui/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));

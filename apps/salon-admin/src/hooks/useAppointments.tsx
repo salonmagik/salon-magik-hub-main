@@ -23,6 +23,7 @@ interface UseAppointmentsOptions {
   endDate?: string;
   bookingStatuses?: AppointmentStatus[];
   paymentStatuses?: PaymentStatus[];
+  approvalStatuses?: string[];
   locationId?: string;
   isUnscheduled?: boolean;
   isGifted?: boolean;
@@ -61,8 +62,12 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
       if (options.startDate && options.endDate) {
         const startOfRange = `${options.startDate}T00:00:00`;
         const endOfRange = `${options.endDate}T23:59:59`;
-        
-        if (options.filterByBookingDate) {
+
+        if (options.approvalStatuses && options.approvalStatuses.length > 0) {
+          query = query.or(
+            `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
+          );
+        } else if (options.filterByBookingDate) {
           // Use created_at for unscheduled (booking date)
           query = query
             .gte("created_at", startOfRange)
@@ -83,6 +88,10 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
       // Apply payment status filter (multi-select)
       if (options.paymentStatuses && options.paymentStatuses.length > 0) {
         query = query.in("payment_status", options.paymentStatuses);
+      }
+
+      if (options.approvalStatuses && options.approvalStatuses.length > 0) {
+        query = query.in("approval_status", options.approvalStatuses as any);
       }
 
       // Apply location filter
@@ -119,6 +128,7 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
     options.endDate,
     options.bookingStatuses?.join(","),
     options.paymentStatuses?.join(","),
+    options.approvalStatuses?.join(","),
     options.locationId,
     options.isUnscheduled,
     options.isGifted,

@@ -1,3 +1,5 @@
+import { getCountryForCurrency, getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -18,24 +20,42 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-
-    if (!paystackSecretKey) {
-      return new Response(
-        JSON.stringify({ error: "Paystack not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     // Parse request body
-    const { country, type } = await req.json();
+    const { country, type, currency } = await req.json();
 
-    if (!country) {
+    if (!country && !currency) {
       return new Response(
-        JSON.stringify({ error: "Missing country parameter" }),
+        JSON.stringify({ error: "Missing country or currency parameter" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Determine country from currency if not provided
+    let targetCountry = country;
+    if (currency && !targetCountry) {
+      targetCountry = getCountryForCurrency(currency);
+      if (!targetCountry) {
+        return new Response(
+          JSON.stringify({ error: `Unsupported currency: ${currency}` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Determine currency from country if not provided
+    const effectiveCurrency = currency || (targetCountry === "GH" ? "GHS" : "NGN");
+
+    // Get currency-specific Paystack key
+    const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return new Response(
+        JSON.stringify({
+          error: paystackKeyResult.error || "Paystack not configured for this currency"
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const paystackSecretKey = paystackKeyResult.key;
 
     // Map country codes to Paystack country names
     const countryMap: Record<string, string> = {
@@ -45,20 +65,42 @@ Deno.serve(async (req) => {
       'ZA': 'south africa',
     };
 
-    const paystackCountry = countryMap[country] || country.toLowerCase();
+    const paystackCountry = countryMap[targetCountry] || targetCountry.toLowerCase();
 
     // Build Paystack API URL
     const paystackUrl = new URL("https://api.paystack.co/bank");
     paystackUrl.searchParams.set("country", paystackCountry);
 
-    // For Ghana without type, set pay_with_bank_transfer=true
-    if (country === "GH" && !type) {
-      paystackUrl.searchParams.set("pay_with_bank_transfer", "true");
-    }
-
-    // If type is provided (mobile_money or ghipss for Ghana), pass it to Paystack
-    if (type) {
-      paystackUrl.searchParams.set("type", type);
+    // Handle type parameter based on country
+    if (targetCountry === "NG") {
+      // Nigeria: type="bank" is not valid, use pay_with_bank filter instead
+      if (type === "bank") {
+        // paystackUrl.searchParams.set("pay_with_bank", "true");
+      } else if (type === "mobile_money") {
+        // Nigeria doesn't support mobile money via Paystack
+        // Return early with empty array
+        console.log("Mobile money not supported for Nigeria");
+        return new Response(
+          JSON.stringify({ banks: [] }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else if (targetCountry === "GH") {
+      // Ghana: use type parameter for mobile_money and ghipss
+      if (type === "mobile_money") {
+        paystackUrl.searchParams.set("type", "mobile_money");
+      } else if (type === "bank") {
+        // For Ghana banks, use ghipss type or pay_with_bank_transfer
+        paystackUrl.searchParams.set("type", "ghipss");
+      } else if (!type) {
+        // Default for Ghana: banks with transfer support
+        paystackUrl.searchParams.set("pay_with_bank_transfer", "true");
+      }
+    } else {
+      // Other countries (Kenya, South Africa): pass type as-is if provided
+      if (type) {
+        paystackUrl.searchParams.set("type", type);
+      }
     }
 
     // Call Paystack API

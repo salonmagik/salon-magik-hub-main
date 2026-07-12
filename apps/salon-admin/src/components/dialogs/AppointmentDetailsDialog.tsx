@@ -56,6 +56,7 @@ interface AppointmentDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   appointment: CalendarAppointment | null;
   onRefresh?: () => void;
+  onOpenApprovalAction?: (action: "approve" | "decline" | "reschedule" | "review", appointment: CalendarAppointment) => void;
 }
 
 type AppointmentBookingMetadata = {
@@ -85,6 +86,7 @@ export function AppointmentDetailsDialog({
   onOpenChange,
   appointment,
   onRefresh,
+  onOpenApprovalAction,
 }: AppointmentDetailsDialogProps) {
   const navigate = useNavigate();
   const { currentTenant, roles } = useAuth();
@@ -116,6 +118,8 @@ export function AppointmentDetailsDialog({
   if (!appointment) return null;
 
   const { label, variant } = statusConfig[appointment.status];
+  const approvalStatus = (appointment as CalendarAppointment & { approval_status?: string | null }).approval_status || "not_required";
+  const confirmationStatus = (appointment as CalendarAppointment & { confirmation_status?: string | null }).confirmation_status || null;
   const bookingReference = (appointment as CalendarAppointment & { booking_reference?: string | null }).booking_reference || null;
   const bookingMetadata = ((appointment as CalendarAppointment & { booking_metadata?: AppointmentBookingMetadata }).booking_metadata || null) as AppointmentBookingMetadata;
   const scheduledDate = appointment.scheduled_start
@@ -148,6 +152,38 @@ export function AppointmentDetailsDialog({
     appointment.status === "cancelled" &&
     amountPaid > 0 &&
     appointment.payment_status !== "refunded_full";
+  const confirmationConfig: Record<string, { label: string; className: string }> = {
+    pending: { label: "Unconfirmed", className: "bg-amber-100 text-amber-800" },
+    approved: { label: "Accepted", className: "bg-emerald-100 text-emerald-800" },
+    declined: { label: "Declined", className: "bg-rose-100 text-rose-800" },
+    reschedule_proposed: { label: "Reschedule Proposed", className: "bg-sky-100 text-sky-800" },
+    reschedule_accepted: { label: "Reschedule Accepted", className: "bg-emerald-100 text-emerald-800" },
+    reschedule_declined: { label: "Reschedule Declined", className: "bg-orange-100 text-orange-800" },
+    not_required: {
+      label: confirmationStatus === "auto" ? "Auto-confirmed" : "Confirmed",
+      className: "bg-slate-100 text-slate-800",
+    },
+  };
+  const confirmationBadge = confirmationConfig[approvalStatus] || {
+    label: approvalStatus.replace(/_/g, " "),
+    className: "bg-slate-100 text-slate-800",
+  };
+  const isAwaitingApproval = approvalStatus === "pending";
+  const showRescheduleAction = (() => {
+    const lineItemType = bookingMetadata?.line_item?.type || null;
+    const fulfillmentType = bookingMetadata?.line_item?.fulfillment_type || null;
+    if (lineItemType === "service") return true;
+    if (lineItemType === "product" || lineItemType === "package") return false;
+    if (lineItemType === "product") return false;
+    if (fulfillmentType === "pickup" || fulfillmentType === "delivery") return false;
+    if (appointment.services.length > 0) return true;
+    return true;
+  })();
+  const reviewActionLabel = (() => {
+    const lineItemType = bookingMetadata?.line_item?.type || null;
+    if (lineItemType === "product" || lineItemType === "package") return "Review order";
+    return "Review booking";
+  })();
 
   const handleGiftedToggle = async (checked: boolean) => {
     if (!appointment?.id) return;
@@ -233,6 +269,9 @@ export function AppointmentDetailsDialog({
                 </Badge>
               )}
               <Badge variant={variant}>{label}</Badge>
+              <Badge variant="secondary" className={confirmationBadge.className}>
+                {confirmationBadge.label}
+              </Badge>
             </div>
           </DialogTitle>
         </DialogHeader>
@@ -268,6 +307,29 @@ export function AppointmentDetailsDialog({
                 <p className="text-xs text-muted-foreground">
                   Booked on {bookedOn}
                 </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <Package className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div className="space-y-1 text-sm">
+                <p className="font-medium">Confirmation</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className={confirmationBadge.className}>
+                    {confirmationBadge.label}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {approvalStatus === "pending"
+                      ? "Customer submitted this booking and it still needs salon action."
+                      : approvalStatus === "approved"
+                        ? "This booking was accepted by the salon and is ready for invoice/payment."
+                        : approvalStatus === "reschedule_proposed"
+                          ? "The salon proposed a new time and is waiting for the customer response."
+                          : approvalStatus === "declined"
+                            ? "This booking request was declined."
+                            : "This booking is already confirmed."}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -476,6 +538,35 @@ export function AppointmentDetailsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
+          {isAwaitingApproval && onOpenApprovalAction && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => onOpenApprovalAction("decline", appointment)}
+              >
+                Decline
+              </Button>
+              {showRescheduleAction && (
+                <Button
+                  variant="outline"
+                  onClick={() => onOpenApprovalAction("reschedule", appointment)}
+                >
+                  Reschedule
+                </Button>
+              )}
+              {bookingReference && (
+                <Button
+                  variant="outline"
+                  onClick={() => onOpenApprovalAction("review", appointment)}
+                >
+                  {reviewActionLabel}
+                </Button>
+              )}
+              <Button onClick={() => onOpenApprovalAction("approve", appointment)}>
+                Accept
+              </Button>
+            </>
+          )}
           <Button onClick={handleGoToAppointments}>Go to Appointments</Button>
         </DialogFooter>
       </DialogContent>

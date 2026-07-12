@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Mail, Lock, Phone } from "lucide-react";
+import { Mail, Lock, Phone, ShieldCheck } from "lucide-react";
 import { useToast } from "@ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -85,6 +85,8 @@ export default function LoginPage() {
   const [showGoogleSignupPrompt, setShowGoogleSignupPrompt] = useState(false);
   const googleOAuthIntent = readGoogleOAuthIntent();
   const promoCodeFromUrl = searchParams.get("promo");
+  const reviewSessions = searchParams.get("review-sessions") === "true";
+  const postLoginDestination = reviewSessions ? "/salon?review-sessions=true" : "/salon";
   const [lastAuthMethod, setLastAuthMethod] = useState<LastAuthMethod | null>(null);
 
   // Email login state
@@ -97,6 +99,9 @@ export default function LoginPage() {
   const [phone, setPhone] = useState("");
   const [phoneStep, setPhoneStep] = useState<PhoneStep>("phone");
   const [otp, setOtp] = useState("");
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const [resendAttempts, setResendAttempts] = useState(0);
+  const [resendLockedUntil, setResendLockedUntil] = useState<number | null>(null);
 
   useEffect(() => {
     if (promoCodeFromUrl) {
@@ -206,11 +211,11 @@ export default function LoginPage() {
       } else {
         persistLastAuthMethod("email");
         setLastAuthMethod("email");
+        navigate(postLoginDestination);
         toast({
           title: "Welcome back!",
           description: "You have successfully signed in.",
         });
-        navigate("/salon");
       }
     } catch (error) {
       toast({
@@ -233,52 +238,30 @@ export default function LoginPage() {
     try {
       persistRememberMePreference(rememberMe);
       persistRememberedEmail("", false);
-      const { data: limitData, error: limitError } = await supabase.functions.invoke("auth-check-otp-rate-limit", {
-        body: {
-          identifier: phone,
-          appScope: "salon_admin",
-        },
+
+      // Send OTP via Arkesel (custom flow — not Supabase native phone auth)
+      const { data, error } = await supabase.functions.invoke("send-phone-otp", {
+        body: { phone },
       });
 
-      if (limitError || limitData?.error) {
+      if (error || data?.error) {
+        const msg: string = data?.message || data?.error || error?.message || "Unable to send code.";
+        const isRateLimit = data?.error === "hourly_limit" || data?.error === "cooldown";
         toast({
-          title: "Failed to send code",
-          description: limitData?.error || limitError?.message || "Unable to prepare OTP request.",
+          title: isRateLimit ? "OTP unavailable" : "Failed to send code",
+          description: msg,
           variant: "destructive",
         });
         return;
       }
 
-      if (!limitData?.allowed) {
-        toast({
-          title: "OTP unavailable",
-          description:
-            limitData.reason === "hourly_limit"
-              ? "You have reached the maximum number of OTP requests for this hour."
-              : "Please wait 60 seconds before requesting another code.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Phone is already in E.164 format from PhoneInput
-      const { error } = await supabase.auth.signInWithOtp({
-        phone,
+      toast({
+        title: "Code sent!",
+        description: "Please check your phone for the verification code.",
       });
-
-      if (error) {
-        toast({
-          title: "Failed to send code",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Code sent!",
-          description: "Please check your phone for the verification code.",
-        });
-        setPhoneStep("otp");
-      }
+      setPhoneStep("otp");
+      setResendCountdown(60);
+      setResendAttempts(1);
     } catch (error) {
       toast({
         title: "Error",
@@ -299,28 +282,43 @@ export default function LoginPage() {
 
     try {
       persistRememberMePreference(rememberMe);
-      // Phone is already in E.164 format from PhoneInput
-      const { error } = await supabase.auth.verifyOtp({
-        phone,
-        token: otp,
-        type: "sms",
+
+      // Verify OTP via custom edge function (Arkesel flow)
+      const { data, error } = await supabase.functions.invoke("verify-phone-otp", {
+        body: { phone, otp },
       });
 
-      if (error) {
+      if (error || data?.error) {
         toast({
           title: "Verification failed",
-          description: error.message,
+          description: data?.error || error?.message || "Incorrect or expired code.",
           variant: "destructive",
         });
-      } else {
-        persistLastAuthMethod("phone");
-        setLastAuthMethod("phone");
-        toast({
-          title: "Welcome back!",
-          description: "You have successfully signed in.",
-        });
-        navigate("/salon");
+        return;
       }
+
+      // Edge function returns session tokens — set them directly
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+
+      if (sessionError) {
+        toast({
+          title: "Sign-in failed",
+          description: sessionError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      persistLastAuthMethod("phone");
+      setLastAuthMethod("phone");
+      navigate(postLoginDestination);
+      toast({
+        title: "Welcome back!",
+        description: "You have successfully signed in.",
+      });
     } catch (error) {
       toast({
         title: "Error",
@@ -399,10 +397,46 @@ export default function LoginPage() {
     navigate("/login", { replace: true });
   };
 
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const timer = setTimeout(() => setResendCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCountdown]);
+
   const resetPhoneFlow = () => {
     setPhoneStep("phone");
     setOtp("");
     setErrors({});
+    setResendCountdown(0);
+    setResendAttempts(0);
+    setResendLockedUntil(null);
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCountdown > 0 || isLoading) return;
+    if (resendLockedUntil && Date.now() < resendLockedUntil) return;
+    if (resendAttempts >= 4) {
+      const lockUntil = Date.now() + 30 * 60 * 1000;
+      setResendLockedUntil(lockUntil);
+      toast({ title: "Too many attempts", description: "Please wait 30 minutes before requesting a new code.", variant: "destructive" });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-phone-otp", { body: { phone } });
+      if (error || data?.error) {
+        const msg: string = data?.message || data?.error || error?.message || "Unable to send code.";
+        toast({ title: "Failed to resend", description: msg, variant: "destructive" });
+        return;
+      }
+      setResendAttempts((a) => a + 1);
+      setResendCountdown(60);
+      toast({ title: "Code resent!", description: "Check your phone for the new verification code." });
+    } catch {
+      toast({ title: "Error", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -570,32 +604,37 @@ export default function LoginPage() {
 
 			{/* OTP Verification Form */}
 			{loginMode === "phone" && phoneStep === "otp" && (
-				<form onSubmit={handleOtpSubmit} className="space-y-4 mt-4">
-					<div className="space-y-2">
-						<label className="text-sm font-medium">
-							Enter the 6-digit code sent to {phone}
-						</label>
-						<div className="flex justify-center">
-							<InputOTP
-								value={otp}
-								onChange={setOtp}
-								maxLength={6}
-								disabled={isLoading}
-							>
-								<InputOTPGroup>
-									<InputOTPSlot index={0} />
-									<InputOTPSlot index={1} />
-									<InputOTPSlot index={2} />
-									<InputOTPSlot index={3} />
-									<InputOTPSlot index={4} />
-									<InputOTPSlot index={5} />
-								</InputOTPGroup>
-							</InputOTP>
+				<form onSubmit={handleOtpSubmit} className="space-y-5 mt-4">
+					{/* Icon + heading */}
+					<div className="flex flex-col items-center gap-1 text-center">
+						<div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center mb-1">
+							<ShieldCheck className="w-5 h-5 text-primary" />
 						</div>
+						<p className="text-sm text-muted-foreground">
+							We sent a 6-digit code to
+						</p>
+						<p className="text-sm font-semibold text-foreground tracking-wide">{phone}</p>
+					</div>
+
+					{/* OTP slots */}
+					<div className="flex flex-col items-center gap-2">
+						<InputOTP
+							value={otp}
+							onChange={setOtp}
+							maxLength={6}
+							disabled={isLoading}
+						>
+							<InputOTPGroup>
+								<InputOTPSlot index={0} />
+								<InputOTPSlot index={1} />
+								<InputOTPSlot index={2} />
+								<InputOTPSlot index={3} />
+								<InputOTPSlot index={4} />
+								<InputOTPSlot index={5} />
+							</InputOTPGroup>
+						</InputOTP>
 						{errors.otp && (
-							<p className="text-sm text-destructive text-center">
-								{errors.otp}
-							</p>
+							<p className="text-sm text-destructive">{errors.otp}</p>
 						)}
 					</div>
 
@@ -603,13 +642,35 @@ export default function LoginPage() {
 						Verify & Sign in
 					</AuthButton>
 
-					<button
-						type="button"
-						onClick={resetPhoneFlow}
-						className="w-full text-sm text-muted-foreground hover:text-foreground"
-					>
-						Use a different phone number
-					</button>
+					{/* Resend section */}
+					<div className="flex flex-col items-center gap-1.5 text-sm">
+						{resendLockedUntil && Date.now() < resendLockedUntil ? (
+							<p className="text-destructive text-center">
+								Too many attempts. Please wait 30 minutes.
+							</p>
+						) : resendCountdown > 0 ? (
+							<p className="text-muted-foreground">
+								Resend code in{" "}
+								<span className="font-medium text-foreground tabular-nums">{resendCountdown}s</span>
+							</p>
+						) : (
+							<button
+								type="button"
+								onClick={handleResendOtp}
+								disabled={isLoading}
+								className="text-primary hover:underline disabled:opacity-50"
+							>
+								Resend code
+							</button>
+						)}
+						<button
+							type="button"
+							onClick={resetPhoneFlow}
+							className="text-muted-foreground hover:text-foreground"
+						>
+							Use a different number
+						</button>
+					</div>
 				</form>
 			)}
 

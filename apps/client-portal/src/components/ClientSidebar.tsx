@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useClientAuth } from "@/hooks";
+import { useClientNotifications } from "@/hooks";
 import { ClientInactivityGuard } from "./ClientInactivityGuard";
 import { Button } from "@ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@ui/sheet";
 import { ScrollArea } from "@ui/scroll-area";
 import { Separator } from "@ui/separator";
 import { cn } from "@shared/utils";
@@ -41,7 +42,7 @@ const navItems = [
   { label: "Bookings", icon: Calendar, path: "/bookings" },
   { label: "History", icon: Clock, path: "/history" },
   { label: "Refunds & Credits", icon: RefreshCcw, path: "/refunds" },
-  { label: "Notifications", icon: Bell, path: "/notifications" },
+  { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },
   { label: "Profile & Security", icon: User, path: "/profile" },
   { label: "Help & Support", icon: HelpCircle, path: "/help" },
 ];
@@ -49,7 +50,8 @@ const navItems = [
 export function ClientSidebar({ children }: ClientSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, customers } = useClientAuth();
+  const { signOut } = useClientAuth();
+  const { unreadCount } = useClientNotifications();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -60,15 +62,12 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
   };
 
   const isActive = (path: string) => {
-    if (path === "/") {
-      return location.pathname === "/";
-    }
+    if (path === "/") return location.pathname === "/";
     return location.pathname.startsWith(path);
   };
 
   const NavContent = ({ onItemClick, forceExpanded = false }: { onItemClick?: () => void; forceExpanded?: boolean }) => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
       <div className="p-4 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           <SalonMagikLogo variant="white" size="sm" showText={forceExpanded || !isCollapsed} />
@@ -77,31 +76,39 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
 
       <Separator className="bg-white/10" />
 
-      {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={onItemClick}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive(item.path)
-                  ? "bg-white/15 text-white"
-                  : "text-white/80 hover:bg-white/10 hover:text-white"
-              )}
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {(forceExpanded || !isCollapsed) && <span>{item.label}</span>}
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const badgeCount = item.showBadge ? unreadCount : 0;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={onItemClick}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  isActive(item.path)
+                    ? "bg-white/15 text-white"
+                    : "text-white/80 hover:bg-white/10 hover:text-white"
+                )}
+              >
+                <div className="relative shrink-0">
+                  <item.icon className="h-5 w-5" />
+                  {badgeCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
+                      {badgeCount > 9 ? "9+" : badgeCount}
+                    </span>
+                  )}
+                </div>
+                {(forceExpanded || !isCollapsed) && <span>{item.label}</span>}
+              </Link>
+            );
+          })}
         </nav>
       </ScrollArea>
 
       <Separator className="bg-white/10" />
 
-      {/* Logout */}
       <div className="p-3">
         <button
           onClick={() => setShowLogoutDialog(true)}
@@ -130,6 +137,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-72 border-white/10 bg-primary p-0 text-white">
+              <SheetTitle className="sr-only">Navigation menu</SheetTitle>
               <NavContent onItemClick={() => setMobileOpen(false)} forceExpanded />
             </SheetContent>
           </Sheet>
@@ -149,7 +157,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
             )}
           >
             <NavContent />
-            
+
             {/* Collapse Toggle */}
             <div className="absolute -right-3 top-20">
               <Button
@@ -158,11 +166,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
                 className="h-6 w-6 rounded-full border-white/15 bg-primary text-white hover:bg-white/10 hover:text-white"
                 onClick={() => setIsCollapsed(!isCollapsed)}
               >
-                {isCollapsed ? (
-                  <ChevronRight className="h-3 w-3" />
-                ) : (
-                  <ChevronLeft className="h-3 w-3" />
-                )}
+                {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
               </Button>
             </div>
           </aside>
@@ -184,9 +188,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleLogout}>
-                Sign out
-              </AlertDialogAction>
+              <AlertDialogAction onClick={handleLogout}>Sign out</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

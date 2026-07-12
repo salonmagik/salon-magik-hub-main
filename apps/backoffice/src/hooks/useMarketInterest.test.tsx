@@ -3,13 +3,16 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useMarketInterest } from "./useMarketInterest";
 
-const orderMock = vi.fn();
-const selectMock = vi.fn(() => ({ order: orderMock }));
-const fromMock = vi.fn(() => ({ select: selectMock }));
+const { fromMock, selectMock, orderMock } = vi.hoisted(() => {
+  const orderMock = vi.fn();
+  const selectMock = vi.fn(() => ({ order: orderMock }));
+  const fromMock = vi.fn(() => ({ select: selectMock }));
+  return { fromMock, selectMock, orderMock };
+});
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
+    from: fromMock,
   },
 }));
 

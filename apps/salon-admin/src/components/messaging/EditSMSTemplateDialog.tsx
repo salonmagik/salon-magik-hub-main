@@ -30,6 +30,7 @@ import {
   smsTemplateAutoSendTriggers,
 } from "@/hooks/useSMSTemplates";
 import { cn } from "@shared/utils";
+import { replaceTemplateTokens } from "@/components/messaging/templateEditorUtils";
 
 interface EditSMSTemplateDialogProps {
   open: boolean;
@@ -49,6 +50,14 @@ export function EditSMSTemplateDialog({
   const [autoSendEnabled, setAutoSendEnabled] = useState(false);
   const [autoSendTrigger, setAutoSendTrigger] = useState<string>("");
   const [missingVariables, setMissingVariables] = useState<string[]>([]);
+  const previewValues = {
+    customer_name: "Ama",
+    appointment_date: "Tuesday, May 12",
+    appointment_time: "2:30 PM",
+    service_name: "Silk Press",
+    salon_name: "Glamour House",
+    amount: "GHS 200",
+  };
 
   // Character count and SMS segment calculation
   const charCount = message.length;
@@ -113,17 +122,18 @@ export function EditSMSTemplateDialog({
   if (!templateType) return null;
 
   const variables = smsTemplateVariables[templateType] || [];
+  const previewMessage = replaceTemplateTokens(message, previewValues);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-purple-500/10">
               <MessageSquare className="w-5 h-5 text-purple-500" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Edit SMS Template</DialogTitle>
+              <DialogTitle className="text-xl">Edit text message template</DialogTitle>
               <DialogDescription>
                 {smsTemplateTypeLabels[templateType]}
               </DialogDescription>
@@ -131,9 +141,9 @@ export function EditSMSTemplateDialog({
           </div>
         </DialogHeader>
 
-        <div className="space-y-5 mt-4">
+        <div className="mt-4 space-y-4.5">
           {/* Active Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+          <div className="flex items-center justify-between rounded-2xl border bg-muted/40 p-3">
             <div>
               <Label htmlFor="is-active" className="font-medium">
                 Enable this template
@@ -147,7 +157,7 @@ export function EditSMSTemplateDialog({
 
           {/* Auto-Send Toggle */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+            <div className="flex items-center justify-between rounded-2xl border bg-muted/40 p-3">
               <div>
                 <Label htmlFor="auto-send" className="font-medium">
                   Auto-send SMS
@@ -188,7 +198,7 @@ export function EditSMSTemplateDialog({
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">
-                  Available Variables (click to insert)
+                  Add customer info
                 </span>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -196,10 +206,10 @@ export function EditSMSTemplateDialog({
                   <Badge
                     key={v}
                     variant={missingVariables.includes(v) ? "destructive" : "outline"}
-                    className="cursor-pointer hover:bg-primary/10 transition-colors"
-                    onClick={() => insertVariable(v)}
-                  >
-                    {`{{${v}}}`}
+                  className="cursor-pointer hover:bg-primary/10 transition-colors"
+                  onClick={() => insertVariable(v)}
+                >
+                    + {v.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())}
                   </Badge>
                 ))}
               </div>
@@ -211,8 +221,7 @@ export function EditSMSTemplateDialog({
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Missing recommended variables:{" "}
-                {missingVariables.map((v) => `{{${v}}}`).join(", ")}
+                Consider adding: {missingVariables.map((v) => v.replace(/_/g, " ")).join(", ")}
               </AlertDescription>
             </Alert>
           )}
@@ -220,7 +229,7 @@ export function EditSMSTemplateDialog({
           {/* Message Textarea */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label>Message Content</Label>
+              <Label>Text message</Label>
               <span
                 className={cn(
                   "text-xs",
@@ -233,10 +242,17 @@ export function EditSMSTemplateDialog({
             <Textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Enter SMS message content..."
-              rows={6}
+              placeholder="Write the text the same way your customer should read it."
+              rows={5}
               className="font-sans text-sm"
             />
+          </div>
+
+          <div className="rounded-2xl border bg-muted/10 p-3.5">
+            <div className="text-sm font-medium">What the customer will see</div>
+            <div className="mt-3 rounded-3xl bg-slate-950 px-4 py-3.5 text-sm leading-7 text-white">
+              {previewMessage || "Your customer-facing SMS preview will appear here."}
+            </div>
           </div>
 
           {/* Character Limit Warning */}
@@ -257,10 +273,10 @@ export function EditSMSTemplateDialog({
               <strong>SMS Best Practices</strong>
             </div>
             <ul className="list-disc list-inside space-y-1 text-xs pl-2">
-              <li>Keep messages under 160 characters to use 1 segment</li>
-              <li>Use variables like <code className="bg-muted px-1 rounded">{"{{customer_name}}"}</code> for personalization</li>
-              <li>Each SMS costs 2 credits per recipient</li>
-              <li>Auto-send will trigger on the selected event for active templates</li>
+              <li>Say your salon name early so customers know who the text is from.</li>
+              <li>Keep the message short to avoid extra SMS segments.</li>
+              <li>Each SMS segment costs 2 credits per recipient.</li>
+              <li>Auto-send uses this exact message when the chosen event happens.</li>
             </ul>
           </div>
         </div>

@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, Globe2, Lock, Power, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Globe2, Lock, Power, ShieldAlert, ShieldOff } from "lucide-react";
 import type { Json } from "@/lib/supabase";
 
 type LegalStatus = "planned" | "legal_approved" | "active" | "paused";
@@ -102,7 +102,7 @@ function parseKillSwitch(value: Json | null): KillSwitchValue {
   };
 }
 
-async function writeAuditLog(action: string, actorId: string | undefined, metadata: Record<string, unknown>) {
+async function writeAuditLog(action: string, actorId: string | undefined, metadata: Json) {
   const { error } = await supabase.from("audit_logs").insert({
     action,
     entity_type: "platform_settings",
@@ -127,6 +127,9 @@ export default function BackofficeSettingsPage() {
   const [newCurrencyCode, setNewCurrencyCode] = useState("USD");
   const [notesDraft, setNotesDraft] = useState("");
   const [trialDaysDraft, setTrialDaysDraft] = useState(14);
+  const [otpLimitEnabled, setOtpLimitEnabled] = useState(true);
+  const [otpMaxPerHour, setOtpMaxPerHour] = useState(3);
+  const [otpCooldownSeconds, setOtpCooldownSeconds] = useState(60);
   const [overrideTenantId, setOverrideTenantId] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideStartsAt, setOverrideStartsAt] = useState("");
@@ -149,7 +152,7 @@ export default function BackofficeSettingsPage() {
     queryKey: ["market-countries-admin"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("market_countries" as any)
+        .from("market_countries")
         .select("*")
         .order("country_name", { ascending: true });
 
@@ -167,7 +170,7 @@ export default function BackofficeSettingsPage() {
         .eq("key", "default_trial_days")
         .maybeSingle();
       if (error) throw error;
-      const parsed = Number((data?.value as any)?.days);
+      const parsed = Number((data?.value as Record<string, unknown>)?.days);
       return Number.isFinite(parsed) ? Math.max(0, parsed) : 14;
     },
   });
@@ -178,11 +181,60 @@ export default function BackofficeSettingsPage() {
     }
   }, [defaultTrialDays]);
 
+  const { data: otpRateLimitConfig } = useQuery({
+    queryKey: ["platform-settings", "otp_rate_limit"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "otp_rate_limit")
+        .maybeSingle();
+      if (error) throw error;
+      const v = (data?.value ?? {}) as Record<string, unknown>;
+      return {
+        enabled: typeof v.enabled === "boolean" ? v.enabled : true,
+        maxPerHour: typeof v.max_per_hour === "number" ? v.max_per_hour : 3,
+        cooldownSeconds: typeof v.cooldown_seconds === "number" ? v.cooldown_seconds : 60,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (otpRateLimitConfig) {
+      setOtpLimitEnabled(otpRateLimitConfig.enabled);
+      setOtpMaxPerHour(otpRateLimitConfig.maxPerHour);
+      setOtpCooldownSeconds(otpRateLimitConfig.cooldownSeconds);
+    }
+  }, [otpRateLimitConfig]);
+
+  const updateOtpRateLimitMutation = useMutation({
+    mutationFn: async ({ enabled, maxPerHour, cooldownSeconds }: { enabled: boolean; maxPerHour: number; cooldownSeconds: number }) => {
+      const { error } = await supabase
+        .from("platform_settings")
+        .upsert(
+          {
+            key: "otp_rate_limit",
+            value: { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds } as Json,
+            description: "OTP rate limiting. Set enabled=false to bypass limits for testing.",
+            updated_by_id: backofficeUser?.user_id,
+          },
+          { onConflict: "key" }
+        );
+      if (error) throw error;
+      await writeAuditLog("otp_rate_limit_updated", backofficeUser?.user_id, { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-settings", "otp_rate_limit"] });
+      toast.success("OTP rate limit settings saved.");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to update OTP rate limit settings"),
+  });
+
   const { data: marketCurrencies = [], isLoading: currenciesLoading } = useQuery({
     queryKey: ["market-country-currencies-admin"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("market_country_currency" as any)
+        .from("market_country_currency")
         .select("*")
         .order("country_code", { ascending: true })
         .order("currency_code", { ascending: true });
@@ -195,11 +247,11 @@ export default function BackofficeSettingsPage() {
   const { data: trialOverrides = [] } = useQuery({
     queryKey: ["tenant-trial-overrides"],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("tenant_trial_overrides" as any)
+      const { data, error } = await supabase
+        .from("tenant_trial_overrides")
         .select("id, tenant_id, starts_at, ends_at, reason, status, created_at")
         .order("created_at", { ascending: false })
-        .limit(20) as any);
+        .limit(20);
       if (error) throw error;
       return (data ?? []) as TenantTrialOverride[];
     },
@@ -208,11 +260,11 @@ export default function BackofficeSettingsPage() {
   const { data: supportTickets = [], isLoading: supportTicketsLoading } = useQuery({
     queryKey: ["support-tickets-admin"],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("support_tickets" as any)
+      const { data, error } = await supabase
+        .from("support_tickets")
         .select("id, source_app, tenant_id, issue_type, subject, status, priority, created_at, assigned_backoffice_user_id")
         .order("created_at", { ascending: false })
-        .limit(50) as any);
+        .limit(50);
       if (error) throw error;
       return (data ?? []) as SupportTicket[];
     },
@@ -283,7 +335,7 @@ export default function BackofficeSettingsPage() {
             value: { days: safeDays } as Json,
             description: "Global default trial period in days",
             updated_by_id: backofficeUser?.user_id,
-          } as any,
+          },
           { onConflict: "key" }
         );
       if (error) throw error;
@@ -305,16 +357,16 @@ export default function BackofficeSettingsPage() {
         throw new Error("Tenant ID, start, and end dates are required.");
       }
 
-      const { error } = await (supabase
-        .from("tenant_trial_overrides" as any)
+      const { error } = await supabase
+        .from("tenant_trial_overrides")
         .insert({
           tenant_id: overrideTenantId.trim(),
           starts_at: new Date(overrideStartsAt).toISOString(),
           ends_at: new Date(overrideEndsAt).toISOString(),
-          reason: overrideReason.trim() || null,
+          reason: overrideReason.trim() || "",
           status: "active",
           granted_by: backofficeUser?.user_id ?? null,
-        } as any) as any);
+        });
 
       if (error) throw error;
       await writeAuditLog("tenant_trial_override_created", backofficeUser?.user_id, {
@@ -336,10 +388,10 @@ export default function BackofficeSettingsPage() {
 
   const revokeTrialOverrideMutation = useMutation({
     mutationFn: async (overrideId: string) => {
-      const { error } = await (supabase
-        .from("tenant_trial_overrides" as any)
-        .update({ status: "revoked" } as any)
-        .eq("id", overrideId) as any);
+      const { error } = await supabase
+        .from("tenant_trial_overrides")
+        .update({ status: "revoked" })
+        .eq("id", overrideId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -351,13 +403,13 @@ export default function BackofficeSettingsPage() {
 
   const updateSupportTicketMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase
-        .from("support_tickets" as any)
+      const { error } = await supabase
+        .from("support_tickets")
         .update({
           status,
           assigned_backoffice_user_id: backofficeUser?.user_id ?? null,
-        } as any)
-        .eq("id", id) as any);
+        })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -381,13 +433,13 @@ export default function BackofficeSettingsPage() {
     }) => {
       const goLiveAt = legalStatus === "active" && selectedCountry?.go_live_at == null ? new Date().toISOString() : selectedCountry?.go_live_at;
       const { error } = await supabase
-        .from("market_countries" as any)
+        .from("market_countries")
         .update({
           is_selectable: isSelectable,
           legal_status: legalStatus,
           go_live_at: goLiveAt,
           notes: notes.trim() || null,
-        } as any)
+        })
         .eq("country_code", countryCode);
       if (error) throw error;
 
@@ -411,14 +463,14 @@ export default function BackofficeSettingsPage() {
       if (!normalizedCode) throw new Error("Currency code is required");
 
       const { error } = await supabase
-        .from("market_country_currency" as any)
+        .from("market_country_currency")
         .upsert(
           {
             country_code: countryCode,
             currency_code: normalizedCode,
             is_enabled: true,
             is_default: false,
-          } as any,
+          },
           { onConflict: "country_code,currency_code" }
         );
 
@@ -439,14 +491,14 @@ export default function BackofficeSettingsPage() {
   const setDefaultCurrencyMutation = useMutation({
     mutationFn: async ({ countryCode, currencyCode }: { countryCode: string; currencyCode: string }) => {
       const { error: resetError } = await supabase
-        .from("market_country_currency" as any)
-        .update({ is_default: false } as any)
+        .from("market_country_currency")
+        .update({ is_default: false })
         .eq("country_code", countryCode);
       if (resetError) throw resetError;
 
       const { error: setError } = await supabase
-        .from("market_country_currency" as any)
-        .update({ is_default: true, is_enabled: true } as any)
+        .from("market_country_currency")
+        .update({ is_default: true, is_enabled: true })
         .eq("country_code", countryCode)
         .eq("currency_code", currencyCode);
 
@@ -467,8 +519,8 @@ export default function BackofficeSettingsPage() {
   const toggleCurrencyMutation = useMutation({
     mutationFn: async ({ id, isEnabled }: { id: string; isEnabled: boolean }) => {
       const { data, error } = await supabase
-        .from("market_country_currency" as any)
-        .update({ is_enabled: isEnabled } as any)
+        .from("market_country_currency")
+        .update({ is_enabled: isEnabled })
         .eq("id", id)
         .select("country_code,currency_code")
         .single();
@@ -668,6 +720,79 @@ export default function BackofficeSettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   Current: {defaultTrialDays ?? 14} day(s)
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-lg p-2 ${!otpLimitEnabled ? "bg-amber-100 text-amber-600" : "bg-muted"}`}>
+                    <ShieldOff className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle>OTP Rate Limiting</CardTitle>
+                    <CardDescription>
+                      Controls how many OTP requests a single identifier can make. Disable during testing to remove all limits.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {!otpLimitEnabled && (
+                  <Alert className="border-amber-300 bg-amber-50 text-amber-800">
+                    <ShieldOff className="h-4 w-4" />
+                    <AlertTitle>Rate limiting is disabled</AlertTitle>
+                    <AlertDescription>OTPs can be requested without restriction. Re-enable before going live.</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="font-medium">Enable rate limiting</p>
+                    <p className="text-sm text-muted-foreground">Disable to allow unlimited OTP requests (for testing only)</p>
+                  </div>
+                  <Switch
+                    checked={otpLimitEnabled}
+                    onCheckedChange={setOtpLimitEnabled}
+                    disabled={!isSuperAdmin}
+                  />
+                </div>
+
+                <div className={`grid gap-4 md:grid-cols-2 transition-opacity ${!otpLimitEnabled ? "opacity-40 pointer-events-none" : ""}`}>
+                  <div className="space-y-2">
+                    <Label>Max requests per hour</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={otpMaxPerHour}
+                      onChange={(e) => setOtpMaxPerHour(Math.max(1, Number(e.target.value || 1)))}
+                      className="w-36"
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Default: 3</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Cooldown between requests (seconds)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={3600}
+                      value={otpCooldownSeconds}
+                      onChange={(e) => setOtpCooldownSeconds(Math.max(0, Number(e.target.value || 0)))}
+                      className="w-36"
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Default: 60</p>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => updateOtpRateLimitMutation.mutate({ enabled: otpLimitEnabled, maxPerHour: otpMaxPerHour, cooldownSeconds: otpCooldownSeconds })}
+                  disabled={!isSuperAdmin || updateOtpRateLimitMutation.isPending}
+                >
+                  Save OTP Settings
+                </Button>
               </CardContent>
             </Card>
 

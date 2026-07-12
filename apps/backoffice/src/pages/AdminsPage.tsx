@@ -51,6 +51,7 @@ import {
 } from "@ui/dropdown-menu";
 import { Alert, AlertDescription } from "@ui/alert";
 import { Loader2, Plus, MoreHorizontal, Shield, Users } from "lucide-react";
+import { EmptyState } from "@ui/empty-state";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { toast } from "sonner";
@@ -612,8 +613,8 @@ export default function AdminsPage() {
                       ))}
                       {!users.length ? (
                         <TableRow>
-                          <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
-                            No team members found.
+                          <TableCell colSpan={10}>
+                            <EmptyState icon={Users} title="No team members found" />
                           </TableCell>
                         </TableRow>
                       ) : null}
@@ -675,8 +676,8 @@ export default function AdminsPage() {
                     ))}
                     {!roleStats.length ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                          No roles found.
+                        <TableCell colSpan={6}>
+                          <EmptyState icon={Shield} title="No roles found" />
                         </TableCell>
                       </TableRow>
                     ) : null}

@@ -25,6 +25,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<BookingPage />} />
+          {/* /:slug lets localhost:3000/my-salon work in dev without ?slug= */}
+          <Route path="/:slug" element={<BookingPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

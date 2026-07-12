@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getPaystackKeyForCurrency, createPaystackSubaccount } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,15 +29,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-
-    // Verify Paystack is configured
-    if (!paystackSecretKey) {
-      return new Response(
-        JSON.stringify({ error: "Paystack not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Verify the user's JWT
     const authHeader = req.headers.get("Authorization");
@@ -53,7 +45,7 @@ Deno.serve(async (req) => {
     });
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
@@ -104,8 +96,43 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Use service role for database operations
+    const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Fetch tenant details for subaccount creation
+    const { data: tenant, error: tenantError } = await serviceSupabase
+      .from("tenants")
+      .select("name, platform_percentage_charge")
+      .eq("id", tenantId)
+      .single();
+
+    if (tenantError || !tenant) {
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch tenant details" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Get currency-specific Paystack key
+    const paystackKeyResult = getPaystackKeyForCurrency(currency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return new Response(
+        JSON.stringify({
+          error: paystackKeyResult.error || `Paystack not configured for currency ${currency}`
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const paystackSecretKey = paystackKeyResult.key;
+
     // Create Paystack recipient
     let paystackRecipientCode: string;
+    let paystackSubaccountCode: string | null = null;
+    let paystackSubaccountId: number | null = null;
+    let paystackSubaccountActive: boolean | null = null;
+    let paystackSubaccountError: string | null = null;
+    let tenantPaymentStatus = "pending_bank_account";
+    let tenantPaymentError: string | null = null;
 
     if (destinationType === "bank") {
       // Determine recipient type based on country
@@ -137,6 +164,27 @@ Deno.serve(async (req) => {
       }
 
       paystackRecipientCode = paystackData.data.recipient_code;
+
+      // Try to create Paystack subaccount
+      try {
+        const subaccountData = await createPaystackSubaccount(currency.toUpperCase(), {
+          business_name: tenant.name || `Salon ${tenantId}`,
+          settlement_bank: bankCode!,
+          account_number: accountNumber!,
+          percentage_charge: tenant.platform_percentage_charge || 0.5, // make sure percentage is in right format 0.5 is 0.5%
+          primary_contact_email: user.email,
+        });
+
+        paystackSubaccountCode = subaccountData.subaccount_code;
+        paystackSubaccountId = subaccountData.id;
+        paystackSubaccountActive = subaccountData.active;
+        tenantPaymentStatus = "ready";
+      } catch (err: any) {
+        console.error("Error creating subaccount:", err);
+        paystackSubaccountError = err.message || "Unknown error creating subaccount";
+        tenantPaymentStatus = "failed";
+        tenantPaymentError = paystackSubaccountError;
+      }
     } else {
       // Mobile money recipient
       const paystackResponse = await fetch("https://api.paystack.co/transferrecipient", {
@@ -168,9 +216,6 @@ Deno.serve(async (req) => {
       paystackRecipientCode = paystackData.data.recipient_code;
     }
 
-    // Use service role for database operations
-    const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // If isDefault=true, unset is_default on all other destinations for tenant
     if (isDefault) {
       const { error: unsetError } = await serviceSupabase
@@ -199,6 +244,10 @@ Deno.serve(async (req) => {
         momo_provider: momoProvider || null,
         momo_number: momoNumber || null,
         paystack_recipient_code: paystackRecipientCode,
+        paystack_subaccount_code: paystackSubaccountCode,
+        paystack_subaccount_id: paystackSubaccountId,
+        paystack_subaccount_active: paystackSubaccountActive,
+        paystack_subaccount_error: paystackSubaccountError,
         is_default: isDefault,
       })
       .select()
@@ -210,6 +259,21 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Failed to create payout destination" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Update tenant's payment_setup_status
+    if (destinationType === "bank") {
+      const { error: tenantUpdateError } = await serviceSupabase
+        .from("tenants")
+        .update({
+          payment_setup_status: tenantPaymentStatus,
+          payment_setup_error: tenantPaymentError,
+        })
+        .eq("id", tenantId);
+
+      if (tenantUpdateError) {
+        console.error("Error updating tenant payment status:", tenantUpdateError);
+      }
     }
 
     return new Response(

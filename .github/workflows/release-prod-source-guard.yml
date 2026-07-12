@@ -27,10 +27,10 @@ jobs:
             exit 0
           fi
 
-          if [[ "${{ github.head_ref }}" =~ ^merge/.+-into-release-prod$ ]]; then
+          if [[ "${{ github.head_ref }}" =~ ^merge/.+-into-release-prod$ ]] || [[ "${{ github.head_ref }}" =~ ^merge/main-into-prod$ ]]; then
             echo "Allowed source branch."
             exit 0
           fi
 
-          echo "Blocked: only PRs from 'main' or branches matching 'merge/*-into-release-prod' can merge into 'release/prod'."
+          echo "Blocked: only PRs from 'main' or bridge branches matching 'merge/*-into-release-prod' can merge into 'release/prod'."
           exit 1

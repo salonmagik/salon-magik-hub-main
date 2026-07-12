@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
@@ -110,14 +110,17 @@ export function useNotificationSettings() {
     }
   };
 
-  // Return current settings or defaults
-  const currentSettings = settings || {
-    ...defaultSettings,
-    id: "",
-    tenant_id: currentTenant?.id || "",
-    created_at: "",
-    updated_at: "",
-  };
+  const currentSettings = useMemo(
+    () =>
+      settings || {
+        ...defaultSettings,
+        id: "",
+        tenant_id: currentTenant?.id || "",
+        created_at: "",
+        updated_at: "",
+      },
+    [settings, currentTenant?.id],
+  );
 
   return {
     settings: currentSettings,

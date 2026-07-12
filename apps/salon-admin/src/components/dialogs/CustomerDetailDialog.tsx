@@ -304,7 +304,7 @@ export function CustomerDetailDialog({
 
   const canSendMessage = Boolean(customer.email || customer.phone);
   const sendMessageTooltip = canSendMessage
-    ? "Send Email, SMS, or WhatsApp"
+    ? "Send Email or SMS"
     : "Customer has no email or phone number";
 
   function clearFilters(): void {

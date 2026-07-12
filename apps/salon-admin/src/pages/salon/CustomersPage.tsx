@@ -49,7 +49,7 @@ import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
 
 type Customer = CustomerWithVisitSummary;
-type ReactivationChannel = "email" | "sms" | "whatsapp";
+type ReactivationChannel = "email" | "sms";
 
 interface InactiveCustomerRow {
   customer_id: string;
@@ -846,9 +846,8 @@ export default function CustomersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="email">Email (1 credit)</SelectItem>
+                    <SelectItem value="email">Email (free)</SelectItem>
                     <SelectItem value="sms">SMS (2 credits)</SelectItem>
-                    <SelectItem value="whatsapp">WhatsApp (2 credits)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

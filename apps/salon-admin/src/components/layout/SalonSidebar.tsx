@@ -18,10 +18,17 @@ import {
   Menu,
   X,
   ChevronLeft,
+  ChevronDown,
   Bell,
   Plus,
   FileText,
   Loader2,
+  Palette,
+  CalendarX2,
+  Globe,
+  Shield,
+  Zap,
+  User,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
@@ -41,7 +48,8 @@ import { TrialBanner } from "@/components/billing/TrialBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
-import { isModuleAllowedInContext } from "@/lib/contextAccess";
+import { NewDeviceReviewModal } from "@/components/session/NewDeviceReviewModal";
+import { isModuleAllowedInContext, ROUTE_DEFINITIONS } from "@/lib/contextAccess";
 import {
   Tooltip,
   TooltipContent,
@@ -59,7 +67,7 @@ import {
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
   const { user, profile } = useAuth();
-  
+
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
   const initials = displayName
@@ -99,7 +107,8 @@ interface NavItem {
   icon: React.ElementType;
   path: string;
   badge?: string | number;
-  module?: string; // Permission module key
+  module?: string;
+  children?: Omit<NavItem, "children">[];
 }
 
 const mainNavItems: NavItem[] = [
@@ -110,11 +119,12 @@ const mainNavItems: NavItem[] = [
   { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
   { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
   { label: "Services and Products", icon: Scissors, path: "/salon/services", module: "services" },
-  { label: "Payments", icon: CreditCard, path: "/salon/payments", module: "payments" },
+  { label: "Transactions", icon: CreditCard, path: "/salon/transactions", module: "payments" },
   { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
-  { label: "Journal", icon: BookOpen, path: "/salon/journal", module: "journal" },
+  { label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" },
   { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+  { label: "All Notifications", icon: Bell, path: "/salon/all-notifications", module: "notifications" },
   { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
   { label: "Settings", icon: Settings, path: "/salon/settings", module: "settings" },
 ];
@@ -148,13 +158,26 @@ interface SalonSidebarProps {
 export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
   const [refreshingAccess, setRefreshingAccess] = useState(false);
+  const [reviewSessionsOpen, setReviewSessionsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Open the new-device review modal when redirected from the security email CTA
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("review-sessions") === "true") {
+      setReviewSessionsOpen(true);
+      // Remove the param from the URL without a page reload
+      const cleanUrl = location.pathname + location.search.replace(/[?&]review-sessions=true/, "").replace(/^\?$/, "");
+      navigate(cleanUrl, { replace: true });
+    }
+  }, [location.search, location.pathname, navigate]);
   const { toast } = useToast();
   const notificationsData = useNotifications();
   const { unreadCount } = notificationsData;
@@ -169,7 +192,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     getFirstAllowedRoute,
     refreshTenants,
   } = useAuth();
-  
+
   // Start staff session on mount
   const { startSession } = useStaffSessions();
   useEffect(() => {
@@ -182,6 +205,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const visibleItems = mainNavItems.filter((item) => {
       if (item.path === "/salon/overview/staff") {
         return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
+      }
+      if (item.path === "/salon/all-notifications") {
+        const branchCount = availableContexts.filter((c) => c.type === "location").length;
+        return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && branchCount >= 2;
       }
       if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
         return false;
@@ -201,11 +228,39 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       return visibleItems;
     }
     return visibleItems.map((item) => {
-      if (item.path !== "/salon/settings") return item;
-      if (activeContextType === "owner_hub") {
-        return { ...item, label: "Business Settings", path: "/salon/business-settings" };
+      if (item.path === "/salon/settings") {
+        if (activeContextType === "owner_hub") {
+          return {
+            ...item,
+            label: "Business Settings",
+            path: "/salon/business-settings",
+            children: [
+              { label: "Business Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
+              { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
+              { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
+              { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
+              { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
+              { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
+              { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
+              { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+            ],
+          };
+        }
+        return {
+          ...item,
+          label: "Branch Settings",
+          path: "/salon/branch-settings",
+          children: [
+            { label: "Branch Profile", icon: Building2, path: "/salon/branch-settings?tab=profile" },
+            { label: "Branch Hours", icon: CalendarX2, path: "/salon/branch-settings?tab=hours" },
+            { label: "Active Sessions", icon: Shield, path: "/salon/branch-settings?tab=sessions" },
+          ],
+        };
       }
-      return { ...item, label: "Branch Settings", path: "/salon/branch-settings" };
+      if (item.path === "/salon/transactions" && activeContextType === "owner_hub") {
+        return { ...item, label: "Cashflow & Payouts" };
+      }
+      return item;
     });
   }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
 
@@ -217,11 +272,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Get plan display info
   const getPlanDisplay = () => {
     if (!currentTenant) return { emoji: "🎁", label: "Free" };
-    
+
     const isTrialing = currentTenant.subscription_status === "trialing";
     const isPastDue = currentTenant.subscription_status === "past_due";
     const isActive = currentTenant.subscription_status === "active";
-    
+
     if (isPastDue) {
       return { emoji: "⚠️", label: "Past Due" };
     }
@@ -235,7 +290,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       return { emoji: "⚠️", label: "Trial Ended" };
     }
     if (isActive) {
-      return { emoji: "✨", label: "Pro" };
+      const planLabel = currentTenant.plan
+        ? currentTenant.plan.charAt(0).toUpperCase() + currentTenant.plan.slice(1)
+        : "Pro";
+      return { emoji: "✨", label: planLabel };
     }
     return { emoji: "🎁", label: "Free" };
   };
@@ -252,6 +310,41 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   useEffect(() => {
     setIsMobileOpen(false);
   }, [location.pathname]);
+
+  // Auto-switch to location context when navigating to a route that is not
+  // available in owner_hub (e.g. Messaging, Appointments, Calendar).
+  useEffect(() => {
+    if (permissionsLoading || isAssignmentPending) return;
+    if (activeContextType !== "owner_hub") return;
+    const currentRoute = ROUTE_DEFINITIONS.find((r) => r.path === location.pathname);
+    if (!currentRoute?.module) return;
+    if (isModuleAllowedInContext(currentRoute.module, "owner_hub")) return;
+    const targetLocationId = availableContexts.find((c) => c.type === "location")?.locationId ?? null;
+    if (targetLocationId) {
+      void setActiveContext("location", targetLocationId);
+    }
+  }, [location.pathname, activeContextType, availableContexts, permissionsLoading, isAssignmentPending, setActiveContext]);
+
+  // Auto-expand any nav group whose child matches the current route
+  useEffect(() => {
+    for (const item of filteredMainNavItems) {
+      if (!item.children) continue;
+      const hasActiveChild = item.children.some((child) => {
+        const [childPathname, childSearch] = child.path.split("?");
+        if (location.pathname !== childPathname) return false;
+        if (!childSearch) return true;
+        const childParams = new URLSearchParams(childSearch);
+        const currentParams = new URLSearchParams(location.search);
+        for (const [key, val] of childParams) {
+          if (currentParams.get(key) !== val) return false;
+        }
+        return true;
+      });
+      if (hasActiveChild) {
+        setExpandedGroups((prev) => new Set([...prev, item.path]));
+      }
+    }
+  }, [location.pathname, location.search, filteredMainNavItems]);
 
   // Handle escape key
   useEffect(() => {
@@ -430,6 +523,106 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     return false;
   };
 
+  const isChildActive = (childPath: string) => {
+    const [childPathname, childSearch] = childPath.split("?");
+    if (location.pathname !== childPathname) return false;
+    if (!childSearch) return true;
+    const childParams = new URLSearchParams(childSearch);
+    const currentParams = new URLSearchParams(location.search);
+    for (const [key, val] of childParams) {
+      if (currentParams.get(key) !== val) return false;
+    }
+    return true;
+  };
+
+  const ExpandableNavItemComponent = ({ item }: { item: NavItem }) => {
+    const Icon = item.icon;
+    const isOpen = expandedGroups.has(item.path);
+    const anyChildActive = item.children?.some((c) => isChildActive(c.path)) ?? false;
+
+    const toggle = () => {
+      setExpandedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(item.path)) next.delete(item.path);
+        else next.add(item.path);
+        return next;
+      });
+    };
+
+    const trigger = (
+      <button
+        type="button"
+        onClick={toggle}
+        className={cn(
+          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+          anyChildActive
+            ? "bg-white/15 text-white"
+            : "text-white/80 hover:bg-white/10 hover:text-white",
+        )}
+      >
+        <Icon className="w-5 h-5 flex-shrink-0" />
+        {(isExpanded || isMobileOpen) && (
+          <>
+            <span className="flex-1 text-left">{item.label}</span>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 shrink-0 transition-transform duration-200",
+                isOpen ? "rotate-180" : "",
+              )}
+            />
+          </>
+        )}
+      </button>
+    );
+
+    return (
+      <div>
+        {!isExpanded && !isMobileOpen ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+            <TooltipContent side="right" sideOffset={10}>
+              {item.label}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          trigger
+        )}
+
+        {isOpen && (isExpanded || isMobileOpen) && item.children && (
+          <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/15 pl-3">
+            {item.children.map((child) => {
+              const ChildIcon = child.icon;
+              const active = isChildActive(child.path);
+              return (
+                <Link
+                  key={child.path}
+                  to={child.path}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(child.path);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
+                    active
+                      ? "bg-white/15 text-white"
+                      : "text-white/70 hover:bg-white/10 hover:text-white",
+                  )}
+                >
+                  <ChildIcon className="w-4 h-4 flex-shrink-0" />
+                  <span>{child.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const NavItemComponent = ({ item }: { item: NavItem }) => {
     const active = isActive(item.path);
     const Icon = item.icon;
@@ -562,9 +755,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             ))}
           </div>
         ) : (
-          filteredMainNavItems.map((item) => (
-            <NavItemComponent key={item.path} item={item} />
-          ))
+          filteredMainNavItems.map((item) =>
+            item.children ? (
+              <ExpandableNavItemComponent key={item.path} item={item} />
+            ) : (
+              <NavItemComponent key={item.path} item={item} />
+            )
+          )
         )}
       </nav>
 
@@ -778,6 +975,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      <NewDeviceReviewModal
+        open={reviewSessionsOpen}
+        onClose={() => setReviewSessionsOpen(false)}
+      />
       </InactivityGuard>
     </BannerProvider>
     </SidebarContext.Provider>

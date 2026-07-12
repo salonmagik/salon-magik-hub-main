@@ -94,7 +94,10 @@ verify_jwt = false
 [functions.public-booking-prefill]
 verify_jwt = false
 
-[functions.payment-webhook]
+[functions.payment-webhook-gh]
+verify_jwt = false
+
+[functions.payment-webhook-ng]
 verify_jwt = false
 
 [functions.get-banks-and-momo-providers]
@@ -109,7 +112,28 @@ verify_jwt = false
 [functions.send-daily-digest]
 verify_jwt = false
 
+[functions.process-recurring-addon-billing]
+verify_jwt = false
+
+[functions.create-plan-configuration-checkout-session]
+verify_jwt = false
+
+[functions.verify-plan-configuration-payment]
+verify_jwt = false
+
+[functions.create-theme-purchase-checkout-session]
+verify_jwt = false
+
+[functions.verify-theme-purchase-payment]
+verify_jwt = false
+
 [functions.manage-termii-sender-id]
+verify_jwt = false
+
+[functions.manage-sms-sender-name]
+verify_jwt = false
+
+[functions.verify-subscription-payment]
 verify_jwt = false
 
 [functions.send-bulk-message]
@@ -121,8 +145,23 @@ verify_jwt = false
 [functions.manage-whatsapp-templates]
 verify_jwt = false
 
-[functions.create-invoice-payment]
+[functions.create-invoice-payment-session]
 verify_jwt = false
 
 [functions.send-invoice]
 verify_jwt = false
+
+[functions.verify-bank-account]
+verify_jwt = false
+
+[functions.paystack-transfer-webhook-ng]
+verify_jwt = false
+
+[functions.paystack-transfer-approval-gh]
+verify_jwt = false
+
+[functions.paystack-transfer-approval-ng]
+verify_jwt = false
+
+[functions.sync-paystack-plan-pricing]
+verify_jwt = true
