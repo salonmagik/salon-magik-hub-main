@@ -36,8 +36,9 @@ describe("ClientLoginPage", () => {
       </MemoryRouter>
     );
 
+    // Email tab is active by default — submitting empty shows email validation error
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    expect(await screen.findByText(/please enter your email or phone number/i)).toBeInTheDocument();
+    expect(await screen.findByText(/please enter a valid email address/i)).toBeInTheDocument();
   });
 
   it("advances to OTP step for valid email", async () => {
@@ -66,7 +67,7 @@ describe("ClientLoginPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/enter your email or phone number/i), {
+    fireEvent.change(screen.getByPlaceholderText(/enter your email/i), {
       target: { value: "client@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
@@ -92,7 +93,7 @@ describe("ClientLoginPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/enter your email or phone number/i), {
+    fireEvent.change(screen.getByPlaceholderText(/enter your email/i), {
       target: { value: "client@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
@@ -117,11 +118,11 @@ describe("ClientLoginPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/enter your email or phone number/i), {
+    fireEvent.change(screen.getByPlaceholderText(/enter your email/i), {
       target: { value: "missing@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
-    expect(await screen.findByText(/no customer account was found/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no account was found/i)).toBeInTheDocument();
   });
 });
