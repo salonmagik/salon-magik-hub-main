@@ -102,7 +102,7 @@ function parseKillSwitch(value: Json | null): KillSwitchValue {
   };
 }
 
-async function writeAuditLog(action: string, actorId: string | undefined, metadata: Record<string, unknown>) {
+async function writeAuditLog(action: string, actorId: string | undefined, metadata: Json) {
   const { error } = await supabase.from("audit_logs").insert({
     action,
     entity_type: "platform_settings",
@@ -152,7 +152,7 @@ export default function BackofficeSettingsPage() {
     queryKey: ["market-countries-admin"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("market_countries" as any)
+        .from("market_countries")
         .select("*")
         .order("country_name", { ascending: true });
 
@@ -170,7 +170,7 @@ export default function BackofficeSettingsPage() {
         .eq("key", "default_trial_days")
         .maybeSingle();
       if (error) throw error;
-      const parsed = Number((data?.value as any)?.days);
+      const parsed = Number((data?.value as Record<string, unknown>)?.days);
       return Number.isFinite(parsed) ? Math.max(0, parsed) : 14;
     },
   });
@@ -214,10 +214,10 @@ export default function BackofficeSettingsPage() {
         .upsert(
           {
             key: "otp_rate_limit",
-            value: { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds } as any,
+            value: { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds } as Json,
             description: "OTP rate limiting. Set enabled=false to bypass limits for testing.",
             updated_by_id: backofficeUser?.user_id,
-          } as any,
+          },
           { onConflict: "key" }
         );
       if (error) throw error;
@@ -234,7 +234,7 @@ export default function BackofficeSettingsPage() {
     queryKey: ["market-country-currencies-admin"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("market_country_currency" as any)
+        .from("market_country_currency")
         .select("*")
         .order("country_code", { ascending: true })
         .order("currency_code", { ascending: true });
@@ -247,11 +247,11 @@ export default function BackofficeSettingsPage() {
   const { data: trialOverrides = [] } = useQuery({
     queryKey: ["tenant-trial-overrides"],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("tenant_trial_overrides" as any)
+      const { data, error } = await supabase
+        .from("tenant_trial_overrides")
         .select("id, tenant_id, starts_at, ends_at, reason, status, created_at")
         .order("created_at", { ascending: false })
-        .limit(20) as any);
+        .limit(20);
       if (error) throw error;
       return (data ?? []) as TenantTrialOverride[];
     },
@@ -260,11 +260,11 @@ export default function BackofficeSettingsPage() {
   const { data: supportTickets = [], isLoading: supportTicketsLoading } = useQuery({
     queryKey: ["support-tickets-admin"],
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("support_tickets" as any)
+      const { data, error } = await supabase
+        .from("support_tickets")
         .select("id, source_app, tenant_id, issue_type, subject, status, priority, created_at, assigned_backoffice_user_id")
         .order("created_at", { ascending: false })
-        .limit(50) as any);
+        .limit(50);
       if (error) throw error;
       return (data ?? []) as SupportTicket[];
     },
@@ -335,7 +335,7 @@ export default function BackofficeSettingsPage() {
             value: { days: safeDays } as Json,
             description: "Global default trial period in days",
             updated_by_id: backofficeUser?.user_id,
-          } as any,
+          },
           { onConflict: "key" }
         );
       if (error) throw error;
@@ -357,16 +357,16 @@ export default function BackofficeSettingsPage() {
         throw new Error("Tenant ID, start, and end dates are required.");
       }
 
-      const { error } = await (supabase
-        .from("tenant_trial_overrides" as any)
+      const { error } = await supabase
+        .from("tenant_trial_overrides")
         .insert({
           tenant_id: overrideTenantId.trim(),
           starts_at: new Date(overrideStartsAt).toISOString(),
           ends_at: new Date(overrideEndsAt).toISOString(),
-          reason: overrideReason.trim() || null,
+          reason: overrideReason.trim() || "",
           status: "active",
           granted_by: backofficeUser?.user_id ?? null,
-        } as any) as any);
+        });
 
       if (error) throw error;
       await writeAuditLog("tenant_trial_override_created", backofficeUser?.user_id, {
@@ -388,10 +388,10 @@ export default function BackofficeSettingsPage() {
 
   const revokeTrialOverrideMutation = useMutation({
     mutationFn: async (overrideId: string) => {
-      const { error } = await (supabase
-        .from("tenant_trial_overrides" as any)
-        .update({ status: "revoked" } as any)
-        .eq("id", overrideId) as any);
+      const { error } = await supabase
+        .from("tenant_trial_overrides")
+        .update({ status: "revoked" })
+        .eq("id", overrideId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -403,13 +403,13 @@ export default function BackofficeSettingsPage() {
 
   const updateSupportTicketMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase
-        .from("support_tickets" as any)
+      const { error } = await supabase
+        .from("support_tickets")
         .update({
           status,
           assigned_backoffice_user_id: backofficeUser?.user_id ?? null,
-        } as any)
-        .eq("id", id) as any);
+        })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -433,13 +433,13 @@ export default function BackofficeSettingsPage() {
     }) => {
       const goLiveAt = legalStatus === "active" && selectedCountry?.go_live_at == null ? new Date().toISOString() : selectedCountry?.go_live_at;
       const { error } = await supabase
-        .from("market_countries" as any)
+        .from("market_countries")
         .update({
           is_selectable: isSelectable,
           legal_status: legalStatus,
           go_live_at: goLiveAt,
           notes: notes.trim() || null,
-        } as any)
+        })
         .eq("country_code", countryCode);
       if (error) throw error;
 
@@ -463,14 +463,14 @@ export default function BackofficeSettingsPage() {
       if (!normalizedCode) throw new Error("Currency code is required");
 
       const { error } = await supabase
-        .from("market_country_currency" as any)
+        .from("market_country_currency")
         .upsert(
           {
             country_code: countryCode,
             currency_code: normalizedCode,
             is_enabled: true,
             is_default: false,
-          } as any,
+          },
           { onConflict: "country_code,currency_code" }
         );
 
@@ -491,14 +491,14 @@ export default function BackofficeSettingsPage() {
   const setDefaultCurrencyMutation = useMutation({
     mutationFn: async ({ countryCode, currencyCode }: { countryCode: string; currencyCode: string }) => {
       const { error: resetError } = await supabase
-        .from("market_country_currency" as any)
-        .update({ is_default: false } as any)
+        .from("market_country_currency")
+        .update({ is_default: false })
         .eq("country_code", countryCode);
       if (resetError) throw resetError;
 
       const { error: setError } = await supabase
-        .from("market_country_currency" as any)
-        .update({ is_default: true, is_enabled: true } as any)
+        .from("market_country_currency")
+        .update({ is_default: true, is_enabled: true })
         .eq("country_code", countryCode)
         .eq("currency_code", currencyCode);
 
@@ -519,8 +519,8 @@ export default function BackofficeSettingsPage() {
   const toggleCurrencyMutation = useMutation({
     mutationFn: async ({ id, isEnabled }: { id: string; isEnabled: boolean }) => {
       const { data, error } = await supabase
-        .from("market_country_currency" as any)
-        .update({ is_enabled: isEnabled } as any)
+        .from("market_country_currency")
+        .update({ is_enabled: isEnabled })
         .eq("id", id)
         .select("country_code,currency_code")
         .single();

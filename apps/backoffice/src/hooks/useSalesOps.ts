@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { supabase, type TablesInsert } from "@/lib/supabase";
 import { toast } from "sonner";
 import { useBackofficeAuth } from "./useBackofficeAuth";
 
@@ -18,11 +18,11 @@ export function useSalesOps() {
     queryKey: ["sales-agent-self", backofficeUser?.id],
     enabled: Boolean(backofficeUser?.user_id && !isSuperAdmin),
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("sales_agents" as never)
+      const { data, error } = await supabase
+        .from("sales_agents")
         .select("id")
         .eq("backoffice_user_id", backofficeUser!.id)
-        .maybeSingle() as never);
+        .maybeSingle();
       if (error) throw error;
       return (data?.id as string | undefined) || null;
     },
@@ -32,10 +32,10 @@ export function useSalesOps() {
     queryKey: ["sales-campaigns"],
     enabled: canCaptureClient || canManageCampaigns,
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("sales_promo_campaigns" as never)
+      const { data, error } = await supabase
+        .from("sales_promo_campaigns")
         .select("id, name, starts_at, ends_at, is_active, discount_type, discount_value, enable_trial_extension, trial_extension_days, billing_targets, max_uses_per_tenant, email_subject_template, email_body_template")
-        .order("created_at", { ascending: false }) as never);
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -45,12 +45,12 @@ export function useSalesOps() {
     queryKey: ["sales-agents"],
     enabled: canCaptureClient || canManageAgentsKyc,
     queryFn: async () => {
-      let query = (supabase
-        .from("sales_agents" as never)
+      let query = supabase
+        .from("sales_agents")
         .select("id, backoffice_user_id, employment_status, country_code, monthly_base_salary, hire_date, backoffice_users(user_id, email_domain)")
-        .order("created_at", { ascending: false }) as never);
+        .order("created_at", { ascending: false });
       if (!isSuperAdmin && ownSalesAgentQuery.data) {
-        query = (query.eq("id", ownSalesAgentQuery.data) as never);
+        query = query.eq("id", ownSalesAgentQuery.data);
       }
       const { data, error } = await query;
       if (error) throw error;
@@ -62,7 +62,7 @@ export function useSalesOps() {
     queryKey: ["backoffice-users-options"],
     enabled: canManageAgentsKyc,
     queryFn: async () => {
-      const { data, error } = await (supabase.rpc as any)("backoffice_list_team_members");
+      const { data, error } = await supabase.rpc("backoffice_list_team_members");
       if (error) throw error;
       return ((data || []) as any[]).filter(
         (user) => user.base_role !== "super_admin" && user.is_sales_agent === true,
@@ -74,8 +74,8 @@ export function useSalesOps() {
     queryKey: ["sales-promo-codes"],
     enabled: canCaptureClient && (isSuperAdmin || ownSalesAgentQuery.isSuccess),
     queryFn: async () => {
-      let query = (supabase
-        .from("sales_promo_codes" as never)
+      let query = supabase
+        .from("sales_promo_codes")
         .select(`
           id,
           code,
@@ -111,12 +111,11 @@ export function useSalesOps() {
             last_used_at
           )
         `)
-        .order("created_at", { ascending: false })
-        .limit(25) as never);
+        .order("created_at", { ascending: false });
       if (!isSuperAdmin && ownSalesAgentQuery.data) {
-        query = (query.eq("agent_id", ownSalesAgentQuery.data) as never);
+        query = query.eq("agent_id", ownSalesAgentQuery.data);
       }
-      const { data, error } = await query;
+      const { data, error } = await query.limit(25);
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -126,15 +125,14 @@ export function useSalesOps() {
     queryKey: ["sales-commission-ledger"],
     enabled: canViewConversions && (isSuperAdmin || ownSalesAgentQuery.isSuccess),
     queryFn: async () => {
-      let query = (supabase
-        .from("sales_commission_ledger" as never)
+      let query = supabase
+        .from("sales_commission_ledger")
         .select("id, payment_reference, total_amount, status, created_at, agent_id")
-        .order("created_at", { ascending: false })
-        .limit(25) as never);
+        .order("created_at", { ascending: false });
       if (!isSuperAdmin && ownSalesAgentQuery.data) {
-        query = (query.eq("agent_id", ownSalesAgentQuery.data) as never);
+        query = query.eq("agent_id", ownSalesAgentQuery.data);
       }
-      const { data, error } = await query;
+      const { data, error } = await query.limit(25);
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -144,15 +142,14 @@ export function useSalesOps() {
     queryKey: ["sales-redemptions"],
     enabled: canViewConversions && (isSuperAdmin || ownSalesAgentQuery.isSuccess),
     queryFn: async () => {
-      let query = (supabase
-        .from("sales_promo_redemptions" as never)
+      let query = supabase
+        .from("sales_promo_redemptions")
         .select("id, owner_email, status, created_at, sales_promo_codes(code, agent_id)")
-        .order("created_at", { ascending: false })
-        .limit(25) as never);
+        .order("created_at", { ascending: false });
       if (!isSuperAdmin && ownSalesAgentQuery.data) {
-        query = (query.eq("sales_promo_codes.agent_id", ownSalesAgentQuery.data) as never);
+        query = query.eq("sales_promo_codes.agent_id", ownSalesAgentQuery.data);
       }
-      const { data, error } = await query;
+      const { data, error } = await query.limit(25);
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -162,9 +159,9 @@ export function useSalesOps() {
     queryKey: ["sales-agent-kyc"],
     enabled: canManageAgentsKyc,
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("sales_agent_kyc" as never)
-        .select("sales_agent_id, legal_full_name, national_id_number, national_id_type, next_of_kin_name, next_of_kin_phone, reference_person_name, reference_person_phone, past_workplace, verification_status") as never);
+      const { data, error } = await supabase
+        .from("sales_agent_kyc")
+        .select("sales_agent_id, legal_full_name, national_id_number, national_id_type, next_of_kin_name, next_of_kin_phone, reference_person_name, reference_person_phone, past_workplace, verification_status");
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -174,10 +171,10 @@ export function useSalesOps() {
     queryKey: ["sales-agent-documents"],
     enabled: canManageAgentsKyc,
     queryFn: async () => {
-      const { data, error } = await (supabase
-        .from("sales_agent_documents" as never)
+      const { data, error } = await supabase
+        .from("sales_agent_documents")
         .select("id, sales_agent_id, document_type, storage_path, review_status, created_at")
-        .order("created_at", { ascending: false }) as never);
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
@@ -200,11 +197,12 @@ export function useSalesOps() {
       if (!resolvedAgentId) {
         throw new Error("Sales agent profile not found for your account");
       }
-      const { data, error } = await (supabase.rpc as never)("backoffice_generate_sales_promo_code", {
+      const { data, error } = await supabase.rpc("backoffice_generate_sales_promo_code", {
         p_campaign_id: campaignId,
         p_agent_id: resolvedAgentId,
         p_target_email: targetEmail,
-        p_target_first_name: targetFirstName?.trim() || null,
+        // p_target_first_name not yet in generated types but accepted by the function
+        ...({ p_target_first_name: targetFirstName?.trim() || null } as object),
       });
       if (error) throw error;
       return data;
@@ -234,12 +232,13 @@ export function useSalesOps() {
 
   const invalidatePromoCode = useMutation({
     mutationFn: async ({ promoCodeId, reason }: { promoCodeId: string; reason?: string }) => {
-      const { data, error } = await (supabase.rpc as any)("invalidate_sales_promo_code", {
+      const { data, error } = await supabase.rpc("invalidate_sales_promo_code", {
         p_promo_code_id: promoCodeId,
-        p_reason: reason || null,
+        p_reason: reason || undefined,
       });
       if (error) throw error;
-      if (!data?.success) throw new Error(data?.message || "Failed to invalidate promo code");
+      const result = data as { success?: boolean; message?: string } | null;
+      if (!result?.success) throw new Error(result?.message || "Failed to invalidate promo code");
       return data;
     },
     onSuccess: () => {
@@ -252,9 +251,7 @@ export function useSalesOps() {
   const ensureOwnAgentProfile = useMutation({
     mutationFn: async () => {
       if (isSuperAdmin) return ownSalesAgentQuery.data;
-      const { data, error } = await (supabase.rpc as never)("ensure_sales_agent_profile", {
-        p_backoffice_user_id: null,
-      });
+      const { data, error } = await supabase.rpc("ensure_sales_agent_profile", {});
       if (error) throw error;
       return (data as string | null) ?? null;
     },
@@ -266,7 +263,7 @@ export function useSalesOps() {
 
   const ensureAgentProfileForUser = useMutation({
     mutationFn: async (backofficeUserId: string) => {
-      const { data, error } = await (supabase.rpc as never)("ensure_sales_agent_profile", {
+      const { data, error } = await supabase.rpc("ensure_sales_agent_profile", {
         p_backoffice_user_id: backofficeUserId,
       });
       if (error) throw error;
@@ -293,8 +290,8 @@ export function useSalesOps() {
       emailBodyTemplate: string;
     }) => {
       if (!canManageCampaigns) throw new Error("You do not have permission to manage campaigns");
-      const { error } = await (supabase
-        .from("sales_promo_campaigns" as never)
+      const { error } = await supabase
+        .from("sales_promo_campaigns")
         .insert({
           name: payload.name.trim(),
           starts_at: new Date(payload.startsAt).toISOString(),
@@ -308,7 +305,7 @@ export function useSalesOps() {
           email_subject_template: payload.emailSubjectTemplate.trim(),
           email_body_template: payload.emailBodyTemplate.trim(),
           is_active: true,
-        } as never) as never);
+        });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -321,10 +318,10 @@ export function useSalesOps() {
   const toggleCampaign = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       if (!canManageCampaigns) throw new Error("You do not have permission to manage campaigns");
-      const { error } = await (supabase
-        .from("sales_promo_campaigns" as never)
-        .update({ is_active: isActive } as never)
-        .eq("id", id) as never);
+      const { error } = await supabase
+        .from("sales_promo_campaigns")
+        .update({ is_active: isActive })
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sales-campaigns"] }),
@@ -334,15 +331,15 @@ export function useSalesOps() {
   const createAgent = useMutation({
     mutationFn: async (payload: { backofficeUserId: string; countryCode: string; monthlySalary: number; hireDate: string | null }) => {
       if (!canManageAgentsKyc) throw new Error("You do not have permission to manage agent profiles");
-      const { error } = await (supabase
-        .from("sales_agents" as never)
+      const { error } = await supabase
+        .from("sales_agents")
         .insert({
           backoffice_user_id: payload.backofficeUserId,
           country_code: payload.countryCode,
           monthly_base_salary: payload.monthlySalary,
           hire_date: payload.hireDate,
           employment_status: "active",
-        } as never) as never);
+        });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -360,8 +357,8 @@ export function useSalesOps() {
       hireDate: string | null;
     }) => {
       if (!canManageAgentsKyc) throw new Error("You do not have permission to update profiles");
-      const { data, error } = await (supabase
-        .from("sales_agents" as never)
+      const { data, error } = await supabase
+        .from("sales_agents")
         .upsert(
           {
             backoffice_user_id: payload.backofficeUserId,
@@ -369,11 +366,11 @@ export function useSalesOps() {
             monthly_base_salary: payload.monthlySalary,
             hire_date: payload.hireDate,
             employment_status: "active",
-          } as never,
+          },
           { onConflict: "backoffice_user_id" },
         )
         .select("id")
-        .single() as never);
+        .single();
       if (error) throw error;
       return data as { id: string };
     },
@@ -387,9 +384,9 @@ export function useSalesOps() {
   const upsertKyc = useMutation({
     mutationFn: async (payload: Record<string, string | null>) => {
       if (!canManageAgentsKyc) throw new Error("You do not have permission to manage KYC");
-      const { error } = await (supabase
-        .from("sales_agent_kyc" as never)
-        .upsert(payload as never, { onConflict: "sales_agent_id" }) as never);
+      const { error } = await supabase
+        .from("sales_agent_kyc")
+        .upsert(payload as TablesInsert<"sales_agent_kyc">, { onConflict: "sales_agent_id" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -410,14 +407,14 @@ export function useSalesOps() {
         .upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await (supabase
-        .from("sales_agent_documents" as never)
+      const { error: insertError } = await supabase
+        .from("sales_agent_documents")
         .insert({
           sales_agent_id: salesAgentId,
           document_type: documentType,
           storage_path: path,
           review_status: "pending",
-        } as never) as never);
+        });
       if (insertError) throw insertError;
     },
     onSuccess: () => {
@@ -430,10 +427,10 @@ export function useSalesOps() {
   const updateKycVerificationStatus = useMutation({
     mutationFn: async ({ salesAgentId, status }: { salesAgentId: string; status: "pending" | "approved" | "rejected" }) => {
       if (!canManageAgentsKyc) throw new Error("You do not have permission to update KYC status");
-      const { error } = await (supabase
-        .from("sales_agent_kyc" as never)
-        .update({ verification_status: status } as never)
-        .eq("sales_agent_id", salesAgentId) as never);
+      const { error } = await supabase
+        .from("sales_agent_kyc")
+        .update({ verification_status: status })
+        .eq("sales_agent_id", salesAgentId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -446,10 +443,10 @@ export function useSalesOps() {
   const updateDocumentReviewStatus = useMutation({
     mutationFn: async ({ documentId, status }: { documentId: string; status: "pending" | "approved" | "rejected" }) => {
       if (!canManageAgentsKyc) throw new Error("You do not have permission to review documents");
-      const { error } = await (supabase
-        .from("sales_agent_documents" as never)
-        .update({ review_status: status } as never)
-        .eq("id", documentId) as never);
+      const { error } = await supabase
+        .from("sales_agent_documents")
+        .update({ review_status: status })
+        .eq("id", documentId);
       if (error) throw error;
     },
     onSuccess: () => {

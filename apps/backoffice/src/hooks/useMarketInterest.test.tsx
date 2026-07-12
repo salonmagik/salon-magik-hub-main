@@ -9,7 +9,7 @@ const fromMock = vi.fn(() => ({ select: selectMock }));
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
+    from: fromMock,
   },
 }));
 

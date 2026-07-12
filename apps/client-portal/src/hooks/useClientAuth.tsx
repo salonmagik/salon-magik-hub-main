@@ -7,7 +7,7 @@ type Customer = Tables<"customers">;
 type Tenant = Tables<"tenants">;
 type Profile = Tables<"profiles">;
 
-interface CustomerWithTenant extends Customer {
+export interface CustomerWithTenant extends Customer {
   tenant: Tenant;
 }
 

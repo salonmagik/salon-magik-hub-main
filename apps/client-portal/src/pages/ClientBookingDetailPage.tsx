@@ -112,7 +112,7 @@ export default function ClientBookingDetailPage() {
     payment_status: string;
     approval_status: string | null;
     location_id: string | null;
-    location: { id: string; name: string; phone: string | null; email: string | null } | null;
+    location: { id: string; name: string; phone: string | null } | null;
   };
   const [relatedBookings, setRelatedBookings] = useState<SiblingBooking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -155,13 +155,13 @@ export default function ClientBookingDetailPage() {
         if (bookingReference) {
           const { data: siblings } = await supabase
             .from("appointments")
-            .select("id, status, scheduled_start, total_amount, amount_paid, payment_status, approval_status, location_id, location:locations(id, name, phone, email)")
+            .select("id, status, scheduled_start, total_amount, amount_paid, payment_status, approval_status, location_id, location:locations(id, name, phone)")
             .eq("booking_reference", bookingReference)
             .in("customer_id", customerIds)
             .neq("id", id)
             .order("scheduled_start", { ascending: true, nullsFirst: false });
 
-          setRelatedBookings((siblings as SiblingBooking[]) || []);
+          setRelatedBookings((siblings as unknown as SiblingBooking[]) || []);
         } else {
           setRelatedBookings([]);
         }
@@ -362,11 +362,9 @@ export default function ClientBookingDetailPage() {
     ["approved", "reschedule_accepted", "not_required"].includes(approvalBooking.approval_status || "not_required");
   const showPendingApprovalState = (approvalBooking.approval_status || "not_required") === "pending";
   const showRescheduleProposal = approvalBooking.approval_status === "reschedule_proposed";
-  const salonContactHref = booking.tenant?.email
-    ? `mailto:${booking.tenant.email}`
-    : booking.tenant?.phone
-      ? `tel:${booking.tenant.phone}`
-      : null;
+  const salonContactHref = booking.tenant?.contact_phone
+    ? `tel:${booking.tenant.contact_phone}`
+    : null;
 
   // Mixed-outcome detection for multi-appointment booking groups
   const approvedStatuses = new Set(["approved", "not_required", "reschedule_accepted"]);
@@ -376,7 +374,7 @@ export default function ClientBookingDetailPage() {
     id: string;
     approval_status: string | null;
     status: string;
-    location: { id: string; name: string; phone: string | null; email: string | null } | null;
+    location: { id: string; name: string; phone: string | null } | null;
   }> = [
     {
       id: booking.id,
@@ -407,7 +405,7 @@ export default function ClientBookingDetailPage() {
           map.set(item.location.id, item.location);
         }
         return map;
-      }, new Map<string, { id: string; name: string; phone: string | null; email: string | null }>())
+      }, new Map<string, { id: string; name: string; phone: string | null }>())
       .values()
   );
 
@@ -682,8 +680,8 @@ export default function ClientBookingDetailPage() {
                     variant="outline"
                     className="border-amber-400 text-amber-900 hover:bg-amber-100"
                   >
-                    <a href={branch.phone ? `tel:${branch.phone}` : branch.email ? `mailto:${branch.email}` : "#"}>
-                      {branch.phone ? <Phone className="h-3.5 w-3.5 mr-1.5" /> : <Mail className="h-3.5 w-3.5 mr-1.5" />}
+                    <a href={branch.phone ? `tel:${branch.phone}` : "#"}>
+                      <Phone className="h-3.5 w-3.5 mr-1.5" />
                       Contact {branch.name}
                     </a>
                   </Button>

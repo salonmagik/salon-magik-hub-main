@@ -1,6 +1,12 @@
 export { ClientAuthProvider, useClientAuth } from "./useClientAuth";
+export type { CustomerWithTenant } from "./useClientAuth";
 export { useClientBookings, useClientBookingActions } from "./useClientBookings";
+export type { ClientAppointmentWithDetails } from "./useClientBookings";
 export { useClientPurse } from "./useClientPurse";
+export type { PurseWithTenant, PurseCountryGroup } from "./useClientPurse";
 export { useClientNotifications } from "./useClientNotifications";
+export type { ClientNotification } from "./useClientNotifications";
 export { useClientRefunds } from "./useClientRefunds";
+export type { ClientRefundWithDetails } from "./useClientRefunds";
 export { useClientTransactions } from "./useClientTransactions";
+export type { ClientTransactionWithTenant } from "./useClientTransactions";

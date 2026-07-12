@@ -315,7 +315,7 @@ export default function WaitlistPage() {
                                       {(["new", "reviewing", "contacted", "qualified", "closed"] as const).map((status) => (
                                         <DropdownMenuItem
                                           key={`${lead.id}-${status}`}
-                                          onClick={() => updateMarketInterestStatus.mutate({ id: lead.id, status })}
+                                          onClick={() => updateMarketInterestStatus.mutate({ leadId: lead.id, status })}
                                         >
                                           Mark as {status}
                                         </DropdownMenuItem>
