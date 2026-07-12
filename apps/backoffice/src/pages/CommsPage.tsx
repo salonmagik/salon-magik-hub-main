@@ -50,6 +50,42 @@ const emptyEditorState: TemplateEditorState = {
   is_active: true,
 };
 
+// Keep this in sync with the `templateValues` object each edge function actually
+// supplies to renderPlatformTemplate(). A placeholder not in this list will render
+// as a literal "{{...}}" in the sent email — see send-staff-invitation's
+// {{staff_name}} incident for why this is enforced, not just documented.
+// Placeholders ending in _button render a ready-made, brand-styled button —
+// use those instead of the raw _link version so custom templates don't need
+// to hand-write button markup to stay on-brand.
+const KNOWN_TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
+  email_verification: ["first_name", "verification_link", "verification_link_button"],
+  staff_invitation: [
+    "first_name",
+    "staff_name",
+    "email",
+    "salon_name",
+    "role",
+    "login_link",
+    "login_link_button",
+    "temp_password",
+  ],
+  daily_digest: [
+    "first_name",
+    "salon_name",
+    "digest_date",
+    "upcoming_appointments_count",
+    "payments_received",
+    "outstanding_balances",
+    "cta_link",
+    "cta_link_button",
+  ],
+};
+
+function extractPlaceholders(text: string): string[] {
+  const matches = text.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
+  return [...new Set(matches.map((m) => m.replace(/[{}\s]/g, "")))];
+}
+
 export default function CommsPage() {
   const queryClient = useQueryClient();
   const [editorOpen, setEditorOpen] = useState(false);
@@ -79,6 +115,19 @@ export default function CommsPage() {
 
   const upsertTemplate = useMutation({
     mutationFn: async (payload: TemplateEditorState) => {
+      const knownPlaceholders = KNOWN_TEMPLATE_PLACEHOLDERS[payload.template_key.trim()];
+      if (knownPlaceholders) {
+        const usedPlaceholders = extractPlaceholders(`${payload.subject} ${payload.body}`);
+        const unknown = usedPlaceholders.filter((p) => !knownPlaceholders.includes(p));
+        if (unknown.length > 0) {
+          throw new Error(
+            `Unknown placeholder${unknown.length > 1 ? "s" : ""} for "${payload.template_key}": ${unknown
+              .map((p) => `{{${p}}}`)
+              .join(", ")}. Valid placeholders: ${knownPlaceholders.map((p) => `{{${p}}}`).join(", ")}.`,
+          );
+        }
+      }
+
       const record = {
         channel: payload.channel,
         template_key: payload.template_key.trim(),
@@ -271,6 +320,36 @@ export default function CommsPage() {
                 value={editorState.body}
                 onChange={(event) => setEditorState((current) => ({ ...current, body: event.target.value }))}
               />
+              {(() => {
+                const known = KNOWN_TEMPLATE_PLACEHOLDERS[editorState.template_key.trim()];
+                if (known) {
+                  return (
+                    <p className="text-xs text-muted-foreground">
+                      Available placeholders for <span className="font-mono">{editorState.template_key}</span>:{" "}
+                      {known.map((p) => (
+                        <span key={p} className={`mr-1.5 font-mono ${p.endsWith("_button") ? "font-semibold text-primary" : ""}`}>
+                          {`{{${p}}}`}
+                        </span>
+                      ))}
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-xs text-muted-foreground">
+                    No registered placeholder list for this template key — double-check the actual edge function
+                    before using any <span className="font-mono">{"{{...}}"}</span> placeholders, since an unknown
+                    one will show up literally in the sent email instead of being replaced.
+                  </p>
+                );
+              })()}
+              <p className="text-xs text-muted-foreground">
+                Brand styling (logo, colors, footer) is applied automatically around this body when the email is
+                sent — only write the message content here, not a full HTML document. For call-to-action links,
+                use the <span className="font-mono font-semibold text-primary">_button</span> placeholder (e.g.{" "}
+                <span className="font-mono">{"{{login_link_button}}"}</span>) to get a real branded button — the
+                plain <span className="font-mono">{"{{login_link}}"}</span> version is just the raw URL and won't
+                be styled.
+              </p>
             </div>
             <div className="flex items-center justify-between rounded-2xl border p-3">
               <div>

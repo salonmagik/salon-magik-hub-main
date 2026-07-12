@@ -17,6 +17,7 @@ export interface CatalogIntegrityIssue {
   branch_location_names: string[];
   metadata: Record<string, unknown>;
   detected_at: string;
+  resolved_at: string | null;
 }
 
 export function useCatalogIntegrityIssues() {

@@ -34,9 +34,10 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
  } from "@ui/select";
  import { toast } from "sonner";
  import { Eye, Search, AlertTriangle, Clock } from "lucide-react";
+ import { EmptyState } from "@ui/empty-state";
  import type { Json } from "@/lib/supabase";
  import { format } from "date-fns";
- 
+
  interface ImpersonationSession {
    id: string;
    backoffice_user_id: string;
@@ -45,18 +46,18 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
    started_at: string;
    ended_at: string | null;
  }
- 
+
  export default function ImpersonationPage() {
    const queryClient = useQueryClient();
    const { backofficeUser } = useBackofficeAuth();
    const { data: tenants } = useTenants();
- 
+
    const [searchQuery, setSearchQuery] = useState("");
    const [startDialogOpen, setStartDialogOpen] = useState(false);
    const [selectedTenantId, setSelectedTenantId] = useState<string>("");
    const [reason, setReason] = useState("");
    const [activeSession, setActiveSession] = useState<ImpersonationSession | null>(null);
- 
+
    // Fetch impersonation sessions
    const { data: sessions } = useQuery({
      queryKey: ["impersonation-sessions"],
@@ -70,14 +71,14 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
        return data as ImpersonationSession[];
      },
    });
- 
+
    // Check for active session
    const currentActiveSession = sessions?.find(
      (s) =>
        s.backoffice_user_id === backofficeUser?.id &&
        s.ended_at === null
    );
- 
+
    const startSessionMutation = useMutation({
      mutationFn: async ({ tenantId, reason }: { tenantId: string; reason: string }) => {
        const { data, error } = await supabase
@@ -104,7 +105,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
        toast.error("Failed to start session: " + error.message);
      },
    });
- 
+
    const endSessionMutation = useMutation({
      mutationFn: async (sessionId: string) => {
        const { error } = await supabase
@@ -122,15 +123,15 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
        toast.error("Failed to end session: " + error.message);
      },
    });
- 
+
    const filteredTenants = tenants?.filter((t) =>
      t.name.toLowerCase().includes(searchQuery.toLowerCase())
    );
- 
+
    const getTenantName = (tenantId: string) => {
      return tenants?.find((t) => t.id === tenantId)?.name || "Unknown";
    };
- 
+
    const handleStartSession = () => {
      if (!selectedTenantId) {
        toast.error("Please select a tenant");
@@ -142,7 +143,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
      }
      startSessionMutation.mutate({ tenantId: selectedTenantId, reason });
    };
- 
+
    return (
      <BackofficeLayout>
        <div className="p-6 space-y-6">
@@ -152,14 +153,14 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
              View salons as their owners see them (read-only access)
            </p>
          </div>
- 
-         <Card className="border-amber-200 bg-amber-50/50">
+
+         <Card className="border-warning-bg bg-warning-bg/50">
            <CardContent className="py-4">
              <div className="flex items-start gap-3">
-               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-               <div className="text-sm text-amber-800">
+               <AlertTriangle className="h-5 w-5 text-warning mt-0.5" />
+               <div className="text-sm text-warning">
                  <p className="font-medium">Read-Only Mode</p>
-                 <p className="text-amber-700">
+                 <p className="text-warning/100">
                    Impersonation provides view-only access. You cannot modify any data.
                    All sessions are logged and audited.
                  </p>
@@ -167,7 +168,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
              </div>
            </CardContent>
          </Card>
- 
+
          {/* Active Session Banner */}
          {currentActiveSession && (
            <Card className="border-primary bg-primary/5">
@@ -195,7 +196,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
              </CardContent>
            </Card>
          )}
- 
+
          {/* Start New Session */}
          {!currentActiveSession && (
            <Card>
@@ -221,7 +222,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
                    Start Session
                  </Button>
                </div>
- 
+
                {searchQuery && filteredTenants && filteredTenants.length > 0 && (
                  <div className="mt-4 border rounded-lg divide-y max-h-60 overflow-auto">
                    {filteredTenants.slice(0, 10).map((tenant) => (
@@ -249,7 +250,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
              </CardContent>
            </Card>
          )}
- 
+
          {/* Session History */}
          <Card>
            <CardHeader>
@@ -264,7 +265,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
            <CardContent>
              {sessions?.length === 0 ? (
                <div className="text-center py-8 text-muted-foreground">
-                 No impersonation sessions yet
+                 <EmptyState icon={Eye} title="No impersonation sessions yet" />
                </div>
              ) : (
                <Table>
@@ -296,9 +297,9 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
                        </TableCell>
                        <TableCell>
                          {session.ended_at ? (
-                           <Badge variant="secondary">Ended</Badge>
+                           <Badge variant="neutral">Ended</Badge>
                          ) : (
-                           <Badge variant="default">Active</Badge>
+                           <Badge variant="success">Active</Badge>
                          )}
                        </TableCell>
                      </TableRow>
@@ -308,7 +309,7 @@ import { useBackofficeAuth, useTenants } from "@/hooks";
              )}
            </CardContent>
          </Card>
- 
+
          {/* Start Session Dialog */}
          <Dialog open={startDialogOpen} onOpenChange={setStartDialogOpen}>
            <DialogContent>

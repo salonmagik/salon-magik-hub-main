@@ -19,6 +19,7 @@ import type {
 
 interface CatalogViewProps {
   themeKey?: string | null;
+  storefrontMode?: "services" | "products" | "both";
   services: PublicService[];
   packages: PublicPackage[];
   products: PublicProduct[];
@@ -29,6 +30,9 @@ interface CatalogViewProps {
   strictScopedLocationIds?: string[];
   selectedLocationIds: string[];
   onLocationFilterChange: (locationIds: string[]) => void;
+  /** When provided, the header search bar is controlled externally (ecommerce header search) */
+  externalSearch?: string;
+  onExternalSearchChange?: (q: string) => void;
 }
 
 type SortOption = "name" | "price-asc" | "price-desc";
@@ -53,6 +57,7 @@ type CatalogItem = {
 
 export function CatalogView({
   themeKey,
+  storefrontMode = "both",
   services,
   packages,
   products,
@@ -63,11 +68,17 @@ export function CatalogView({
   strictScopedLocationIds = [],
   selectedLocationIds,
   onLocationFilterChange,
+  externalSearch,
+  onExternalSearchChange,
 }: CatalogViewProps) {
   const isEcommerceTheme = themeKey === "ecommerce";
+  const isModeRestricted = storefrontMode !== "both";
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  // In ecommerce mode the header controls search externally; fall back to internal
+  const searchQuery = isEcommerceTheme && externalSearch !== undefined ? externalSearch : internalSearchQuery;
+  const setSearchQuery = isEcommerceTheme && onExternalSearchChange ? onExternalSearchChange : setInternalSearchQuery;
   const [sortBy, setSortBy] = useState<SortOption>("name");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -95,8 +106,17 @@ export function CatalogView({
       branches: item.branches ?? [], locationIds: item.location_ids ?? [],
       locationNames: Array.from(new Set((item.branches ?? []).map((b) => b.city || b.name))),
     }));
+    if (storefrontMode === "services") return [...s, ...p];
+    if (storefrontMode === "products") return [...p, ...r];
     return [...s, ...p, ...r];
-  }, [services, packages, products]);
+  }, [services, packages, products, storefrontMode]);
+
+  const searchPlaceholder =
+    storefrontMode === "services"
+      ? "Search services & packages…"
+      : storefrontMode === "products"
+        ? "Search products & packages…"
+        : "Search services, packages, products…";
 
   const getItemLocationIds = (item: CatalogItem) =>
     item.branches?.length ? item.branches.map((b) => b.id) : item.locationIds ?? [];
@@ -160,6 +180,7 @@ export function CatalogView({
           <ItemCard
             key={`${item.type}-${item.id}`}
             themeKey={themeKey}
+            storefrontMode={storefrontMode}
             type={item.type}
             id={item.id}
             name={item.name}
@@ -198,28 +219,30 @@ export function CatalogView({
           </Select>
         </div>
 
-        {/* Divider */}
-        <div className="border-t border-black/8" />
-
-        {/* Type */}
-        <div>
-          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Type</p>
-          <ul className="space-y-2.5">
-            {typeOptions.map((opt) => (
-              <li key={opt.value}>
-                <button
-                  type="button"
-                  onClick={() => { setTypeFilter(opt.value); setActiveCategory(null); }}
-                  className="flex w-full items-center justify-between text-left text-sm transition-colors"
-                  style={{ color: typeFilter === opt.value ? "var(--brand-color)" : "#6b7280" }}
-                >
-                  <span className={typeFilter === opt.value ? "font-semibold" : ""}>{opt.label}</span>
-                  <span className="text-xs text-gray-300">{counts[opt.value]}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Type (hidden when storefront mode already restricts to one type) */}
+        {!isModeRestricted && (
+          <>
+            <div className="border-t border-black/8" />
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400">Type</p>
+              <ul className="space-y-2.5">
+                {typeOptions.map((opt) => (
+                  <li key={opt.value}>
+                    <button
+                      type="button"
+                      onClick={() => { setTypeFilter(opt.value); setActiveCategory(null); }}
+                      className="flex w-full items-center justify-between text-left text-sm transition-colors"
+                      style={{ color: typeFilter === opt.value ? "var(--brand-color)" : "#6b7280" }}
+                    >
+                      <span className={typeFilter === opt.value ? "font-semibold" : ""}>{opt.label}</span>
+                      <span className="text-xs text-gray-300">{counts[opt.value]}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
 
         {/* Categories (only relevant for services) */}
         {categories.length > 0 && (typeFilter === "all" || typeFilter === "service") && (
@@ -376,7 +399,7 @@ export function CatalogView({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search services, packages, products…"
+            placeholder={searchPlaceholder}
             value={searchQuery}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -392,19 +415,21 @@ export function CatalogView({
         </Select>
       </div>
 
-      {/* Type pills for default */}
-      <div className="flex flex-wrap gap-2">
-        {typeOptions.map((opt) => (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => setTypeFilter(opt.value)}
-            className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${typeFilter === opt.value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted/40"}`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      {/* Type pills for default (hidden when storefront mode already restricts to one type) */}
+      {!isModeRestricted && (
+        <div className="flex flex-wrap gap-2">
+          {typeOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTypeFilter(opt.value)}
+              className={`rounded-full border px-4 py-1.5 text-xs font-medium transition-colors ${typeFilter === opt.value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted/40"}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {locations.length > 1 && (
         <div className="rounded-lg border p-3 space-y-2">

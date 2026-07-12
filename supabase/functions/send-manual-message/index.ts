@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
 import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
 
@@ -262,10 +262,11 @@ const handler = async (req: Request): Promise<Response> => {
           salonName: senderDisplayName,
           fromEmail,
         });
-        const html =
+        const rawContent =
           typeof message.message === "string" && /<[^>]+>/.test(message.message)
             ? message.message
             : `<p>${String(message.message || "").replace(/\n/g, "<br />")}</p>`;
+        const html = wrapEmailTemplate(rawContent, { mode: "salon", salonName: senderDisplayName });
 
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",

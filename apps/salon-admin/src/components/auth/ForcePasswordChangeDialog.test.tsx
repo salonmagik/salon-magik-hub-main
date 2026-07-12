@@ -7,20 +7,11 @@ vi.mock("@ui/ui/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
-vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    signOut: vi.fn(),
-  }),
-}));
-
-vi.mock("@/lib/googleOAuthFlow", () => ({
-  markPasswordChangeRedirectPending: vi.fn(),
-}));
-
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
       getSession: vi.fn(),
+      refreshSession: vi.fn(),
     },
     functions: {
       invoke: vi.fn(),

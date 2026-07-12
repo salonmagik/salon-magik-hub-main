@@ -65,8 +65,8 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
   // Can mark "Running Late" if before scheduled start
   const canMarkRunningLate = isBeforeStart && booking.status === "scheduled";
 
-  // Can reschedule if before start
-  const canReschedule = isBeforeStart && ["scheduled"].includes(booking.status);
+  // Self-service reschedule not yet available — keep flag false until implemented
+  const canReschedule = false;
 
   // Can cancel if before start
   const canCancel = isBeforeStart && ["scheduled"].includes(booking.status);

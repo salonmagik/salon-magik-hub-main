@@ -28,7 +28,7 @@ const ENTRY_TYPE_LABELS: Record<string, string> = {
   customer_purse_debit_booking: "Booking Payment",
   customer_purse_debit_invoice: "Invoice Payment",
   customer_purse_reversal: "Reversal",
-  salon_purse_credit_booking: "Booking Revenue",
+  salon_purse_credit_booking: "Booking Inflow",
   salon_purse_credit_invoice: "Invoice Payment",
   salon_purse_topup: "Wallet Top Up",
   salon_purse_withdrawal: "Withdrawal",

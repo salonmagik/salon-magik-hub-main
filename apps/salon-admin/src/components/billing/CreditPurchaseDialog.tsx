@@ -183,8 +183,9 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
             Purchase Message Credits
           </DialogTitle>
           <DialogDescription>
-            Credits are used for sending emails and SMS to your customers.
-            Each email costs 1 credit, SMS costs 2 credits.
+            Credits are used for sending SMS messages to your customers. Each
+            SMS costs 2 credits. Email is always free and included with your
+            plan.
           </DialogDescription>
         </DialogHeader>
 

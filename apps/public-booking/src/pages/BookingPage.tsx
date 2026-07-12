@@ -213,6 +213,7 @@ function BookingPageContent() {
       <BookingPageWithCart
         salon={salon}
         themeKey={previewThemeKey || salon.theme_key || null}
+        storefrontMode={salon.storefront_mode || "both"}
         isThemePreview={Boolean(previewThemeKey)}
         locations={countryScopedLocations}
         checkoutLocations={checkoutLocations}
@@ -237,6 +238,7 @@ function BookingPageContent() {
 interface BookingPageWithCartProps {
   salon: PublicTenant;
   themeKey: string | null;
+  storefrontMode: "services" | "products" | "both";
   isThemePreview: boolean;
   locations: PublicLocation[];
   checkoutLocations: PublicLocation[];
@@ -258,6 +260,7 @@ interface BookingPageWithCartProps {
 function BookingPageWithCart({
   salon,
   themeKey,
+  storefrontMode,
   isThemePreview,
   locations,
   checkoutLocations,
@@ -280,6 +283,7 @@ function BookingPageWithCart({
   const [modalCountryCode, setModalCountryCode] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
+  const [ecomSearchQuery, setEcomSearchQuery] = useState("");
 
   // Detect payment return from Paystack
   useEffect(() => {
@@ -322,6 +326,8 @@ function BookingPageWithCart({
         themeKey={themeKey}
         isThemePreview={isThemePreview}
         onCartClick={() => setCheckoutOpen(true)}
+        searchQuery={ecomSearchQuery}
+        onSearchChange={setEcomSearchQuery}
       >
         {themeKey === "ecommerce" ? (
           <>
@@ -336,6 +342,7 @@ function BookingPageWithCart({
             {!isCatalogBlocked ? (
               <CatalogView
                 themeKey={themeKey}
+                storefrontMode={storefrontMode}
                 services={services}
                 packages={packages}
                 products={products}
@@ -346,6 +353,8 @@ function BookingPageWithCart({
                 strictScopedLocationIds={scopedLocationIds}
                 selectedLocationIds={selectedLocationIds}
                 onLocationFilterChange={onLocationFilterChange}
+                externalSearch={ecomSearchQuery}
+                onExternalSearchChange={setEcomSearchQuery}
               />
             ) : (
               <div className="mx-auto max-w-7xl px-6 py-20 text-center lg:px-8">
@@ -367,6 +376,7 @@ function BookingPageWithCart({
             {!isCatalogBlocked ? (
               <CatalogView
                 themeKey={themeKey}
+                storefrontMode={storefrontMode}
                 services={services}
                 packages={packages}
                 products={products}

@@ -40,7 +40,7 @@ import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatCurrency } from "@shared/currency";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 import {
   Dialog,
@@ -57,6 +57,7 @@ export default function SalonsOverviewPage() {
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
+  const navigate = useNavigate();
   const {
     currentTenant,
     currentRole,
@@ -64,6 +65,7 @@ export default function SalonsOverviewPage() {
     activeLocationId,
     availableContexts,
     refreshTenants,
+    setActiveContext,
   } = useAuth();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
@@ -203,7 +205,7 @@ export default function SalonsOverviewPage() {
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                         <Coins className="w-3 h-3" />
-                        Total Revenue
+                        Total Inflow
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -277,7 +279,7 @@ export default function SalonsOverviewPage() {
                           <div>
                             <p className="font-semibold text-lg">{aggregateStats.bestPerforming.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} revenue
+                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} inflow
                             </p>
                           </div>
                           <Badge variant="secondary" className="bg-success/10 text-success">
@@ -314,7 +316,7 @@ export default function SalonsOverviewPage() {
                           <div>
                             <p className="font-semibold text-lg">{aggregateStats.worstPerforming.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} revenue
+                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} inflow
                             </p>
                           </div>
                           <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
@@ -356,7 +358,7 @@ export default function SalonsOverviewPage() {
                         <TableRow>
                           <TableHead>Branches</TableHead>
                           {canViewRevenueAnalytics && (
-                            <TableHead className="text-right">Revenue</TableHead>
+                            <TableHead className="text-right">Inflow</TableHead>
                           )}
                           <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
                           <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>
@@ -397,7 +399,16 @@ export default function SalonsOverviewPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              title={`View ${location.name} reports`}
+                              onClick={async () => {
+                                await setActiveContext("location", location.id);
+                                navigate("/salon/reports");
+                              }}
+                            >
                               <ChevronRight className="w-4 h-4" />
                             </Button>
                           </TableCell>

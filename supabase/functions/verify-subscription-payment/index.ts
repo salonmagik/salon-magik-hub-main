@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { sendReceiptEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -65,7 +66,7 @@ serve(async (req) => {
     // Load tenant to get currency
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, currency, subscription_status")
+      .select("id, name, logo_url, currency, subscription_status")
       .eq("id", tenantId)
       .single();
 
@@ -135,10 +136,20 @@ serve(async (req) => {
       });
     }
 
+    // Capture the reusable card token (if Paystack returned one) so future
+    // plan/add-on changes can be charged server-to-server with no redirect.
+    const authorization = txData?.authorization;
+    const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
+    if (authorization?.reusable && authorization?.authorization_code) {
+      tenantUpdate.paystack_authorization_code = authorization.authorization_code;
+      tenantUpdate.paystack_customer_code = txData?.customer?.customer_code || null;
+      tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
+    }
+
     // Activate the subscription
     const { error: updateError } = await supabase
       .from("tenants")
-      .update({ subscription_status: "active" })
+      .update(tenantUpdate)
       .eq("id", tenantId);
 
     if (updateError) {
@@ -156,6 +167,20 @@ serve(async (req) => {
       actor_user_id: user.id,
       metadata: { reference, currency, intent: "subscription_activation" },
     });
+
+    const receiptEmail = txData?.customer?.email || user.email;
+    if (receiptEmail) {
+      await sendReceiptEmail({
+        recipientEmail: receiptEmail,
+        salonName: tenant.name,
+        salonLogoUrl: tenant.logo_url,
+        title: "Your Salon Magik subscription is active",
+        lineItems: [{ label: "Subscription plan", amount: (txData?.amount || 0) / 100 }],
+        total: (txData?.amount || 0) / 100,
+        currency,
+        reference,
+      });
+    }
 
     console.log(`Subscription activated for tenant ${tenantId} via reference ${reference}`);
 

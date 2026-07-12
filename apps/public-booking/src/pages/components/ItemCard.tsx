@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShoppingBag, Clock, Package as PackageIcon, MapPin } from "lucide-react";
+import { ShoppingBag, Calendar, Clock, Package as PackageIcon, MapPin } from "lucide-react";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
@@ -11,6 +11,7 @@ import { ImageSlider } from "@/components/ImageSlider";
 
 interface ItemCardProps {
   themeKey?: string | null;
+  storefrontMode?: "services" | "products" | "both";
   type: "service" | "package" | "product";
   id: string;
   name: string;
@@ -28,6 +29,7 @@ interface ItemCardProps {
 
 export function ItemCard({
   themeKey,
+  storefrontMode = "both",
   type,
   id,
   name,
@@ -43,6 +45,12 @@ export function ItemCard({
   locationNames = [],
 }: ItemCardProps) {
   const isEcommerceTheme = themeKey === "ecommerce";
+  // In "services only" mode, bookable items (services/packages) get a
+  // "Book" CTA instead of "Add to cart" — the concrete feel difference
+  // between a booking-focused storefront and a shop-focused one.
+  const isServiceFeel = storefrontMode === "services" && type !== "product";
+  const ctaLabel = isServiceFeel ? "Book" : "Add";
+  const CtaIcon = isServiceFeel ? Calendar : ShoppingBag;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const { addItem, getItemInCart, updateQuantity } = useBookingCart();
 
@@ -136,9 +144,9 @@ export function ItemCard({
                 onClick={handleAddToCart}
                 className="absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md opacity-0 transition-all duration-200 group-hover:opacity-100 hover:scale-110"
                 style={{ color: "var(--brand-color)" }}
-                aria-label={`Add ${name} to cart`}
+                aria-label={isServiceFeel ? `Book ${name}` : `Add ${name} to cart`}
               >
-                <ShoppingBag className="h-4 w-4" />
+                <CtaIcon className="h-4 w-4" />
               </button>
             )}
 
@@ -207,6 +215,7 @@ export function ItemCard({
           hasDiscount={hasDiscount} discountPercent={discountPercent}
           type={type} onAddToCart={() => handleAddToCart()}
           onIncrement={handleIncrement} onDecrement={handleDecrement}
+          serviceFeel={isServiceFeel}
         />
       </>
     );
@@ -275,7 +284,7 @@ export function ItemCard({
               style={{ backgroundColor: isOutOfStock ? undefined : "var(--brand-color)", color: isOutOfStock ? undefined : "var(--brand-foreground, white)" }}
               onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleAddToCart(); }}
             >
-              <ShoppingBag className="h-4 w-4" />Add
+              <CtaIcon className="h-4 w-4" />{ctaLabel}
             </Button>
           )}
         </div>
@@ -291,6 +300,7 @@ export function ItemCard({
         hasDiscount={hasDiscount} discountPercent={discountPercent}
         type={type} onAddToCart={() => handleAddToCart()}
         onIncrement={handleIncrement} onDecrement={handleDecrement}
+        serviceFeel={isServiceFeel}
       />
     </>
   );
@@ -301,6 +311,7 @@ function ItemDetailDialog({
   open, onOpenChange, name, typeLabel, description, price, originalPrice,
   currency, imageUrls, durationMinutes, locationNames, isInCart, itemInCart,
   isOutOfStock, hasDiscount, discountPercent, type, onAddToCart, onIncrement, onDecrement,
+  serviceFeel = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -322,7 +333,10 @@ function ItemDetailDialog({
   onAddToCart: () => void;
   onIncrement: () => void;
   onDecrement: () => void;
+  serviceFeel?: boolean;
 }) {
+  const DialogCtaIcon = serviceFeel ? Calendar : ShoppingBag;
+  const dialogCtaLabel = serviceFeel ? "Book now" : "Add to cart";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
@@ -372,7 +386,7 @@ function ItemDetailDialog({
                 className="gap-1.5 border-0"
                 style={{ backgroundColor: isOutOfStock ? undefined : "var(--brand-color)", color: isOutOfStock ? undefined : "var(--brand-foreground, white)" }}
               >
-                <ShoppingBag className="h-4 w-4" />Add to cart
+                <DialogCtaIcon className="h-4 w-4" />{dialogCtaLabel}
               </Button>
             )}
           </div>

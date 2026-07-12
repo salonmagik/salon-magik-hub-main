@@ -99,13 +99,30 @@ serve(async (req) => {
     const normalized = normalizeIdentifier(identifier);
     const customerColumn = normalized.type === "email" ? "email" : "phone";
 
-    const { data: matchedCustomers, error: customerError } = await admin
+    const { data: primaryCustomers, error: customerError } = await admin
       .from("customers")
       .select("id, user_id, full_name, email, phone")
       .eq(customerColumn, normalized.value);
 
     if (customerError) {
       throw customerError;
+    }
+
+    let matchedCustomers = primaryCustomers;
+
+    // For phone identifiers, customers may be stored in local format (e.g. "0552626984")
+    // rather than E.164 ("+233552626984"). Fall back to matching by last 9 significant digits.
+    if (normalized.type === "phone" && (!matchedCustomers || matchedCustomers.length === 0)) {
+      const last9 = normalized.value.replace(/\D/g, "").slice(-9);
+      if (last9.length >= 7) {
+        const { data: fallbackCustomers } = await admin
+          .from("customers")
+          .select("id, user_id, full_name, email, phone")
+          .like("phone", `%${last9}`);
+        if (fallbackCustomers?.length) {
+          matchedCustomers = fallbackCustomers;
+        }
+      }
     }
 
     if (!matchedCustomers || matchedCustomers.length === 0) {
@@ -192,7 +209,11 @@ serve(async (req) => {
     const fullName = buildFullName(
       matchedCustomers[0]?.full_name || (metadata.full_name as string | undefined),
     );
-    const phone = matchedCustomers[0]?.phone || authUser.phone || null;
+    // When user identified by phone, always store the E.164 value so send-phone-otp can find them.
+    const phone =
+      normalized.type === "phone"
+        ? normalized.value
+        : (matchedCustomers[0]?.phone || authUser.phone || null);
 
     const { error: profileError } = await admin
       .from("profiles")

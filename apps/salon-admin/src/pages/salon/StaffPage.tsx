@@ -114,12 +114,14 @@ export default function StaffPage() {
     locations: false,
     permissions: false,
   });
+  const [editCanManageSessions, setEditCanManageSessions] = useState(false);
   const [initialEditSnapshot, setInitialEditSnapshot] = useState<{
     firstName: string;
     lastName: string;
     role: StaffMember["role"];
     selectedLocationIds: string[];
     overrideSelections: Record<string, boolean>;
+    canManageSessions: boolean;
   } | null>(null);
   const { staff, isLoading, refetch, updateStaffLocal } = useStaff();
   const {
@@ -139,6 +141,15 @@ export default function StaffPage() {
 
   const pendingInvitations = invitations.filter((i) => i.status === "pending");
   const filteredStaff = staffTab === "unassigned" ? staff.filter((member) => member.isUnassigned) : staff;
+  // send-staff-invitation creates the user_roles row (is_active: true) the moment an
+  // invite is sent, so the account exists and looks "Active" in user_roles terms even
+  // though the person has never logged in or set a real password. Cross-reference
+  // against unaccepted invitations by email so Team Members reflects that correctly.
+  const pendingInvitationByEmail = new Map(
+    pendingInvitations
+      .filter((invitation) => !invitation.accepted_at)
+      .map((invitation) => [invitation.email.toLowerCase(), invitation] as const),
+  );
   const isRoleChangedInDraft = Boolean(initialEditSnapshot && editRole !== initialEditSnapshot.role);
   const isEditingOwner = staffToEdit?.role === "owner";
   const normalizedSelectedLocations = [...selectedLocationIds].sort();
@@ -158,7 +169,12 @@ export default function StaffPage() {
           (overrideSelections[moduleKey] ?? false) !== (initialEditSnapshot.overrideSelections[moduleKey] ?? false)
       )
   );
-  const isEditDirty = profileChanged || roleChanged || locationsChanged || (!roleChanged && overridesChanged);
+  const sessionsChanged = Boolean(
+    initialEditSnapshot &&
+      staffToEdit?.role === "manager" &&
+      editCanManageSessions !== initialEditSnapshot.canManageSessions
+  );
+  const isEditDirty = profileChanged || roleChanged || locationsChanged || (!roleChanged && overridesChanged) || sessionsChanged;
 
   const { data: tenantLocations = [] } = useQuery({
     queryKey: ["staff-assignment-locations", currentTenant?.id],
@@ -336,13 +352,34 @@ export default function StaffPage() {
       initialOverrides[moduleKey] = memberOverrideMap.get(moduleKey) ?? roleAllowed;
     });
     setOverrideSelections(initialOverrides);
+    setEditCanManageSessions(false);
     setInitialEditSnapshot({
       firstName: first,
       lastName: rest.join(" "),
       role: member.role,
       selectedLocationIds: member.assignedLocationIds,
       overrideSelections: initialOverrides,
+      canManageSessions: false,
     });
+
+    // For managers, load their current can_manage_staff_sessions flag.
+    // Update both the edit state and the snapshot baseline once resolved.
+    if (member.role === "manager" && currentTenant?.id) {
+      supabase
+        .from("user_roles")
+        .select("can_manage_staff_sessions")
+        .eq("user_id", member.userId)
+        .eq("tenant_id", currentTenant.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          const val = data?.can_manage_staff_sessions === true;
+          setEditCanManageSessions(val);
+          setInitialEditSnapshot((prev) =>
+            prev ? { ...prev, canManageSessions: val } : prev
+          );
+        });
+    }
+
     const resolvedTab = member.role === "owner" ? "profile" : tab;
     setMemberDialogTab(resolvedTab);
     setEditableTabs({
@@ -451,6 +488,15 @@ export default function StaffPage() {
             .insert(overrideRows);
           if (insertOverrideError) throw insertOverrideError;
         }
+      }
+
+      if (sessionsChanged && staffToEdit.role === "manager") {
+        const { error: sessionsError } = await supabase
+          .from("user_roles")
+          .update({ can_manage_staff_sessions: editCanManageSessions })
+          .eq("user_id", staffToEdit.userId)
+          .eq("tenant_id", currentTenant.id);
+        if (sessionsError) throw sessionsError;
       }
 
       if (isChainTenant && currentUserCanAssign && locationsChanged) {
@@ -700,6 +746,10 @@ export default function StaffPage() {
                       <TableBody>
                         {filteredStaff.map((member) => {
                           const isActive = member.isActive;
+                          const pendingInvitation = member.email
+                            ? pendingInvitationByEmail.get(member.email.toLowerCase())
+                            : undefined;
+                          const resendStatus = pendingInvitation ? canResend(pendingInvitation) : null;
                           return (
                           <TableRow 
                             key={member.userId}
@@ -738,7 +788,11 @@ export default function StaffPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {isActive ? (
+                              {pendingInvitation ? (
+                                <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
+                                  Pending
+                                </Badge>
+                              ) : isActive ? (
                                 <Badge className="bg-success/10 text-success hover:bg-success/10">
                                   Active
                                 </Badge>
@@ -767,7 +821,7 @@ export default function StaffPage() {
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
-                              {currentUserCanAssign && member.role !== "owner" && (
+                              {((currentUserCanAssign && member.role !== "owner") || pendingInvitation) && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -784,22 +838,37 @@ export default function StaffPage() {
                                       View Activities
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
-                                    {isActive ? (
-                                      <DropdownMenuItem 
-                                        onClick={() => handleDeactivateClick(member)}
-                                        className="text-destructive"
+                                    {pendingInvitation && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleResend(pendingInvitation.id)}
+                                        disabled={!resendStatus?.allowed || resendingInvitationId === pendingInvitation.id}
                                       >
-                                        <XCircle className="w-4 h-4 mr-2" />
-                                        Deactivate
+                                        <Mail className="w-4 h-4 mr-2" />
+                                        {resendingInvitationId === pendingInvitation.id
+                                          ? "Resending..."
+                                          : resendStatus?.allowed
+                                            ? "Resend invite"
+                                            : `Resend invite (${resendStatus?.minutesRemaining}m)`}
                                       </DropdownMenuItem>
-                                    ) : (
-                                      <DropdownMenuItem 
-                                        onClick={() => handleReactivateClick(member)}
-                                        className="text-success"
-                                      >
-                                        <CheckCircle className="w-4 h-4 mr-2" />
-                                        Reactivate
-                                      </DropdownMenuItem>
+                                    )}
+                                    {currentUserCanAssign && member.role !== "owner" && (
+                                      isActive ? (
+                                        <DropdownMenuItem
+                                          onClick={() => handleDeactivateClick(member)}
+                                          className="text-destructive"
+                                        >
+                                          <XCircle className="w-4 h-4 mr-2" />
+                                          Deactivate
+                                        </DropdownMenuItem>
+                                      ) : (
+                                        <DropdownMenuItem
+                                          onClick={() => handleReactivateClick(member)}
+                                          className="text-success"
+                                        >
+                                          <CheckCircle className="w-4 h-4 mr-2" />
+                                          Reactivate
+                                        </DropdownMenuItem>
+                                      )
                                     )}
                                   </DropdownMenuContent>
                                 </DropdownMenu>
@@ -871,6 +940,9 @@ export default function StaffPage() {
                                 {invitation.first_name} {invitation.last_name}
                               </p>
                               <p className="text-sm text-muted-foreground">{invitation.email}</p>
+                              {invitation.phone && (
+                                <p className="text-sm text-muted-foreground">{invitation.phone}</p>
+                              )}
                               <div className="flex flex-wrap items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs">
                                   {roleLabels[invitation.role]}
@@ -1181,6 +1253,25 @@ export default function StaffPage() {
                   </p>
                 )}
               </div>
+              {staffToEdit?.role === "manager" && currentUserIsOwner && (
+                <div className="border-t pt-4 mt-2">
+                  <Label className="text-sm font-medium mb-2 block">Session management</Label>
+                  <label className="flex items-start gap-3 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={editCanManageSessions}
+                      disabled={!editableTabs.permissions}
+                      onCheckedChange={(checked: boolean | "indeterminate") => setEditCanManageSessions(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <span className="font-medium">View &amp; revoke all staff sessions</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Lets this manager see and end login sessions for all staff on the Sessions tab. Only grant to trusted managers.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
           <DialogFooter>
@@ -1212,6 +1303,9 @@ export default function StaffPage() {
             locationsChanged ? `Locations: ${selectedLocationIds.length} selected` : null,
             !roleChanged && overridesChanged ? "Permissions overrides: updated" : null,
             roleChanged ? "Overrides will be reset to the new role defaults." : null,
+            sessionsChanged
+              ? `Session management: ${editCanManageSessions ? "granted" : "revoked"}`
+              : null,
           ]
             .filter(Boolean)
             .join(" | ") || `Apply updates for ${staffToEdit?.profile?.full_name || "this staff member"}?`

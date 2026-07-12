@@ -73,7 +73,7 @@ const getIconColor = (type: Notification["type"]) => {
 
 export function NotificationsPanel({ open, onOpenChange, notificationsData }: NotificationsPanelProps) {
   const navigate = useNavigate();
-  const { availableContexts, setActiveContext, getFirstAllowedRoute } = useAuth();
+  const { activeContextType, setActiveContext, assignedLocationIds } = useAuth();
   const notificationsHook = useNotifications(!notificationsData);
   const { notifications, isLoading, markAsRead, markAllAsRead, refetch } =
     notificationsData || notificationsHook;
@@ -136,41 +136,33 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     if (!notification.read) {
       await markAsRead(notification.id);
     }
-
     onOpenChange(false);
+
+    // When in owner_hub context, switch to the appropriate branch context first
+    // so the sidebar and active context correctly reflect the destination page.
+    const switchToLocationIfNeeded = async (locationId?: string | null) => {
+      if (activeContextType !== "owner_hub") return;
+      const targetLocation = locationId && assignedLocationIds.includes(locationId)
+        ? locationId
+        : (assignedLocationIds[0] ?? null);
+      if (targetLocation) {
+        await setActiveContext("location", targetLocation);
+      }
+    };
 
     if (notification.type === "appointment" && notification.entity_id) {
       const appointmentMeta = appointmentMetaById[notification.entity_id];
-      if (appointmentMeta?.location_id) {
-        const hasLocationContext = availableContexts.some(
-          (context) => context.type === "location" && context.locationId === appointmentMeta.location_id,
-        );
-        if (hasLocationContext) {
-          await setActiveContext("location", appointmentMeta.location_id);
-          const route = await getFirstAllowedRoute("location", appointmentMeta.location_id);
-          if (route === "/salon/appointments") {
-            window.location.assign(`/salon/appointments?appointmentId=${notification.entity_id}&open=details`);
-            return;
-          }
-          window.location.assign(route);
-          return;
-        }
-      }
-      const route = await getFirstAllowedRoute();
-      if (route === "/salon/appointments") {
-        window.location.assign(`/salon/appointments?appointmentId=${notification.entity_id}&open=details`);
-      } else {
-        window.location.assign(route);
-      }
+      await switchToLocationIfNeeded(appointmentMeta?.location_id);
+      navigate(`/salon/appointments?appointmentId=${notification.entity_id}&open=details`);
       return;
     }
-
     if (notification.type === "payment") {
-      navigate("/salon/payments");
+      await switchToLocationIfNeeded();
+      navigate("/salon/transactions");
       return;
     }
-
     if (notification.type === "customer") {
+      await switchToLocationIfNeeded();
       navigate("/salon/customers");
       return;
     }
@@ -184,27 +176,19 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       await markAsRead(notification.id);
     }
     onOpenChange(false);
-    const appointmentMeta = notification.entity_id ? appointmentMetaById[notification.entity_id] : undefined;
-    if (appointmentMeta?.location_id) {
-      const hasLocationContext = availableContexts.some(
-        (context) => context.type === "location" && context.locationId === appointmentMeta.location_id,
-      );
-      if (hasLocationContext) {
-        await setActiveContext("location", appointmentMeta.location_id);
-        const route = await getFirstAllowedRoute("location", appointmentMeta.location_id);
-        if (route === "/salon/appointments") {
-          window.location.assign(`/salon/appointments?appointmentId=${notification.entity_id}&approvalAction=${action}`);
-          return;
+    if (notification.entity_id) {
+      // Switch branch context if currently in owner_hub before navigating.
+      if (activeContextType === "owner_hub") {
+        const appointmentMeta = appointmentMetaById[notification.entity_id];
+        const locationId = appointmentMeta?.location_id;
+        const targetLocation = locationId && assignedLocationIds.includes(locationId)
+          ? locationId
+          : (assignedLocationIds[0] ?? null);
+        if (targetLocation) {
+          await setActiveContext("location", targetLocation);
         }
-        window.location.assign(route);
-        return;
       }
-    }
-    const route = await getFirstAllowedRoute();
-    if (route === "/salon/appointments") {
-      window.location.assign(`/salon/appointments?appointmentId=${notification.entity_id}&approvalAction=${action}`);
-    } else {
-      window.location.assign(route);
+      navigate(`/salon/appointments?appointmentId=${notification.entity_id}&approvalAction=${action}`);
     }
   };
 

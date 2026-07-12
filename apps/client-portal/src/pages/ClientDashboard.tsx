@@ -18,7 +18,7 @@ import {
 
 export default function ClientDashboard() {
   const { customers, isLoading: authLoading } = useClientAuth();
-  const { nextAppointment, isLoading: bookingsLoading } = useClientBookings("upcoming");
+  const { bookings, nextAppointment, isLoading: bookingsLoading } = useClientBookings("upcoming");
   const { purses, purseGroups, hasMultipleCountries, totalBalance, isLoading: purseLoading } = useClientPurse();
   const { unreadCount, isLoading: notificationsLoading } = useClientNotifications();
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
@@ -40,8 +40,16 @@ export default function ClientDashboard() {
   // Get the first customer's name for greeting (they may have multiple salon accounts)
   const customerName = customers[0]?.full_name?.split(" ")[0] || "there";
 
-  // Calculate total outstanding balance across all salons
-  const totalOutstanding = customers.reduce((sum, c) => sum + Number(c.outstanding_balance || 0), 0);
+  // Compute outstanding balance from live appointment data.
+  // customers.outstanding_balance is a cached column that isn't maintained by the
+  // booking/payment flow, so computing directly from appointments is more accurate.
+  const totalOutstanding = useMemo(() => {
+    return bookings.reduce((sum, b) => {
+      if (b.status === "cancelled") return sum;
+      if (["fully_paid", "refunded_full"].includes(b.payment_status)) return sum;
+      return sum + Math.max(Number(b.total_amount || 0) - Number(b.amount_paid || 0), 0);
+    }, 0);
+  }, [bookings]);
 
   return (
     <ClientSidebar>
@@ -97,9 +105,13 @@ export default function ClientDashboard() {
                   {formatCurrency(totalOutstanding, customers[0]?.tenant?.currency || "USD")}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-1">
-                Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
-              </p>
+              {totalOutstanding > 0 ? (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">No outstanding fees</p>
+              )}
             </CardContent>
           </Card>
 

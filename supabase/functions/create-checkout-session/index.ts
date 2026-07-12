@@ -136,9 +136,11 @@ serve(async (req) => {
     };
 
     if (paystackPlanCode && localPlanAmount > 0) {
-      // Subscription: amount comes from the plan definition, not the request
+      // Paystack requires `amount` even when a plan code is provided — it
+      // validates the two match (or uses it as the charge amount). Both are
+      // now kept in sync via backoffice → "Sync to Paystack", so they agree.
       paystackBody.plan = paystackPlanCode;
-      paystackBody.amount = localPlanAmount * 100; // paystack expects amount in the initialization request even if the plan code is provided, but it will be ignored and the plan's amount will be used instead. Amount is in kobo/pesewas.
+      paystackBody.amount = Math.round(localPlanAmount * 100);
       paystackBody.currency = currency;
     } else {
       // No plan code configured yet — fall back to a small authorization charge.

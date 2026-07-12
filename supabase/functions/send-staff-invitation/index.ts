@@ -22,6 +22,7 @@ interface InvitationRequest {
   firstName?: string;
   lastName?: string;
   email?: string;
+  phone?: string | null;
   role?: string;
   invitationId?: string;
   resend?: boolean;
@@ -46,33 +47,26 @@ function generateSecurePassword(): string {
   return password;
 }
 
-function buildInvitationEmail(
+function buildInvitationEmailContent(
   firstName: string,
   email: string,
   salonName: string,
   role: string,
   loginLink: string,
   tempPassword: string,
-  salonLogoUrl?: string
 ): string {
-  const content = `
+  return `
     ${heading("Join our team")}
     ${paragraph(`Hi ${firstName},`)}
     ${paragraph(`You've been invited to join <strong>${salonName}</strong> as a <strong>${role}</strong>.`)}
     ${paragraph(`Your login email: <strong>${email}</strong>`)}
     ${paragraph(`Temporary password (you’ll set a new one on first login): <strong>${tempPassword}</strong>`)}
     ${createButton("Sign in now", loginLink)}
-    ${smallText("This invitation expires in 7 days. If you weren't expecting this, you can ignore the email.")} 
+    ${smallText("This invitation expires in 7 days. If you weren't expecting this, you can ignore the email.")}
   `;
-
-  return wrapEmailTemplate(content, {
-    mode: "salon",
-    salonName,
-    salonLogoUrl,
-  });
 }
 
-function getBaseUrlFromRequest(req: Request): string {
+function getBaseUrlFromRequest(req: Request, options: { skipEnvFallback?: boolean } = {}): string {
   const origin = req.headers.get("origin");
   if (origin && /^https?:\/\//i.test(origin)) return origin;
 
@@ -90,6 +84,8 @@ function getBaseUrlFromRequest(req: Request): string {
     const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
     return `${forwardedProto}://${forwardedHost}`;
   }
+
+  if (options.skipEnvFallback) return "";
 
   // Last-resort fallback
   return Deno.env.get("SALON_APP_URL") || Deno.env.get("BASE_URL") || "https://app.salonmagik.com";
@@ -175,7 +171,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const requestBody: InvitationRequest = await req.json();
-    const { firstName, lastName, email, role, invitationId, resend } = requestBody;
+    const { firstName, lastName, email, phone, role, invitationId, resend } = requestBody;
 
     let invitation: any;
     let tempPassword: string;
@@ -315,6 +311,7 @@ const handler = async (req: Request): Promise<Response> => {
       const { error: profileError } = await serviceRoleClient.from("profiles").insert({
         user_id: createdUserId,
         full_name: `${firstName} ${lastName}`,
+        phone: phone || null,
       });
 
       if (profileError) {
@@ -348,6 +345,7 @@ const handler = async (req: Request): Promise<Response> => {
           first_name: firstName,
           last_name: lastName,
           email: normalizedEmail,
+          phone: phone || null,
           role: role,
           token: crypto.randomUUID(), // Keep token for backwards compatibility
           expires_at: expiresAt.toISOString(),
@@ -376,11 +374,17 @@ const handler = async (req: Request): Promise<Response> => {
       recipientRole = role;
     }
 
-    // Build login link - goes directly to /login, not accept-invite
+    // Build login link - goes directly to /login, not accept-invite.
+    // Prefer the actual request's Origin (set automatically by the browser on
+    // cross-origin fetch/invoke calls) over the env-var defaults, so an admin
+    // testing from localhost gets a localhost link back, not whatever
+    // SALON_APP_URL is configured to in this project's secrets. Env vars are
+    // still the fallback for non-browser callers (e.g. the "resend" flow).
     const baseUrl =
+      getBaseUrlFromRequest(req, { skipEnvFallback: true }) ||
       Deno.env.get("SALON_APP_URL") ||
       Deno.env.get("BASE_URL") ||
-      getBaseUrlFromRequest(req);
+      "https://app.salonmagik.com";
     const loginLink = `${baseUrl}/login`;
 
     console.log("Generated login link for staff invitation", {
@@ -391,32 +395,43 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Build email content
     const defaultSubject = `You're invited to join ${tenant.name}`;
-    const defaultHtmlBody = buildInvitationEmail(
+    const defaultContent = buildInvitationEmailContent(
       recipientFirstName,
       recipientEmail,
       tenant.name,
       recipientRole,
       loginLink,
       tempPassword,
-      tenant.logo_url || undefined
     );
     const platformTemplate = await fetchPlatformTemplate(serviceRoleClient, "staff_invitation", "email");
     const templateValues = {
       first_name: recipientFirstName,
+      staff_name: recipientFirstName,
       email: recipientEmail,
       salon_name: tenant.name,
       role: recipientRole,
       login_link: loginLink,
+      // Pre-rendered styled button HTML — use this instead of {{login_link}} in a
+      // custom template to get the branded button without writing any markup.
+      login_link_button: createButton("Accept invitation", loginLink),
       temp_password: tempPassword,
     };
     const subject = renderPlatformTemplate(
       platformTemplate?.is_active === false ? defaultSubject : platformTemplate?.subject || defaultSubject,
       templateValues,
     );
-    const htmlBody = renderPlatformTemplate(
-      platformTemplate?.is_active === false ? defaultHtmlBody : platformTemplate?.body || defaultHtmlBody,
+    const renderedContent = renderPlatformTemplate(
+      platformTemplate?.is_active === false ? defaultContent : platformTemplate?.body || defaultContent,
       templateValues,
     );
+    // Always wrap with the branded shell, whether the content came from the
+    // hardcoded default or a custom template edited in the backoffice — a
+    // custom template should only replace the message, not the branding.
+    const htmlBody = wrapEmailTemplate(renderedContent, {
+      mode: "salon",
+      salonName: tenant.name,
+      salonLogoUrl: tenant.logo_url || undefined,
+    });
 
     // Send email via Resend API
     const emailResponse = await fetch("https://api.resend.com/emails", {

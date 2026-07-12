@@ -31,14 +31,15 @@ function normalizePhone(phone: string): string {
 
 async function handleArkeselResponse(response: Response, operation: string): Promise<ArkeselSMSResponse> {
   const body = await response.json().catch(() => ({})) as Record<string, unknown>;
+  console.log(`[arkesel] ${operation} HTTP ${response.status}:`, JSON.stringify(body));
   if (!response.ok) {
     throw new Error(
       (body?.message as string) ||
         `Arkesel ${operation} failed with HTTP ${response.status}`,
     );
   }
-  if ((body?.status as string) === "error") {
-    throw new Error((body?.message as string) || `Arkesel ${operation} failed`);
+  if ((body?.status as string) !== "success") {
+    throw new Error((body?.message as string) || `Arkesel ${operation} returned status: ${body?.status}`);
   }
   return body as ArkeselSMSResponse;
 }

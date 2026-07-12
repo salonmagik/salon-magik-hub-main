@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
 import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
 
@@ -52,6 +52,16 @@ const CREDIT_COST: Record<string, number> = {
 
 function getSmsSegments(message: string) {
   return Math.max(1, Math.ceil(Math.max(message.trim().length, 1) / 160));
+}
+
+function replaceMessageVars(
+  text: string,
+  vars: { customerName: string; salonName: string; bookingLink: string },
+): string {
+  return text
+    .replace(/\{\{customer_name\}\}/gi, vars.customerName)
+    .replace(/\{\{salon_name\}\}/gi, vars.salonName)
+    .replace(/\{\{booking_link\}\}/gi, vars.bookingLink);
 }
 
 
@@ -205,7 +215,7 @@ const handler = async (req: Request): Promise<Response> => {
     const senderDisplayName = senderContext?.senderDisplayName?.trim() || tenant.name;
 
     // Calculate total credits required
-    const creditsPerMessage = CREDIT_COST[channel] || 1;
+    const creditsPerMessage = CREDIT_COST[channel] ?? 1;
     const smsSegments = channel === "sms" ? getSmsSegments(message) : 1;
     const totalCreditsRequired = typedCustomers.length * creditsPerMessage * smsSegments;
 
@@ -385,6 +395,11 @@ async function processBulkSMS(
   const senderID = tenant.sms_sender_name || tenant.termii_sender_id || "SalonMagik";
   const BATCH_SIZE = 25;
 
+  const bookingBaseUrl = Deno.env.get("PUBLIC_BOOKING_URL") || "https://booking.salonmagik.com";
+  const bookingLink = tenant.slug
+    ? `${bookingBaseUrl}/?slug=${tenant.slug}`
+    : bookingBaseUrl;
+
   // Process in smaller batches to avoid timeouts and keep per-message status.
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
     const batch = customers.slice(i, i + BATCH_SIZE);
@@ -397,21 +412,22 @@ async function processBulkSMS(
           throw new Error("Customer has no phone number");
         }
 
+        const resolvedMessage = replaceMessageVars(message, {
+          customerName: customer.full_name || "Valued Customer",
+          salonName: tenant.name,
+          bookingLink,
+        });
+
         const smsResponse = await sendArkeselSMS({
           to: customer.phone,
           from: senderID,
-          message,
+          message: resolvedMessage,
         });
 
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-
-        await supabase
-          .from("communication_credits")
-          .update({
-            balance: supabase.raw(`balance - ${creditsPerMessage}`),
-          })
-          .eq("tenant_id", tenant.id);
+        await supabase.rpc("deduct_communication_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+        });
 
         await supabase
           .from("manual_messages")
@@ -437,21 +453,39 @@ async function processBulkSMS(
           credits_used: creditsPerMessage,
           error_message: null,
         });
+
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
+        const errMsg = error.message || "Failed to send SMS";
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
           customerName: customer.full_name,
-          error: error.message || "Failed to send SMS",
+          error: errMsg,
         });
 
         await supabase
           .from("manual_messages")
-          .update({
-            status: "failed",
-            error_message: error.message || "Failed to send SMS",
-          })
+          .update({ status: "failed", error_message: errMsg })
           .eq("id", messageRecord.id);
+
+        // Record failed attempts in message_logs so they appear in delivery history.
+        await supabase.from("message_logs").insert({
+          tenant_id: tenant.id,
+          customer_id: customer.id,
+          channel: "sms",
+          recipient: customer.phone || null,
+          subject: null,
+          status: "failed",
+          sent_at: new Date().toISOString(),
+          provider: "arkesel_sms",
+          termii_message_id: null,
+          termii_device_id: null,
+          initiated_by: "salon",
+          credits_used: 0,
+          error_message: errMsg,
+        });
       }
     });
 
@@ -481,6 +515,11 @@ async function processBulkEmail(
     fromEmail,
   });
 
+  const bookingBaseUrl = Deno.env.get("PUBLIC_BOOKING_URL") || "https://booking.salonmagik.com";
+  const bookingLink = tenant.slug
+    ? `${bookingBaseUrl}/?slug=${tenant.slug}`
+    : bookingBaseUrl;
+
   // Process in batches of 10
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
     const batch = customers.slice(i, i + BATCH_SIZE);
@@ -490,10 +529,26 @@ async function processBulkEmail(
     const promises = batch.map(async (customer, index) => {
       const messageRecord = batchMessages[index];
 
+      // Resolve template variables outside try so catch can reference them.
+      const vars = {
+        customerName: customer.full_name || "Valued Customer",
+        salonName: tenant.name,
+        bookingLink,
+      };
+      const resolvedMessage = replaceMessageVars(message, vars);
+      const resolvedSubject = subject
+        ? replaceMessageVars(subject, vars)
+        : `Message from ${senderDisplayName || tenant.name}`;
+
       try {
         if (!customer.email) {
           throw new Error("Customer has no email address");
         }
+
+        const htmlMessage = wrapEmailTemplate(resolvedMessage, {
+          mode: "salon",
+          salonName: senderDisplayName || tenant.name,
+        });
 
         // Send email via Resend
         const emailResponse = await fetch("https://api.resend.com/emails", {
@@ -505,8 +560,8 @@ async function processBulkEmail(
           body: JSON.stringify({
             from: fromAddress,
             to: [customer.email],
-            subject: subject || "Message from " + (senderDisplayName || tenant.name),
-            html: message,
+            subject: resolvedSubject,
+            html: htmlMessage,
           }),
         });
 
@@ -517,17 +572,11 @@ async function processBulkEmail(
           throw new Error(emailData.message || "Failed to send email");
         }
 
-        // Success - deduct credits
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-
-        // Deduct credits from tenant
-        await supabase
-          .from("communication_credits")
-          .update({
-            balance: supabase.raw(`balance - ${creditsPerMessage}`),
-          })
-          .eq("tenant_id", tenant.id);
+        // Deduct credits from tenant (atomic RPC)
+        await supabase.rpc("deduct_communication_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+        });
 
         // Update manual_messages
         await supabase
@@ -545,7 +594,7 @@ async function processBulkEmail(
           customer_id: customer.id,
           channel: "email",
           recipient: customer.email,
-          subject: subject || null,
+          subject: resolvedSubject || null,
           status: "sent",
           sent_at: new Date().toISOString(),
           provider: "resend",
@@ -555,24 +604,42 @@ async function processBulkEmail(
           credits_used: creditsPerMessage,
           error_message: null,
         });
+
+        // Success - increment after accounting succeeds
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
+        const errMsg = error.message || "Failed to send email";
         console.error(`Failed to send email to ${customer.full_name}:`, error);
 
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
           customerName: customer.full_name,
-          error: error.message || "Failed to send email",
+          error: errMsg,
         });
 
-        // Update manual_messages status to failed
         await supabase
           .from("manual_messages")
-          .update({
-            status: "failed",
-            error_message: error.message || "Failed to send email",
-          })
+          .update({ status: "failed", error_message: errMsg })
           .eq("id", messageRecord.id);
+
+        // Record failed attempts in message_logs so they appear in delivery history.
+        await supabase.from("message_logs").insert({
+          tenant_id: tenant.id,
+          customer_id: customer.id,
+          channel: "email",
+          recipient: customer.email || null,
+          subject: resolvedSubject || null,
+          status: "failed",
+          sent_at: new Date().toISOString(),
+          provider: "resend",
+          termii_message_id: null,
+          termii_device_id: null,
+          initiated_by: "salon",
+          credits_used: 0,
+          error_message: errMsg,
+        });
       }
     });
 
@@ -669,17 +736,11 @@ async function processBulkWhatsApp(
           throw new Error("Either template or message is required for WhatsApp");
         }
 
-        // Success - deduct credits
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-
-        // Deduct credits from tenant
-        await supabase
-          .from("communication_credits")
-          .update({
-            balance: supabase.raw(`balance - ${creditsPerMessage}`),
-          })
-          .eq("tenant_id", tenant.id);
+        // Deduct credits from tenant (atomic RPC)
+        await supabase.rpc("deduct_communication_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+        });
 
         // Update manual_messages
         await supabase
@@ -707,6 +768,9 @@ async function processBulkWhatsApp(
           credits_used: creditsPerMessage,
           error_message: null,
         });
+
+        result.sent++;
+        result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
         console.error(`Failed to send WhatsApp to ${customer.full_name}:`, error);
 

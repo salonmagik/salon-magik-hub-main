@@ -57,7 +57,7 @@ import { useNavigate, Link } from "react-router-dom";
 						</div>
 						<CardTitle className="text-2xl">BackOffice Login</CardTitle>
 						<CardDescription>
-							Restricted access. Domain verification required.
+							Restricted access.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
@@ -121,7 +121,7 @@ import { useNavigate, Link } from "react-router-dom";
 							</div>
 						</form>
 						<p className="mt-6 text-center text-xs text-muted-foreground">
-							Only authorized personnel with approved email domains can access
+							Only authorized personnel can access
 							this system.
 						</p>
 					</CardContent>

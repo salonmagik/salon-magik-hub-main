@@ -82,7 +82,7 @@ export function PurseTopupDialog({
 
   const handleTopup = async () => {
     if (!customerId || !tenantId) {
-      setError("Missing customer or tenant information");
+      setError("Missing customer or salon information");
       return;
     }
 

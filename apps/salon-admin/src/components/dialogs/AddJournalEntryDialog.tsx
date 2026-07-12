@@ -255,7 +255,7 @@ export function AddJournalEntryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Journal Entry</DialogTitle>
+          <DialogTitle>Add Cash Tracker Entry</DialogTitle>
           <DialogDescription>
             Record a cash, POS, or transfer transaction
           </DialogDescription>

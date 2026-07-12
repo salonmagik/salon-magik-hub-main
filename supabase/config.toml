@@ -112,6 +112,21 @@ verify_jwt = false
 [functions.send-daily-digest]
 verify_jwt = false
 
+[functions.process-recurring-addon-billing]
+verify_jwt = false
+
+[functions.create-plan-configuration-checkout-session]
+verify_jwt = false
+
+[functions.verify-plan-configuration-payment]
+verify_jwt = false
+
+[functions.create-theme-purchase-checkout-session]
+verify_jwt = false
+
+[functions.verify-theme-purchase-payment]
+verify_jwt = false
+
 [functions.manage-termii-sender-id]
 verify_jwt = false
 
@@ -139,9 +154,6 @@ verify_jwt = false
 [functions.verify-bank-account]
 verify_jwt = false
 
-[functions.paystack-transfer-webhook-gh]
-verify_jwt = false
-
 [functions.paystack-transfer-webhook-ng]
 verify_jwt = false
 
@@ -150,3 +162,6 @@ verify_jwt = false
 
 [functions.paystack-transfer-approval-ng]
 verify_jwt = false
+
+[functions.sync-paystack-plan-pricing]
+verify_jwt = true

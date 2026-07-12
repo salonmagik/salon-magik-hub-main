@@ -229,7 +229,8 @@ export function getCountryByDialCode(dialCode: string): Country | undefined {
 
 // Format phone number to E.164
 export function formatToE164(dialCode: string, nationalNumber: string): string {
-  const cleanNumber = nationalNumber.replace(/\D/g, "");
+  // Strip non-digits then strip leading zero (E.164 drops the trunk prefix)
+  const cleanNumber = nationalNumber.replace(/\D/g, "").replace(/^0+/, "");
   return `${dialCode}${cleanNumber}`;
 }
 

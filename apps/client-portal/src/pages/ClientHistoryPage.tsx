@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { useClientTransactions, useClientBookings } from "@/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
@@ -9,6 +10,7 @@ import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 
 export default function ClientHistoryPage() {
+  const navigate = useNavigate();
   const { transactions, isLoading: txLoading } = useClientTransactions();
   const { bookings, isLoading: bookingsLoading } = useClientBookings("completed");
 
@@ -152,7 +154,8 @@ export default function ClientHistoryPage() {
                     {bookings.map((booking) => (
                       <div
                         key={booking.id}
-                        className="p-4 rounded-lg border"
+                        className="p-4 rounded-lg border cursor-pointer hover:border-primary/40 transition-colors"
+                        onClick={() => navigate(`/bookings/${booking.id}`)}
                       >
                         <div className="flex items-start justify-between">
                           <div>
