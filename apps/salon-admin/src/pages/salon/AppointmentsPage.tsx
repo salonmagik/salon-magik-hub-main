@@ -177,10 +177,14 @@ export default function AppointmentsPage() {
   const [proposedEndTime, setProposedEndTime] = useState("");
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
-  // Date range state
+  // Date range state — initialize immediately so the first query is always filtered.
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("this_week");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>(() =>
+    format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd")
+  );
+  const [endDate, setEndDate] = useState<string>(() =>
+    format(endOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd")
+  );
 
   // Multi-select status filters
   const [bookingStatuses, setBookingStatuses] = useState<Set<AppointmentStatus | "all">>(new Set(["all"]));
@@ -218,10 +222,6 @@ export default function AppointmentsPage() {
     }
   }, []);
 
-  // Initialize with "this_week" on mount
-  useEffect(() => {
-    handlePresetChange("this_week");
-  }, [handlePresetChange]);
 
   // Toggle handlers for multi-select
   const toggleBookingStatus = (status: AppointmentStatus | "all") => {
