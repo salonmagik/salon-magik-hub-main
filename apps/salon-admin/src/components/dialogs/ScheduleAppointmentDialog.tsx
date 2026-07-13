@@ -32,7 +32,7 @@ interface SelectedService {
 }
 
 export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: ScheduleAppointmentDialogProps) {
-  const { activeLocationId } = useAuth();
+  const { activeLocationId, currentRole, assignedLocationIds } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<
@@ -59,13 +59,17 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   const { staff, isLoading: staffLoading } = useStaff();
   const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  // Owners can book into any branch; everyone else only sees their assigned branches
+  const accessibleLocations = currentRole === "owner"
+    ? locations
+    : locations.filter((l) => assignedLocationIds.includes(l.id));
 
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       const resolvedLocationId =
-        (activeLocationId && locations.find((l) => l.id === activeLocationId)?.id) ||
-        defaultLocation?.id ||
+        (activeLocationId && accessibleLocations.find((l) => l.id === activeLocationId)?.id) ||
+        accessibleLocations[0]?.id ||
         "";
       setFormData({
         customerId: "",
@@ -178,8 +182,8 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
               </div>
             </div>
 
-            {/* Branch Selection — shown when tenant has multiple branches */}
-            {locations.length > 1 && (
+            {/* Branch Selection — shown when user has access to more than one branch */}
+            {accessibleLocations.length > 1 && (
               <div className="space-y-2">
                 <Label>
                   Branch <span className="text-destructive">*</span>
@@ -192,7 +196,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((loc) => (
+                    {accessibleLocations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.name}
                       </SelectItem>

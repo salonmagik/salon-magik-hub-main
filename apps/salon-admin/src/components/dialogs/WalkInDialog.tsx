@@ -51,7 +51,7 @@ interface SelectedService {
 }
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
-  const { currentTenant, activeLocationId } = useAuth();
+  const { currentTenant, activeLocationId, currentRole, assignedLocationIds } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
@@ -75,14 +75,17 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const { staff, isLoading: staffLoading } = useStaff();
   const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  const accessibleLocations = currentRole === "owner"
+    ? locations
+    : locations.filter((l) => assignedLocationIds.includes(l.id));
 
   // Reset form when dialog opens, use tenant default buffer
   useEffect(() => {
     if (open) {
       const defaultBuffer = currentTenant?.default_buffer_minutes?.toString() || "0";
       const resolvedLocationId =
-        (activeLocationId && locations.find((l) => l.id === activeLocationId)?.id) ||
-        defaultLocation?.id ||
+        (activeLocationId && accessibleLocations.find((l) => l.id === activeLocationId)?.id) ||
+        accessibleLocations[0]?.id ||
         "";
       setFormData({
         customerId: "",
@@ -209,8 +212,8 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
               </div>
             </div>
 
-            {/* Branch Selection — shown when tenant has multiple branches */}
-            {locations.length > 1 && (
+            {/* Branch Selection — shown when user has access to more than one branch */}
+            {accessibleLocations.length > 1 && (
               <div className="space-y-2">
                 <Label>
                   Branch <span className="text-destructive">*</span>
@@ -223,7 +226,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                     <SelectValue placeholder="Select branch" />
                   </SelectTrigger>
                   <SelectContent>
-                    {locations.map((loc) => (
+                    {accessibleLocations.map((loc) => (
                       <SelectItem key={loc.id} value={loc.id}>
                         {loc.name}
                       </SelectItem>

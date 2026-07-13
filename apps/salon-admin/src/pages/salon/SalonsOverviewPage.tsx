@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BrandLoader } from "@/components/BrandLoader";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
@@ -79,7 +80,9 @@ export default function SalonsOverviewPage() {
     canUseOwnerHub,
   } = useAuth();
 
-  // Restore hub context when navigating back here from a branch context
+  // Restore hub context when navigating here from a branch context.
+  // The ref prevents double-firing; the early-return below prevents a flash
+  // of branch content before setActiveContext has updated the store.
   const restoredRef = useRef(false);
   useEffect(() => {
     if (!restoredRef.current && canUseOwnerHub && activeContextType !== "owner_hub") {
@@ -88,6 +91,12 @@ export default function SalonsOverviewPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // While the context is still being restored to owner_hub, show a loader —
+  // this prevents the brief render of the branch-scoped overview / sidebar.
+  if (canUseOwnerHub && activeContextType !== "owner_hub") {
+    return <BrandLoader fullScreen size="lg" />;
+  }
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
   const activeLocationLabel =
