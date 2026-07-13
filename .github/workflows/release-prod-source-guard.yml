@@ -6,23 +6,20 @@ on:
       - release/prod
 
 jobs:
-  only-approved-branches-can-merge-into-release-prod:
-    name: Source Branch Policy
+  block-all-prs:
+    name: Block Direct PRs to release/prod
     runs-on: ubuntu-latest
     steps:
-      - name: Validate PR source branch
+      - name: Fail — release/prod is CI-only
         run: |
-          echo "base_ref=${{ github.base_ref }}"
-          echo "head_ref=${{ github.head_ref }}"
-
-          if [ "${{ github.base_ref }}" != "release/prod" ]; then
-            echo "This workflow only validates PRs targeting release/prod."
-            exit 1
-          fi
-
-          if [ "${{ github.head_ref }}" != "main" ] && [ "${{ github.head_ref }}" != "merge/main-into-release-prod" ]; then
-            echo "Blocked: only PRs from 'main' or 'merge/main-into-release-prod' can merge into 'release/prod'."
-            exit 1
-          fi
-
-          echo "Allowed source branch."
+          echo "❌ PRs targeting release/prod are not allowed."
+          echo ""
+          echo "release/prod is a read-only record of what is deployed in production."
+          echo "It is advanced exclusively by the 'Deploy Production' workflow"
+          echo "after a successful deploy (migrations → edge functions → frontend)."
+          echo ""
+          echo "To ship to production:"
+          echo "  1. Merge your changes into main"
+          echo "  2. Trigger the Deploy Production workflow from main"
+          echo "  3. On success, CI will advance release/prod automatically"
+          exit 1
