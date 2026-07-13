@@ -5,6 +5,7 @@ export interface BookingEligibleStaff {
   userId: string;
   fullName: string;
   role: "manager" | "supervisor" | "staff" | string;
+  avatarUrl?: string | null;
 }
 
 interface UseBookingEligibleStaffArgs {
@@ -18,6 +19,7 @@ interface EligibleStaffRow {
   user_id: string;
   full_name: string;
   role: string;
+  avatar_url?: string | null;
 }
 
 export function useBookingEligibleStaff({
@@ -46,6 +48,7 @@ export function useBookingEligibleStaff({
         userId: row.user_id,
         fullName: row.full_name,
         role: row.role,
+        avatarUrl: row.avatar_url ?? null,
       }));
     },
   });

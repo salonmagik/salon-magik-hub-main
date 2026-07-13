@@ -274,11 +274,38 @@ function SchedulingItem({
               {!salon.require_staff_selection && (
                 <SelectItem value="__auto__">Auto-assign best match</SelectItem>
               )}
-              {eligibleStaff.map((staff) => (
-                <SelectItem key={staff.userId} value={staff.userId}>
-                  {staff.fullName} ({staff.role})
-                </SelectItem>
-              ))}
+              {eligibleStaff.map((staff) => {
+                const initials = staff.fullName
+                  .split(" ")
+                  .filter(Boolean)
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2);
+                return (
+                  <SelectItem key={staff.userId} value={staff.userId}>
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-7 w-7 shrink-0 overflow-hidden rounded-full">
+                        {staff.avatarUrl ? (
+                          <img
+                            src={staff.avatarUrl}
+                            alt={staff.fullName}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center bg-muted text-[10px] font-medium text-muted-foreground">
+                            {initials}
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex flex-col leading-tight">
+                        <span className="text-sm font-medium">{staff.fullName}</span>
+                        <span className="text-xs capitalize text-muted-foreground">{staff.role}</span>
+                      </span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

@@ -23,6 +23,12 @@
 10. [Developer Setup](#developer-setup)
 11. [Environment Variables](#environment-variables)
 12. [Deployment](#deployment)
+    - [Infrastructure](#infrastructure)
+    - [Branch Model](#branch-model)
+    - [Deployment Pipeline](#deployment-pipeline)
+    - [Rules for the prod Branch](#rules-for-the-prod-branch)
+    - [Triggering a Production Deploy](#triggering-a-production-deploy)
+    - [Hotfix Process](#hotfix-process)
 
 ---
 
@@ -608,10 +614,91 @@ pnpm test     # run all test suites
 
 ## Deployment
 
+### Infrastructure
+
 - **Hosting**: Vercel, one project per app; each app's `vercel.json` sets build command and output dir
 - **Node version**: 20.x (pinned in root `package.json` `engines`; set matching version in Vercel project settings)
 - **Lock file**: use workspace root `pnpm-lock.yaml`
 - **Supabase functions**: deployed via `supabase functions deploy`; secrets managed in Supabase dashboard
 - **Migrations**: applied via `supabase db push` against the remote project
-- **Branch strategy**: feature work on `development-only`, PRs into `main`
 - **Email branding**: all functions use `wrapEmailTemplate` and `getSenderName` from `_shared/email-template.ts` for consistent branding
+
+---
+
+### Branch Model
+
+| Branch | Purpose |
+|---|---|
+| `development-only` | Active feature work; PRs target `main` |
+| `main` | Stable, CI-verified code; source of truth for all deployments |
+| `prod` | Read-only pointer to what is actually running in production — **never merged into by humans** |
+
+`prod` is not a normal branch. It is advanced exclusively by the production deploy workflow after a successful deploy. It exists so that the deployed state is always visible in git without querying Vercel or Supabase dashboards.
+
+---
+
+### Deployment Pipeline
+
+```
+feature branch
+  → PR → main (CI must pass)
+    → deploy-dev.yml   (auto, triggers on CI success on main push)
+      → deploy-staging.yml  (auto, triggers on dev deploy success)
+        → deploy-prod.yml   (manual trigger — you decide when to ship)
+          → on success: CI advances prod to main's SHA
+```
+
+Each stage runs in order: **DB migrations → edge functions → frontend**. This order is non-negotiable — new frontend code that calls a new edge function must never reach users before the function is deployed.
+
+---
+
+### Rules for the `prod` Branch
+
+**These rules prevent deployment conflicts and ensure `prod` always reflects reality.**
+
+1. **Never merge into `prod` directly.** No `git merge`, no PRs targeting `prod`, no pushes. `prod` is only writable by the deploy CI using `--force-with-lease`.
+
+2. **Never commit a hotfix directly to `prod`.** All changes — including urgent hotfixes — must go through `main` first. Merge the fix to `main`, then trigger `deploy-prod.yml` manually.
+
+3. **`prod` always equals `main` after a deploy.** The deploy workflow sets `prod` to `main`'s SHA via force-push. This avoids the merge-commit divergence that causes conflicts on every subsequent merge attempt.
+
+4. **If `prod` appears to be behind `main`, that means a deploy is pending** — `prod` has not yet been advanced because either no deploy has been triggered, or the last deploy failed. Never resolve this by merging; trigger the deploy.
+
+#### Why these rules exist
+
+When a conflict is resolved via a merge commit, that commit lives on the target branch but not on the source. The next time you try to merge in the same direction, git sees diverged histories and conflicts again — even if the code is identical. The `--force-with-lease` approach sidesteps this entirely: `prod` is never the target of a merge, so it never accumulates merge commits, and there is never divergence to resolve.
+
+---
+
+### Triggering a Production Deploy
+
+```sh
+# Via GitHub Actions UI:
+# Actions → Deploy Prod → Run workflow → select main → Run
+
+# Or via CLI:
+gh workflow run deploy-prod.yml --ref main
+```
+
+The workflow will:
+1. Run DB migrations against prod Supabase (`supabase db push`)
+2. Deploy all edge functions (`supabase functions deploy`)
+3. Deploy all frontend apps to Vercel
+4. On success: advance `prod` to the current `main` SHA
+
+If any step fails, `prod` does not advance and you will see which step failed in the Actions log.
+
+---
+
+### Hotfix Process
+
+```
+1. Branch off main:         git checkout -b fix/my-hotfix main
+2. Fix and commit
+3. PR into main (CI runs)
+4. Merge to main
+5. Trigger deploy-prod.yml manually
+6. Deploy succeeds → prod advances to main
+```
+
+Do not branch off `prod` for hotfixes. `main` is always the branching point.
