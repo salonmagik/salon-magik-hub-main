@@ -34,7 +34,7 @@ const variableTokens = [
 export function SendMessageDialog({ open, onOpenChange, customerId: providedCustomerId }: SendMessageDialogProps) {
   const { currentTenant, user } = useAuth();
   const { customers, isLoading: customersLoading } = useCustomers();
-  const { sendMessage, isLoading: sendingMessage } = useManualMessages({ tenantId: currentTenant?.id || "" });
+  const { sendMessage, isSending } = useManualMessages({ tenantId: currentTenant?.id || "" });
   const { credits, refetch: refetchCredits } = useMessagingCredits();
 
   const [channel, setChannel] = useState<"email" | "sms">("email");
@@ -49,7 +49,7 @@ export function SendMessageDialog({ open, onOpenChange, customerId: providedCust
   const creditBalance = credits?.balance || 0;
   const creditCost = CREDIT_COST[channel];
   const hasInsufficientCredits = channel === "sms" && creditBalance < creditCost;
-  const isSubmitting = sendingMessage;
+  const isSubmitting = isSending;
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch.trim()) return customers;

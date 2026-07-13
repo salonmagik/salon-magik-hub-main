@@ -64,6 +64,7 @@ export function useManualMessages(options: UseManualMessagesOptions) {
   const { customerId, tenantId } = options;
   const [messages, setMessages] = useState<UnifiedMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchMessages = useCallback(async () => {
@@ -160,6 +161,7 @@ export function useManualMessages(options: UseManualMessagesOptions) {
       return null;
     }
 
+    setIsSending(true);
     try {
       // Create manual_messages record
       const { data: newMessage, error: insertError } = await supabase
@@ -215,12 +217,15 @@ export function useManualMessages(options: UseManualMessagesOptions) {
       const errorMessage = err instanceof Error ? err.message : "Failed to send message";
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
       return null;
+    } finally {
+      setIsSending(false);
     }
   };
 
   return {
     messages,
     isLoading,
+    isSending,
     error,
     sendMessage,
     refetch: fetchMessages,
