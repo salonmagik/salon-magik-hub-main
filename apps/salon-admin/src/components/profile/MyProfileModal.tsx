@@ -34,6 +34,8 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [cropScale, setCropScale] = useState(1);
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  // Natural image dimensions — used to compute the cover-fit size for the preview
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
   const isDragging = useRef(false);
   const lastPointer = useRef({ x: 0, y: 0 });
 
@@ -57,6 +59,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
     setCropUrl(url);
     setCropScale(1);
     setCropOffset({ x: 0, y: 0 });
+    setNaturalSize(null);
     // Reset input so same file can be re-selected
     e.target.value = "";
   }
@@ -125,7 +128,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
       const { error: updateErr } = await supabase
         .from("profiles")
         .update({ avatar_url: urlData.publicUrl })
-        .eq("id", user.id);
+        .eq("user_id", user.id);
       if (updateErr) throw updateErr;
 
       await refreshProfile();
@@ -174,17 +177,27 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
                 src={cropUrl}
                 draggable={false}
                 className="absolute max-w-none"
-                style={{
-                  width: "auto",
-                  height: "auto",
-                  transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropScale})`,
-                  top: "50%",
-                  left: "50%",
-                  minWidth: `${CROP_SIZE}px`,
-                  minHeight: `${CROP_SIZE}px`,
-                  objectFit: "cover",
-                  transformOrigin: "center",
+                onLoad={(e) => {
+                  const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+                  setNaturalSize({ w, h });
                 }}
+                style={(() => {
+                  // Before natural size is known, hide the image to avoid a flash of wrong size
+                  if (!naturalSize) return { opacity: 0, position: "absolute" as const };
+                  // Cover fit: scale so the shorter side exactly fills CROP_SIZE at scale=1
+                  const coverFit = CROP_SIZE / Math.min(naturalSize.w, naturalSize.h);
+                  const displayW = naturalSize.w * coverFit;
+                  const displayH = naturalSize.h * coverFit;
+                  return {
+                    position: "absolute" as const,
+                    width: displayW,
+                    height: displayH,
+                    top: "50%",
+                    left: "50%",
+                    transform: `translate(calc(-50% + ${cropOffset.x}px), calc(-50% + ${cropOffset.y}px)) scale(${cropScale})`,
+                    transformOrigin: "center",
+                  };
+                })()}
               />
             </div>
 
