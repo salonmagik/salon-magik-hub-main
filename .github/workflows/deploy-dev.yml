@@ -71,7 +71,18 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }}
+          # Retry supabase link to handle two transient failures:
+          # 1. COMING_UP: project waking from pause — needs a moment to become active.
+          # 2. IPv6 not available on runners — CLI auto-switches to session pooler
+          #    (IPv4) when re-linked after an IPv6 failure.
+          for i in 1 2 3 4 5; do
+            if supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF_DEV }}; then
+              break
+            fi
+            if [ "$i" = "5" ]; then echo "supabase link failed after 5 attempts" && exit 1; fi
+            echo "Attempt $i failed — retrying in 30s..."
+            sleep 30
+          done
           supabase db push --include-all --yes
 
       - name: Deploy edge functions (dev)
