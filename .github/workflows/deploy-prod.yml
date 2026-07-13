@@ -104,6 +104,9 @@ jobs:
         run: pnpm test
 
       - name: Advance release/prod to deployed SHA
+        env:
+          GH_PROD_PUSH_TOKEN: ${{ secrets.GH_PROD_PUSH_TOKEN }}
         run: |
+          git remote set-url origin https://x-access-token:${GH_PROD_PUSH_TOKEN}@github.com/${{ github.repository }}.git
           git fetch origin
           git push --force-with-lease origin ${{ inputs.commit_sha }}:refs/heads/release/prod
