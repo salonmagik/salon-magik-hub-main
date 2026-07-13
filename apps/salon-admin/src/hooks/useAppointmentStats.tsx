@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
+import { useLocationScope } from "./useLocationScope";
 
 interface ScheduledStats {
   rangeCount: number;
@@ -34,6 +35,7 @@ interface UseAppointmentStatsResult {
 
 export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): UseAppointmentStatsResult {
   const { currentTenant } = useAuth();
+  const { scopedLocationIds, hasScope } = useLocationScope();
   const [scheduledStats, setScheduledStats] = useState<ScheduledStats>({
     rangeCount: 0,
     giftedCount: 0,
@@ -61,12 +63,20 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
     setIsLoading(true);
 
     // Use provided date range or default to today
-    const startOfRange = options.startDate 
-      ? `${options.startDate}T00:00:00` 
+    const startOfRange = options.startDate
+      ? `${options.startDate}T00:00:00`
       : new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-    const endOfRange = options.endDate 
-      ? `${options.endDate}T23:59:59.999` 
+    const endOfRange = options.endDate
+      ? `${options.endDate}T23:59:59.999`
       : new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
+
+    // Apply location scope to any Supabase filter builder
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    function withLocation(q: any): any {
+      return hasScope && scopedLocationIds.length > 0
+        ? q.in("location_id", scopedLocationIds)
+        : q;
+    }
 
     try {
       // Fetch scheduled stats (appointments in date range)
@@ -85,46 +95,46 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
         unscheduledPartialResult,
       ] = await Promise.all([
         // Scheduled appointments in range
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", false)
           .gte("scheduled_start", startOfRange)
-          .lte("scheduled_start", endOfRange),
-        
+          .lte("scheduled_start", endOfRange)),
+
         // Gifted appointments in range
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_gifted", true)
           .eq("is_unscheduled", false)
           .gte("scheduled_start", startOfRange)
-          .lte("scheduled_start", endOfRange),
-        
+          .lte("scheduled_start", endOfRange)),
+
         // Cancelled appointments in range
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("status", "cancelled")
           .eq("is_unscheduled", false)
           .gte("scheduled_start", startOfRange)
-          .lte("scheduled_start", endOfRange),
-        
+          .lte("scheduled_start", endOfRange)),
+
         // Rescheduled appointments in range (reschedule_count > 0)
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .gt("reschedule_count", 0)
           .eq("is_unscheduled", false)
           .gte("scheduled_start", startOfRange)
-          .lte("scheduled_start", endOfRange),
-        
+          .lte("scheduled_start", endOfRange)),
+
         // Amount due for scheduled appointments in range (not fully paid)
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("total_amount, amount_paid")
           .eq("tenant_id", currentTenant.id)
@@ -133,64 +143,64 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
           .neq("payment_status", "fully_paid")
           .neq("payment_status", "refunded_full")
           .gte("scheduled_start", startOfRange)
-          .lte("scheduled_start", endOfRange),
+          .lte("scheduled_start", endOfRange)),
 
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .in("approval_status", ["pending", "reschedule_proposed"])
           .or(
             `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
-          ),
+          )),
 
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("total_amount")
           .eq("tenant_id", currentTenant.id)
           .in("approval_status", ["pending", "reschedule_proposed"])
           .or(
             `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
-          ),
-        
+          )),
+
         // Total unscheduled
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
-          .eq("is_unscheduled", true),
-        
+          .eq("is_unscheduled", true)),
+
         // Unscheduled + gifted
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", true)
-          .eq("is_gifted", true),
+          .eq("is_gifted", true)),
 
         // Unscheduled + fully paid
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", true)
-          .eq("payment_status", "fully_paid"),
+          .eq("payment_status", "fully_paid")),
 
         // Unscheduled + unpaid
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", true)
-          .eq("payment_status", "unpaid"),
+          .eq("payment_status", "unpaid")),
 
         // Unscheduled + deposit paid (partial)
-        supabase
+        withLocation(supabase
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
           .eq("is_unscheduled", true)
-          .eq("payment_status", "deposit_paid"),
+          .eq("payment_status", "deposit_paid")),
       ]);
 
       // Calculate amount due
@@ -223,7 +233,7 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, options.startDate, options.endDate]);
+  }, [currentTenant?.id, options.startDate, options.endDate, hasScope, scopedLocationIds]);
 
   useEffect(() => {
     fetchStats();
