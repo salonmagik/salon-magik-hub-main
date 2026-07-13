@@ -81,8 +81,9 @@ export default function SalonsOverviewPage() {
   } = useAuth();
 
   // Restore hub context when navigating here from a branch context.
-  // The ref prevents double-firing; the early-return below prevents a flash
-  // of branch content before setActiveContext has updated the store.
+  // Must depend on canUseOwnerHub + activeContextType so it re-fires once auth
+  // finishes loading (canUseOwnerHub starts false during the initial auth hydration).
+  // The ref prevents calling setActiveContext more than once per mount cycle.
   const restoredRef = useRef(false);
   useEffect(() => {
     if (!restoredRef.current && canUseOwnerHub && activeContextType !== "owner_hub") {
@@ -90,13 +91,8 @@ export default function SalonsOverviewPage() {
       void setActiveContext("owner_hub", null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canUseOwnerHub, activeContextType]);
 
-  // While the context is still being restored to owner_hub, show a loader —
-  // this prevents the brief render of the branch-scoped overview / sidebar.
-  if (canUseOwnerHub && activeContextType !== "owner_hub") {
-    return <BrandLoader fullScreen size="lg" />;
-  }
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
   const activeLocationLabel =
@@ -140,6 +136,12 @@ export default function SalonsOverviewPage() {
     for (const loc of locations) map.set(loc.id, loc);
     return map;
   }, [locations]);
+
+  // All hooks above — safe to return early now.
+  // Prevents branch-scoped overview flashing before the hub context resolves.
+  if (canUseOwnerHub && activeContextType !== "owner_hub") {
+    return <BrandLoader fullScreen size="lg" />;
+  }
 
   const getBranchesForAction = (key: string) => {
     if (key === "pending-approvals") {
