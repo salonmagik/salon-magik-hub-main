@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
@@ -29,6 +29,7 @@ import {
   MapPin,
   Clock,
   ChevronRight,
+  ChevronDown,
   Activity,
   Star,
   AlertCircle,
@@ -75,7 +76,18 @@ export default function SalonsOverviewPage() {
     availableContexts,
     refreshTenants,
     setActiveContext,
+    canUseOwnerHub,
   } = useAuth();
+
+  // Restore hub context when navigating back here from a branch context
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (!restoredRef.current && canUseOwnerHub && activeContextType !== "owner_hub") {
+      restoredRef.current = true;
+      void setActiveContext("owner_hub", null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
   const activeLocationLabel =
@@ -113,6 +125,29 @@ export default function SalonsOverviewPage() {
 
   const branchContexts = availableContexts.filter((c) => c.type === "location");
 
+  // Map locations by id for per-action branch filtering
+  const locationById = useMemo(() => {
+    const map = new Map<string, typeof locations[0]>();
+    for (const loc of locations) map.set(loc.id, loc);
+    return map;
+  }, [locations]);
+
+  const getBranchesForAction = (key: string) => {
+    if (key === "pending-approvals") {
+      return branchContexts.filter((ctx) => {
+        const loc = locationById.get(ctx.locationId!);
+        return loc && loc.pendingApprovals > 0;
+      });
+    }
+    if (key === "unpaid-balances") {
+      return branchContexts.filter((ctx) => {
+        const loc = locationById.get(ctx.locationId!);
+        return loc && loc.unpaidBalances > 0;
+      });
+    }
+    return branchContexts;
+  };
+
   const handleBranchAction = async (locationId: string, destination: string) => {
     setQuickActionPopover(null);
     await setActiveContext("location", locationId);
@@ -120,8 +155,9 @@ export default function SalonsOverviewPage() {
   };
 
   const triggerQuickAction = (actionKey: string, destination: string) => {
-    if (branchContexts.length === 1) {
-      handleBranchAction(branchContexts[0].locationId!, destination);
+    const filtered = getBranchesForAction(actionKey);
+    if (filtered.length === 1) {
+      handleBranchAction(filtered[0].locationId!, destination);
     } else {
       setQuickActionPopover(quickActionPopover === actionKey ? null : actionKey);
     }
@@ -192,11 +228,12 @@ export default function SalonsOverviewPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
                 { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null },
-                { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments", count: aggregateStats?.totalPendingApprovals ?? null },
-                { key: "unpaid-balances", label: "Unpaid Balances", icon: CreditCard, destination: "/salon/appointments", count: aggregateStats?.totalUnpaidBalances ?? null },
+                { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null },
+                { key: "unpaid-balances", label: "Unpaid Balances", icon: CreditCard, destination: "/salon/appointments?tab=unscheduled&payment=unpaid", count: aggregateStats?.totalUnpaidBalances ?? null },
                 { key: "messages", label: "Messages", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null },
               ].map(({ key, label, icon: Icon, destination, count }) => {
               const urgent = count !== null && count > 0;
+              const filteredBranches = getBranchesForAction(key);
               return (
               <Popover
                 key={key}
@@ -206,12 +243,12 @@ export default function SalonsOverviewPage() {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="flex flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left hover:bg-accent transition-colors"
+                    className="group flex flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left transition-all hover:border-blue-400 hover:bg-blue-50/40 dark:hover:bg-blue-950/20"
                     onClick={() => triggerQuickAction(key, destination)}
                   >
                     <div className="flex w-full items-center justify-between">
-                      <div className={`rounded-md p-2 ${urgent ? "bg-destructive/10" : "bg-muted"}`}>
-                        <Icon className={`h-4 w-4 ${urgent ? "text-destructive" : "text-muted-foreground"}`} />
+                      <div className={`rounded-md p-2 ${urgent ? "bg-destructive/10" : "bg-muted group-hover:bg-blue-100/60 dark:group-hover:bg-blue-900/30 transition-colors"}`}>
+                        <Icon className={`h-4 w-4 ${urgent ? "text-destructive" : "text-muted-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"}`} />
                       </div>
                       {count !== null && count > 0 && (
                         <span className="text-xs font-semibold tabular-nums rounded-full bg-destructive text-destructive-foreground px-2 py-0.5">
@@ -219,13 +256,18 @@ export default function SalonsOverviewPage() {
                         </span>
                       )}
                     </div>
-                    <span className="text-sm font-medium leading-tight">{label}</span>
+                    <div className="flex w-full items-center justify-between">
+                      <span className="text-sm font-medium leading-tight">{label}</span>
+                      {filteredBranches.length > 1 && (
+                        <ChevronDown className="h-3.5 w-3.5 text-blue-500/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </div>
                   </button>
                 </PopoverTrigger>
-                {branchContexts.length > 1 && (
+                {filteredBranches.length > 1 && (
                   <PopoverContent className="w-52 p-1" align="start">
                     <p className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Select branch</p>
-                    {branchContexts.map((ctx) => (
+                    {filteredBranches.map((ctx) => (
                       <button
                         key={ctx.locationId}
                         type="button"
@@ -236,6 +278,11 @@ export default function SalonsOverviewPage() {
                         {ctx.label}
                       </button>
                     ))}
+                    {filteredBranches.length === 0 && (
+                      <p className="px-2 py-2 text-xs text-muted-foreground">
+                        No branches with {label.toLowerCase()} right now.
+                      </p>
+                    )}
                   </PopoverContent>
                 )}
               </Popover>

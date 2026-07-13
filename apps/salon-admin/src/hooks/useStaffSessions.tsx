@@ -88,9 +88,13 @@ export function useStaffSessions() {
 
       if (updateError) {
         console.error("Error refreshing active session:", updateError);
+        sessionStorage.setItem("staff_session_id", existingSession.id);
+        setCurrentSession(existingSession);
+        fetchOnlineCounts();
         return existingSession;
       }
 
+      sessionStorage.setItem("staff_session_id", updatedSession.id);
       setCurrentSession(updatedSession);
       fetchOnlineCounts();
       return updatedSession;
@@ -113,6 +117,7 @@ export function useStaffSessions() {
       return null;
     }
 
+    sessionStorage.setItem("staff_session_id", data.id);
     setCurrentSession(data);
     fetchOnlineCounts();
     return data;
@@ -146,6 +151,7 @@ export function useStaffSessions() {
       return;
     }
 
+    sessionStorage.removeItem("staff_session_id");
     setCurrentSession(null);
     fetchOnlineCounts();
   }, [currentSession?.id, fetchOnlineCounts]);
@@ -171,16 +177,19 @@ export function useStaffSessions() {
         return;
       }
 
-      // Check for existing active session
+      // Check for existing active session — use order+limit so multiple sessions don't cause an error
       const { data: existingSession } = await supabase
         .from("staff_sessions")
         .select("*")
         .eq("user_id", user.id)
         .eq("tenant_id", currentTenant.id)
         .is("ended_at", null)
+        .order("last_activity_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       if (existingSession) {
+        sessionStorage.setItem("staff_session_id", existingSession.id);
         setCurrentSession(existingSession);
       }
 

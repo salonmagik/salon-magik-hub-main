@@ -483,6 +483,25 @@ export default function AppointmentsPage() {
     setSearchParams(next);
   }, [appointments, fetchAppointmentById, openApprovalDialog, searchParams, setSearchParams]);
 
+  // Read initial tab and payment filter from URL params (e.g. from Business Overview quick actions)
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const payment = searchParams.get("payment");
+    if (tab === "unscheduled" || tab === "unconfirmed") {
+      setActiveTab(tab);
+    }
+    if (payment === "unpaid") {
+      setPaymentStatuses(new Set(["unpaid"]));
+    }
+    if (tab || payment) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("tab");
+      next.delete("payment");
+      setSearchParams(next, { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const appointmentId = searchParams.get("appointmentId");
     const openMode = searchParams.get("open");

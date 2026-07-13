@@ -212,10 +212,10 @@ export default function LoginPage() {
         persistLastAuthMethod("email");
         setLastAuthMethod("email");
         navigate(postLoginDestination);
-        toast({
+        setTimeout(() => toast({
           title: "Welcome back!",
           description: "You have successfully signed in.",
-        });
+        }), 100);
       }
     } catch (error) {
       toast({
@@ -315,10 +315,10 @@ export default function LoginPage() {
       persistLastAuthMethod("phone");
       setLastAuthMethod("phone");
       navigate(postLoginDestination);
-      toast({
+      setTimeout(() => toast({
         title: "Welcome back!",
         description: "You have successfully signed in.",
-      });
+      }), 100);
     } catch (error) {
       toast({
         title: "Error",

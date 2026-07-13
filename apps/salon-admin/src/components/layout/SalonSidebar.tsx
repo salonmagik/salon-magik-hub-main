@@ -19,6 +19,7 @@ import {
   X,
   ChevronLeft,
   ChevronDown,
+  ChevronRight,
   Bell,
   Plus,
   FileText,
@@ -30,6 +31,7 @@ import {
   Zap,
   User,
 } from "lucide-react";
+import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { supabase } from "@/lib/supabase";
@@ -67,6 +69,7 @@ import {
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
   const { user, profile } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
@@ -79,26 +82,44 @@ function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean;
     .slice(0, 2) || "U";
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-3 py-2.5 mt-2",
-        !isExpanded && !isMobileOpen && "justify-center"
-      )}
-    >
-      <div className="w-8 h-8 bg-white/20 text-white rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
-        {initials}
-      </div>
-      {(isExpanded || isMobileOpen) && (
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate text-white">
-            {displayName}
-          </p>
-          <p className="text-xs text-white/70 truncate">
-            {displayEmail}
-          </p>
+    <>
+      <button
+        type="button"
+        onClick={() => setProfileOpen(true)}
+        className={cn(
+          "flex items-center gap-3 px-3 py-2.5 mt-2 w-full rounded-lg transition-colors hover:bg-white/10 cursor-pointer",
+          !isExpanded && !isMobileOpen && "justify-center"
+        )}
+      >
+        <div className="relative w-8 h-8 flex-shrink-0">
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt={displayName}
+              className="w-8 h-8 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-white/20 text-white rounded-full flex items-center justify-center text-sm font-medium">
+              {initials}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+        {(isExpanded || isMobileOpen) && (
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-medium truncate text-white">
+              {displayName}
+            </p>
+            <p className="text-xs text-white/70 truncate">
+              {displayEmail}
+            </p>
+          </div>
+        )}
+        {(isExpanded || isMobileOpen) && (
+          <ChevronRight className="h-3.5 w-3.5 text-white/50 shrink-0" />
+        )}
+      </button>
+      <MyProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+    </>
   );
 }
 
@@ -191,6 +212,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     setActiveContext,
     getFirstAllowedRoute,
     refreshTenants,
+    canUseOwnerHub,
   } = useAuth();
 
   // Start staff session on mount
@@ -221,6 +243,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         const canAccessOwnAppointments = hasPermission("appointments:own");
         return (hasPermission("appointments") || canAccessOwnAppointments) &&
           isModuleAllowedInContext(item.module, activeContextType);
+      }
+      if (item.module === "salons_overview" && canUseOwnerHub && activeContextType === "owner_hub") {
+        return true;
       }
       return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
     });
@@ -262,7 +287,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       }
       return item;
     });
-  }, [activeContextType, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
+  }, [activeContextType, availableContexts, canUseOwnerHub, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
 
   const contextValue = useMemo(() => {
     if (activeContextType === "owner_hub") return "owner_hub";

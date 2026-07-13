@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
@@ -11,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { EditTemplateDialog } from "@/components/dialogs/EditTemplateDialog";
 import { EditSMSTemplateDialog } from "@/components/messaging/EditSMSTemplateDialog";
 import { CreditPurchaseDialog } from "@/components/billing/CreditPurchaseDialog";
+import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -330,7 +332,9 @@ export default function MessagingPage() {
   const [editingEmailTemplate, setEditingEmailTemplate] = useState<TemplateType | null>(null);
   const [editingSmsTemplate, setEditingSmsTemplate] = useState<SMSTemplateType | null>(null);
   const [creditPurchaseDialogOpen, setCreditPurchaseDialogOpen] = useState(false);
+  const [creditPurchaseSuccessOpen, setCreditPurchaseSuccessOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [customerSearch, setCustomerSearch] = useState("");
   const [saveReusable, setSaveReusable] = useState<SaveReusableState>({ open: false, name: "" });
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number; creditsUsed: number } | null>(null);
@@ -395,6 +399,17 @@ export default function MessagingPage() {
       return (data as BroadcastDraft | null) || null;
     },
   });
+
+  // Handle ?purchase=success redirect from Paystack after credit purchase
+  useEffect(() => {
+    if (searchParams.get("purchase") !== "success") return;
+    const clean = new URLSearchParams(searchParams);
+    clean.delete("purchase");
+    clean.delete("reference");
+    clean.delete("trxref");
+    setSearchParams(clean, { replace: true });
+    setCreditPurchaseSuccessOpen(true);
+  }, [searchParams.get("purchase")]);
 
   useEffect(() => {
     if (!activeDraft || sendResult) return;
@@ -2131,6 +2146,13 @@ export default function MessagingPage() {
         <CreditPurchaseDialog
           open={creditPurchaseDialogOpen}
           onOpenChange={setCreditPurchaseDialogOpen}
+        />
+
+        <PaymentSuccessModal
+          open={creditPurchaseSuccessOpen}
+          onClose={() => setCreditPurchaseSuccessOpen(false)}
+          title="Credits added!"
+          description="Your messaging credits have been topped up and are ready to use."
         />
       </div>
     </SalonSidebar>
