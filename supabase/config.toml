@@ -154,9 +154,6 @@ verify_jwt = false
 [functions.verify-bank-account]
 verify_jwt = false
 
-[functions.paystack-transfer-webhook]
-verify_jwt = false
-
 [functions.paystack-transfer-approval-gh]
 verify_jwt = false
 
