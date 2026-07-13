@@ -4,6 +4,13 @@ import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { useBookingCart, type PublicTenant } from "@/hooks";
 
+interface SearchSuggestion {
+  id: string;
+  name: string;
+  type: string;
+  imageUrl?: string | null;
+}
+
 interface BookingLayoutProps {
   children: ReactNode;
   salon?: PublicTenant | null;
@@ -14,6 +21,36 @@ interface BookingLayoutProps {
   /** Controlled search query for ecommerce header search */
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  searchSuggestions?: SearchSuggestion[];
+}
+
+function BrandIconButton({
+  brandColor,
+  onClick,
+  label,
+  className = "",
+  children,
+}: {
+  brandColor: string;
+  onClick?: () => void;
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className={`relative flex h-9 w-9 items-center justify-center rounded-full transition-colors ${className}`}
+      style={{ backgroundColor: hovered ? `${brandColor}1a` : "transparent" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {children}
+    </button>
+  );
 }
 
 export function BookingLayout({
@@ -24,12 +61,14 @@ export function BookingLayout({
   onCartClick,
   searchQuery = "",
   onSearchChange,
+  searchSuggestions = [],
 }: BookingLayoutProps) {
   const { getItemCount } = useBookingCart();
   const itemCount = getItemCount();
   const brandColor = salon?.brand_color || "#111827";
   const isEcommerceTheme = themeKey === "ecommerce";
   const [searchOpen, setSearchOpen] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,6 +81,7 @@ export function BookingLayout({
     if (searchOpen && searchQuery) {
       onSearchChange?.("");
     }
+    if (searchOpen) setShowSuggestions(false);
     setSearchOpen((prev) => !prev);
   };
 
@@ -98,20 +138,46 @@ export function BookingLayout({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => onSearchChange?.(e.target.value)}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                       placeholder="Search services, products…"
                       className="h-9 w-56 rounded-full border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none sm:w-72"
                     />
+                    {showSuggestions && searchQuery.length >= 2 && searchSuggestions.length > 0 && (
+                      <div className="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+                        {searchSuggestions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-gray-50"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              onSearchChange?.(item.name);
+                              setShowSuggestions(false);
+                            }}
+                          >
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt="" className="h-8 w-8 flex-shrink-0 rounded object-cover" />
+                            ) : (
+                              <div className="h-8 w-8 flex-shrink-0 rounded bg-gray-100" />
+                            )}
+                            <span className="flex-1 truncate font-medium text-gray-900">{item.name}</span>
+                            <span className="text-xs capitalize text-gray-400">{item.type}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <Button variant="ghost" size="icon" onClick={handleSearchToggle} aria-label="Close search">
+                  <BrandIconButton brandColor={brandColor} onClick={handleSearchToggle} label="Close search">
                     <X className="h-4 w-4 text-gray-600" />
-                  </Button>
+                  </BrandIconButton>
                 </div>
               ) : (
-                <Button variant="ghost" size="icon" aria-label="Search" onClick={handleSearchToggle}>
+                <BrandIconButton brandColor={brandColor} onClick={handleSearchToggle} label="Search">
                   <Search className="h-5 w-5 text-gray-700" />
-                </Button>
+                </BrandIconButton>
               )}
-              <Button variant="ghost" size="icon" className="relative" onClick={onCartClick}>
+              <BrandIconButton brandColor={brandColor} onClick={onCartClick} label="Cart">
                 <ShoppingBag className="h-5 w-5 text-gray-700" />
                 {itemCount > 0 && (
                   <Badge
@@ -121,7 +187,7 @@ export function BookingLayout({
                     {itemCount}
                   </Badge>
                 )}
-              </Button>
+              </BrandIconButton>
             </div>
           ) : (
             <Button variant="outline" size="icon" className="relative" onClick={onCartClick}>

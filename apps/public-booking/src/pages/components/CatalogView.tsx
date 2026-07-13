@@ -332,15 +332,17 @@ export function CatalogView({
             <SlidersHorizontal className="h-4 w-4" />
             Filter & Sort
           </button>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search…"
-              value={searchQuery}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-              className="h-9 w-48 border-black/15 pl-9 text-sm"
-            />
-          </div>
+          {!(isEcommerceTheme && externalSearch !== undefined) && (
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search…"
+                value={searchQuery}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                className="h-9 w-48 border-black/15 pl-9 text-sm"
+              />
+            </div>
+          )}
         </div>
 
         {/* Mobile sidebar drawer */}
@@ -374,15 +376,17 @@ export function CatalogView({
               <p className="text-sm text-gray-400">
                 {displayItems.length} {displayItems.length === 1 ? "item" : "items"}
               </p>
-              <div className="relative hidden lg:block">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                <Input
-                  placeholder="Search…"
-                  value={searchQuery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                  className="h-9 w-56 border-black/15 pl-9 text-sm"
-                />
-              </div>
+              {!(isEcommerceTheme && externalSearch !== undefined) && (
+                <div className="relative hidden lg:block">
+                  <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Search…"
+                    value={searchQuery}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                    className="h-9 w-56 border-black/15 pl-9 text-sm"
+                  />
+                </div>
+              )}
             </div>
 
             {renderGrid(displayItems)}
