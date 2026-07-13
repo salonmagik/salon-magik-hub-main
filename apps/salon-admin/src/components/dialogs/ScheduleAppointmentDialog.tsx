@@ -46,6 +46,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   >([]);
   const [formData, setFormData] = useState({
     customerId: "",
+    locationId: "",
     date: new Date().toISOString().split("T")[0],
     startTime: "09:00",
     staffId: "",
@@ -58,16 +59,17 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   const { staff, isLoading: staffLoading } = useStaff();
   const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
-  const appointmentLocationId =
-    (activeLocationId && locations.find((location) => location.id === activeLocationId)?.id) ||
-    defaultLocation?.id ||
-    null;
 
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
+      const resolvedLocationId =
+        (activeLocationId && locations.find((l) => l.id === activeLocationId)?.id) ||
+        defaultLocation?.id ||
+        "";
       setFormData({
         customerId: "",
+        locationId: resolvedLocationId,
         date: new Date().toISOString().split("T")[0],
         startTime: "09:00",
         staffId: "",
@@ -104,7 +106,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!appointmentLocationId || selectedServices.length === 0) {
+    if (!formData.locationId || selectedServices.length === 0) {
       return;
     }
 
@@ -123,7 +125,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
       })),
       scheduledStart,
       scheduledEnd,
-      locationId: appointmentLocationId,
+      locationId: formData.locationId,
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
       attachments: noteAttachments.length > 0 ? noteAttachments : undefined,
@@ -175,6 +177,30 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 </Button>
               </div>
             </div>
+
+            {/* Branch Selection — shown when tenant has multiple branches */}
+            {locations.length > 1 && (
+              <div className="space-y-2">
+                <Label>
+                  Branch <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.locationId}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Service Selection */}
             <div className="space-y-2">

@@ -285,6 +285,17 @@ function BookingPageWithCart({
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
   const [ecomSearchQuery, setEcomSearchQuery] = useState("");
 
+  const handleSuggestionSelect = (itemId: string) => {
+    // After React re-renders the filtered list, scroll the item into view
+    setTimeout(() => {
+      const el = document.getElementById(`catalog-item-${itemId}`);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top, behavior: "smooth" });
+      }
+    }, 80);
+  };
+
   const searchSuggestions = useMemo(() => {
     if (themeKey !== "ecommerce" || ecomSearchQuery.length < 2) return [];
     const q = ecomSearchQuery.toLowerCase();
@@ -347,6 +358,7 @@ function BookingPageWithCart({
         searchQuery={ecomSearchQuery}
         onSearchChange={setEcomSearchQuery}
         searchSuggestions={searchSuggestions}
+        onSuggestionSelect={handleSuggestionSelect}
       >
         {themeKey === "ecommerce" ? (
           <>

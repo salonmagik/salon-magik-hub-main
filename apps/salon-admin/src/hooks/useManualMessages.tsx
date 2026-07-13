@@ -13,6 +13,38 @@ export interface ManualMessageWithDetails extends ManualMessage {
   template?: WhatsAppTemplate;
 }
 
+// Unified type for display in MessageHistory (covers both manual and broadcast)
+export interface UnifiedMessage {
+  id: string;
+  channel: "email" | "sms" | "whatsapp";
+  message: string | null;
+  subject: string | null;
+  status: "pending" | "sent" | "delivered" | "failed";
+  credits_used: number;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  template_variables: Record<string, any> | null;
+  template: WhatsAppTemplate | null | undefined;
+  source: "manual" | "broadcast";
+  recipient: string | null;
+}
+
+interface BroadcastLog {
+  id: string;
+  tenant_id: string;
+  customer_id: string | null;
+  channel: string;
+  recipient: string;
+  subject: string | null;
+  status: string;
+  credits_used: number;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
 export interface UseManualMessagesOptions {
   customerId?: string;
   tenantId: string;
@@ -30,7 +62,7 @@ export interface SendMessageOptions {
 export function useManualMessages(options: UseManualMessagesOptions) {
   const { currentTenant, user } = useAuth();
   const { customerId, tenantId } = options;
-  const [messages, setMessages] = useState<ManualMessageWithDetails[]>([]);
+  const [messages, setMessages] = useState<UnifiedMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -45,27 +77,66 @@ export function useManualMessages(options: UseManualMessagesOptions) {
     setError(null);
 
     try {
-      let query = supabase
-        .from("manual_messages")
-        .select(
-          `
-          *,
-          customer:customers(*),
-          template:whatsapp_templates(*)
-        `
-        )
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: false });
+      // Run both queries in parallel
+      const [manualResult, logsResult] = await Promise.all([
+        supabase
+          .from("manual_messages")
+          .select(`*, customer:customers(*), template:whatsapp_templates(*)`)
+          .eq("tenant_id", tenantId)
+          .eq("customer_id", customerId ?? "")
+          .order("created_at", { ascending: false }),
 
-      if (customerId) {
-        query = query.eq("customer_id", customerId);
-      }
+        customerId
+          ? supabase
+              .from("message_logs")
+              .select("*")
+              .eq("tenant_id", tenantId)
+              .eq("customer_id", customerId)
+              .order("created_at", { ascending: false })
+          : Promise.resolve({ data: [] as BroadcastLog[], error: null }),
+      ]);
 
-      const { data, error: fetchError } = await query;
+      if (manualResult.error) throw manualResult.error;
+      if (logsResult.error) throw logsResult.error;
 
-      if (fetchError) throw fetchError;
+      const manualMessages: UnifiedMessage[] = ((manualResult.data as ManualMessageWithDetails[]) || []).map((m) => ({
+        id: m.id,
+        channel: m.channel as UnifiedMessage["channel"],
+        message: m.message,
+        subject: m.subject,
+        status: m.status as UnifiedMessage["status"],
+        credits_used: m.credits_used ?? 0,
+        error_message: m.error_message,
+        sent_at: m.sent_at,
+        created_at: m.created_at,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        template_variables: (m.template_variables as Record<string, any> | null) ?? null,
+        template: m.template,
+        source: "manual",
+        recipient: null,
+      }));
 
-      setMessages((data as ManualMessageWithDetails[]) || []);
+      const broadcastMessages: UnifiedMessage[] = ((logsResult.data as BroadcastLog[]) || []).map((log) => ({
+        id: log.id,
+        channel: log.channel as UnifiedMessage["channel"],
+        message: null,
+        subject: log.subject,
+        status: log.status as UnifiedMessage["status"],
+        credits_used: log.credits_used ?? 0,
+        error_message: log.error_message,
+        sent_at: log.sent_at,
+        created_at: log.created_at,
+        template_variables: null,
+        template: null,
+        source: "broadcast",
+        recipient: log.recipient,
+      }));
+
+      const merged = [...manualMessages, ...broadcastMessages].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+
+      setMessages(merged);
     } catch (err) {
       console.error("Error fetching manual messages:", err);
       setError(err as Error);

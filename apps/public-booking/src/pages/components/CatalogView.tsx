@@ -177,24 +177,25 @@ export function CatalogView({
         : "grid grid-cols-1 gap-4 sm:grid-cols-2"
       }>
         {items.map((item) => (
-          <ItemCard
-            key={`${item.type}-${item.id}`}
-            themeKey={themeKey}
-            storefrontMode={storefrontMode}
-            type={item.type}
-            id={item.id}
-            name={item.name}
-            description={item.description}
-            price={item.price}
-            originalPrice={item.originalPrice}
-            currency={currency}
-            imageUrls={item.imageUrls}
-            durationMinutes={item.durationMinutes}
-            serviceIds={item.serviceIds}
-            stockQuantity={item.stockQuantity}
-            branches={item.branches}
-            locationNames={item.locationNames}
-          />
+          <div key={`${item.type}-${item.id}`} id={`catalog-item-${item.id}`}>
+            <ItemCard
+              themeKey={themeKey}
+              storefrontMode={storefrontMode}
+              type={item.type}
+              id={item.id}
+              name={item.name}
+              description={item.description}
+              price={item.price}
+              originalPrice={item.originalPrice}
+              currency={currency}
+              imageUrls={item.imageUrls}
+              durationMinutes={item.durationMinutes}
+              serviceIds={item.serviceIds}
+              stockQuantity={item.stockQuantity}
+              branches={item.branches}
+              locationNames={item.locationNames}
+            />
+          </div>
         ))}
       </div>
     );

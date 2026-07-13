@@ -22,6 +22,7 @@ interface BookingLayoutProps {
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
   searchSuggestions?: SearchSuggestion[];
+  onSuggestionSelect?: (itemId: string) => void;
 }
 
 function BrandIconButton({
@@ -62,6 +63,7 @@ export function BookingLayout({
   searchQuery = "",
   onSearchChange,
   searchSuggestions = [],
+  onSuggestionSelect,
 }: BookingLayoutProps) {
   const { getItemCount } = useBookingCart();
   const itemCount = getItemCount();
@@ -154,6 +156,7 @@ export function BookingLayout({
                             onClick={() => {
                               onSearchChange?.(item.name);
                               setShowSuggestions(false);
+                              onSuggestionSelect?.(item.id);
                             }}
                           >
                             {item.imageUrl ? (
