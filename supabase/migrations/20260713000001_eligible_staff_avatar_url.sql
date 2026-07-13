@@ -1,7 +1,10 @@
 -- Add avatar_url to list_public_booking_eligible_staff so the public booking
 -- UI can display staff profile pictures in the staff-selection dropdown.
+-- DROP required because PostgreSQL cannot replace a function with a changed return type.
 
-create or replace function public.list_public_booking_eligible_staff(
+drop function if exists public.list_public_booking_eligible_staff(uuid, uuid, uuid[]);
+
+create function public.list_public_booking_eligible_staff(
   p_tenant_id uuid,
   p_location_id uuid,
   p_service_ids uuid[] default null
