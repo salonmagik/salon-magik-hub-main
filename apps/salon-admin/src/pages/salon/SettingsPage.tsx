@@ -102,6 +102,7 @@ import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
+import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch";
 
@@ -174,6 +175,11 @@ type BookingSettingsSubTab = "booking_config";
 export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [isSaving, setIsSaving] = useState(false);
+	const [paymentSuccessModal, setPaymentSuccessModal] = useState<{
+		title: string;
+		description: string;
+		detail?: string;
+	} | null>(null);
 	const {
 		currentTenant,
 		profile,
@@ -459,10 +465,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		const subscriptionStatus = searchParams.get("subscription");
 
 		if (topupStatus === "success") {
-			toast({
-				title: "Top-Up Successful",
-				description:
-					"Your wallet has been topped up successfully. Funds will appear in your balance shortly.",
+			setPaymentSuccessModal({
+				title: "Wallet topped up!",
+				description: "Funds will appear in your balance shortly.",
 			});
 
 			// Clean up URL parameter
@@ -510,15 +515,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							console.error("Subscription verification error:", error);
 						}
 						await refreshTenants();
-						toast({
-							title: "Subscription activated",
+						setPaymentSuccessModal({
+							title: "Subscription activated!",
 							description: "Your plan is now active.",
 						});
 					});
 			} else {
 				refreshTenants().then(() => {
-					toast({
-						title: "Payment received",
+					setPaymentSuccessModal({
+						title: "Payment received!",
 						description: "Your subscription status will update shortly.",
 					});
 				});
@@ -572,8 +577,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							return;
 						}
 						await Promise.all([refreshTenants(), refetchEntitlements()]);
-						toast({
-							title: "Billing updated",
+						setPaymentSuccessModal({
+							title: "Billing updated!",
 							description: "Your branches and team seats have been updated.",
 						});
 					});
@@ -624,10 +629,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							return;
 						}
 						await refetchEntitlements();
-						toast({
-							title: "Theme activated",
-							description:
-								"The e-commerce storefront theme is now active for your public booking page.",
+						setPaymentSuccessModal({
+							title: "Theme activated!",
+							description: "The e-commerce storefront theme is now active for your public booking page.",
 						});
 					});
 			}
@@ -3708,6 +3712,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					)}
 					{settingsContent}
 				</div>
+				<PaymentSuccessModal
+					open={!!paymentSuccessModal}
+					onClose={() => setPaymentSuccessModal(null)}
+					title={paymentSuccessModal?.title ?? ""}
+					description={paymentSuccessModal?.description ?? ""}
+					detail={paymentSuccessModal?.detail}
+				/>
 			</SalonSidebar>
 		);
 	}
@@ -3788,6 +3799,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<div className="flex-1">{settingsContent}</div>
 				</div>
 			</div>
+			<PaymentSuccessModal
+				open={!!paymentSuccessModal}
+				onClose={() => setPaymentSuccessModal(null)}
+				title={paymentSuccessModal?.title ?? ""}
+				description={paymentSuccessModal?.description ?? ""}
+				detail={paymentSuccessModal?.detail}
+			/>
 		</SalonSidebar>
 	);
 }

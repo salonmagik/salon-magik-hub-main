@@ -1,10 +1,10 @@
 import { ReactNode, useEffect } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { isModuleAllowedInContext } from "@/lib/contextAccess";
 import { supabase } from "@/lib/supabase";
+import { BrandLoader } from "@/components/BrandLoader";
 
 interface ModuleProtectedRouteProps {
   children: ReactNode;
@@ -30,6 +30,7 @@ export function ModuleProtectedRoute({
     currentTenant,
     activeContextType,
     currentRole,
+    canUseOwnerHub,
     isLoading: authLoading,
     hasCompletedOnboarding,
     isAssignmentPending,
@@ -41,7 +42,10 @@ export function ModuleProtectedRoute({
   const isContextAllowed = isModuleAllowedInContext(module, activeContextType, location.pathname);
   const requiresStrictContext = location.pathname === "/salon/overview/staff";
   const ownerBypass = currentRole === "owner";
-  const isAllowed = ownerBypass || (hasModuleAccess && (!requiresStrictContext || isContextAllowed));
+  // Managers/supervisors get hub access strictly for Business Overview and Notifications only.
+  const hubBypass = canUseOwnerHub && !ownerBypass && activeContextType === "owner_hub" &&
+    (module === "salons_overview" || module === "notifications");
+  const isAllowed = ownerBypass || hubBypass || (hasModuleAccess && (!requiresStrictContext || isContextAllowed));
 
   const isChainAuditLogBlocked =
     module === "audit_log" && currentTenant?.plan === "chain" && activeContextType !== "owner_hub";
@@ -74,11 +78,7 @@ export function ModuleProtectedRoute({
   }, [activeContextType, currentTenant?.id, hasModuleAccess, isAllowed, isAssignmentPending, isChainAuditLogBlocked, isGuardBootstrapping, isLoading, module, user?.id]);
 
   if (isLoading || isGuardBootstrapping) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    return <BrandLoader fullScreen size="lg" />;
   }
 
   if (isAssignmentPending) {

@@ -51,7 +51,7 @@ interface SelectedService {
 }
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
-  const { currentTenant, activeLocationId } = useAuth();
+  const { currentTenant, activeLocationId, currentRole, assignedLocationIds } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
@@ -63,6 +63,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   }>>([]);
   const [formData, setFormData] = useState({
     customerId: "",
+    locationId: "",
     staffId: "",
     notes: "",
     bufferMinutes: "0",
@@ -74,17 +75,21 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const { staff, isLoading: staffLoading } = useStaff();
   const { locations, defaultLocation } = useLocations();
   const { createAppointment, isSubmitting } = useAppointmentActions();
-  const appointmentLocationId =
-    (activeLocationId && locations.find((location) => location.id === activeLocationId)?.id) ||
-    defaultLocation?.id ||
-    null;
+  const accessibleLocations = currentRole === "owner"
+    ? locations
+    : locations.filter((l) => assignedLocationIds.includes(l.id));
 
   // Reset form when dialog opens, use tenant default buffer
   useEffect(() => {
     if (open) {
       const defaultBuffer = currentTenant?.default_buffer_minutes?.toString() || "0";
+      const resolvedLocationId =
+        (activeLocationId && accessibleLocations.find((l) => l.id === activeLocationId)?.id) ||
+        accessibleLocations[0]?.id ||
+        "";
       setFormData({
         customerId: "",
+        locationId: resolvedLocationId,
         staffId: "",
         notes: "",
         bufferMinutes: defaultBuffer,
@@ -120,11 +125,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!appointmentLocationId) {
-      return;
-    }
-
-    if (selectedServices.length === 0) {
+    if (!formData.locationId || selectedServices.length === 0) {
       return;
     }
 
@@ -144,7 +145,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
         price: s.price,
         duration: s.duration,
       })),
-      locationId: appointmentLocationId,
+      locationId: formData.locationId,
       staffId: formData.staffId && formData.staffId !== "_none" ? formData.staffId : undefined,
       notes: formData.notes || undefined,
       isWalkIn: true,
@@ -210,6 +211,30 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                 </Button>
               </div>
             </div>
+
+            {/* Branch Selection — shown when user has access to more than one branch */}
+            {accessibleLocations.length > 1 && (
+              <div className="space-y-2">
+                <Label>
+                  Branch <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.locationId}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accessibleLocations.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Service Selection */}
             <div className="space-y-2">

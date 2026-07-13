@@ -60,6 +60,7 @@ export function ActiveSessionsTab() {
 
   const currentUserId = user?.id;
   const currentTenantId = currentTenant?.id;
+  const currentSessionId = sessionStorage.getItem("staff_session_id");
 
   const { data: sessions = [], isLoading } = useQuery({
     queryKey: ["active-staff-sessions", currentTenantId],
@@ -174,17 +175,17 @@ export function ActiveSessionsTab() {
                   </TableHeader>
                   <TableBody>
                     {visibleSessions.map((session) => {
-                      const isOwn = session.user_id === currentUserId;
+                      const isCurrentSession = session.id === currentSessionId;
                       return (
                         <TableRow key={session.id}>
                           <TableCell>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col gap-0.5">
                               <span className="font-medium text-sm">
                                 {session.profiles?.full_name ?? "Unknown"}
                               </span>
-                              {isOwn && (
-                                <Badge variant="secondary" className="w-fit text-xs mt-0.5">
-                                  This device
+                              {isCurrentSession && (
+                                <Badge variant="default" className="w-fit text-xs">
+                                  This session
                                 </Badge>
                               )}
                             </div>
@@ -221,6 +222,8 @@ export function ActiveSessionsTab() {
                               size="sm"
                               className="text-destructive hover:text-destructive hover:bg-destructive/10"
                               onClick={() => setConfirmSessionId(session.id)}
+                              disabled={isCurrentSession}
+                              title={isCurrentSession ? "You can't end your current session here" : undefined}
                             >
                               <LogOut className="w-4 h-4 mr-1.5" />
                               End
@@ -259,47 +262,57 @@ export function ActiveSessionsTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ownSessions.map((session) => (
-                    <TableRow key={session.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          {locationLabel(session)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
-                          <DeviceIcon type={session.device_type} />
-                          {session.device_type ?? "desktop"}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {session.browser_name ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 shrink-0" />
-                          {format(new Date(session.started_at), "MMM d, h:mm a")}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDistanceToNow(new Date(session.last_activity_at), {
-                          addSuffix: true,
-                        })}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setConfirmSessionId(session.id)}
-                        >
-                          <LogOut className="w-4 h-4 mr-1.5" />
-                          End
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {ownSessions.map((session) => {
+                    const isCurrentSession = session.id === currentSessionId;
+                    return (
+                      <TableRow key={session.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                            {locationLabel(session)}
+                          </div>
+                          {isCurrentSession && (
+                            <Badge variant="default" className="w-fit text-xs mt-1">
+                              This session
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground capitalize">
+                            <DeviceIcon type={session.device_type} />
+                            {session.device_type ?? "desktop"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {session.browser_name ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 shrink-0" />
+                            {format(new Date(session.started_at), "MMM d, h:mm a")}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {formatDistanceToNow(new Date(session.last_activity_at), {
+                            addSuffix: true,
+                          })}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setConfirmSessionId(session.id)}
+                            disabled={isCurrentSession}
+                            title={isCurrentSession ? "You can't end your current session here" : undefined}
+                          >
+                            <LogOut className="w-4 h-4 mr-1.5" />
+                            End
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

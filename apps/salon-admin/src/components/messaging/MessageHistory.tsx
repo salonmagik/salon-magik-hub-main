@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Mail, Phone, MessageSquare, ChevronDown, ChevronUp, Filter, X } from "lucide-react";
-import { useManualMessages } from "@/hooks/useManualMessages";
+import { useManualMessages, type UnifiedMessage } from "@/hooks/useManualMessages";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -204,10 +204,21 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredMessages.map((message) => {
+            {filteredMessages.map((message: UnifiedMessage) => {
               const Icon = channelIcons[message.channel];
               const isExpanded = expandedMessageId === message.id;
-              const statusConfig = statusVariants[message.status];
+              const statusConfig = statusVariants[message.status] ?? statusVariants.pending;
+              const isBroadcast = message.source === "broadcast";
+
+              const previewText = isBroadcast
+                ? `Broadcast ${message.channel.toUpperCase()}${message.recipient ? ` → ${message.recipient}` : ""}`
+                : message.message
+                  ? message.message.length > 100
+                    ? `${message.message.substring(0, 100)}...`
+                    : message.message
+                  : message.template
+                    ? `WhatsApp template: ${message.template.template_name}`
+                    : "—";
 
               return (
                 <Collapsible key={message.id} open={isExpanded} onOpenChange={() => toggleExpanded(message.id)}>
@@ -232,23 +243,17 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
                               {message.subject && (
                                 <h4 className="font-medium text-sm truncate">{message.subject}</h4>
                               )}
-                              {message.template && (
-                                <h4 className="font-medium text-sm truncate">
-                                  WhatsApp Template: {message.template.template_name}
-                                </h4>
-                              )}
                               <p className="text-sm text-muted-foreground truncate mt-0.5">
-                                {message.message ? (
-                                  message.message.length > 100
-                                    ? `${message.message.substring(0, 100)}...`
-                                    : message.message
-                                ) : (
-                                  "WhatsApp message via template"
-                                )}
+                                {previewText}
                               </p>
                             </div>
 
                             <div className="flex items-center gap-2 flex-shrink-0">
+                              {isBroadcast && (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                  Broadcast
+                                </span>
+                              )}
                               <Badge variant={statusConfig.variant} className={statusConfig.className}>
                                 {message.status}
                               </Badge>
@@ -287,6 +292,16 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
                             <h5 className="font-medium text-sm mb-1">Message Content</h5>
                             <p className="text-sm text-muted-foreground whitespace-pre-wrap bg-muted/50 p-3 rounded-md">
                               {message.message}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Broadcast: no body stored, show recipient */}
+                        {isBroadcast && (
+                          <div>
+                            <h5 className="font-medium text-sm mb-1">Recipient</h5>
+                            <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
+                              {message.recipient ?? "—"}
                             </p>
                           </div>
                         )}

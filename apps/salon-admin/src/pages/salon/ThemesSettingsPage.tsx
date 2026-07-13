@@ -11,7 +11,6 @@ import {
   Image as ImageIcon,
   X,
   Save,
-  CheckCircle2,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { cn } from "@shared/utils";
@@ -38,6 +37,7 @@ import {
   DialogTitle,
 } from "@ui/dialog";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
+import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
 type ThemeKey = "default" | "ecommerce";
 
@@ -352,63 +352,55 @@ export default function ThemesSettingsPage() {
             </Badge>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
             {/* ── Default theme card ── */}
-            <div className="flex flex-col rounded-xl border bg-card p-4 shadow-sm">
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Palette className="h-4 w-4 text-muted-foreground" />
-                    <p className="font-semibold">Default</p>
-                    <Badge variant="secondary" className="text-[10px]">Free</Badge>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Clean, appointment-first booking page with your salon branding.
-                  </p>
+            <div className="flex flex-col rounded-xl border bg-card p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Palette className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <p className="font-semibold text-sm truncate">Default</p>
+                  <Badge variant="secondary" className="text-[10px] shrink-0">Free</Badge>
                 </div>
-                {activeThemeKey === "default" && <Badge className="shrink-0">Applied</Badge>}
+                {activeThemeKey === "default" && <Badge className="shrink-0 text-[10px]">Applied</Badge>}
               </div>
 
-              <div className="flex-1">
-                <BookingThemePreview
-                  themeKey="default"
-                  mode="card"
-                  salonName={currentTenant?.name || "Your Salon"}
-                  brandColor={settings.brandColor}
-                  bannerUrls={bannerUrls}
-                  bookingPageBio={settings.bookingPageBio || null}
-                  storefrontMode={settings.storefrontMode}
-                  locations={previewLocations}
-                />
+              <div className="relative overflow-hidden rounded-md border" style={{ height: "160px" }}>
+                <div
+                  className="absolute top-0 left-0 origin-top-left pointer-events-none"
+                  style={{ width: "200%", transform: "scale(0.5)" }}
+                >
+                  <BookingThemePreview
+                    themeKey="default"
+                    mode="card"
+                    salonName={currentTenant?.name || "Your Salon"}
+                    brandColor={settings.brandColor}
+                    bannerUrls={bannerUrls}
+                    bookingPageBio={settings.bookingPageBio || null}
+                    storefrontMode={settings.storefrontMode}
+                    locations={previewLocations}
+                  />
+                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-7 text-xs px-2"
                   onClick={() => { setThemePreviewKey("default"); setThemePreviewOpen(true); }}
                 >
-                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  <Eye className="mr-1 h-3 w-3" />
                   Preview
                 </Button>
-                {bookingUrl && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => window.open(`${bookingUrl}&preview_theme=default`, "_blank")}
-                  >
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                    Live preview
-                  </Button>
-                )}
                 {activeThemeKey !== "default" && (
                   <Button
                     size="sm"
                     variant="outline"
+                    className="h-7 text-xs px-2"
                     onClick={() => handleApplyTheme("default")}
                     disabled={isApplying}
                   >
-                    {isApplying ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                    {isApplying ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
                     Apply
                   </Button>
                 )}
@@ -416,123 +408,105 @@ export default function ThemesSettingsPage() {
             </div>
 
             {/* ── E-commerce theme card ── */}
-            <div className="flex flex-col rounded-xl border bg-card p-4 shadow-sm">
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <p className="font-semibold">E-commerce</p>
-                    {hasPurchasedEcommerce ? (
-                      <Badge variant="secondary" className="text-[10px]">Purchased</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 bg-amber-50">Paid</Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Shopify-inspired storefront for bookable services, packages, and products.
-                  </p>
-                  {ecommercePricing !== undefined && ecommercePricing > 0 && !hasPurchasedEcommerce && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatCurrency(ecommercePricing, currentTenant?.currency || "USD")} / year
-                    </p>
+            <div className="flex flex-col rounded-xl border bg-card p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <p className="font-semibold text-sm truncate">E-commerce</p>
+                  {hasPurchasedEcommerce ? (
+                    <Badge variant="secondary" className="text-[10px] shrink-0">Owned</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] shrink-0 border-amber-300 text-amber-700 bg-amber-50">Paid</Badge>
                   )}
                 </div>
-                {activeThemeKey === "ecommerce" && <Badge className="shrink-0">Applied</Badge>}
+                {activeThemeKey === "ecommerce" && <Badge className="shrink-0 text-[10px]">Applied</Badge>}
               </div>
 
-              <div className="flex-1">
-                <BookingThemePreview
-                  themeKey="ecommerce"
-                  mode="card"
-                  salonName={currentTenant?.name || "Your Salon"}
-                  brandColor={settings.brandColor}
-                  bannerUrls={bannerUrls}
-                  bookingPageBio={settings.bookingPageBio || null}
-                  storefrontMode={settings.storefrontMode}
-                  locations={previewLocations}
-                />
+              <div className="relative overflow-hidden rounded-md border" style={{ height: "160px" }}>
+                <div
+                  className="absolute top-0 left-0 origin-top-left pointer-events-none"
+                  style={{ width: "200%", transform: "scale(0.5)" }}
+                >
+                  <BookingThemePreview
+                    themeKey="ecommerce"
+                    mode="card"
+                    salonName={currentTenant?.name || "Your Salon"}
+                    brandColor={settings.brandColor}
+                    bannerUrls={bannerUrls}
+                    bookingPageBio={settings.bookingPageBio || null}
+                    storefrontMode={settings.storefrontMode}
+                    locations={previewLocations}
+                  />
+                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-7 text-xs px-2"
                   onClick={() => { setThemePreviewKey("ecommerce"); setThemePreviewOpen(true); }}
                 >
-                  <Eye className="mr-1.5 h-3.5 w-3.5" />
+                  <Eye className="mr-1 h-3 w-3" />
                   Preview
                 </Button>
-                {bookingUrl && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => window.open(`${bookingUrl}&preview_theme=ecommerce`, "_blank")}
-                  >
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                    Live preview
-                  </Button>
-                )}
-
                 {!hasPurchasedEcommerce && (
                   <Button
                     size="sm"
+                    className="h-7 text-xs px-2"
                     onClick={handlePurchase}
                     disabled={isPurchasing || !canPurchase}
                     title={!canPurchase ? "Upgrade from trial first to purchase a paid theme" : undefined}
                   >
-                    {isPurchasing ? (
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                    )}
-                    Buy theme
+                    {isPurchasing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
+                    {ecommercePricing ? formatCurrency(ecommercePricing, currentTenant?.currency || "USD") + "/yr" : "Buy"}
                   </Button>
                 )}
-
                 {hasPurchasedEcommerce && activeThemeKey !== "ecommerce" && (
                   <Button
                     size="sm"
+                    className="h-7 text-xs px-2"
                     onClick={() => handleApplyTheme("ecommerce")}
                     disabled={isApplying}
                   >
-                    {isApplying ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                    Apply theme
+                    {isApplying ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                    Apply
                   </Button>
                 )}
-
                 {hasPurchasedEcommerce && (
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="h-7 text-xs px-2"
                     onClick={() => { setActiveTab("general"); setSettingsDialogOpen(false); }}
                   >
-                    <SettingsIcon className="mr-1.5 h-3.5 w-3.5" />
+                    <SettingsIcon className="mr-1 h-3 w-3" />
                     Settings
                   </Button>
                 )}
               </div>
 
               {!canPurchase && !hasPurchasedEcommerce && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Upgrade from your trial first to purchase a paid theme.
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Upgrade from trial first to buy.
                 </p>
               )}
             </div>
-          </div>
 
-          {/* Coming soon cards */}
-          <div className="grid gap-4 sm:grid-cols-2">
+            {/* ── Coming soon cards ── */}
             {[
               { name: "Minimal", desc: "Ultra-clean, text-forward booking layout." },
               { name: "Luxury", desc: "Dark, editorial aesthetic for premium salons." },
             ].map((t) => (
-              <div key={t.name} className="flex flex-col rounded-xl border border-dashed bg-muted/20 p-4 opacity-60">
-                <div className="flex items-center gap-2 mb-1">
-                  <Palette className="h-4 w-4 text-muted-foreground" />
-                  <p className="font-semibold text-muted-foreground">{t.name}</p>
-                  <Badge variant="outline" className="text-[10px]">Coming soon</Badge>
+              <div key={t.name} className="flex flex-col rounded-xl border border-dashed bg-muted/20 p-3 opacity-60">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <Palette className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <p className="font-semibold text-sm text-muted-foreground truncate">{t.name}</p>
+                  <Badge variant="outline" className="text-[10px] shrink-0">Coming soon</Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">{t.desc}</p>
+                <div className="rounded-md border border-dashed bg-muted/30 flex items-center justify-center" style={{ height: "160px" }}>
+                  <p className="text-xs text-muted-foreground px-3 text-center">{t.desc}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -865,46 +839,25 @@ export default function ThemesSettingsPage() {
       </Dialog>
 
       {/* ── Purchase success modal ── */}
-      <Dialog open={purchaseSuccessOpen} onOpenChange={setPurchaseSuccessOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <DialogTitle>Theme purchased!</DialogTitle>
-                <DialogDescription className="mt-0.5">
-                  The e-commerce storefront theme is now in your library.
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground mb-1">Next step: apply the theme</p>
-            <p>
-              Purchasing a theme doesn't activate it automatically. Click <strong>Apply theme</strong> below to switch
-              your public booking page to the e-commerce layout.
-            </p>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="ghost" onClick={() => setPurchaseSuccessOpen(false)}>
-              Later
-            </Button>
-            <Button
-              onClick={() => handleApplyTheme("ecommerce")}
-              disabled={isApplying}
-            >
-              {isApplying ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
-              )}
-              Apply theme now
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PaymentSuccessModal
+        open={purchaseSuccessOpen}
+        onClose={() => setPurchaseSuccessOpen(false)}
+        title="Theme purchased!"
+        description="The e-commerce storefront theme is now in your library."
+        detail={
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Next step: apply the theme.</span>{" "}
+            Purchasing a theme doesn't activate it automatically — click{" "}
+            <strong>Apply now</strong> to switch your public booking page to the e-commerce layout.
+          </p>
+        }
+        primaryAction={{
+          label: <><Sparkles className="mr-2 h-4 w-4" />Apply now</>,
+          onClick: () => { setPurchaseSuccessOpen(false); handleApplyTheme("ecommerce"); },
+          loading: isApplying,
+        }}
+        closeLabel="Later"
+      />
     </div>
     </SalonSidebar>
   );

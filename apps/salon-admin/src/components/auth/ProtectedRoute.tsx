@@ -1,11 +1,11 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { Loader2 } from "lucide-react";
 import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
 import { clearGoogleOAuthIntent, readGoogleOAuthIntent } from "@/lib/googleOAuthFlow";
+import { BrandLoader } from "@/components/BrandLoader";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -13,14 +13,7 @@ interface ProtectedRouteProps {
 }
 
 function LoadingScreen() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    </div>
-  );
+  return <BrandLoader fullScreen size="lg" label="Loading…" />;
 }
 
 export function ProtectedRoute({ children, requireOnboarding = true }: ProtectedRouteProps) {

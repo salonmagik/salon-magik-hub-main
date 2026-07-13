@@ -285,6 +285,35 @@ function BookingPageWithCart({
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
   const [ecomSearchQuery, setEcomSearchQuery] = useState("");
 
+  const handleSuggestionSelect = (itemId: string) => {
+    // After React re-renders the filtered list, scroll the item into view
+    setTimeout(() => {
+      const el = document.getElementById(`catalog-item-${itemId}`);
+      if (el) {
+        const top = el.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top, behavior: "smooth" });
+      }
+    }, 80);
+  };
+
+  const searchSuggestions = useMemo(() => {
+    if (themeKey !== "ecommerce" || ecomSearchQuery.length < 2) return [];
+    const q = ecomSearchQuery.toLowerCase();
+    const matchedServices = services
+      .filter((s) => s.name.toLowerCase().includes(q))
+      .slice(0, 3)
+      .map((s) => ({ id: s.id, name: s.name, type: "service", imageUrl: (s.image_urls ?? [])[0] ?? null }));
+    const matchedPackages = packages
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 2)
+      .map((p) => ({ id: p.id, name: p.name, type: "package", imageUrl: (p.image_urls ?? [])[0] ?? null }));
+    const matchedProducts = products
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 2)
+      .map((p) => ({ id: p.id, name: p.name, type: "product", imageUrl: (p.image_urls ?? [])[0] ?? null }));
+    return [...matchedServices, ...matchedPackages, ...matchedProducts].slice(0, 6);
+  }, [themeKey, ecomSearchQuery, services, packages, products]);
+
   // Detect payment return from Paystack
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -328,6 +357,8 @@ function BookingPageWithCart({
         onCartClick={() => setCheckoutOpen(true)}
         searchQuery={ecomSearchQuery}
         onSearchChange={setEcomSearchQuery}
+        searchSuggestions={searchSuggestions}
+        onSuggestionSelect={handleSuggestionSelect}
       >
         {themeKey === "ecommerce" ? (
           <>
