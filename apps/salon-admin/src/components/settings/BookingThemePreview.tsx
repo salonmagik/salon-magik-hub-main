@@ -25,6 +25,10 @@ interface BookingThemePreviewProps {
   locations: PreviewLocation[];
   mode?: "card" | "dialog";
   storefrontMode?: "services" | "products" | "both";
+  heroHeading?: string | null;
+  heroTagline?: string | null;
+  heroCTAPrimary?: string | null;
+  heroCTASecondary?: string | null;
 }
 
 type PreviewItem = {
@@ -75,6 +79,10 @@ export function BookingThemePreview({
   locations,
   mode = "card",
   storefrontMode = "both",
+  heroHeading,
+  heroTagline,
+  heroCTAPrimary,
+  heroCTASecondary,
 }: BookingThemePreviewProps) {
   const [typeFilter, setTypeFilter] = useState("all");
   const isDialog = mode === "dialog";
@@ -103,9 +111,11 @@ export function BookingThemePreview({
 
   /* ── Ecommerce editorial preview ──────────────────────── */
   if (isEcommerceTheme) {
-    const nameParts = salonName.split(/\s*[&+]\s*/);
-    const hasMulti = nameParts.length > 1;
     const bio = bookingPageBio || "";
+    const displayHeading = heroHeading || salonName;
+    const displayTagline = heroTagline ?? (bio ? bio.split(/[.!,]/)[0] : "");
+    const primaryCTA = heroCTAPrimary || "Book Now";
+    const secondaryCTA = heroCTASecondary || "Our Services";
 
     return (
       <BrowserChrome url={displayUrl}>
@@ -134,23 +144,22 @@ export function BookingThemePreview({
                 Bookings Open
               </span>
               <h2 className="text-2xl font-black leading-tight tracking-tight text-gray-900">
-                {hasMulti ? (
-                  <>{nameParts[0]}<br /><span style={{ color: brand }}>&amp; {nameParts.slice(1).join(" & ")}</span></>
-                ) : (
-                  <>{salonName}<br /><span style={{ color: brand }}>{bio ? bio.split(/[.!,]/)[0] : "Studio"}</span></>
+                {displayHeading}
+                {displayTagline && (
+                  <><br /><span style={{ color: brand }}>{displayTagline}</span></>
                 )}
               </h2>
               {bio && (
                 <p className="mt-3 line-clamp-2 text-[11px] leading-relaxed text-gray-500">
-                  {hasMulti ? bio : bio.split(/[.!]/).slice(1).join(". ").trim() || bio}
+                  {bio}
                 </p>
               )}
               <div className="mt-5 flex gap-2">
                 <button type="button" className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white" style={{ backgroundColor: brand }}>
-                  Book Now
+                  {primaryCTA}
                 </button>
                 <button type="button" className="border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em]" style={{ borderColor: brand, color: brand }}>
-                  Services
+                  {secondaryCTA}
                 </button>
               </div>
               {showContactOnBooking && contactPhone && (
