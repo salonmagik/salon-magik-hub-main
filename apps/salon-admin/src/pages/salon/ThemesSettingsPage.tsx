@@ -436,6 +436,10 @@ export default function ThemesSettingsPage() {
                     bookingPageBio={settings.bookingPageBio || null}
                     storefrontMode={settings.storefrontMode}
                     locations={previewLocations}
+                    heroHeading={settings.heroHeading || null}
+                    heroTagline={settings.heroTagline || null}
+                    heroCTAPrimary={settings.heroCTAPrimary || null}
+                    heroCTASecondary={settings.heroCTASecondary || null}
                   />
                 </div>
               </div>
@@ -791,6 +795,10 @@ export default function ThemesSettingsPage() {
                     bookingPageBio={settings.bookingPageBio || null}
                     storefrontMode={settings.storefrontMode}
                     locations={previewLocations}
+                    heroHeading={settings.heroHeading || null}
+                    heroTagline={settings.heroTagline || null}
+                    heroCTAPrimary={settings.heroCTAPrimary || null}
+                    heroCTASecondary={settings.heroCTASecondary || null}
                   />
                 </div>
               </div>
@@ -819,6 +827,10 @@ export default function ThemesSettingsPage() {
             bookingPageBio={settings.bookingPageBio || null}
             storefrontMode={settings.storefrontMode}
             locations={previewLocations}
+            heroHeading={settings.heroHeading || null}
+            heroTagline={settings.heroTagline || null}
+            heroCTAPrimary={settings.heroCTAPrimary || null}
+            heroCTASecondary={settings.heroCTASecondary || null}
           />
           {themePreviewKey === "ecommerce" && activeThemeKey !== "ecommerce" && (
             <DialogFooter>

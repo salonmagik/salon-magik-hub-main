@@ -103,9 +103,14 @@ jobs:
       - name: Post-deploy smoke checks
         run: pnpm test
 
+      - name: Generate deploy bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Advance release/prod to deployed SHA
-        env:
-          GH_PROD_PUSH_TOKEN: ${{ secrets.GH_PROD_PUSH_TOKEN }}
         run: |
-          git remote set-url origin https://x-access-token:${GH_PROD_PUSH_TOKEN}@github.com/${{ github.repository }}.git
+          git remote set-url origin https://x-access-token:${{ steps.bot-token.outputs.token }}@github.com/${{ github.repository }}.git
           git push --force origin ${{ inputs.commit_sha }}:refs/heads/release/prod
