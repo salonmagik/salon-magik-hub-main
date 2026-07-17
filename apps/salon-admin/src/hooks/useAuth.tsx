@@ -33,6 +33,7 @@ interface AuthContextType extends AuthState {
   setCurrentTenant: (tenant: Tenant) => void;
   setActiveContext: (contextType: ActiveContextType, locationId?: string | null) => Promise<void>;
   getFirstAllowedRoute: (contextType?: ActiveContextType, locationId?: string | null) => Promise<string>;
+  resolveFallbackFirstRoute: (contextType: ActiveContextType) => string;
   refreshProfile: () => Promise<void>;
   refreshTenants: () => Promise<void>;
   refreshAuthUser: () => Promise<void>;
@@ -546,7 +547,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               // re-verify against the server this tick.
               const verifiedUser = verifiedUserResult ?? session.user;
 
-              let profile = await fetchProfile(verifiedUser.id);
+              const [profileResult, { tenants, roles }] = await Promise.all([
+                fetchProfile(verifiedUser.id),
+                fetchTenantsAndRoles(verifiedUser.id),
+              ]);
+
+              let profile = profileResult;
 
               // If profile doesn't exist, try to create it from auth metadata
               if (!profile) {
@@ -560,7 +566,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   })
                   .select()
                   .single();
-                
+
                 if (createError) {
                   console.error("Failed to create profile:", createError);
                   await forceSignOut();
@@ -568,8 +574,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
                 profile = newProfile;
               }
-              
-              const { tenants, roles } = await fetchTenantsAndRoles(verifiedUser.id);
               
               // Get stored tenant preference or use first tenant
               const storedTenantId = localStorage.getItem("currentTenantId");
@@ -591,18 +595,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
               if (currentTenant) {
                 saveStoredContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
-                await syncServerContext(
-                  currentTenant.id,
-                  contextState.activeContextType,
-                  contextState.activeLocationId
-                );
-                await logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
-                  context_type: contextState.activeContextType,
-                });
-                // Touch the staff session record (geo+device tracking). Fire-and-forget.
-                supabase.functions.invoke("touch-staff-session", {
-                  body: { tenant_id: currentTenant.id },
-                }).catch((err) => console.warn("touch-staff-session failed:", err));
               }
 
               setState((prev) => ({
@@ -628,6 +620,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   contextState.assignedLocationIds
                 ),
               }));
+
+              // Fire-and-forget server side effects — do not block setState
+              if (currentTenant) {
+                void syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
+                void logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
+                  context_type: contextState.activeContextType,
+                });
+                supabase.functions.invoke("touch-staff-session", {
+                  body: { tenant_id: currentTenant.id },
+                }).catch((err) => console.warn("touch-staff-session failed:", err));
+              }
             }, 0);
           }
         }
@@ -660,8 +663,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // this tick, the session itself is still valid.
         const verifiedUser = verifiedUserResult ?? session.user;
 
-        let profile = await fetchProfile(verifiedUser.id);
-        
+        const [profileResult, { tenants, roles }] = await Promise.all([
+          fetchProfile(verifiedUser.id),
+          fetchTenantsAndRoles(verifiedUser.id),
+        ]);
+
+        let profile = profileResult;
+
         // If profile doesn't exist, try to create it from auth metadata
         if (!profile) {
           console.log("Session exists but profile not found - attempting to create");
@@ -674,7 +682,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             })
             .select()
             .single();
-          
+
           if (createError) {
             console.error("Failed to create profile on init:", createError);
             await forceSignOut();
@@ -684,8 +692,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           profile = newProfile;
         }
-        
-        const { tenants, roles } = await fetchTenantsAndRoles(verifiedUser.id);
         
         const storedTenantId = localStorage.getItem("currentTenantId");
         const currentTenant = tenants.find((t) => t.id === storedTenantId) || tenants[0] || null;
@@ -706,10 +712,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (currentTenant) {
           saveStoredContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
-          await syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
-          await logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
-            context_type: contextState.activeContextType,
-          });
         }
 
         setState({
@@ -734,6 +736,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             contextState.assignedLocationIds
           ),
         });
+
+        // Fire-and-forget server side effects — do not block setState
+        if (currentTenant) {
+          void syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
+          void logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
+            context_type: contextState.activeContextType,
+          });
+        }
       } else {
         setState((prev) => ({ ...prev, isLoading: false }));
       }
@@ -995,6 +1005,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentTenant,
         setActiveContext,
         getFirstAllowedRoute,
+        resolveFallbackFirstRoute,
         refreshProfile,
         refreshTenants,
         refreshAuthUser,
