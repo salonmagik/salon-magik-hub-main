@@ -40,7 +40,14 @@ serve(async (req) => {
       updates.full_name = fullName.trim();
     }
     if (typeof phone === "string") {
-      updates.phone = phone.trim() || null;
+      const trimmed = phone.trim();
+      if (trimmed && !/^\+[1-9][0-9]{6,14}$/.test(trimmed)) {
+        return new Response(
+          JSON.stringify({ error: "Phone number must be in international format, e.g. +2348012345678" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+      updates.phone = trimmed || null;
     }
 
     if (Object.keys(updates).length > 0) {
