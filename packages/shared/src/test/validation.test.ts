@@ -15,9 +15,13 @@ describe("validation helpers", () => {
   });
 
   it("validates NG and GH phone lengths", () => {
+    // Local format (with leading 0)
     expect(validatePhoneByCountry("NG", "08012345678").isValid).toBe(true);
     expect(validatePhoneByCountry("GH", "0241234567").isValid).toBe(true);
     expect(validatePhoneByCountry("GH", "0241234").isValid).toBe(false);
+    // National format (no leading 0) — what parseE164 returns after stripping dial code
+    expect(validatePhoneByCountry("GH", "241234567").isValid).toBe(true);
+    expect(validatePhoneByCountry("NG", "8012345678").isValid).toBe(true);
   });
 
   it("converts local phone to E.164", () => {
