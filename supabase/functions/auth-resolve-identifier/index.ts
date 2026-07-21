@@ -203,9 +203,7 @@ serve(async (req) => {
     }
 
     const hasPassword = existingProfile?.client_password_initialized === true;
-    const fullName = buildFullName(
-      matchedCustomers[0]?.full_name || (metadata.full_name as string | undefined),
-    );
+    const fullName = buildFullName(matchedCustomers[0]?.full_name);
     // When user identified by phone, always store the E.164 value so send-phone-otp can find them.
     const phone =
       normalized.type === "phone"
