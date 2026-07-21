@@ -48,7 +48,6 @@ const CANONICAL_PERMISSION_KEYS: PermissionKey[] = [
   { key: "comms.view", label: "Comms", description: "View and manage platform-owned communication templates" },
   { key: "settings.view", label: "Settings", description: "View settings" },
   { key: "audit_logs.view", label: "Audit Logs", description: "View audit logs" },
-  { key: "impersonation.view", label: "Impersonation", description: "Use impersonation tools" },
   { key: "sales.manage_campaigns", label: "Sales · Manage Campaigns", description: "Create, edit and activate campaigns" },
   { key: "sales.capture_client", label: "Sales · Capture Client", description: "Generate promo codes for clients" },
   { key: "sales.view_conversions", label: "Sales · View Conversions", description: "View redemptions and commission entries" },
@@ -69,7 +68,6 @@ const CANONICAL_PAGE_KEYS: PageKey[] = [
   { key: "sales_conversions", label: "Sales Ops · Conversions", route_path: "/sales/conversions" },
   { key: "admins", label: "Admins", route_path: "/admins" },
   { key: "audit_logs", label: "Audit Logs", route_path: "/audit-logs" },
-  { key: "impersonation", label: "Impersonation", route_path: "/impersonation" },
   { key: "settings", label: "Settings", route_path: "/settings" },
 ];
 

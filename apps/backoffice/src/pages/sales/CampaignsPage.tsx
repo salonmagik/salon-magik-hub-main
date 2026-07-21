@@ -38,6 +38,7 @@ export default function CampaignsPage() {
   const [emailBodyTemplate, setEmailBodyTemplate] = useState(
     "<p>Hello {{recipient_firstname}},</p><p>Your Salon Magik promo code for {{campaign_name}} is <strong>{{promo_code}}</strong>.</p><p>This code is reserved for {{recipient_email}} and can be used before {{expires_at}}.</p><p><a href=\"{{signup_url}}\">Create your account</a> or <a href=\"{{login_url}}\">log in</a> to continue.</p>",
   );
+  const [codeExpiryHours, setCodeExpiryHours] = useState("24");
 
   const canSubmit =
     Boolean(newCampaignName) &&
@@ -45,6 +46,7 @@ export default function CampaignsPage() {
     Boolean(newCampaignEndsAt) &&
     billingTargets.length > 0 &&
     Number(maxUsesPerTenant) >= 1 &&
+    Number(codeExpiryHours) >= 1 &&
     !createCampaign.isPending;
 
   return (
@@ -122,6 +124,18 @@ export default function CampaignsPage() {
                     onChange={(e) => setMaxUsesPerTenant(e.target.value)}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Code Expiry (hours)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={8760}
+                    value={codeExpiryHours}
+                    onChange={(e) => setCodeExpiryHours(e.target.value)}
+                    placeholder="24"
+                  />
+                  <p className="text-xs text-muted-foreground">How long each generated code is valid for (max 365 days).</p>
+                </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Trial Extension Days</Label>
                   <Input value={newCampaignTrialDays} onChange={(e) => setNewCampaignTrialDays(e.target.value)} disabled={!newCampaignTrialEnabled} />
@@ -167,6 +181,7 @@ export default function CampaignsPage() {
                         maxUsesPerTenant: Number(maxUsesPerTenant || 1),
                         emailSubjectTemplate,
                         emailBodyTemplate,
+                        codeExpiryHours: Number(codeExpiryHours || 24),
                       },
                       {
                         onSuccess: () => {
@@ -182,6 +197,7 @@ export default function CampaignsPage() {
                           setMaxUsesPerTenant("1");
                           setEmailSubjectTemplate("Your {{campaign_name}} Salon Magik promo code");
                           setEmailBodyTemplate("<p>Hello {{recipient_firstname}},</p><p>Your Salon Magik promo code for {{campaign_name}} is <strong>{{promo_code}}</strong>.</p><p>This code is reserved for {{recipient_email}} and can be used before {{expires_at}}.</p><p><a href=\"{{signup_url}}\">Create your account</a> or <a href=\"{{login_url}}\">log in</a> to continue.</p>");
+                          setCodeExpiryHours("24");
                         },
                       },
                     );
@@ -208,7 +224,7 @@ export default function CampaignsPage() {
                     {new Date(campaign.starts_at).toLocaleString()} - {new Date(campaign.ends_at).toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Targets: {(campaign.billing_targets || []).join(", ")} · Max uses: {campaign.max_uses_per_tenant}
+                    Targets: {(campaign.billing_targets || []).join(", ")} · Max uses: {campaign.max_uses_per_tenant} · Code expiry: {campaign.code_expiry_hours ?? 24}h
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

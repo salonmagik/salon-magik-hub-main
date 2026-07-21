@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { supabase } from "@/lib/supabase";
@@ -39,9 +40,15 @@ type AuditLog = {
 const PAGE_SIZE = 25;
 
 export default function AuditLogsPage() {
+  const [searchParams] = useSearchParams();
   const [actionFilter, setActionFilter] = useState("all");
   const [entityTypeFilter, setEntityTypeFilter] = useState("all");
-  const [actorFilter, setActorFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState(searchParams.get("member") ?? "");
+
+  useEffect(() => {
+    const member = searchParams.get("member");
+    if (member) setActorFilter(member);
+  }, [searchParams]);
   const [searchFilter, setSearchFilter] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");

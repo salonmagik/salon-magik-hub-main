@@ -83,7 +83,6 @@ const permissionByPageKey: Record<string, string[]> = {
   admins: ["admins.manage"],
   settings: ["settings.view"],
   audit_logs: ["audit_logs.view"],
-  impersonation: ["impersonation.view"],
 };
 
 function buildMemberName(user: BackofficeUserWithTemplate): string {

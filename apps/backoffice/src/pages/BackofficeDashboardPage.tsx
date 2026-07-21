@@ -124,9 +124,14 @@ export default function BackofficeDashboardPage() {
       { route: "/customers/waitlists", pageKey: "customers_waitlists", permissionKey: "customers.view_waitlists" },
       { route: "/customers/tenants", pageKey: "customers_tenants", permissionKey: "customers.view_tenants" },
       { route: "/customers/ops-monitor", pageKey: "customers_ops_monitor", permissionKey: "customers.view_ops_monitor" },
+      { route: "/feature-flags", pageKey: "feature_flags" },
+      { route: "/plans", pageKey: "plans", permissionKey: "plans.view" },
+      { route: "/comms", pageKey: "comms", permissionKey: "comms.view" },
       { route: "/sales/campaigns", pageKey: "sales_campaigns", permissionKey: "sales.manage_campaigns" },
       { route: "/sales/capture-client", pageKey: "sales_capture_client", permissionKey: "sales.capture_client" },
       { route: "/sales/conversions", pageKey: "sales_conversions", permissionKey: "sales.view_conversions" },
+      { route: "/admins", pageKey: "admins" },
+      { route: "/audit-logs", pageKey: "audit_logs", permissionKey: "audit_logs.view" },
       { route: "/settings", pageKey: "settings", permissionKey: "settings.view" },
     ];
     const firstAllowed = routeCandidates.find(
