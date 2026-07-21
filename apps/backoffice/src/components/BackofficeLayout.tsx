@@ -35,7 +35,6 @@ import {
   Shield,
   ChevronDown,
   Coins,
-  Eye,
   FileText,
   BriefcaseBusiness,
   MessageSquareText,
@@ -67,6 +66,7 @@ const navItems: NavItem[] = [
       { href: "/customers/waitlists", label: "Waitlists", pageKey: "customers_waitlists" },
       { href: "/customers/tenants", label: "Tenants", pageKey: "customers_tenants" },
       { href: "/customers/ops-monitor", label: "Ops Monitor", pageKey: "customers_ops_monitor" },
+      { href: "/customers/support", label: "Support", pageKey: "settings" },
     ],
   },
   { href: "/feature-flags", label: "Feature Flags", icon: Flag, pageKey: "feature_flags" },
@@ -85,7 +85,6 @@ const navItems: NavItem[] = [
   },
   { href: "/audit-logs", label: "Audit Logs", icon: FileText, pageKey: "audit_logs" },
   { href: "/admins", label: "Admins", icon: Shield, pageKey: "admins" },
-  { href: "/impersonation", label: "Impersonation", icon: Eye, pageKey: "impersonation" },
   { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
 ];
 

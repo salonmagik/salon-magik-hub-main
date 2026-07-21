@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowRight, Loader2, LogOut } from "lucide-react";
 import { Button } from "@ui/button";
@@ -17,13 +17,19 @@ export default function AssignmentPendingPage() {
   } = useAuth();
   const [isCheckingAccess, setIsCheckingAccess] = useState(false);
 
+  const refreshTenantsRef = useRef(refreshTenants);
+  refreshTenantsRef.current = refreshTenants;
+  const currentTenantRef = useRef(currentTenant);
+  currentTenantRef.current = currentTenant;
+
   const resolveAllowedRoute = async () => {
-    if (!currentTenant?.id) return null;
+    const tenant = currentTenantRef.current;
+    if (!tenant?.id) return null;
 
     const { data: contextData, error: contextError } = await (supabase.rpc as any)(
       "resolve_user_contexts",
       {
-        p_tenant_id: currentTenant.id,
+        p_tenant_id: tenant.id,
       }
     );
 
@@ -45,7 +51,7 @@ export default function AssignmentPendingPage() {
     const { data: routesData, error: routesError } = await (supabase.rpc as any)(
       "list_accessible_routes",
       {
-        p_tenant_id: currentTenant.id,
+        p_tenant_id: tenant.id,
         p_context_type: contextType,
         p_location_id: locationId,
       }
@@ -85,7 +91,7 @@ export default function AssignmentPendingPage() {
 
       setIsCheckingAccess(true);
       try {
-        await refreshTenants();
+        await refreshTenantsRef.current();
         if (!active) return;
 
         const nextRoute = await resolveAllowedRoute();
@@ -109,7 +115,10 @@ export default function AssignmentPendingPage() {
     return () => {
       active = false;
     };
-  }, [navigate, refreshTenants, user?.id]);
+    // refreshTenants intentionally excluded — held via ref to avoid infinite loop
+    // when refreshTenants() state update triggers a new function reference
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleGoToAllowedPage = async () => {
     setIsCheckingAccess(true);

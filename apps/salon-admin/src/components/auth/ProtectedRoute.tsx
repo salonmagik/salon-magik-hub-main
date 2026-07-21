@@ -93,7 +93,7 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
 
 // For routes that should NOT be accessible after login (login, signup, etc.)
 export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
+  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user, resolveFallbackFirstRoute } = useAuth();
   const location = useLocation();
   const googleOAuthIntent = readGoogleOAuthIntent();
 
@@ -121,7 +121,7 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
         ? "/salon/assignment-pending"
         : activeContextType === "owner_hub"
           ? "/salon/overview"
-          : "/salon"
+          : resolveFallbackFirstRoute(activeContextType)
       : "/onboarding";
     const requestedFrom = (location.state as any)?.from?.pathname as string | undefined;
     const from =
@@ -136,7 +136,7 @@ export function PublicOnlyRoute({ children }: { children: React.ReactNode }) {
 
 // For the onboarding route specifically
 export function OnboardingRoute({ children }: { children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user } = useAuth();
+  const { isLoading, isAuthenticated, hasCompletedOnboarding, profile, activeContextType, isAssignmentPending, user, resolveFallbackFirstRoute } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -160,7 +160,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
     if (isAssignmentPending) {
       return <Navigate to="/salon/assignment-pending" replace />;
     }
-    return <Navigate to={activeContextType === "owner_hub" ? "/salon/overview" : "/salon"} replace />;
+    return <Navigate to={activeContextType === "owner_hub" ? "/salon/overview" : resolveFallbackFirstRoute(activeContextType)} replace />;
   }
 
   return <>{children}</>;

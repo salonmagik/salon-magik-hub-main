@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
-import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
-import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
+import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -238,7 +237,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send message based on channel
     let provider = "";
-    let termiiMessageId = null;
     let success = false;
     let errorMessage = null;
 
@@ -292,7 +290,7 @@ const handler = async (req: Request): Promise<Response> => {
         success = true;
 
       } else if (message.channel === "sms") {
-        const senderID = message.tenant.sms_sender_name || message.tenant.termii_sender_id || "SalonMagik";
+        const senderID = resolveArkeselSenderId(message.customer.phone, message.tenant.sms_sender_name);
 
         if (!message.customer?.phone) {
           throw new Error("Customer phone number not found");
@@ -304,50 +302,8 @@ const handler = async (req: Request): Promise<Response> => {
           from: senderID,
           message: messageRecord.message as string,
         });
-        termiiMessageId = extractArkeselMessageId(smsResponse);
+        extractArkeselMessageId(smsResponse);
 
-        success = true;
-
-      } else if (message.channel === "whatsapp") {
-        // Send via Termii WhatsApp Template
-        provider = "termii_whatsapp";
-
-        if (!message.customer?.phone) {
-          throw new Error("Customer phone number not found");
-        }
-
-        if (!message.template_id) {
-          throw new Error("WhatsApp template ID is required");
-        }
-
-        // Validate template is approved
-        if (message.template?.status !== "approved") {
-          throw new Error("WhatsApp template is not approved. Please wait for approval before sending.");
-        }
-
-        const deviceId = message.tenant.termii_device_id;
-        if (!deviceId) {
-          throw new Error("Termii device ID not configured for this tenant. Please configure in settings.");
-        }
-
-        // Build template data from template_variables
-        const templateData: Record<string, string> = {};
-        if (message.template_variables && typeof message.template_variables === "object") {
-          // Convert template_variables to numeric keys for Termii
-          const variables = message.template_variables as Record<string, string>;
-          Object.keys(variables).forEach((key, index) => {
-            templateData[String(index + 1)] = variables[key];
-          });
-        }
-
-        const whatsappResponse = await sendTermiiWhatsAppTemplate({
-          device_id: deviceId,
-          phone_number: message.customer.phone,
-          template_id: message.template.template_id,
-          data: templateData,
-        });
-
-        termiiMessageId = whatsappResponse.message_id;
         success = true;
 
       } else {
@@ -384,8 +340,6 @@ const handler = async (req: Request): Promise<Response> => {
       status: success ? "sent" : "failed",
       sent_at: success ? new Date().toISOString() : null,
       provider,
-      termii_message_id: termiiMessageId,
-      termii_device_id: message.channel === "whatsapp" ? message.tenant.termii_device_id : null,
       initiated_by: "salon",
       credits_used: success ? creditsRequired : 0,
       error_message: errorMessage,

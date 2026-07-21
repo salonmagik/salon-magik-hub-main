@@ -49,25 +49,28 @@ export function validatePhoneByCountry(countryCode: string, localDigits: string)
 } {
   const normalizedCountryCode = countryCode.toUpperCase();
   const digits = localDigits.replace(/\D/g, "");
+  // Strip the trunk prefix (leading 0) — E.164 national numbers don't carry it,
+  // but local-format inputs do. Normalising here lets both forms pass validation.
+  const nationalDigits = digits.startsWith("0") ? digits.slice(1) : digits;
   const strictLengths: Record<string, number> = {
-    NG: 11,
-    GH: 10,
+    NG: 10,
+    GH: 9,
   };
   const expectedLength = strictLengths[normalizedCountryCode] ?? null;
 
   if (expectedLength === null) {
     return {
-      isValid: digits.length >= 6,
+      isValid: nationalDigits.length >= 6,
       expectedLength: null,
-      error: digits.length >= 6 ? undefined : "Enter a valid phone number",
+      error: nationalDigits.length >= 6 ? undefined : "Enter a valid phone number",
     };
   }
 
-  const isValid = digits.length === expectedLength;
+  const isValid = nationalDigits.length === expectedLength;
   return {
     isValid,
     expectedLength,
-    error: isValid ? undefined : `Phone number must be ${expectedLength} digits`,
+    error: isValid ? undefined : `Phone number must be ${expectedLength + 1} digits`,
   };
 }
 

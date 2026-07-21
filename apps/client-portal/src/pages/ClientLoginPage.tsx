@@ -27,6 +27,7 @@ type Resolution = {
   exists: boolean;
   identifier: string;
   identifierType: IdentifierType;
+  loginEmail: string | null;
   hasPassword: boolean;
   requiresOtp: boolean;
 };
@@ -119,6 +120,7 @@ export default function ClientLoginPage() {
         exists: true,
         identifier: data.identifier || normalizedIdentifier,
         identifierType: data.identifierType || nextIdentifierType,
+        loginEmail: data.loginEmail ?? null,
         hasPassword: Boolean(data.hasPassword),
         requiresOtp: Boolean(data.requiresOtp),
       };
@@ -220,12 +222,22 @@ export default function ClientLoginPage() {
 
     setIsLoading(true);
     try {
-      const credentials =
+      // Always sign in with email — Supabase phone auth provider is disabled.
+      // For phone-identified users, loginEmail is the email on the auth account.
+      const signInEmail =
         resolution.identifierType === "email"
-          ? { email: resolution.identifier, password }
-          : { phone: resolution.identifier, password };
+          ? resolution.identifier
+          : resolution.loginEmail;
 
-      const { error: signInError } = await supabase.auth.signInWithPassword(credentials as never);
+      if (!signInEmail) {
+        setError("No email linked to this account. Please use OTP to sign in.");
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: signInEmail,
+        password,
+      });
       if (signInError) {
         setError("Incorrect password. Please try again.");
         return;

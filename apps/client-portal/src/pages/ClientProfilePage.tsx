@@ -10,6 +10,7 @@ import { Switch } from "@ui/switch";
 import { Separator } from "@ui/separator";
 import { Avatar, AvatarFallback } from "@ui/avatar";
 import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck } from "lucide-react";
+import { PhoneInput } from "@ui/phone-input";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { ValidationChecklist } from "@ui/validation-checklist";
@@ -228,11 +229,15 @@ export default function ClientProfilePage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="phone" className="flex items-center gap-2">
+                    <Label className="flex items-center gap-2">
                       <Phone className="h-4 w-4" />
                       Phone
                     </Label>
-                    <Input id="phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+                    <PhoneInput
+                      value={phone}
+                      onChange={setPhone}
+                      defaultCountry={customers[0]?.tenant?.country || "GH"}
+                    />
                   </div>
                 </div>
 

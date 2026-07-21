@@ -66,34 +66,15 @@ serve(async (req) => {
       .update({ used: true })
       .eq("id", token.id);
 
-    // Generate a magic link to get a hashed_token, then immediately redeem it
-    // server-side via verifyOtp — this avoids any email being sent to the user
-    // and uses the documented API (GenerateLinkProperties.hashed_token).
-    const { data: authUser, error: userError } = await admin.auth.admin.getUserById(token.user_id);
-    if (userError || !authUser?.user?.email) {
-      return json({ error: "User account not found." }, 400);
-    }
-
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
-      type: "magiclink",
-      email: authUser.user.email,
+    const { data: sessionData, error: sessionError } = await (admin.auth.admin as any).createSession({
+      user_id: token.user_id,
     });
 
-    if (linkError || !linkData?.properties?.hashed_token) {
-      console.error("generateLink error:", linkError);
-      return json({ error: "Failed to create session. Please try again." }, 500);
-    }
-
-    // Redeem the hashed token immediately — this does NOT send any email.
-    const { data: sessionData, error: sessionError } = await admin.auth.verifyOtp({
-      type: "magiclink",
-      token_hash: linkData.properties.hashed_token,
-    });
-
-    const { access_token, refresh_token } = sessionData?.session ?? {};
+    const access_token = sessionData?.session?.access_token;
+    const refresh_token = sessionData?.session?.refresh_token;
 
     if (sessionError || !access_token || !refresh_token) {
-      console.error("verifyOtp error:", sessionError);
+      console.error("[verify-phone-otp] createSession error:", sessionError);
       return json({ error: "Failed to create session. Please try again." }, 500);
     }
 

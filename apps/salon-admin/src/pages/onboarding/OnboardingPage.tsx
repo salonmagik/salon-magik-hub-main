@@ -10,7 +10,7 @@ import { Card } from "@ui/card";
 import { Progress } from "@ui/progress";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { ArrowLeft, ArrowRight, Loader2, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 
 import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
 import { OwnerInviteStep, type OwnerInviteInfo } from "@/components/onboarding/OwnerInviteStep";
@@ -18,6 +18,7 @@ import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanSte
 import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
+import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
@@ -101,6 +102,7 @@ export default function OnboardingPage() {
     maxUsesPerTenant?: number;
     billingTargets?: string[];
     campaignEndsAt?: string | null;
+    expiresAt?: string | null;
   } | null>(null);
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
@@ -241,6 +243,7 @@ export default function OnboardingPage() {
         maxUsesPerTenant: Number(data?.max_uses_per_tenant || 0),
         billingTargets: Array.isArray(data?.billing_targets) ? data.billing_targets : [],
         campaignEndsAt: data?.campaign_ends_at || null,
+        expiresAt: data?.expires_at || null,
       });
     } catch (error) {
       console.error("Promo validation error:", error);
@@ -505,24 +508,15 @@ export default function OnboardingPage() {
       clearGoogleOAuthIntent();
       clearPendingSalesPromoCode();
 
-      setStep("complete");
-      
       if (isChain && configuredChainLocations > 10) {
         toast({
           title: "Onboarding complete",
           description:
             "Your first 10 locations are active. Additional locations are pending custom pricing approval.",
         });
-      } else {
-        toast({
-          title: "Welcome to Salon Magik!",
-          description: "Your salon has been set up successfully.",
-        });
       }
 
-      setTimeout(() => {
-        navigate("/salon");
-      }, 2000);
+      setStep("complete");
     } catch (error: any) {
       console.error("Onboarding error:", error);
       toast({
@@ -538,16 +532,15 @@ export default function OnboardingPage() {
   if (step === "complete") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center space-y-6">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-            <Check className="w-10 h-10 text-green-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold mb-2">You're all set!</h1>
-            <p className="text-muted-foreground">Redirecting to your dashboard...</p>
-          </div>
-          <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
-        </div>
+        <WelcomeModal
+          initialPlan={selectedPlan || "solo"}
+          currency={businessInfo.currency || "NGN"}
+          trialDays={onboardingTrialDays}
+          promoPreview={promoPreview}
+          chainLocations={isChain ? locationsConfig.locations : []}
+          businessName={businessInfo.name}
+          onDismiss={() => navigate("/salon/overview")}
+        />
       </div>
     );
   }

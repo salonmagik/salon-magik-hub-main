@@ -18,8 +18,10 @@ import {
   SelectValue,
 } from "@ui/select";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
-import { User, Mail, Phone, MapPin, Tag, Save, Loader2 } from "lucide-react";
+import { User, Mail, MapPin, Tag, Save, Loader2 } from "lucide-react";
+import { PhoneInput } from "@ui/phone-input";
 import { useCustomers } from "@/hooks/useCustomers";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AddCustomerDialogProps {
   open: boolean;
@@ -29,6 +31,7 @@ interface AddCustomerDialogProps {
 
 export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomerDialogProps) {
   const { createCustomer } = useCustomers();
+  const { currentTenant } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -154,18 +157,11 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
               <Label>
                 Phone <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Enter phone number"
-                  className="pl-9"
-                  value={formData.phone}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, phone: e.target.value }))
-                  }
-                  required
-                />
-              </div>
+              <PhoneInput
+                value={formData.phone}
+                onChange={(value) => setFormData((prev) => ({ ...prev, phone: value }))}
+                defaultCountry={currentTenant?.country || "GH"}
+              />
             </div>
           </div>
 

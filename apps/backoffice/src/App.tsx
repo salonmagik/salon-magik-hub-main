@@ -11,9 +11,9 @@ import BackofficeDashboardPage from "@/pages/BackofficeDashboardPage";
 import CustomersWaitlistsPage from "@/pages/customers/CustomersWaitlistsPage";
 import CustomersTenantsPage from "@/pages/customers/CustomersTenantsPage";
 import CustomersOpsMonitorPage from "@/pages/customers/CustomersOpsMonitorPage";
+import CustomersSupportPage from "@/pages/customers/CustomersSupportPage";
 import FeatureFlagsPage from "@/pages/FeatureFlagsPage";
 import PlansPage from "@/pages/PlansPage";
-import ImpersonationPage from "@/pages/ImpersonationPage";
 import BackofficeSettingsPage from "@/pages/SettingsPage";
 import AdminsPage from "@/pages/AdminsPage";
 import AuditLogsPage from "@/pages/AuditLogsPage";
@@ -140,6 +140,15 @@ function App() {
               }
           />
           <Route
+            path="/customers/support"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="settings">
+                  <CustomersSupportPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
             path="/feature-flags"
             element=
               {
@@ -154,15 +163,6 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="plans">
                   <PlansPage />
-                </BackofficeProtectedRoute>
-              }
-          />
-          <Route
-            path="/impersonation"
-            element=
-              {
-                <BackofficeProtectedRoute requiredPageKey="impersonation">
-                  <ImpersonationPage />
                 </BackofficeProtectedRoute>
               }
           />

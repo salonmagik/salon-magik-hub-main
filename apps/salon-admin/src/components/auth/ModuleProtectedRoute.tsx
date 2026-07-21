@@ -34,6 +34,7 @@ export function ModuleProtectedRoute({
     isLoading: authLoading,
     hasCompletedOnboarding,
     isAssignmentPending,
+    resolveFallbackFirstRoute,
   } = useAuth();
   const isGuardBootstrapping =
     authLoading || (hasCompletedOnboarding && (!currentTenant?.id || !permissionRole));
@@ -97,7 +98,7 @@ export function ModuleProtectedRoute({
     if (fallback) {
       return <>{fallback}</>;
     }
-    return <Navigate to="/salon/access-denied" replace />;
+    return <Navigate to={resolveFallbackFirstRoute(activeContextType)} replace />;
   }
 
   return <>{children}</>;

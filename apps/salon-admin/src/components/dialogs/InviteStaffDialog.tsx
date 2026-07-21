@@ -31,7 +31,7 @@ interface InviteStaffDialogProps {
 
 const roleOptions = [
   { value: "manager", label: "Manager", description: "Full access except billing" },
-  { value: "supervisor", label: "Supervisor", description: "Manage appointments and staff" },
+  { value: "supervisor", label: "Supervisor", description: "Manage appointments, customers and services" },
   { value: "receptionist", label: "Receptionist", description: "Book and manage appointments" },
   { value: "staff", label: "Staff", description: "View assigned appointments only" },
 ] as const;

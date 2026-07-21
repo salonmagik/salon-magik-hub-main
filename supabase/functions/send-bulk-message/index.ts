@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
-import { sendTermiiSMS, sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
-import { sendArkeselSMS, extractArkeselMessageId } from "../_shared/arkesel-client.ts";
+import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -330,19 +329,6 @@ const handler = async (req: Request): Promise<Response> => {
         creditsPerMessage,
         result
       );
-    } else if (channel === "whatsapp") {
-      // WhatsApp: Process individually (Termii API requires single recipient)
-      await processBulkWhatsApp(
-        supabase,
-        typedCustomers,
-        createdMessages,
-        message,
-        template,
-        templateVariables,
-        tenant,
-        creditsPerMessage,
-        result
-      );
     }
 
     // Log bulk operation in audit_logs
@@ -392,7 +378,7 @@ async function processBulkSMS(
   creditsPerMessage: number,
   result: BulkMessageResult
 ) {
-  const senderID = tenant.sms_sender_name || tenant.termii_sender_id || "SalonMagik";
+  const tenantSenderId = tenant.sms_sender_name || null;
   const BATCH_SIZE = 25;
 
   const bookingBaseUrl = Deno.env.get("PUBLIC_BOOKING_URL") || "https://booking.salonmagik.com";
@@ -420,8 +406,9 @@ async function processBulkSMS(
 
         const smsResponse = await sendArkeselSMS({
           to: customer.phone,
-          from: senderID,
+          from: resolveArkeselSenderId(customer.phone, tenantSenderId),
           message: resolvedMessage,
+          useCase: "promotional",
         });
 
         await supabase.rpc("deduct_communication_credits", {
@@ -447,8 +434,6 @@ async function processBulkSMS(
           status: "sent",
           sent_at: new Date().toISOString(),
           provider: "arkesel_sms",
-          termii_message_id: extractArkeselMessageId(smsResponse),
-          termii_device_id: null,
           initiated_by: "salon",
           credits_used: creditsPerMessage,
           error_message: null,
@@ -480,8 +465,6 @@ async function processBulkSMS(
           status: "failed",
           sent_at: new Date().toISOString(),
           provider: "arkesel_sms",
-          termii_message_id: null,
-          termii_device_id: null,
           initiated_by: "salon",
           credits_used: 0,
           error_message: errMsg,
@@ -598,8 +581,6 @@ async function processBulkEmail(
           status: "sent",
           sent_at: new Date().toISOString(),
           provider: "resend",
-          termii_message_id: null,
-          termii_device_id: null,
           initiated_by: "salon",
           credits_used: creditsPerMessage,
           error_message: null,
@@ -634,8 +615,6 @@ async function processBulkEmail(
           status: "failed",
           sent_at: new Date().toISOString(),
           provider: "resend",
-          termii_message_id: null,
-          termii_device_id: null,
           initiated_by: "salon",
           credits_used: 0,
           error_message: errMsg,
@@ -648,153 +627,5 @@ async function processBulkEmail(
   }
 }
 
-/**
- * Process bulk WhatsApp messages individually (Termii requires single recipient)
- */
-async function processBulkWhatsApp(
-  supabase: any,
-  customers: any[],
-  createdMessages: any[],
-  message: string | null,
-  template: any | null,
-  templateVariables: Record<string, string> | undefined,
-  tenant: any,
-  creditsPerMessage: number,
-  result: BulkMessageResult
-) {
-  const BATCH_SIZE = 10;
-  const deviceId = tenant.termii_device_id;
-
-  if (!deviceId) {
-    // All messages fail if no device ID
-    for (let i = 0; i < customers.length; i++) {
-      const customer = customers[i];
-      const messageRecord = createdMessages[i];
-
-      result.failed++;
-      result.failedMessages.push({
-        customerId: customer.id,
-        customerName: customer.full_name,
-        error: "Termii device ID not configured for this tenant",
-      });
-
-      // Update manual_messages status to failed
-      await supabase
-        .from("manual_messages")
-        .update({
-          status: "failed",
-          error_message: "Termii device ID not configured for this tenant",
-        })
-        .eq("id", messageRecord.id);
-    }
-    return;
-  }
-
-  // Convert template variables to numeric keys (for template mode)
-  const templateData: Record<string, string> = {};
-  if (templateVariables && typeof templateVariables === "object") {
-    Object.keys(templateVariables).forEach((key, index) => {
-      templateData[String(index + 1)] = templateVariables[key];
-    });
-  }
-
-  // Process in batches of 10 to avoid timeouts
-  for (let i = 0; i < customers.length; i += BATCH_SIZE) {
-    const batch = customers.slice(i, i + BATCH_SIZE);
-    const batchMessages = createdMessages.slice(i, i + BATCH_SIZE);
-
-    // Process batch in parallel
-    const promises = batch.map(async (customer, index) => {
-      const messageRecord = batchMessages[index];
-
-      try {
-        if (!customer.phone) {
-          throw new Error("Customer has no phone number");
-        }
-
-        let whatsappResponse;
-
-        // Choose sending method based on whether template or custom message
-        if (template && template.template_id) {
-          // TEMPLATE MODE: Use pre-approved template
-          whatsappResponse = await sendTermiiWhatsAppTemplate({
-            device_id: deviceId,
-            phone_number: customer.phone,
-            template_id: template.template_id,
-            data: templateData,
-          });
-        } else if (message) {
-          // CONVERSATIONAL MODE: Send custom message using SMS endpoint with channel="whatsapp"
-          whatsappResponse = await sendTermiiSMS({
-            to: customer.phone,
-            from: deviceId, // Use device_id as "from" for WhatsApp
-            sms: message,
-            type: "plain",
-            channel: "whatsapp",
-          });
-        } else {
-          throw new Error("Either template or message is required for WhatsApp");
-        }
-
-        // Deduct credits from tenant (atomic RPC)
-        await supabase.rpc("deduct_communication_credits", {
-          p_tenant_id: tenant.id,
-          p_amount: creditsPerMessage,
-        });
-
-        // Update manual_messages
-        await supabase
-          .from("manual_messages")
-          .update({
-            status: "sent",
-            sent_at: new Date().toISOString(),
-            credits_used: creditsPerMessage,
-          })
-          .eq("id", messageRecord.id);
-
-        // Insert message_logs
-        await supabase.from("message_logs").insert({
-          tenant_id: tenant.id,
-          customer_id: customer.id,
-          channel: "whatsapp",
-          recipient: customer.phone,
-          subject: null,
-          status: "sent",
-          sent_at: new Date().toISOString(),
-          provider: "termii_whatsapp",
-          termii_message_id: whatsappResponse.message_id,
-          termii_device_id: deviceId,
-          initiated_by: "salon",
-          credits_used: creditsPerMessage,
-          error_message: null,
-        });
-
-        result.sent++;
-        result.creditsUsed += creditsPerMessage;
-      } catch (error: any) {
-        console.error(`Failed to send WhatsApp to ${customer.full_name}:`, error);
-
-        result.failed++;
-        result.failedMessages.push({
-          customerId: customer.id,
-          customerName: customer.full_name,
-          error: error.message || "Failed to send WhatsApp",
-        });
-
-        // Update manual_messages status to failed
-        await supabase
-          .from("manual_messages")
-          .update({
-            status: "failed",
-            error_message: error.message || "Failed to send WhatsApp",
-          })
-          .eq("id", messageRecord.id);
-      }
-    });
-
-    // Wait for batch to complete
-    await Promise.allSettled(promises);
-  }
-}
 
 serve(handler);

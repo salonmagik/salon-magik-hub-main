@@ -4,7 +4,6 @@ export { useTenants, type TenantWithStats } from "./useTenants";
 export { useFeatureFlagsAdmin } from "./useFeatureFlagsAdmin";
 export { useBackofficeUsers, type BackofficeUserWithTemplate } from "./useBackofficeUsers";
 export { useBackofficeRoleTemplates, type RoleTemplate } from "./useBackofficeRoleTemplates";
-export { useImpersonation, ImpersonationProvider } from "./useImpersonation";
 export {
   useMarketInterest,
   useMarketInterestActions,

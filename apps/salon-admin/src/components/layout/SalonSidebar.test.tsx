@@ -26,6 +26,8 @@ vi.mock("@/components/session/InactivityGuard", () => ({
 vi.mock("@/components/banners", () => ({
   BannerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   GlobalBanner: () => null,
+  BlockingBannerOverlay: () => null,
+  MaintenanceBannerModal: () => null,
 }));
 
 vi.mock("@/components/billing/TrialBanner", () => ({

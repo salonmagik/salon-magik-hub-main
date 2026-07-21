@@ -22,6 +22,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
+import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -172,8 +173,9 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           </aside>
 
           {/* Main Content */}
-          <main className="flex-1 p-4 lg:p-6">
-            {children}
+          <main className="flex-1 overflow-auto">
+            <MaintenanceBanner />
+            <div className="p-4 lg:p-6">{children}</div>
           </main>
         </div>
 

@@ -513,6 +513,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					.then(async ({ error }) => {
 						if (error) {
 							console.error("Subscription verification error:", error);
+							toast({
+								title: "Could not confirm payment",
+								description: "Contact support if your plan doesn't activate shortly.",
+								variant: "destructive",
+							});
+							return;
 						}
 						await refreshTenants();
 						setPaymentSuccessModal({
@@ -2984,8 +2990,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				name: "Supervisor",
 				permissions: [
 					"Manage appointments",
-					"View reports",
 					"Manage customers",
+					"View services catalog",
 				],
 			},
 			{
@@ -2993,7 +2999,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				permissions: [
 					"Manage appointments",
 					"Manage customers",
-					"Process payments",
+					"Send messages",
 				],
 			},
 			{
