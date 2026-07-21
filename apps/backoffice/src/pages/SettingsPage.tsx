@@ -20,6 +20,8 @@ import {
 } from "@ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
+import { Checkbox } from "@ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -28,7 +30,7 @@ import {
   SelectValue,
 } from "@ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, Globe2, Lock, Power, ShieldAlert, ShieldOff } from "lucide-react";
+import { AlertTriangle, Calendar, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import type { Json } from "@/lib/supabase";
 
 type LegalStatus = "planned" | "legal_approved" | "active" | "paused";
@@ -58,6 +60,18 @@ interface KillSwitchValue {
   enabled_by: string | null;
 }
 
+type MaintenancePlatform = "salon_admin" | "client_portal";
+
+interface MaintenanceBannerValue {
+  enabled: boolean;
+  mode: "immediate" | "scheduled";
+  platforms: MaintenancePlatform[];
+  scheduled_at: string | null;
+  title: string;
+  description: string;
+  guidance: string;
+}
+
 interface TenantTrialOverride {
   id: string;
   tenant_id: string;
@@ -66,18 +80,6 @@ interface TenantTrialOverride {
   reason: string | null;
   status: string;
   created_at: string;
-}
-
-interface SupportTicket {
-  id: string;
-  source_app: string;
-  tenant_id: string | null;
-  issue_type: string;
-  subject: string;
-  status: string;
-  priority: string;
-  created_at: string;
-  assigned_backoffice_user_id: string | null;
 }
 
 const LEGAL_STATUS_OPTIONS: { value: LegalStatus; label: string }[] = [
@@ -102,6 +104,33 @@ function parseKillSwitch(value: Json | null): KillSwitchValue {
   };
 }
 
+function parseMaintBanner(value: Json | null): MaintenanceBannerValue {
+  const defaults: MaintenanceBannerValue = {
+    enabled: false,
+    mode: "immediate",
+    platforms: [],
+    scheduled_at: null,
+    title: "Scheduled Maintenance",
+    description: "",
+    guidance: "",
+  };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return defaults;
+  const obj = value as Record<string, unknown>;
+  return {
+    enabled: typeof obj.enabled === "boolean" ? obj.enabled : defaults.enabled,
+    mode: obj.mode === "scheduled" ? "scheduled" : "immediate",
+    platforms: Array.isArray(obj.platforms)
+      ? (obj.platforms as string[]).filter((p): p is MaintenancePlatform =>
+          p === "salon_admin" || p === "client_portal"
+        )
+      : [],
+    scheduled_at: typeof obj.scheduled_at === "string" ? obj.scheduled_at : null,
+    title: typeof obj.title === "string" ? obj.title : defaults.title,
+    description: typeof obj.description === "string" ? obj.description : "",
+    guidance: typeof obj.guidance === "string" ? obj.guidance : "",
+  };
+}
+
 async function writeAuditLog(action: string, actorId: string | undefined, metadata: Json) {
   const { error } = await supabase.from("audit_logs").insert({
     action,
@@ -116,12 +145,26 @@ async function writeAuditLog(action: string, actorId: string | undefined, metada
 
 export default function BackofficeSettingsPage() {
   const queryClient = useQueryClient();
-  const { backofficeUser, profile } = useBackofficeAuth();
+  const { backofficeUser, profile, session } = useBackofficeAuth();
   const isSuperAdmin = backofficeUser?.role === "super_admin";
 
   const [killSwitchDialogOpen, setKillSwitchDialogOpen] = useState(false);
   const [killSwitchReason, setKillSwitchReason] = useState("");
   const [pendingKillSwitchState, setPendingKillSwitchState] = useState(false);
+  const [killSwitchTotpToken, setKillSwitchTotpToken] = useState("");
+  const [killSwitchSecurityError, setKillSwitchSecurityError] = useState("");
+
+  // Maintenance banner state
+  const [maintEnabled, setMaintEnabled] = useState(false);
+  const [maintMode, setMaintMode] = useState<"immediate" | "scheduled">("immediate");
+  const [maintPlatforms, setMaintPlatforms] = useState<MaintenancePlatform[]>([]);
+  const [maintScheduledAt, setMaintScheduledAt] = useState("");
+  const [maintTitle, setMaintTitle] = useState("Scheduled Maintenance");
+  const [maintDescription, setMaintDescription] = useState("");
+  const [maintGuidance, setMaintGuidance] = useState("");
+  const [maintBannerDialogOpen, setMaintBannerDialogOpen] = useState(false);
+  const [maintTotpToken, setMaintTotpToken] = useState("");
+  const [maintSecurityError, setMaintSecurityError] = useState("");
 
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>("GH");
   const [newCurrencyCode, setNewCurrencyCode] = useState("USD");
@@ -142,11 +185,36 @@ export default function BackofficeSettingsPage() {
         .from("platform_settings")
         .select("*")
         .eq("key", "kill_switch")
-        .single();
+        .maybeSingle();
       if (error) throw error;
       return parseKillSwitch(data?.value ?? null);
     },
   });
+
+  const { data: maintBanner } = useQuery({
+    queryKey: ["platform-settings", "maintenance_banner"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "maintenance_banner")
+        .maybeSingle();
+      if (error) throw error;
+      return parseMaintBanner(data?.value ?? null);
+    },
+  });
+
+  useEffect(() => {
+    if (maintBanner) {
+      setMaintEnabled(maintBanner.enabled);
+      setMaintMode(maintBanner.mode);
+      setMaintPlatforms(maintBanner.platforms);
+      setMaintScheduledAt(maintBanner.scheduled_at ?? "");
+      setMaintTitle(maintBanner.title);
+      setMaintDescription(maintBanner.description);
+      setMaintGuidance(maintBanner.guidance);
+    }
+  }, [maintBanner]);
 
   const { data: marketCountries = [], isLoading: marketsLoading } = useQuery({
     queryKey: ["market-countries-admin"],
@@ -257,19 +325,22 @@ export default function BackofficeSettingsPage() {
     },
   });
 
-  const { data: supportTickets = [], isLoading: supportTicketsLoading } = useQuery({
-    queryKey: ["support-tickets-admin"],
+
+  const {
+    data: arkeselBalance,
+    isLoading: arkeselBalanceLoading,
+    refetch: refetchArkeselBalance,
+    isRefetching: arkeselBalanceRefetching,
+  } = useQuery({
+    queryKey: ["arkesel-balance"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("support_tickets")
-        .select("id, source_app, tenant_id, issue_type, subject, status, priority, created_at, assigned_backoffice_user_id")
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const { data, error } = await supabase.functions.invoke("get-arkesel-balance");
       if (error) throw error;
-      return (data ?? []) as SupportTicket[];
+      return data as { gh: { balance: string | number | null; error?: string }; ng: { balance: string | number | null; error?: string } };
     },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
-  const safeSupportTickets = supportTickets ?? [];
 
   const selectedCountry = useMemo(
     () => marketCountries.find((country) => country.country_code === selectedCountryCode) || null,
@@ -297,10 +368,7 @@ export default function BackofficeSettingsPage() {
 
       const { error } = await supabase
         .from("platform_settings")
-        .update({
-          value: newValue,
-          updated_by_id: backofficeUser?.user_id,
-        })
+        .update({ value: newValue, updated_by_id: backofficeUser?.user_id })
         .eq("key", "kill_switch");
 
       if (error) throw error;
@@ -318,10 +386,44 @@ export default function BackofficeSettingsPage() {
       );
       setKillSwitchDialogOpen(false);
       setKillSwitchReason("");
+      setKillSwitchTotpToken("");
+      setKillSwitchSecurityError("");
     },
     onError: (error: Error) => {
       toast.error("Failed to toggle kill switch: " + error.message);
     },
+  });
+
+  const saveMaintenanceBannerMutation = useMutation({
+    mutationFn: async () => {
+      const newValue: MaintenanceBannerValue = {
+        enabled: maintEnabled,
+        mode: maintMode,
+        platforms: maintPlatforms,
+        scheduled_at: maintMode === "scheduled" && maintScheduledAt ? maintScheduledAt : null,
+        title: maintTitle,
+        description: maintDescription,
+        guidance: maintGuidance,
+      };
+      const { error } = await supabase
+        .from("platform_settings")
+        .update({ value: newValue as unknown as Json, updated_by_id: backofficeUser?.user_id })
+        .eq("key", "maintenance_banner");
+      if (error) throw error;
+      await writeAuditLog(
+        maintEnabled ? "maintenance_banner_enabled" : "maintenance_banner_updated",
+        backofficeUser?.user_id,
+        newValue as unknown as Json
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-settings", "maintenance_banner"] });
+      toast.success("Maintenance banner settings saved.");
+      setMaintBannerDialogOpen(false);
+      setMaintTotpToken("");
+      setMaintSecurityError("");
+    },
+    onError: (error: Error) => toast.error("Failed to save maintenance banner: " + error.message),
   });
 
   const updateDefaultTrialDaysMutation = useMutation({
@@ -399,24 +501,6 @@ export default function BackofficeSettingsPage() {
       toast.success("Trial override revoked");
     },
     onError: (error: Error) => toast.error(error.message || "Failed to revoke override"),
-  });
-
-  const updateSupportTicketMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase
-        .from("support_tickets")
-        .update({
-          status,
-          assigned_backoffice_user_id: backofficeUser?.user_id ?? null,
-        })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["support-tickets-admin"] });
-      toast.success("Support ticket updated");
-    },
-    onError: (error: Error) => toast.error(error.message || "Failed to update support ticket"),
   });
 
   const updateCountryMutation = useMutation({
@@ -546,18 +630,75 @@ export default function BackofficeSettingsPage() {
       return;
     }
     setPendingKillSwitchState(checked);
+    setKillSwitchReason("");
+    setKillSwitchTotpToken("");
+    setKillSwitchSecurityError("");
     setKillSwitchDialogOpen(true);
   };
 
-  const confirmKillSwitch = () => {
+  const confirmKillSwitch = async () => {
     if (pendingKillSwitchState && !killSwitchReason.trim()) {
-      toast.error("A reason is required to enable the kill switch");
+      setKillSwitchSecurityError("A reason is required to enable the kill switch");
+      return;
+    }
+    if (!session?.access_token) {
+      setKillSwitchSecurityError("Session expired. Please sign in again.");
+      return;
+    }
+    if (killSwitchTotpToken.trim().length !== 6) {
+      setKillSwitchSecurityError("Enter your 6-digit 2FA code.");
+      return;
+    }
+    const verify = await supabase.functions.invoke("backoffice-verify-step-up-totp", {
+      body: {
+        token: killSwitchTotpToken.trim(),
+        action: "kill_switch_write",
+        resourceId: "kill_switch",
+        accessToken: session.access_token,
+      },
+    });
+    if (verify.error || !verify.data?.valid) {
+      setKillSwitchSecurityError(verify.data?.error || verify.error?.message || "2FA verification failed");
       return;
     }
     toggleKillSwitchMutation.mutate({
       enabled: pendingKillSwitchState,
       reason: killSwitchReason,
     });
+  };
+
+  const openMaintenanceBannerSaveDialog = () => {
+    if (!isSuperAdmin) {
+      toast.error("Only Super Admins can update the maintenance banner");
+      return;
+    }
+    setMaintTotpToken("");
+    setMaintSecurityError("");
+    setMaintBannerDialogOpen(true);
+  };
+
+  const confirmSaveMaintenanceBanner = async () => {
+    if (!session?.access_token) {
+      setMaintSecurityError("Session expired. Please sign in again.");
+      return;
+    }
+    if (maintTotpToken.trim().length !== 6) {
+      setMaintSecurityError("Enter your 6-digit 2FA code.");
+      return;
+    }
+    const verify = await supabase.functions.invoke("backoffice-verify-step-up-totp", {
+      body: {
+        token: maintTotpToken.trim(),
+        action: "maintenance_banner_write",
+        resourceId: "maintenance_banner",
+        accessToken: session.access_token,
+      },
+    });
+    if (verify.error || !verify.data?.valid) {
+      setMaintSecurityError(verify.data?.error || verify.error?.message || "2FA verification failed");
+      return;
+    }
+    saveMaintenanceBannerMutation.mutate();
   };
 
   const saveMarketDetails = () => {
@@ -586,7 +727,6 @@ export default function BackofficeSettingsPage() {
           <TabsList>
             <TabsTrigger value="operations">Operations</TabsTrigger>
             <TabsTrigger value="markets">Markets</TabsTrigger>
-            <TabsTrigger value="support">Support</TabsTrigger>
           </TabsList>
 
           <TabsContent value="operations" className="space-y-6">
@@ -656,6 +796,171 @@ export default function BackofficeSettingsPage() {
                     <AlertDescription>Only Super Admins can enable or disable the kill switch.</AlertDescription>
                   </Alert>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Maintenance Banner */}
+            <Card className={maintEnabled ? "border-amber-400" : ""}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`rounded-lg p-2 ${maintEnabled ? "bg-amber-100 text-amber-600" : "bg-muted"}`}>
+                      <Megaphone className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle>Maintenance Banner</CardTitle>
+                      <CardDescription>
+                        Show a dismissable banner on Salon Admin and/or Client Portal to inform users of maintenance.
+                      </CardDescription>
+                    </div>
+                  </div>
+                  <Badge variant={maintEnabled ? "default" : "secondary"} className={maintEnabled ? "bg-amber-500" : ""}>
+                    {maintEnabled ? "ACTIVE" : "Inactive"}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Enable toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="font-medium">Banner active</p>
+                    <p className="text-sm text-muted-foreground">When enabled, the banner is shown on the selected platforms. Save requires 2FA.</p>
+                  </div>
+                  {isSuperAdmin ? (
+                    <Switch
+                      checked={maintEnabled}
+                      onCheckedChange={setMaintEnabled}
+                      disabled={saveMaintenanceBannerMutation.isPending}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Lock className="h-4 w-4" />
+                      <span className="text-sm">Super Admin only</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-4 space-y-4">
+                  {/* Platform targeting */}
+                  <div className="space-y-2">
+                    <Label>Target platforms</Label>
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={maintPlatforms.includes("salon_admin")}
+                          onCheckedChange={(checked) =>
+                            setMaintPlatforms((prev) =>
+                              checked
+                                ? [...prev, "salon_admin"]
+                                : prev.filter((p) => p !== "salon_admin")
+                            )
+                          }
+                          disabled={!isSuperAdmin}
+                        />
+                        <span className="text-sm">Salon Admin</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={maintPlatforms.includes("client_portal")}
+                          onCheckedChange={(checked) =>
+                            setMaintPlatforms((prev) =>
+                              checked
+                                ? [...prev, "client_portal"]
+                                : prev.filter((p) => p !== "client_portal")
+                            )
+                          }
+                          disabled={!isSuperAdmin}
+                        />
+                        <span className="text-sm">Client Portal</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Mode */}
+                  <div className="space-y-2">
+                    <Label>Mode</Label>
+                    <RadioGroup
+                      value={maintMode}
+                      onValueChange={(v) => setMaintMode(v as "immediate" | "scheduled")}
+                      className="flex gap-6"
+                      disabled={!isSuperAdmin}
+                    >
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <RadioGroupItem value="immediate" />
+                        <span className="text-sm">Immediate</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <RadioGroupItem value="scheduled" />
+                        <span className="text-sm">Scheduled</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+
+                  {/* Scheduled date/time */}
+                  {maintMode === "scheduled" && (
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        Maintenance date &amp; time
+                      </Label>
+                      <Input
+                        type="datetime-local"
+                        value={maintScheduledAt}
+                        onChange={(e) => setMaintScheduledAt(e.target.value)}
+                        className="w-64"
+                        disabled={!isSuperAdmin}
+                      />
+                    </div>
+                  )}
+
+                  {/* Title */}
+                  <div className="space-y-2">
+                    <Label>Banner title</Label>
+                    <Input
+                      value={maintTitle}
+                      onChange={(e) => setMaintTitle(e.target.value)}
+                      placeholder="e.g. Scheduled Maintenance"
+                      disabled={!isSuperAdmin}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Textarea
+                      value={maintDescription}
+                      onChange={(e) => setMaintDescription(e.target.value)}
+                      placeholder="What maintenance is being performed?"
+                      rows={3}
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Shown in the "Learn more" modal.</p>
+                  </div>
+
+                  {/* Guidance */}
+                  <div className="space-y-2">
+                    <Label>User guidance</Label>
+                    <Textarea
+                      value={maintGuidance}
+                      onChange={(e) => setMaintGuidance(e.target.value)}
+                      placeholder="What should users do or know during maintenance?"
+                      rows={3}
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Shown below the description in the modal.</p>
+                  </div>
+
+                  {isSuperAdmin && (
+                    <Button
+                      onClick={openMaintenanceBannerSaveDialog}
+                      disabled={saveMaintenanceBannerMutation.isPending}
+                      className="flex items-center gap-2"
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      Save Banner Settings
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -886,6 +1191,50 @@ export default function BackofficeSettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Arkesel SMS Balance</CardTitle>
+                    <CardDescription>Live credit balance for each country Arkesel account.</CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchArkeselBalance()}
+                    disabled={arkeselBalanceLoading || arkeselBalanceRefetching}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${arkeselBalanceRefetching ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {arkeselBalanceLoading ? (
+                  <p className="text-sm text-muted-foreground">Fetching balances…</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {(["gh", "ng"] as const).map((market) => {
+                      const entry = arkeselBalance?.[market];
+                      const label = market === "gh" ? "Ghana (GH)" : "Nigeria (NG)";
+                      return (
+                        <div key={market} className="rounded-lg border p-4">
+                          <p className="text-sm text-muted-foreground">{label}</p>
+                          {entry?.error ? (
+                            <p className="mt-1 text-sm text-destructive">{entry.error}</p>
+                          ) : (
+                            <p className="mt-1 text-2xl font-semibold">
+                              {entry?.balance != null ? String(entry.balance) : "—"}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="markets" className="space-y-6">
@@ -1085,65 +1434,6 @@ export default function BackofficeSettingsPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="support" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Support Ticket Queue</CardTitle>
-                <CardDescription>
-                  Manage support tickets submitted by clients and route them through the correct SLA state.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {supportTicketsLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading support tickets...</p>
-                ) : safeSupportTickets.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No support tickets available.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {safeSupportTickets.map((ticket) => (
-                      <div key={ticket.id} className="rounded-lg border p-4">
-                        <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium">{ticket.subject}</p>
-                              <Badge variant="secondary">{ticket.priority}</Badge>
-                              <Badge>{ticket.status.replace(/_/g, " ")}</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {ticket.issue_type.replace(/_/g, " ")} · {ticket.source_app.replace(/_/g, " ")} ·{" "}
-                              {new Date(ticket.created_at).toLocaleString()}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {ticket.tenant_id ? `Tenant: ${ticket.tenant_id}` : "Platform-level ticket"}
-                            </p>
-                          </div>
-
-                          <div className="min-w-[220px]">
-                            <Select
-                              value={ticket.status}
-                              onValueChange={(value) => updateSupportTicketMutation.mutate({ id: ticket.id, status: value })}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="open">Open</SelectItem>
-                                <SelectItem value="in_progress">In progress</SelectItem>
-                                <SelectItem value="waiting_on_salon">Waiting on salon</SelectItem>
-                                <SelectItem value="waiting_on_customer">Waiting on customer</SelectItem>
-                                <SelectItem value="resolved">Resolved</SelectItem>
-                                <SelectItem value="closed">Closed</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
 
         <Dialog open={killSwitchDialogOpen} onOpenChange={setKillSwitchDialogOpen}>
@@ -1160,17 +1450,36 @@ export default function BackofficeSettingsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            {pendingKillSwitchState && (
-              <div className="py-4">
-                <Label>Reason (required)</Label>
-                <Textarea
-                  value={killSwitchReason}
-                  onChange={(event) => setKillSwitchReason(event.target.value)}
-                  placeholder="e.g., Emergency maintenance, security incident..."
-                  className="mt-2"
+            <div className="space-y-3 py-2">
+              {pendingKillSwitchState && (
+                <div className="space-y-2">
+                  <Label>Reason (required)</Label>
+                  <Textarea
+                    value={killSwitchReason}
+                    onChange={(event) => setKillSwitchReason(event.target.value)}
+                    placeholder="e.g., Emergency maintenance, security incident..."
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  2FA code
+                </Label>
+                <input
+                  value={killSwitchTotpToken}
+                  onChange={(e) => setKillSwitchTotpToken(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="123456"
+                  autoComplete="one-time-code"
                 />
               </div>
-            )}
+              {killSwitchSecurityError && (
+                <p className="text-sm text-destructive">{killSwitchSecurityError}</p>
+              )}
+            </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => setKillSwitchDialogOpen(false)}>
@@ -1181,7 +1490,59 @@ export default function BackofficeSettingsPage() {
                 onClick={confirmKillSwitch}
                 disabled={toggleKillSwitchMutation.isPending}
               >
-                {pendingKillSwitchState ? "Enable Kill Switch" : "Disable Kill Switch"}
+                {toggleKillSwitchMutation.isPending
+                  ? "Verifying..."
+                  : pendingKillSwitchState
+                  ? "Enable Kill Switch"
+                  : "Disable Kill Switch"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        {/* Maintenance Banner — 2FA confirm before save */}
+        <Dialog open={maintBannerDialogOpen} onOpenChange={setMaintBannerDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Megaphone className="h-5 w-5 text-amber-500" />
+                Save Maintenance Banner Settings
+              </DialogTitle>
+              <DialogDescription>
+                Confirm with your 2FA code to apply changes
+                {maintEnabled ? " and activate the banner" : ""}.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-2">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  2FA code
+                </Label>
+                <input
+                  value={maintTotpToken}
+                  onChange={(e) => setMaintTotpToken(e.target.value)}
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="123456"
+                  autoComplete="one-time-code"
+                />
+              </div>
+              {maintSecurityError && (
+                <p className="text-sm text-destructive">{maintSecurityError}</p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setMaintBannerDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmSaveMaintenanceBanner}
+                disabled={saveMaintenanceBannerMutation.isPending}
+              >
+                {saveMaintenanceBannerMutation.isPending ? "Saving..." : "Confirm & Save"}
               </Button>
             </DialogFooter>
           </DialogContent>

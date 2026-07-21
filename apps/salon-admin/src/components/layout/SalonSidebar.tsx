@@ -30,6 +30,7 @@ import {
   Shield,
   Zap,
   User,
+  PauseCircle,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { cn } from "@shared/utils";
@@ -43,7 +44,7 @@ import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { useNotifications } from "@/hooks/useNotifications";
-import { BannerProvider, GlobalBanner } from "@/components/banners";
+import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerModal } from "@/components/banners";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/billing/TrialBanner";
@@ -760,7 +761,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 value={context.type === "owner_hub" ? "owner_hub" : context.locationId || ""}
                 className="text-ink"
               >
-                {context.label}
+                {context.isPaused ? `⏸ ${context.label} (Paused)` : context.label}
               </option>
             ))}
           </select>
@@ -932,6 +933,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
             <div className="flex-1 overflow-auto p-4 lg:p-6">{children}</div>
           </main>
         </div>
+
+        {/* Blocking overlay — renders above everything when a blocking banner is active */}
+        <BlockingBannerOverlay />
+
+        {/* Maintenance banner "Learn more" modal */}
+        <MaintenanceBannerModal />
 
         {/* Quick Create Dialog */}
         <QuickCreateDialog

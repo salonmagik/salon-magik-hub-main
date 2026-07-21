@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
+import { useLocation } from "react-router-dom";
 
 export type BannerVariant = "error" | "warning" | "info" | "success" | "maintenance";
 export type BannerPriority = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
@@ -21,6 +22,16 @@ export interface Banner {
   blocking: boolean;
 }
 
+export interface MaintenanceBannerSetting {
+  enabled: boolean;
+  mode: "immediate" | "scheduled";
+  platforms: string[];
+  scheduled_at: string | null;
+  title: string;
+  description: string;
+  guidance: string;
+}
+
 interface BannerContextType {
   banners: Banner[];
   activeBanner: Banner | null;
@@ -30,6 +41,10 @@ interface BannerContextType {
   nextBanner: () => void;
   prevBanner: () => void;
   goToBanner: (index: number) => void;
+  maintenanceBannerSetting: MaintenanceBannerSetting | null;
+  maintenanceModalOpen: boolean;
+  openMaintenanceModal: () => void;
+  closeMaintenanceModal: () => void;
 }
 
 const BannerContext = createContext<BannerContextType | undefined>(undefined);
@@ -48,11 +63,15 @@ interface BannerProviderProps {
 }
 
 export function BannerProvider({ children, platform }: BannerProviderProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, isActiveContextPaused } = useAuth();
   const { pendingInvitations } = useStaffInvitations();
+  const routerLocation = useLocation();
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [maintenanceEvents, setMaintenanceEvents] = useState<any[]>([]);
+  const [killSwitch, setKillSwitch] = useState<{ enabled: boolean; reason?: string | null } | null>(null);
+  const [maintenanceBannerSetting, setMaintenanceBannerSetting] = useState<MaintenanceBannerSetting | null>(null);
+  const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
 
   // Fetch active maintenance events
   useEffect(() => {
@@ -62,21 +81,21 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
         .select("*")
         .eq("is_active", true)
         .order("severity", { ascending: false });
-      
+
       if (data) {
         setMaintenanceEvents(data);
       }
     };
 
     fetchMaintenance();
-    
+
     // Subscribe to realtime updates
     const channel = supabase
       .channel("maintenance_updates")
-      .on("postgres_changes", { 
-        event: "*", 
-        schema: "public", 
-        table: "maintenance_events" 
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "maintenance_events"
       }, fetchMaintenance)
       .subscribe();
 
@@ -85,9 +104,104 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
     };
   }, []);
 
+  // Fetch kill switch state and subscribe to changes
+  useEffect(() => {
+    const fetchKillSwitch = async () => {
+      const { data } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "kill_switch")
+        .maybeSingle();
+      if (data?.value) {
+        const v = data.value as Record<string, unknown>;
+        setKillSwitch({ enabled: v.enabled === true, reason: v.reason as string | null });
+      }
+    };
+
+    fetchKillSwitch();
+
+    const channel = supabase
+      .channel("kill_switch_updates")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "platform_settings",
+        filter: "key=eq.kill_switch",
+      }, fetchKillSwitch)
+      .subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, []);
+
+  // Fetch maintenance_banner setting and subscribe to changes
+  useEffect(() => {
+    const parseValue = (value: Record<string, unknown> | null): MaintenanceBannerSetting | null => {
+      if (!value) return null;
+      return {
+        enabled: value.enabled === true,
+        mode: value.mode === "scheduled" ? "scheduled" : "immediate",
+        platforms: Array.isArray(value.platforms) ? (value.platforms as string[]) : [],
+        scheduled_at: typeof value.scheduled_at === "string" ? value.scheduled_at : null,
+        title: typeof value.title === "string" ? value.title : "Scheduled Maintenance",
+        description: typeof value.description === "string" ? value.description : "",
+        guidance: typeof value.guidance === "string" ? value.guidance : "",
+      };
+    };
+
+    const fetchMaintBanner = async () => {
+      const { data } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "maintenance_banner")
+        .maybeSingle();
+      setMaintenanceBannerSetting(parseValue(data?.value as Record<string, unknown> | null));
+    };
+
+    fetchMaintBanner();
+
+    const channel = supabase
+      .channel("maintenance_banner_updates")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "platform_settings",
+        filter: "key=eq.maintenance_banner",
+      }, fetchMaintBanner)
+      .subscribe();
+
+    return () => { channel.unsubscribe(); };
+  }, []);
+
   // Build banners based on platform and tenant status
   const banners = useMemo(() => {
     const result: Banner[] = [];
+
+    // Priority 1: Platform kill switch (overrides everything, non-dismissible)
+    if (killSwitch?.enabled) {
+      result.push({
+        id: "kill-switch",
+        priority: 1,
+        variant: "error",
+        title: "Platform Maintenance",
+        message: killSwitch.reason?.trim() || "The platform is currently undergoing emergency maintenance. Please try again later.",
+        dismissible: false,
+        blocking: true,
+      });
+    }
+
+    // Priority 4: Paused branch (salon platform, non-dismissible)
+    if (platform === "salon" && isActiveContextPaused && !routerLocation.pathname.startsWith("/salon/overview")) {
+      result.push({
+        id: "paused-branch",
+        priority: 4,
+        variant: "error",
+        title: "Branch Paused",
+        message: "This branch is currently paused. All actions are disabled. Switch to an active branch or revive this one from Business Hub.",
+        cta: { label: "Business Hub", path: "/salon/overview" },
+        dismissible: false,
+        blocking: true,
+      });
+    }
 
     if (!currentTenant && platform === "salon") return result;
 
@@ -170,7 +284,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       }
     }
 
-    // Priority 5 & 9: Maintenance (all platforms)
+    // Priority 5 & 9: Maintenance events (all platforms)
     maintenanceEvents.forEach((event) => {
       const isHighSeverity = event.severity === "high" || event.severity === "critical";
       result.push({
@@ -184,12 +298,40 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       });
     });
 
+    // Priority 6: Platform maintenance banner (from BO settings)
+    if (
+      maintenanceBannerSetting?.enabled &&
+      maintenanceBannerSetting.platforms.includes("salon_admin")
+    ) {
+      const isScheduled = maintenanceBannerSetting.mode === "scheduled";
+      const scheduledAt = maintenanceBannerSetting.scheduled_at
+        ? new Date(maintenanceBannerSetting.scheduled_at)
+        : null;
+      const isUpcoming = scheduledAt && scheduledAt > new Date();
+
+      let message = maintenanceBannerSetting.title;
+      if (isScheduled && isUpcoming) {
+        message = `Maintenance scheduled for ${scheduledAt.toLocaleString()}`;
+      }
+
+      result.push({
+        id: "platform-maintenance-banner",
+        priority: 6,
+        variant: "maintenance",
+        title: isScheduled && isUpcoming ? "Upcoming Maintenance" : maintenanceBannerSetting.title,
+        message,
+        cta: { label: "Learn more", action: () => setMaintenanceModalOpen(true) },
+        dismissible: true,
+        blocking: false,
+      });
+    }
+
     // Sort by priority (lower = higher priority)
     result.sort((a, b) => a.priority - b.priority);
 
     // Filter out dismissed banners
     return result.filter((b) => !dismissedIds.includes(b.id));
-  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds]);
+  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen]);
 
   const dismissBanner = useCallback((id: string) => {
     setDismissedIds((prev) => [...prev, id]);
@@ -234,6 +376,9 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
     setCurrentIndex(index);
   }, []);
 
+  const openMaintenanceModal = useCallback(() => setMaintenanceModalOpen(true), []);
+  const closeMaintenanceModal = useCallback(() => setMaintenanceModalOpen(false), []);
+
   const value: BannerContextType = {
     banners,
     activeBanner: banners[currentIndex] || null,
@@ -243,6 +388,10 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
     nextBanner,
     prevBanner,
     goToBanner,
+    maintenanceBannerSetting,
+    maintenanceModalOpen,
+    openMaintenanceModal,
+    closeMaintenanceModal,
   };
 
   return (
