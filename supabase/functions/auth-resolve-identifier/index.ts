@@ -202,10 +202,7 @@ serve(async (req) => {
       throw profileLookupError;
     }
 
-    const metadata = (authUser.user_metadata as Record<string, unknown> | null) ?? {};
-    const hasPassword =
-      existingProfile?.client_password_initialized === true ||
-      metadata.password_initialized === true;
+    const hasPassword = existingProfile?.client_password_initialized === true;
     const fullName = buildFullName(
       matchedCustomers[0]?.full_name || (metadata.full_name as string | undefined),
     );
@@ -222,7 +219,9 @@ serve(async (req) => {
           user_id: authUser.id,
           full_name: fullName,
           phone,
-          client_password_initialized: hasPassword,
+          // Only set client_password_initialized when it is actually true — never
+          // downgrade an already-initialized account back to false on re-identification.
+          ...(hasPassword ? { client_password_initialized: true } : {}),
         },
         { onConflict: "user_id" } as any,
       );
@@ -243,6 +242,9 @@ serve(async (req) => {
         exists: true,
         identifier: normalized.value,
         identifierType: normalized.type,
+        // loginEmail is the email on the auth account, used by signInWithPassword
+        // when the client identified by phone (Supabase phone auth provider is disabled).
+        loginEmail: authUser.email ?? null,
         hasPassword,
         requiresOtp: !hasPassword,
       }),

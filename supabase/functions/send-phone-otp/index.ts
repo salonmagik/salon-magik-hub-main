@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { sendArkeselSMS } from "../_shared/arkesel-client.ts";
+import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +10,6 @@ const corsHeaders = {
 };
 
 const OTP_TTL_MINUTES = 10;
-const OTP_SENDER = "SalonMagik";
 
 function generateOtp(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -53,30 +52,50 @@ serve(async (req) => {
       return json({ success: true });
     }
 
-    // Rate limit: max 4 OTPs per phone per 30 minutes (aligns with client 4-attempt lockout)
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const { count } = await admin
-      .from("phone_otp_tokens")
-      .select("id", { count: "exact", head: true })
-      .eq("phone", phone)
-      .gte("created_at", thirtyMinAgo);
-
-    if ((count ?? 0) >= 4) {
-      return json({ error: "hourly_limit", message: "Too many OTP requests. Please try again in 30 minutes." }, 429);
-    }
-
-    // Cooldown: must wait 60s between requests
-    const minuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
-    const { data: recent } = await admin
-      .from("phone_otp_tokens")
-      .select("created_at")
-      .eq("phone", phone)
-      .gte("created_at", minuteAgo)
-      .limit(1)
+    // Read rate limit config from platform_settings (falls back to safe defaults)
+    const { data: rlSetting } = await admin
+      .from("platform_settings")
+      .select("value")
+      .eq("key", "otp_rate_limit")
       .maybeSingle();
+    const rlValue = (rlSetting?.value ?? {}) as Record<string, unknown>;
+    const rlEnabled = typeof rlValue.enabled === "boolean" ? rlValue.enabled : true;
+    const rlMaxPerHour = typeof rlValue.max_per_hour === "number" ? rlValue.max_per_hour : 3;
+    const rlCooldownSeconds = typeof rlValue.cooldown_seconds === "number" ? rlValue.cooldown_seconds : 60;
 
-    if (recent) {
-      return json({ error: "cooldown", message: "Please wait 60 seconds before requesting another code." }, 429);
+    if (rlEnabled) {
+      // Hourly window cap — use select("id") without head:true so the count
+      // comes back in the response body; head:true returns count via headers
+      // which Deno's fetch silently drops, making count always null.
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { count, error: countErr } = await admin
+        .from("phone_otp_tokens")
+        .select("id", { count: "exact" })
+        .eq("phone", phone)
+        .gte("created_at", hourAgo);
+
+      if (countErr) {
+        console.error("[send-phone-otp] rate-limit count error:", countErr);
+        return json({ error: "hourly_limit", message: "Too many OTP requests. Please try again later." }, 429);
+      }
+
+      if ((count ?? 0) >= rlMaxPerHour) {
+        return json({ error: "hourly_limit", message: "Too many OTP requests. Please try again later." }, 429);
+      }
+
+      // Per-request cooldown
+      const cooldownAgo = new Date(Date.now() - rlCooldownSeconds * 1000).toISOString();
+      const { data: recent } = await admin
+        .from("phone_otp_tokens")
+        .select("created_at")
+        .eq("phone", phone)
+        .gte("created_at", cooldownAgo)
+        .limit(1)
+        .maybeSingle();
+
+      if (recent) {
+        return json({ error: "cooldown", message: `Please wait ${rlCooldownSeconds} seconds before requesting another code.` }, 429);
+      }
     }
 
     const otp = generateOtp();
@@ -93,7 +112,7 @@ serve(async (req) => {
     console.log(`[send-phone-otp] Sending OTP to ${phone} for user ${profile.user_id}`);
     const smsResult = await sendArkeselSMS({
       to: phone,
-      from: OTP_SENDER,
+      from: resolveArkeselSenderId(phone),
       message: `Your Salon Magik sign-in code is: ${otp}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`,
     });
     console.log(`[send-phone-otp] SMS sent successfully. Message ID: ${JSON.stringify(smsResult?.data)}`);
