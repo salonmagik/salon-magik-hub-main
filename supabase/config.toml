@@ -127,9 +127,6 @@ verify_jwt = false
 [functions.verify-theme-purchase-payment]
 verify_jwt = false
 
-[functions.manage-termii-sender-id]
-verify_jwt = false
-
 [functions.verify-subscription-payment]
 verify_jwt = false
 
@@ -137,9 +134,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.purchase-credits-from-purse]
-verify_jwt = false
-
-[functions.manage-whatsapp-templates]
 verify_jwt = false
 
 [functions.create-invoice-payment-session]
