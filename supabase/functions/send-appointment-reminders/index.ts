@@ -10,7 +10,7 @@
  */
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { sendArkeselSMS } from "../_shared/arkesel-client.ts";
+import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,7 +80,7 @@ serve(async (req) => {
       // Fetch tenant info for SMS sender name
       const { data: tenant } = await supabase
         .from("tenants")
-        .select("name, sms_sender_name, termii_sender_id, currency")
+        .select("name, sms_sender_name, currency")
         .eq("id", setting.tenant_id)
         .maybeSingle();
 
@@ -121,10 +121,7 @@ serve(async (req) => {
         // SMS reminder
         if (setting.sms_appointment_reminders && customer?.phone) {
           try {
-            const senderName =
-              tenant?.sms_sender_name ||
-              tenant?.termii_sender_id ||
-              "SalonMagik";
+            const senderName = resolveArkeselSenderId(customer.phone, tenant?.sms_sender_name);
 
             const apptDate = appt.scheduled_start
               ? new Date(appt.scheduled_start).toLocaleString("en-US", {

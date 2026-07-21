@@ -1,8 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
-import { sendTermiiWhatsAppTemplate } from "../_shared/termii-client.ts";
-import { sendArkeselSMS } from "../_shared/arkesel-client.ts";
+import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,28 +31,10 @@ async function sendEmail(resendApiKey: string, from: string, to: string, subject
 }
 
 async function sendSms(senderId: string, to: string, text: string) {
-  await sendArkeselSMS({ to, from: senderId, message: text });
+  await sendArkeselSMS({ to, from: senderId, message: text, useCase: "promotional" });
   return "arkesel_sms";
 }
 
-async function sendWhatsApp(metaToken: string, phoneNumberId: string, to: string, text: string) {
-  const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${metaToken}`,
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body: text },
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`WhatsApp API failed with status ${response.status}`);
-  }
-}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -94,7 +75,7 @@ serve(async (req) => {
 
     const { data: campaign, error: campaignError } = await adminClient
       .from("customer_reactivation_campaigns")
-      .select("id, tenant_id, channel, name, template_json, whatsapp_provider, termii_template_id, termii_device_id")
+      .select("id, tenant_id, channel, name, template_json")
       .eq("id", campaignId)
       .single();
 
@@ -124,7 +105,7 @@ serve(async (req) => {
     // Fetch tenant messaging configuration
     const { data: tenant } = await adminClient
       .from("tenants")
-      .select("country, termii_device_id, termii_sender_id, sms_sender_name")
+      .select("country, sms_sender_name")
       .eq("id", campaign.tenant_id)
       .single();
 
@@ -173,9 +154,7 @@ serve(async (req) => {
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-    const smsSenderName = tenant?.sms_sender_name || tenant?.termii_sender_id || "SalonMagik";
-    const whatsappToken = Deno.env.get("META_WHATSAPP_TOKEN") || "";
-    const whatsappPhoneId = Deno.env.get("META_WHATSAPP_PHONE_NUMBER_ID") || "";
+    const tenantSenderId = tenant?.sms_sender_name || null;
 
     let sentCount = 0;
     let failedCount = 0;
@@ -208,43 +187,9 @@ serve(async (req) => {
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
-          await sendSms(smsSenderName, customer.phone, message);
+          await sendSms(resolveArkeselSenderId(customer.phone, tenantSenderId), customer.phone, message);
         } else if (channel === "whatsapp") {
-          if (!customer.phone) throw new Error("Customer has no phone number");
-          
-          // Determine WhatsApp provider (default to 'meta' for backward compatibility)
-          const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
-          
-          if (whatsappProvider === "termii") {
-            // Use Termii WhatsApp with template
-            if (!termiiApiKey) throw new Error("TERMII_API_KEY not configured");
-            
-            const termiiTemplateId = (campaign as any).termii_template_id;
-            if (!termiiTemplateId) throw new Error("Termii template ID not configured for this campaign");
-            
-            // Resolve device ID: Use campaign-specific device ID if set, otherwise fall back to tenant device ID
-            const deviceId = (campaign as any).termii_device_id || tenant?.termii_device_id;
-            if (!deviceId) throw new Error("Termii device ID not configured. Set device ID in tenant settings or campaign.");
-            
-            // Convert template variables from payload to numeric keys format (1, 2, 3...)
-            const templateVariables: Record<string, string> = {};
-            const variableKeys = Object.keys(payload).filter(key => key !== "message" && key !== "subject");
-            variableKeys.forEach((key, index) => {
-              templateVariables[String(index + 1)] = String(payload[key] || "");
-            });
-            
-            // Send via Termii WhatsApp
-            await sendTermiiWhatsAppTemplate({
-              device_id: deviceId,
-              phone_number: customer.phone,
-              template_id: termiiTemplateId,
-              data: templateVariables,
-            });
-          } else {
-            // Use Meta WhatsApp (existing implementation)
-            if (!whatsappToken || !whatsappPhoneId) throw new Error("WhatsApp credentials are not configured");
-            await sendWhatsApp(whatsappToken, whatsappPhoneId, customer.phone, message);
-          }
+          throw new Error("WhatsApp channel is not yet available");
         }
 
         sentCount += 1;
@@ -259,9 +204,6 @@ serve(async (req) => {
           provider = "resend";
         } else if (channel === "sms") {
           provider = "arkesel_sms";
-        } else if (channel === "whatsapp") {
-          const whatsappProvider = (campaign as any).whatsapp_provider || "meta";
-          provider = whatsappProvider === "termii" ? "termii_whatsapp" : "meta_whatsapp";
         } else {
           provider = "resend"; // Fallback
         }

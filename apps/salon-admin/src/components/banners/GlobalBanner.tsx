@@ -4,6 +4,41 @@ import { Button } from "@ui/button";
 import { cn } from "@shared/utils";
 import { useBanners, BannerVariant } from "./BannerContext";
 
+/**
+ * Full-screen overlay rendered when the active banner has blocking: true.
+ * Prevents all interaction with the app until the blocking condition clears.
+ * Place this inside BannerProvider scope, alongside (not inside) page content.
+ */
+export function BlockingBannerOverlay() {
+  const navigate = useNavigate();
+  const { banners } = useBanners();
+  const blockingBanner = banners.find((b) => b.blocking);
+  if (!blockingBanner) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md mx-4 p-8 text-center space-y-4">
+        <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-7 h-7 text-destructive" />
+        </div>
+        <h2 className="text-xl font-bold">{blockingBanner.title}</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">{blockingBanner.message}</p>
+        {blockingBanner.cta && (
+          <Button
+            className="w-full"
+            onClick={() => {
+              if (blockingBanner.cta?.action) blockingBanner.cta.action();
+              else if (blockingBanner.cta?.path) navigate(blockingBanner.cta.path);
+            }}
+          >
+            {blockingBanner.cta.label}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const variantStyles: Record<BannerVariant, { bg: string; text: string; icon: React.ElementType }> = {
   error: {
     bg: "bg-[#FEE2E2]",

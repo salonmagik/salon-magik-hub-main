@@ -707,9 +707,9 @@ export default function MessagingPage() {
           effectiveChannel === "email"
             ? "Email will go through Salon Magik's deployed email delivery path."
             : isGhanaTenant
-              ? "Ghana SMS will use Txtconnect."
+              ? "Ghana SMS will use Arkesel."
               : isNigeriaTenant
-                ? "Nigeria SMS will use the current Termii route."
+                ? "Nigeria SMS will use Arkesel."
                 : `SMS is not configured for ${getMarketLabel(currentTenant?.country)} yet.`,
       },
     ];

@@ -22,10 +22,11 @@ interface AuthState {
   activeContextType: ActiveContextType;
   activeLocationId: string | null;
   assignedLocationIds: string[];
-  availableContexts: Array<{ type: ActiveContextType; locationId: string | null; label: string }>;
+  availableContexts: Array<{ type: ActiveContextType; locationId: string | null; label: string; isPaused?: boolean }>;
   canUseOwnerHub: boolean;
   currentRole: UserRole["role"] | null;
   isAssignmentPending: boolean;
+  isActiveContextPaused: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -138,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canUseOwnerHub: false,
     currentRole: null,
     isAssignmentPending: false,
+    isActiveContextPaused: false,
   });
 
   const getContextStorageKey = (tenantId: string) => `${CONTEXT_STORAGE_PREFIX}${tenantId}`;
@@ -161,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     canUseOwnerHub: false,
     currentRole: null,
     isAssignmentPending: false,
+    isActiveContextPaused: false,
   });
   const getVerifiedAuthUser = async (
     session: Session
@@ -282,12 +285,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : [];
           const availableContexts = [
             ...(rpcData.can_use_owner_hub
-              ? [{ type: "owner_hub" as const, locationId: null, label: "Business Hub" }]
+              ? [{ type: "owner_hub" as const, locationId: null, label: "Business Hub", isPaused: false }]
               : []),
             ...availableLocations.map((location: any) => ({
               type: "location" as const,
               locationId: location.id,
               label: location.name,
+              isPaused: Boolean(location.is_paused),
             })),
           ];
 
@@ -522,6 +526,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               canUseOwnerHub: false,
               currentRole: null,
               isAssignmentPending: false,
+              isActiveContextPaused: false,
             });
             return;
           }
@@ -619,6 +624,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   contextState.currentRole,
                   contextState.assignedLocationIds
                 ),
+                isActiveContextPaused: contextState.activeContextType === "location"
+                  ? Boolean(contextState.availableContexts.find(
+                      (c) => c.type === "location" && c.locationId === contextState.activeLocationId
+                    )?.isPaused)
+                  : false,
               }));
 
               // Fire-and-forget server side effects — do not block setState
@@ -735,6 +745,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             contextState.currentRole,
             contextState.assignedLocationIds
           ),
+          isActiveContextPaused: contextState.activeContextType === "location"
+            ? Boolean(contextState.availableContexts.find(
+                (c) => c.type === "location" && c.locationId === contextState.activeLocationId
+              )?.isPaused)
+            : false,
         });
 
         // Fire-and-forget server side effects — do not block setState
@@ -794,6 +809,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           contextState.currentRole,
           contextState.assignedLocationIds
         ),
+        isActiveContextPaused: contextState.activeContextType === "location"
+          ? Boolean(contextState.availableContexts.find(
+              (c) => c.type === "location" && c.locationId === contextState.activeLocationId
+            )?.isPaused)
+          : false,
       }));
     }, 0);
   };
@@ -834,6 +854,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       activeContextType: contextType,
       activeLocationId: nextLocationId,
       isAssignmentPending: isAssignmentPendingState(prev.currentRole, prev.assignedLocationIds),
+      isActiveContextPaused: contextType === "location"
+        ? Boolean(prev.availableContexts.find(
+            (c) => c.type === "location" && c.locationId === nextLocationId
+          )?.isPaused)
+        : false,
     }));
   };
 

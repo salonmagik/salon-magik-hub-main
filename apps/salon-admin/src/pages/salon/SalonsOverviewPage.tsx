@@ -40,6 +40,7 @@ import {
   ClockAlert,
   CreditCard,
   MessageSquare,
+  PauseCircle,
 } from "lucide-react";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
@@ -129,6 +130,7 @@ export default function SalonsOverviewPage() {
   }, [locations]);
 
   const branchContexts = availableContexts.filter((c) => c.type === "location");
+  const pausedBranchCount = branchContexts.filter((c) => c.isPaused).length;
 
   // Map locations by id for per-action branch filtering
   const locationById = useMemo(() => {
@@ -345,6 +347,20 @@ export default function SalonsOverviewPage() {
                     <div className="text-2xl font-bold">{aggregateStats.locationCount}</div>
                   </CardContent>
                 </Card>
+                {currentRole === "owner" && pausedBranchCount > 0 && (
+                  <Card className="border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
+                        <PauseCircle className="w-3 h-3" />
+                        Paused Branches
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{pausedBranchCount}</div>
+                      <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Tap a paused branch to revive it</p>
+                    </CardContent>
+                  </Card>
+                )}
                 {canViewRevenueAnalytics && (
                   <Card>
                     <CardHeader className="pb-2">
