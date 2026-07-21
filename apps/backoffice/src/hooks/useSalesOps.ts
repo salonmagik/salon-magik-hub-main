@@ -34,7 +34,7 @@ export function useSalesOps() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sales_promo_campaigns")
-        .select("id, name, starts_at, ends_at, is_active, discount_type, discount_value, enable_trial_extension, trial_extension_days, billing_targets, max_uses_per_tenant, email_subject_template, email_body_template")
+        .select("id, name, starts_at, ends_at, is_active, discount_type, discount_value, enable_trial_extension, trial_extension_days, billing_targets, max_uses_per_tenant, email_subject_template, email_body_template, code_expiry_hours")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
@@ -288,6 +288,7 @@ export function useSalesOps() {
       maxUsesPerTenant: number;
       emailSubjectTemplate: string;
       emailBodyTemplate: string;
+      codeExpiryHours: number;
     }) => {
       if (!canManageCampaigns) throw new Error("You do not have permission to manage campaigns");
       const { error } = await supabase
@@ -304,6 +305,7 @@ export function useSalesOps() {
           max_uses_per_tenant: payload.maxUsesPerTenant,
           email_subject_template: payload.emailSubjectTemplate.trim(),
           email_body_template: payload.emailBodyTemplate.trim(),
+          code_expiry_hours: payload.codeExpiryHours,
           is_active: true,
         });
       if (error) throw error;
