@@ -111,7 +111,7 @@ export function AuthLayout({ children, title, subtitle }: AuthLayoutProps) {
 
         {/* Copyright — hidden on mobile */}
         <p className="hidden text-[12px] text-white/30 lg:block">
-          © Salon Magik, a Gray Avenue LTD company
+          © Salon Magik, a product of The Gray Avenue LTD
         </p>
       </div>
 

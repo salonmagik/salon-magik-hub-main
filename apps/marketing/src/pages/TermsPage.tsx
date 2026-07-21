@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { SalonMagikLogo } from "@/components/SalonMagikLogo";
+import { MarketingLayout } from "@/components/MarketingLayout";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -29,26 +29,7 @@ function List({ items }: { items: string[] }) {
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-brand-cream">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 bg-brand-cream">
-        <div className="mx-auto flex max-w-[1180px] items-center justify-between px-8 py-[18px]">
-          <Link to="/">
-            <SalonMagikLogo size="md" />
-          </Link>
-          <div className="hidden items-center gap-9 md:flex">
-            <Link to="/pricing" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Pricing</Link>
-            <Link to="/support" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Support</Link>
-          </div>
-          <a
-            href="https://app.salonmagik.com/login"
-            className="rounded-full bg-brand-ink px-[22px] py-[11px] text-[14.5px] text-white transition-colors hover:bg-brand-purple"
-          >
-            Log in
-          </a>
-        </div>
-      </nav>
-
+    <MarketingLayout>
       {/* Content */}
       <section className="px-8 py-16">
         <div className="mx-auto max-w-[720px]">
@@ -251,18 +232,6 @@ export default function TermsPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-brand-cream-dim px-8 py-8">
-        <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-4">
-          <span className="font-serif text-[18px] font-semibold text-brand-ink">Salon Magik</span>
-          <div className="flex gap-6 text-[14px] text-brand-ink/60">
-            <Link to="/pricing" className="transition-colors hover:text-brand-ink">Pricing</Link>
-            <Link to="/support" className="transition-colors hover:text-brand-ink">Support</Link>
-            <Link to="/privacy" className="transition-colors hover:text-brand-ink">Privacy</Link>
-          </div>
-          <p className="text-[13px] text-brand-ink/40">© {new Date().getFullYear()} Salon Magik</p>
-        </div>
-      </footer>
-    </div>
+    </MarketingLayout>
   );
 }

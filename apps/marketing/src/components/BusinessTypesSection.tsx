@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 const types = [
   { emoji: "💇🏾‍♀️", name: "Hair salons", desc: "Braiding, styling, treatments" },
   { emoji: "💅🏾", name: "Nail studios", desc: "Manicure, pedicure, extensions" },
@@ -30,6 +32,15 @@ export function BusinessTypesSection() {
               <div className="mt-1 text-[13px] text-brand-ink/55">{t.desc}</div>
             </div>
           ))}
+        </div>
+
+        <div className="mt-10 text-center">
+          <Link
+            to="/for-salons"
+            className="inline-flex items-center gap-1.5 text-[15px] font-medium text-brand-purple transition-colors hover:text-brand-purple-deep"
+          >
+            Learn more about who Salon Magik is built for →
+          </Link>
         </div>
       </div>
     </section>

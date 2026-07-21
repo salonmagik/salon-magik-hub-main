@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { usePlans, usePlanFeatures, usePlanLimits } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
 import { useWaitlistMode } from "@/hooks/useFeatureFlags";
-import { SalonMagikLogo } from "@/components/SalonMagikLogo";
+import { MarketingLayout } from "@/components/MarketingLayout";
 import { cn } from "@shared/utils";
 
 const SUPPORTED_CURRENCIES = [
@@ -22,35 +22,9 @@ const salonAppUrl = (
   defaultSalonAppUrl
 ).replace(/\/$/, "");
 
-const faqs = [
-  {
-    q: "Is there a free trial?",
-    a: (trialDays: number) =>
-      `Yes! All plans include a ${trialDays}-day free trial. No credit card required to start.`,
-  },
-  {
-    q: "Can I change plans later?",
-    a: () => "Absolutely. Upgrade or downgrade anytime. Changes take effect on your next billing cycle.",
-  },
-  {
-    q: "What payment methods do you accept?",
-    a: () =>
-      "We accept all major credit cards. In Nigeria and Ghana we also support Paystack for local cards and bank transfers.",
-  },
-  {
-    q: "What are communication credits?",
-    a: () =>
-      "Credits are used for SMS and WhatsApp notifications to your clients. Each plan includes a monthly allocation, and you can purchase more if needed.",
-  },
-  {
-    q: "Do you offer refunds?",
-    a: () => "Yes. If you're not satisfied within the first 30 days, contact support for a full refund.",
-  },
-];
-
 function Check() {
   return (
-    <span className="mt-0.5 flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full bg-brand-purple text-[10px] text-brand-yellow">
+    <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full bg-brand-purple text-[10px] text-brand-yellow">
       ✓
     </span>
   );
@@ -59,7 +33,6 @@ function Check() {
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [currency, setCurrency] = useState("USD");
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { isWaitlistMode } = useWaitlistMode();
 
   const { data: plans, isLoading: plansLoading } = usePlans();
@@ -78,8 +51,8 @@ export default function PricingPage() {
     return row.monthly_price;
   };
 
-  const getPlanAnnualTotal = (planId: string) =>
-    pricing?.find((p) => p.plan_id === planId)?.annual_price ?? 0;
+  const getMonthlyPrice = (planId: string) =>
+    pricing?.find((p) => p.plan_id === planId)?.monthly_price ?? null;
 
   const getSavingsPct = (planId: string) => {
     const row = pricing?.find((p) => p.plan_id === planId);
@@ -88,18 +61,17 @@ export default function PricingPage() {
     return saving > 0 ? Math.round(saving) : null;
   };
 
+  const maxSavingsPct =
+    plans?.map((p) => getSavingsPct(p.id)).filter(Boolean).reduce((a, b) => Math.max(a!, b!), 0) ?? null;
+
   const getPlanFeatures = (planId: string) =>
     (features ?? []).filter((f) => f.plan_id === planId).sort((a, b) => a.sort_order - b.sort_order);
 
-  const getPlanLimit = (planId: string) =>
-    limits?.find((l) => l.plan_id === planId);
+  const getPlanLimit = (planId: string) => limits?.find((l) => l.plan_id === planId);
 
-  const formatAmount = (value: number | null | undefined) => {
-    if (value == null || Number.isNaN(Number(value))) return "0";
-    return Number(value).toLocaleString(undefined, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
+  const formatAmt = (v: number | null | undefined) => {
+    if (v == null) return "0";
+    return Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
   useEffect(() => {
@@ -108,64 +80,24 @@ export default function PricingPage() {
       setCurrency(saved);
       return;
     }
-
-    let isMounted = true;
+    let mounted = true;
     (async () => {
       try {
-        const response = await fetch("https://ipapi.co/json/", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) throw new Error("Geo lookup failed");
-        const geo = await response.json();
-        const code = String(geo?.country_code || geo?.country || "").toUpperCase();
+        const res = await fetch("https://ipapi.co/json/", { headers: { Accept: "application/json" } });
+        if (!res.ok) throw new Error();
+        const geo = await res.json();
+        const code = String(geo?.country_code || "").toUpperCase();
         const detected = code === "NG" ? "NGN" : code === "GH" ? "GHS" : "USD";
-        if (isMounted) {
-          setCurrency(detected);
-          localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, detected);
-        }
-      } catch {
-        if (isMounted) setCurrency("USD");
-      }
+        if (mounted) { setCurrency(detected); localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, detected); }
+      } catch { if (mounted) setCurrency("USD"); }
     })();
-    return () => { isMounted = false; };
+    return () => { mounted = false; };
   }, []);
 
   const symbol = getCurrencySymbol(currency);
 
   return (
-    <div className="min-h-screen bg-brand-cream">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 bg-brand-cream">
-        <div className="mx-auto flex max-w-[1180px] items-center justify-between px-8 py-[18px]">
-          <Link to="/">
-            <SalonMagikLogo size="md" />
-          </Link>
-          <div className="hidden items-center gap-9 md:flex">
-            <Link to="/pricing" className="text-[15px] font-medium text-brand-ink">Pricing</Link>
-            <Link to="/support" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Support</Link>
-          </div>
-          <div className="flex items-center gap-5">
-            {!isWaitlistMode && (
-              <>
-                <a
-                  href={`${salonAppUrl}/login`}
-                  className="hidden text-[15px] text-brand-ink transition-colors hover:text-brand-purple md:block"
-                >
-                  Log in
-                </a>
-                <a
-                  href={`${salonAppUrl}/signup`}
-                  className="rounded-full bg-brand-ink px-[22px] py-[11px] text-[14.5px] text-white transition-colors hover:bg-brand-purple"
-                >
-                  Start free
-                </a>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
-
+    <MarketingLayout>
       {/* Hero */}
       <section className="px-8 pb-0 pt-16 text-center">
         <div className="mx-auto max-w-[600px]">
@@ -183,21 +115,15 @@ export default function PricingPage() {
 
         {/* Toggles */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          {/* Currency */}
           <div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
             {SUPPORTED_CURRENCIES.map((c) => (
               <button
                 key={c.code}
                 type="button"
-                onClick={() => {
-                  setCurrency(c.code);
-                  localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, c.code);
-                }}
+                onClick={() => { setCurrency(c.code); localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, c.code); }}
                 className={cn(
                   "rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
-                  currency === c.code
-                    ? "bg-brand-purple text-white"
-                    : "text-brand-ink/60 hover:text-brand-ink",
+                  currency === c.code ? "bg-brand-purple text-white" : "text-brand-ink/60 hover:text-brand-ink",
                 )}
               >
                 {c.label}
@@ -205,7 +131,6 @@ export default function PricingPage() {
             ))}
           </div>
 
-          {/* Billing */}
           <div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
             {([false, true] as const).map((annual) => (
               <button
@@ -214,39 +139,31 @@ export default function PricingPage() {
                 onClick={() => setIsAnnual(annual)}
                 className={cn(
                   "rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
-                  isAnnual === annual
-                    ? "bg-brand-purple text-white"
-                    : "text-brand-ink/60 hover:text-brand-ink",
+                  isAnnual === annual ? "bg-brand-purple text-white" : "text-brand-ink/60 hover:text-brand-ink",
                 )}
               >
-                {annual ? "Annual" : "Monthly"}
-                {annual && (
-                  <span className="ml-1.5 inline-block rounded-full bg-brand-yellow/20 px-[7px] py-[1px] text-[11px] text-brand-purple-deep">
-                    save up to {getSavingsPct(plans?.[1]?.id ?? "") ?? "—"}%
-                  </span>
-                )}
+                {annual ? `Annual · save up to ${maxSavingsPct ?? "—"}%/yr` : "Monthly"}
               </button>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Plan cards */}
+      {/* Plan cards — same as PricingSection on landing */}
       <section className="px-8 pb-[80px] pt-[48px]">
         <div className="mx-auto max-w-[1180px]">
           {isLoading ? (
             <div className="grid grid-cols-1 gap-[22px] md:grid-cols-3">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-[500px] animate-pulse rounded-[20px] bg-white/60" />
-              ))}
+              {[0, 1, 2].map((i) => <div key={i} className="h-[500px] animate-pulse rounded-[20px] bg-white/60" />)}
             </div>
           ) : (
             <div className="grid grid-cols-1 items-stretch gap-[22px] md:grid-cols-3">
               {(plans ?? []).map((plan) => {
                 const price = getPlanPrice(plan.id);
-                const annualTotal = getPlanAnnualTotal(plan.id);
+                const monthlyPrice = getMonthlyPrice(plan.id);
                 const planFeatures = getPlanFeatures(plan.id);
                 const planLimit = getPlanLimit(plan.id);
+                const savingsPct = getSavingsPct(plan.id);
                 const isChain = plan.slug === "chain";
 
                 return (
@@ -261,7 +178,7 @@ export default function PricingPage() {
                   >
                     {plan.is_recommended && (
                       <span className="absolute -top-[13px] left-7 rounded-full bg-brand-purple px-3 py-[5px] text-[11.5px] tracking-[0.03em] text-white">
-                        Most popular
+                        Most set up for teams
                       </span>
                     )}
 
@@ -272,16 +189,16 @@ export default function PricingPage() {
                       {price != null ? (
                         <>
                           <div className="font-serif text-[40px] leading-none text-brand-ink">
-                            {symbol}{formatAmount(price)}
-                            <span className="font-sans text-[14px] text-brand-ink/50"> / mo</span>
+                            {symbol}{formatAmt(price)}
+                            <span className="font-sans text-[14px] text-brand-ink/50"> / month</span>
                           </div>
-                          {isAnnual && annualTotal > 0 ? (
-                            <div className="mt-1 text-[12.5px] text-brand-ink/45">
-                              {symbol}{formatAmount(annualTotal)} billed annually
+                          {isAnnual && savingsPct ? (
+                            <div className="mt-1.5 text-[12.5px] font-medium text-brand-yellow line-through decoration-brand-yellow/60">
+                              {symbol}{formatAmt(monthlyPrice)}/mo without annual
                             </div>
                           ) : (
                             <div className="mt-1 text-[12.5px] text-brand-ink/45">
-                              {isAnnual ? "—" : `Save up to ${getSavingsPct(plan.id) ?? "—"}% annually`}
+                              Save up to {savingsPct ?? "—"}% with annual billing
                             </div>
                           )}
                         </>
@@ -290,7 +207,6 @@ export default function PricingPage() {
                       )}
                     </div>
 
-                    {/* Limits */}
                     {planLimit && (
                       <div className="mt-5 rounded-[10px] bg-brand-lilac-bg px-4 py-3 text-[13px] text-brand-ink/70">
                         <div>{planLimit.max_locations === 1 ? "1 location" : `${planLimit.max_locations} locations`}</div>
@@ -339,7 +255,7 @@ export default function PricingPage() {
                             : "border-[1.5px] border-brand-purple text-brand-purple hover:bg-brand-lilac-bg",
                         )}
                       >
-                        Start free trial
+                        Start free
                       </a>
                     )}
                   </div>
@@ -347,7 +263,6 @@ export default function PricingPage() {
               })}
             </div>
           )}
-
         </div>
       </section>
 
@@ -372,13 +287,7 @@ export default function PricingPage() {
                     Feature
                   </th>
                   {(plans ?? []).map((plan) => (
-                    <th
-                      key={plan.id}
-                      className={cn(
-                        "pb-6 text-center text-[14px] font-medium",
-                        plan.is_recommended ? "text-brand-purple" : "text-brand-ink",
-                      )}
-                    >
+                    <th key={plan.id} className={cn("pb-6 text-center text-[14px] font-medium", plan.is_recommended ? "text-brand-purple" : "text-brand-ink")}>
                       {plan.name}
                       {plan.is_recommended && (
                         <span className="ml-2 inline-block rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] text-brand-purple">
@@ -390,13 +299,10 @@ export default function PricingPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-ink/[0.06]">
-                {/* Capacity rows from DB limits */}
                 {!isLoading && (
                   <>
                     <tr className="bg-brand-ink/[0.02]">
-                      <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">
-                        Capacity
-                      </td>
+                      <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">Capacity</td>
                     </tr>
                     <tr>
                       <td className="py-4 text-[14.5px] text-brand-ink/75">Locations</td>
@@ -415,13 +321,7 @@ export default function PricingPage() {
                         const lim = getPlanLimit(plan.id);
                         return (
                           <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
-                            {lim
-                              ? lim.max_staff === 1
-                                ? "Owner only"
-                                : lim.max_staff >= 999
-                                  ? "Unlimited"
-                                  : `Up to ${lim.max_staff}`
-                              : "—"}
+                            {lim ? lim.max_staff === 1 ? "Owner only" : lim.max_staff >= 999 ? "Unlimited" : `Up to ${lim.max_staff}` : "—"}
                           </td>
                         );
                       })}
@@ -430,15 +330,10 @@ export default function PricingPage() {
                       <td className="py-4 text-[14.5px] text-brand-ink/75">Messages / month</td>
                       {(plans ?? []).map((plan) => {
                         const lim = getPlanLimit(plan.id);
-                        return (
-                          <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
-                            {lim ? lim.monthly_messages.toLocaleString() : "—"}
-                          </td>
-                        );
+                        return <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">{lim ? lim.monthly_messages.toLocaleString() : "—"}</td>;
                       })}
                     </tr>
 
-                    {/* Feature category rows */}
                     {[
                       {
                         category: "Bookings",
@@ -480,9 +375,7 @@ export default function PricingPage() {
                       return (
                         <Fragment key={category}>
                           <tr className="bg-brand-ink/[0.02]">
-                            <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">
-                              {category}
-                            </td>
+                            <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">{category}</td>
                           </tr>
                           {rows.map((row) => (
                             <tr key={row.label}>
@@ -491,11 +384,9 @@ export default function PricingPage() {
                                 const val = slug === "solo" ? row.solo : slug === "studio" ? row.studio : row.chain;
                                 return (
                                   <td key={slug} className="py-4 text-center">
-                                    {val ? (
-                                      <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">✓</span>
-                                    ) : (
-                                      <span className="text-[20px] text-brand-ink/20">—</span>
-                                    )}
+                                    {val
+                                      ? <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">✓</span>
+                                      : <span className="text-[20px] text-brand-ink/20">—</span>}
                                   </td>
                                 );
                               })}
@@ -520,61 +411,29 @@ export default function PricingPage() {
               <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
               Add-ons
             </div>
-            <h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
-              Extend your plan
-            </h2>
-            <p className="mt-2 text-[16px] text-brand-ink/55">
-              Optional extras you can add to any plan, or unlock as your business grows.
-            </p>
+            <h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">Extend your plan</h2>
+            <p className="mt-2 text-[16px] text-brand-ink/55">Optional extras you can add to any plan, or unlock as your business grows.</p>
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             {[
-              {
-                name: "Extra communication credits",
-                desc: "Top up your SMS and notification credits when your monthly allocation runs low.",
-                price: "Starting from ₵5 / bundle",
-                available: true,
-              },
-              {
-                name: "Location check-in for staff",
-                desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.",
-                available: false,
-              },
-              {
-                name: "WhatsApp messaging",
-                desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.",
-                available: false,
-              },
-              {
-                name: "Custom booking domain",
-                desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).",
-                available: false,
-              },
+              { name: "Extra communication credits", desc: "Top up your SMS and notification credits when your monthly allocation runs low.", price: "Starting from ₵5 / bundle", available: true },
+              { name: "Location check-in for staff", desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.", available: false },
+              { name: "WhatsApp messaging", desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.", available: false },
+              { name: "Custom booking domain", desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).", available: false },
             ].map((addon) => (
               <div
                 key={addon.name}
-                className={cn(
-                  "rounded-[18px] border p-6",
-                  addon.available
-                    ? "border-brand-ink/8 bg-white"
-                    : "border-dashed border-brand-ink/10 bg-brand-cream-dim",
-                )}
+                className={cn("rounded-[18px] border p-6", addon.available ? "border-brand-ink/8 bg-white" : "border-dashed border-brand-ink/10 bg-brand-cream-dim")}
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div className="font-serif text-[18px] font-medium text-brand-ink">{addon.name}</div>
-                  {addon.available ? (
-                    <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700">
-                      Available
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full bg-brand-yellow/20 px-3 py-1 text-[11.5px] font-medium text-brand-purple">
-                      Coming soon
-                    </span>
-                  )}
+                  {addon.available
+                    ? <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700">Available</span>
+                    : <span className="shrink-0 rounded-full bg-brand-yellow/20 px-3 py-1 text-[11.5px] font-medium text-brand-purple">Coming soon</span>}
                 </div>
                 <p className="text-[14px] text-brand-ink/55">{addon.desc}</p>
-                {addon.price && (
+                {"price" in addon && addon.price && (
                   <p className="mt-3 text-[13.5px] font-medium text-brand-purple">{addon.price}</p>
                 )}
               </div>
@@ -583,56 +442,27 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* FAQ */}
-      {/* <section className="bg-brand-cream-dim px-8 py-[80px]">
-        <div className="mx-auto max-w-[720px]">
-          <h2 className="mb-10 font-serif text-[clamp(24px,3vw,32px)] font-medium text-brand-ink">
-            Common questions
-          </h2>
-          <div className="divide-y divide-brand-ink/8">
-            {faqs.map((faq, i) => (
-              <div key={faq.q} className="py-5">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between text-left text-[16px] font-medium text-brand-ink"
-                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                >
-                  {faq.q}
-                  <span
-                    className={cn(
-                      "ml-4 flex-shrink-0 text-[20px] text-brand-purple transition-transform duration-200",
-                      openFaq === i ? "rotate-45" : "",
-                    )}
-                  >
-                    +
-                  </span>
-                </button>
-                <div
-                  className={cn(
-                    "overflow-hidden text-[15px] leading-relaxed text-brand-ink/60 transition-all duration-200",
-                    openFaq === i ? "mt-3 max-h-40" : "max-h-0",
-                  )}
-                >
-                  {faq.a(trialDays)}
-                </div>
-              </div>
-            ))}
+      {/* FAQ teaser */}
+      <section className="bg-brand-cream-dim px-8 py-[80px] text-center">
+        <div className="mx-auto max-w-[520px]">
+          <h2 className="font-serif text-[clamp(22px,3vw,30px)] font-medium text-brand-ink">Still have questions?</h2>
+          <p className="mt-3 text-[15px] text-brand-ink/55">We've answered the most common ones. If yours isn't there, reach out and we'll get back to you.</p>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              to="/faq"
+              className="rounded-full border-[1.5px] border-brand-purple px-7 py-[13px] text-[15px] font-medium text-brand-purple transition-colors hover:bg-brand-lilac-bg"
+            >
+              View all FAQs
+            </Link>
+            <a
+              href="mailto:hello@salonmagik.com"
+              className="rounded-full bg-brand-ink px-7 py-[13px] text-[15px] font-medium text-white transition-colors hover:bg-brand-purple"
+            >
+              Contact support
+            </a>
           </div>
         </div>
-      </section> */}
-
-      {/* Footer */}
-      <footer className="bg-brand-cream-dim px-8 py-8">
-        <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-4">
-          <span className="font-serif text-[18px] font-semibold text-brand-ink">Salon Magik</span>
-          <div className="flex gap-6 text-[14px] text-brand-ink/60">
-            <Link to="/support" className="transition-colors hover:text-brand-ink">Support</Link>
-            <Link to="/terms" className="transition-colors hover:text-brand-ink">Terms</Link>
-            <Link to="/privacy" className="transition-colors hover:text-brand-ink">Privacy</Link>
-          </div>
-          <p className="text-[13px] text-brand-ink/40">© {new Date().getFullYear()} Salon Magik</p>
-        </div>
-      </footer>
-    </div>
+      </section>
+    </MarketingLayout>
   );
 }

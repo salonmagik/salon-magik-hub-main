@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { cn } from "@shared/utils";
 
 const faqs = [
@@ -62,6 +63,15 @@ export function FAQSection() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="mt-10 text-center">
+          <Link
+            to="/faq"
+            className="inline-flex items-center gap-1.5 text-[15px] font-medium text-brand-purple transition-colors hover:text-brand-purple-deep"
+          >
+            View more questions →
+          </Link>
         </div>
       </div>
     </section>

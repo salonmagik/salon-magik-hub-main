@@ -114,6 +114,37 @@
   small { @apply text-sm leading-normal; }
 }
 
+/* ── Hero card float animations (staggered, different amplitude) ── */
+@keyframes hero-float-a {
+  0%, 100% { transform: rotate(-7deg) translateY(0px); }
+  50%       { transform: rotate(-7deg) translateY(-10px); }
+}
+@keyframes hero-float-b {
+  0%, 100% { transform: rotate(5deg) translateY(0px); }
+  50%       { transform: rotate(5deg) translateY(-14px); }
+}
+@keyframes hero-float-c {
+  0%, 100% { transform: rotate(-3deg) translateY(0px); }
+  50%       { transform: rotate(-3deg) translateY(-8px); }
+}
+.hero-card-a { animation: hero-float-a 5.2s ease-in-out infinite; }
+.hero-card-b { animation: hero-float-b 6.1s ease-in-out infinite; animation-delay: -1.8s; }
+.hero-card-c { animation: hero-float-c 4.8s ease-in-out infinite; animation-delay: -3.2s; }
+
+/* ── Hero card content fade transition ── */
+@keyframes hero-card-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hero-card-content { animation: hero-card-fade-in 0.4s ease-out; }
+
+/* ── Page reveal on first load ── */
+@keyframes page-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.page-reveal { animation: page-reveal 0.45s ease-out forwards; }
+
 /* ── Footer morph animation ── */
 @keyframes morphCycle {
   0%   { opacity: 0; transform: scale(0.82) rotate(-8deg); }

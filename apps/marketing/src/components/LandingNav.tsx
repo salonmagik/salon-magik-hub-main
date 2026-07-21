@@ -26,7 +26,7 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
               <circle cx="16" cy="16" r="2.3" fill="#fff" />
             </svg>
           </span>
-          <span className="font-serif text-[22px] font-semibold tracking-[0.3px] text-brand-ink">
+          <span className="font-sans text-[19px] font-semibold tracking-[0.2px] text-brand-ink">
             Salon Magik
           </span>
         </div>
@@ -34,6 +34,7 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
         {/* Nav links — hidden on mobile */}
         <div className="hidden items-center gap-9 md:flex">
           <Link to="/pricing" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Pricing</Link>
+          <Link to="/faq" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">FAQ</Link>
           <Link to="/support" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Support</Link>
         </div>
 

@@ -11,3 +11,4 @@ export { CTASection } from "./CTASection";
 export { LandingFooter } from "./LandingFooter";
 export { WaitlistDialog } from "./WaitlistDialog";
 export { SalonMagikLogo } from "./SalonMagikLogo";
+export { MarketingLayout } from "./MarketingLayout";

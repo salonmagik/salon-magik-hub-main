@@ -212,3 +212,17 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Route-loading lemniscate animation ── */
+@keyframes morphCycle {
+  0%   { opacity: 0; transform: scale(0.82) rotate(-8deg); }
+  4%   { opacity: 1; transform: scale(1) rotate(0deg); }
+  18%  { opacity: 1; transform: scale(1) rotate(0deg); }
+  22%  { opacity: 0; transform: scale(0.82) rotate(8deg); }
+  100% { opacity: 0; }
+}
+.morph-icon {
+  position: absolute; inset: 0;
+  opacity: 0;
+  animation: morphCycle 12.5s infinite;
+}

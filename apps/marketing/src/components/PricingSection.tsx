@@ -103,7 +103,9 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
                     : "text-brand-ink/60 hover:text-brand-ink",
                 )}
               >
-                {annual ? "Annual" : "Monthly"}
+                {annual
+                  ? `Annual · save up to ${plans?.map((p) => getSavingsPct(p.id)).filter(Boolean).reduce((a, b) => Math.max(a!, b!), 0) ?? "—"}%/yr`
+                  : "Monthly"}
               </button>
             ))}
           </div>
@@ -151,8 +153,10 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
                           <span className="font-sans text-[14px] text-brand-ink/50"> / month</span>
                         </div>
                         {isAnnual && savingsPct ? (
-                          <div className="mt-1 text-[12.5px] text-brand-ink/45">
-                            Save up to {savingsPct}% vs monthly
+                          <div className="mt-1.5 text-[12.5px]">
+                            <span className="font-medium text-brand-yellow line-through decoration-brand-yellow/60">
+                              {symbol}{pricing?.find((p) => p.plan_id === plan.id)?.monthly_price?.toLocaleString()}/mo without annual
+                            </span>
                           </div>
                         ) : (
                           <div className="mt-1 text-[12.5px] text-brand-ink/45">

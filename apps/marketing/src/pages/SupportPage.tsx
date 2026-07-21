@@ -1,35 +1,12 @@
 import { Link } from "react-router-dom";
-import { SalonMagikLogo } from "@/components/SalonMagikLogo";
+import { MarketingLayout } from "@/components/MarketingLayout";
 
 export default function SupportPage() {
   return (
-    <div className="min-h-screen bg-brand-cream">
-      {/* Nav */}
-      <nav className="sticky top-0 z-50 bg-brand-cream">
-        <div className="mx-auto flex max-w-[1180px] items-center justify-between px-8 py-[18px]">
-          <Link to="/">
-            <SalonMagikLogo size="md" />
-          </Link>
-          <div className="hidden items-center gap-9 md:flex">
-            <Link to="/pricing" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Pricing</Link>
-            <Link to="/support" className="text-[15px] font-medium text-brand-ink">Support</Link>
-          </div>
-          <a
-            href="https://app.salonmagik.com/login"
-            className="rounded-full bg-brand-ink px-[22px] py-[11px] text-[14.5px] text-white transition-colors hover:bg-brand-purple"
-          >
-            Log in
-          </a>
-        </div>
-      </nav>
-
-      {/* Content */}
+    <MarketingLayout>
       <section className="px-8 py-16">
         <div className="mx-auto max-w-[720px]">
-          <Link
-            to="/"
-            className="mb-8 inline-flex items-center gap-1.5 text-[14px] text-brand-ink/50 transition-colors hover:text-brand-ink"
-          >
+          <Link to="/" className="mb-8 inline-flex items-center gap-1.5 text-[14px] text-brand-ink/50 transition-colors hover:text-brand-ink">
             ← Back to home
           </Link>
 
@@ -40,7 +17,6 @@ export default function SupportPage() {
             We're here to help you get the most out of Salon Magik.
           </p>
 
-          {/* Contact cards */}
           <div className="mt-10 grid gap-5 sm:grid-cols-2">
             <div className="rounded-[18px] border border-brand-ink/8 bg-white p-6">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[10px] bg-brand-lilac-bg">
@@ -77,22 +53,20 @@ export default function SupportPage() {
             </div>
           </div>
 
-          {/* Response times */}
           <div className="mt-12">
             <h2 className="mb-5 font-serif text-[22px] font-medium text-brand-ink">Response times</h2>
-            <div className="rounded-[14px] bg-brand-lilac-bg px-6 py-5 text-[14px] leading-relaxed text-brand-ink/70 space-y-2">
+            <div className="space-y-2 rounded-[14px] bg-brand-lilac-bg px-6 py-5 text-[14px] leading-relaxed text-brand-ink/70">
               <p><span className="font-medium text-brand-ink">Email:</span> Within 24 hours on business days</p>
               <p><span className="font-medium text-brand-ink">WhatsApp:</span> Within 2 hours (9 am – 6 pm WAT, Mon – Fri)</p>
               <p><span className="font-medium text-brand-ink">Urgent:</span> Billing and access issues are always prioritised</p>
             </div>
           </div>
 
-          {/* Before you write */}
           <div className="mt-10">
             <h2 className="mb-5 font-serif text-[22px] font-medium text-brand-ink">Before you write in</h2>
             <ul className="space-y-3 text-[14.5px] text-brand-ink/65">
               {[
-                "Check if your question is covered in our FAQ on the pricing page",
+                "Check if your question is in our FAQ",
                 "Make sure you're using an up-to-date browser",
                 "Try logging out and back in for odd behaviour",
                 "Include your salon name and account email so we can help faster",
@@ -103,22 +77,12 @@ export default function SupportPage() {
                 </li>
               ))}
             </ul>
+            <Link to="/faq" className="mt-6 inline-block text-[14px] font-medium text-brand-purple hover:underline">
+              Browse all FAQs →
+            </Link>
           </div>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="bg-brand-cream-dim px-8 py-8">
-        <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-4">
-          <span className="font-serif text-[18px] font-semibold text-brand-ink">Salon Magik</span>
-          <div className="flex gap-6 text-[14px] text-brand-ink/60">
-            <Link to="/pricing" className="transition-colors hover:text-brand-ink">Pricing</Link>
-            <Link to="/terms" className="transition-colors hover:text-brand-ink">Terms</Link>
-            <Link to="/privacy" className="transition-colors hover:text-brand-ink">Privacy</Link>
-          </div>
-          <p className="text-[13px] text-brand-ink/40">© {new Date().getFullYear()} Salon Magik</p>
-        </div>
-      </footer>
-    </div>
+    </MarketingLayout>
   );
 }

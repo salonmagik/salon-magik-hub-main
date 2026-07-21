@@ -76,7 +76,7 @@ export function LandingFooter() {
 
           {/* Large wordmark */}
           <div
-            className="font-serif text-[clamp(48px,9vw,108px)] font-medium leading-none"
+            className="font-questrial text-[clamp(48px,9vw,108px)] font-medium leading-none"
             style={{
               background: "linear-gradient(180deg, #ffffff 0%, #B8A9D9 55%, #F4C84E 100%)",
               WebkitBackgroundClip: "text",
@@ -87,14 +87,14 @@ export function LandingFooter() {
             Salon Magik
           </div>
           <p className="mt-[18px] text-[14px] text-white/45">
-            Bookings, staff, payments and messaging — all in one place.
+            Bookings, staff, payments and messaging, all in one place.
           </p>
         </div>
 
         {/* Links */}
         <div className="grid grid-cols-2 gap-10 pb-[50px] pt-[50px] sm:grid-cols-[1.6fr_1fr_1fr]">
           <div className="col-span-2 sm:col-span-1">
-            <div className="mb-3.5 flex items-center gap-2 font-serif text-[20px] text-white">
+            <div className="mb-3.5 flex items-center gap-2 font-questrial text-[20px] text-white">
               <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
                 <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
                   <path
@@ -136,7 +136,7 @@ export function LandingFooter() {
 
         {/* Bottom bar */}
         <div className="flex flex-wrap items-center justify-between gap-3.5 border-t border-white/5 py-[26px] text-[12.5px]">
-          <span>&copy; {new Date().getFullYear()} Salon Magik. All rights reserved.</span>
+          <span>&copy; Salon Magik, a product of The Gray Avenue LTD</span>
         </div>
       </div>
     </footer>

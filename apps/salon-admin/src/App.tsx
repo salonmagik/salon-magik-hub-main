@@ -4,7 +4,6 @@ import { TooltipProvider } from "@ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
@@ -63,7 +62,25 @@ const queryClient = new QueryClient({
 function RouteLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="relative h-[52px] w-[52px]">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="morph-icon"
+            style={{ animationDelay: `${-(i * 2.5)}s` }}
+          >
+            <svg viewBox="0 0 32 32" fill="none" className="h-full w-full">
+              <path
+                d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
+                stroke="#F4C84E"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              <circle cx="16" cy="16" r="2.1" fill="hsl(var(--primary))" />
+            </svg>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
