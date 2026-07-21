@@ -31,15 +31,19 @@ import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
 
-function SegmentProgress({ current, total }: { current: number; total: number }) {
+function SegmentProgress({ currentIndex, total }: { currentIndex: number; total: number }) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-2">
       {Array.from({ length: total }).map((_, i) => (
         <div
           key={i}
           className={cn(
-            "h-[3px] flex-1 rounded-full transition-colors duration-300",
-            i < current ? "bg-[#F4C84E]" : "bg-black/10",
+            "h-[4px] flex-1 rounded-full transition-colors duration-300",
+            i < currentIndex
+              ? "bg-[#2E1F4E]"
+              : i === currentIndex
+                ? "bg-[#F4C84E]"
+                : "bg-black/[0.08]",
           )}
         />
       ))}
@@ -560,23 +564,27 @@ export default function OnboardingPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F8F6F2]">
-      {/* Top bar */}
-      <div className="bg-white px-8 py-5 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
-        <div className="mx-auto flex max-w-[560px] flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <SalonMagikLogo size="sm" />
-            <span className="text-[13px] text-black/40">
-              Step {currentStepIndex + 1} of {totalSteps}
-            </span>
-          </div>
-          <SegmentProgress current={currentStepIndex + 1} total={totalSteps} />
+      {/* Top nav */}
+      <div className="flex items-center justify-between px-8 py-5">
+        <SalonMagikLogo size="sm" />
+        <div className="flex items-center gap-1 text-[13px] text-black/45">
+          <span>Step {currentStepIndex + 1} of {totalSteps}</span>
+          <span className="mx-1">·</span>
+          <a href="/login" className="text-[#2E1F4E] hover:underline">
+            Already have an account? Log in
+          </a>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex flex-1 items-start justify-center px-4 py-10">
-        <div className="w-full max-w-[560px]">
-          <div className="rounded-[20px] border border-black/[0.06] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
+      {/* Wizard */}
+      <div className="mx-auto w-full max-w-[560px] px-7 pb-20 pt-2">
+        {/* Stepper */}
+        <div className="mb-8">
+          <SegmentProgress currentIndex={currentStepIndex} total={totalSteps} />
+        </div>
+
+        {/* Step content — no white card wrapper, sits directly on cream */}
+        <div>
 
             {step === "role" && (
               <RoleStep selectedRole={selectedRole} onRoleSelect={setSelectedRole} />
@@ -687,49 +695,49 @@ export default function OnboardingPage() {
               />
             )}
 
-            {/* Navigation */}
-            <div className="flex items-center justify-between border-t border-black/[0.06] px-6 py-5">
-              {currentStepIndex > 0 ? (
-                <button
-                  type="button"
-                  onClick={prevStep}
-                  disabled={isLoading}
-                  className="flex items-center gap-1.5 text-[14px] text-black/45 transition-colors hover:text-black/70 disabled:opacity-40"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back
-                </button>
-              ) : (
-                <div />
-              )}
-
+          {/* Navigation */}
+          <div className="mt-8 flex items-center justify-between">
+            {currentStepIndex > 0 ? (
               <button
                 type="button"
-                onClick={nextStep}
-                disabled={!canProceed() || isLoading}
-                className={cn(
-                  "flex items-center gap-2 rounded-full px-6 py-[11px] text-[14.5px] font-medium transition-colors",
-                  canProceed() && !isLoading
-                    ? "bg-[#2E1F4E] text-white hover:bg-[#3A2660]"
-                    : "cursor-not-allowed bg-black/10 text-black/30",
-                )}
+                onClick={prevStep}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 rounded-full border border-black/[0.1] bg-white px-5 py-[10px] text-[14px] text-black/55 transition-colors hover:border-black/20 hover:text-black/80 disabled:opacity-40"
               >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Setting up...
-                  </>
-                ) : step === "review" ? (
-                  "Complete setup"
-                ) : (
-                  <>
-                    Continue
-                    <ArrowRight className="h-4 w-4" />
-                  </>
-                )}
+                <ArrowLeft className="h-4 w-4" />
+                Back
               </button>
-            </div>
+            ) : (
+              <div />
+            )}
+
+            <button
+              type="button"
+              onClick={nextStep}
+              disabled={!canProceed() || isLoading}
+              className={cn(
+                "flex items-center gap-2 rounded-full px-6 py-[11px] text-[14.5px] font-medium transition-colors",
+                canProceed() && !isLoading
+                  ? "bg-[#2E1F4E] text-white hover:bg-[#3A2660]"
+                  : "cursor-not-allowed bg-black/10 text-black/30",
+              )}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Setting up...
+                </>
+              ) : step === "review" ? (
+                "Complete setup"
+              ) : (
+                <>
+                  Continue
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
           </div>
+          <p className="mt-5 text-center text-[12.5px] text-black/35">No credit card needed · takes about 3 minutes</p>
         </div>
       </div>
     </div>

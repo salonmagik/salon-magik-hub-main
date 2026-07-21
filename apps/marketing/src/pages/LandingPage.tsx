@@ -23,46 +23,52 @@ export default function LandingPage() {
   const [geoInterestSource, setGeoInterestSource] = useState<"hero_cta" | "footer_cta" | "launch_section">("hero_cta");
 
   return (
-    <div className="min-h-screen bg-brand-cream">
-      <LandingNav
-        isWaitlistMode={isWaitlistMode}
-        isLoading={isLoading}
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <LandingHero
-        isWaitlistMode={isWaitlistMode}
-        isLoading={isLoading}
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <CountryLaunchStrip
-        isEnabled={isGeoInterestEnabled}
-        onOpenInterest={() => {
-          setGeoInterestSource("launch_section");
-          setGeoInterestOpen(true);
-        }}
-      />
-      <FeaturesSection />
-      <PricingSection
-        isWaitlistMode={isWaitlistMode}
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <BusinessTypesSection />
-      <SocialProof />
-      <PeopleSection />
-      <FAQSection />
-      <CTASection
-        isWaitlistMode={isWaitlistMode}
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <LandingFooter />
+		<div className="min-h-screen bg-brand-cream">
+			<LandingNav
+				isWaitlistMode={isWaitlistMode}
+				isLoading={isLoading}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+			<LandingHero
+				isWaitlistMode={isWaitlistMode}
+				isLoading={isLoading}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+			<CountryLaunchStrip
+				isEnabled={isGeoInterestEnabled}
+				onOpenInterest={() => {
+					setGeoInterestSource("launch_section");
+					setGeoInterestOpen(true);
+				}}
+			/>
+			<SocialProof />
+			<BusinessTypesSection />
+			<FeaturesSection />
+			<PricingSection
+				isWaitlistMode={isWaitlistMode}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
 
-      <WaitlistDialog open={waitlistOpen} onOpenChange={setWaitlistOpen} mode="waitlist" source="footer_cta" />
-      <WaitlistDialog
-        open={geoInterestOpen}
-        onOpenChange={setGeoInterestOpen}
-        mode="interest"
-        source={geoInterestSource}
-      />
-    </div>
-  );
+			<PeopleSection />
+			<FAQSection />
+			<CTASection
+				isWaitlistMode={isWaitlistMode}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+			<LandingFooter />
+
+			<WaitlistDialog
+				open={waitlistOpen}
+				onOpenChange={setWaitlistOpen}
+				mode="waitlist"
+				source="footer_cta"
+			/>
+			<WaitlistDialog
+				open={geoInterestOpen}
+				onOpenChange={setGeoInterestOpen}
+				mode="interest"
+				source={geoInterestSource}
+			/>
+		</div>
+	);
 }

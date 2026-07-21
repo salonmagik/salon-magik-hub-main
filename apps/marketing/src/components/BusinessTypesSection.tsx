@@ -15,7 +15,7 @@ export function BusinessTypesSection() {
             Who it's for
           </div>
           <h2 className="font-serif text-[clamp(26px,3.5vw,36px)] font-medium leading-[1.18] tracking-[-0.3px] text-brand-ink">
-            Built for every kind of beauty business.
+            Built for every beauty business.
           </h2>
         </div>
 

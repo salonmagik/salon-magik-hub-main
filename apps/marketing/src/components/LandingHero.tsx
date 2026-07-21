@@ -10,14 +10,13 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
 
   return (
     <header
-      className="relative overflow-hidden bg-brand-purple pb-0 pt-24"
+      className="relative overflow-hidden bg-brand-purple pb-6 pt-24"
       style={{
         backgroundImage:
           "radial-gradient(circle at 82% 8%, rgba(244,200,78,0.10), transparent 45%), radial-gradient(circle at 8% 92%, rgba(184,169,217,0.12), transparent 40%)",
       }}
     >
       <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-10 px-8 md:grid-cols-[1.05fr_0.95fr]">
-        {/* Copy */}
         <div>
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-yellow/35 px-[14px] py-[7px] text-[13px] uppercase tracking-[0.06em] text-brand-yellow">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow" />
@@ -58,9 +57,9 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
             )}
           </div>
 
-          <p className="mt-6 text-[13.5px] text-white/50">
+          {/* <p className="mt-3 text-[13.5px] text-white/50">
             Built for salons, spas and barbershops across Ghana and Nigeria
-          </p>
+          </p> */}
         </div>
 
         {/* Card stack */}

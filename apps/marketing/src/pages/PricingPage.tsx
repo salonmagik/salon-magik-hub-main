@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { Link } from "react-router-dom";
 import { usePlans, usePlanFeatures, usePlanLimits } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
@@ -351,8 +351,240 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* Comparison table */}
       <section className="bg-brand-cream-dim px-8 py-[80px]">
+        <div className="mx-auto max-w-[1180px]">
+          <div className="mb-12 text-center">
+            <div className="mb-3 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+              <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
+              Compare plans
+            </div>
+            <h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
+              What's included in each plan
+            </h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse">
+              <thead>
+                <tr>
+                  <th className="w-[42%] pb-6 text-left text-[13px] font-medium uppercase tracking-[0.06em] text-brand-ink/40">
+                    Feature
+                  </th>
+                  {(plans ?? []).map((plan) => (
+                    <th
+                      key={plan.id}
+                      className={cn(
+                        "pb-6 text-center text-[14px] font-medium",
+                        plan.is_recommended ? "text-brand-purple" : "text-brand-ink",
+                      )}
+                    >
+                      {plan.name}
+                      {plan.is_recommended && (
+                        <span className="ml-2 inline-block rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] text-brand-purple">
+                          Popular
+                        </span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-brand-ink/[0.06]">
+                {/* Capacity rows from DB limits */}
+                {!isLoading && (
+                  <>
+                    <tr className="bg-brand-ink/[0.02]">
+                      <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">
+                        Capacity
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-4 text-[14.5px] text-brand-ink/75">Locations</td>
+                      {(plans ?? []).map((plan) => {
+                        const lim = getPlanLimit(plan.id);
+                        return (
+                          <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
+                            {lim ? (lim.max_locations > 1 ? `Up to ${lim.max_locations}` : "1") : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td className="py-4 text-[14.5px] text-brand-ink/75">Staff accounts</td>
+                      {(plans ?? []).map((plan) => {
+                        const lim = getPlanLimit(plan.id);
+                        return (
+                          <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
+                            {lim
+                              ? lim.max_staff === 1
+                                ? "Owner only"
+                                : lim.max_staff >= 999
+                                  ? "Unlimited"
+                                  : `Up to ${lim.max_staff}`
+                              : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                    <tr>
+                      <td className="py-4 text-[14.5px] text-brand-ink/75">Messages / month</td>
+                      {(plans ?? []).map((plan) => {
+                        const lim = getPlanLimit(plan.id);
+                        return (
+                          <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
+                            {lim ? lim.monthly_messages.toLocaleString() : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+
+                    {/* Feature category rows */}
+                    {[
+                      {
+                        category: "Bookings",
+                        rows: [
+                          { label: "Online booking page", solo: true, studio: true, chain: true },
+                          { label: "Client reminders (SMS)", solo: true, studio: true, chain: true },
+                          { label: "Appointment management", solo: true, studio: true, chain: true },
+                          { label: "Package & voucher sales", solo: true, studio: true, chain: true },
+                          { label: "Recurring bookings", solo: false, studio: true, chain: true },
+                        ],
+                      },
+                      {
+                        category: "Business",
+                        rows: [
+                          { label: "Services & products catalog", solo: true, studio: true, chain: true },
+                          { label: "Payment tracking", solo: true, studio: true, chain: true },
+                          { label: "Sales reports", solo: true, studio: true, chain: true },
+                          { label: "Staff performance reports", solo: false, studio: true, chain: true },
+                          { label: "Multi-location dashboard", solo: false, studio: false, chain: true },
+                        ],
+                      },
+                      {
+                        category: "Team",
+                        rows: [
+                          { label: "Staff role management", solo: false, studio: true, chain: true },
+                          { label: "Permission controls", solo: false, studio: true, chain: true },
+                        ],
+                      },
+                      {
+                        category: "Support",
+                        rows: [
+                          { label: "Email & chat support", solo: true, studio: true, chain: true },
+                          { label: "Priority support", solo: false, studio: false, chain: true },
+                          { label: "Dedicated onboarding", solo: false, studio: false, chain: true },
+                        ],
+                      },
+                    ].map(({ category, rows }) => {
+                      const planSlugs = (plans ?? []).map((p) => p.slug);
+                      return (
+                        <Fragment key={category}>
+                          <tr className="bg-brand-ink/[0.02]">
+                            <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">
+                              {category}
+                            </td>
+                          </tr>
+                          {rows.map((row) => (
+                            <tr key={row.label}>
+                              <td className="py-4 text-[14.5px] text-brand-ink/75">{row.label}</td>
+                              {planSlugs.map((slug) => {
+                                const val = slug === "solo" ? row.solo : slug === "studio" ? row.studio : row.chain;
+                                return (
+                                  <td key={slug} className="py-4 text-center">
+                                    {val ? (
+                                      <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">✓</span>
+                                    ) : (
+                                      <span className="text-[20px] text-brand-ink/20">—</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
+                  </>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* Add-ons */}
+      <section className="px-8 py-[80px]">
+        <div className="mx-auto max-w-[1180px]">
+          <div className="mb-10">
+            <div className="mb-3 flex items-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+              <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
+              Add-ons
+            </div>
+            <h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
+              Extend your plan
+            </h2>
+            <p className="mt-2 text-[16px] text-brand-ink/55">
+              Optional extras you can add to any plan, or unlock as your business grows.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {[
+              {
+                name: "Extra communication credits",
+                desc: "Top up your SMS and notification credits when your monthly allocation runs low.",
+                price: "Starting from ₵5 / bundle",
+                available: true,
+              },
+              {
+                name: "Location check-in for staff",
+                desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.",
+                available: false,
+              },
+              {
+                name: "WhatsApp messaging",
+                desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.",
+                available: false,
+              },
+              {
+                name: "Custom booking domain",
+                desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).",
+                available: false,
+              },
+            ].map((addon) => (
+              <div
+                key={addon.name}
+                className={cn(
+                  "rounded-[18px] border p-6",
+                  addon.available
+                    ? "border-brand-ink/8 bg-white"
+                    : "border-dashed border-brand-ink/10 bg-brand-cream-dim",
+                )}
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="font-serif text-[18px] font-medium text-brand-ink">{addon.name}</div>
+                  {addon.available ? (
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700">
+                      Available
+                    </span>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-brand-yellow/20 px-3 py-1 text-[11.5px] font-medium text-brand-purple">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
+                <p className="text-[14px] text-brand-ink/55">{addon.desc}</p>
+                {addon.price && (
+                  <p className="mt-3 text-[13.5px] font-medium text-brand-purple">{addon.price}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      {/* <section className="bg-brand-cream-dim px-8 py-[80px]">
         <div className="mx-auto max-w-[720px]">
           <h2 className="mb-10 font-serif text-[clamp(24px,3vw,32px)] font-medium text-brand-ink">
             Common questions
@@ -387,7 +619,7 @@ export default function PricingPage() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Footer */}
       <footer className="bg-brand-cream-dim px-8 py-8">
