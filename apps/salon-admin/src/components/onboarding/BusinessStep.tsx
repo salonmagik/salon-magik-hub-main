@@ -1,9 +1,8 @@
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { Building2 } from "lucide-react";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
+import { cn } from "@shared/utils";
 
 export interface BusinessInfo {
   name: string;
@@ -67,19 +66,21 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
   };
 
   return (
-    <>
-      <CardHeader>
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-          <Building2 className="w-6 h-6 text-primary" />
-        </div>
-        <CardTitle>Business details</CardTitle>
-        <CardDescription>
+    <div className="p-7">
+      <div className="mb-6">
+        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+          Business details
+        </h2>
+        <p className="mt-1 text-[14px] text-black/45">
           Tell us about your salon so we can set everything up correctly.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="businessName">Salon business name *</Label>
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="businessName" className="text-[13.5px] font-medium text-gray-700">
+            Salon name *
+          </Label>
           <Input
             id="businessName"
             placeholder="e.g., Glamour Hair Studio"
@@ -88,9 +89,11 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="country">Country *</Label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="country" className="text-[13.5px] font-medium text-gray-700">
+              Country *
+            </Label>
             <Select value={businessInfo.country} onValueChange={handleCountryChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Select country" />
@@ -104,8 +107,10 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="city">City *</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="city" className="text-[13.5px] font-medium text-gray-700">
+              City *
+            </Label>
             <Input
               id="city"
               placeholder="e.g., Lagos"
@@ -115,8 +120,10 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="address">Address *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="address" className="text-[13.5px] font-medium text-gray-700">
+            Address
+          </Label>
           <Input
             id="address"
             placeholder="e.g., 123 Victoria Island"
@@ -126,15 +133,19 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
         </div>
 
         {businessInfo.currency && (
-          <div className="flex items-center gap-4 text-sm text-muted-foreground bg-muted p-3 rounded-lg">
-            <span>Currency: <strong>{businessInfo.currency}</strong></span>
-            <span>Timezone: <strong>{businessInfo.timezone}</strong></span>
+          <div className="flex items-center gap-4 rounded-[10px] bg-black/[0.03] px-4 py-3 text-[13px] text-black/50">
+            <span>
+              Currency: <strong className="text-black/70">{businessInfo.currency}</strong>
+            </span>
+            <span>
+              Timezone: <strong className="text-black/70">{businessInfo.timezone}</strong>
+            </span>
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Opening time</Label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-[13.5px] font-medium text-gray-700">Opening time</Label>
             <Select
               value={businessInfo.openingTime}
               onValueChange={(v) => handleChange("openingTime", v)}
@@ -151,8 +162,8 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Closing time</Label>
+          <div className="space-y-1.5">
+            <Label className="text-[13.5px] font-medium text-gray-700">Closing time</Label>
             <Select
               value={businessInfo.closingTime}
               onValueChange={(v) => handleChange("closingTime", v)}
@@ -171,26 +182,27 @@ export function BusinessStep({ businessInfo, onChange }: BusinessStepProps) {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label>Days open *</Label>
+        <div className="space-y-1.5">
+          <Label className="text-[13.5px] font-medium text-gray-700">Days open *</Label>
           <div className="flex flex-wrap gap-2">
             {DAYS_OF_WEEK.map((day) => (
               <button
                 key={day.id}
                 type="button"
                 onClick={() => toggleDay(day.id)}
-                className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                className={cn(
+                  "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors",
                   businessInfo.openingDays.includes(day.id)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-input hover:bg-muted"
-                }`}
+                    ? "border-[#2E1F4E] bg-[#2E1F4E] text-white"
+                    : "border-black/[0.1] bg-white text-black/60 hover:border-black/20",
+                )}
               >
                 {day.label}
               </button>
             ))}
           </div>
         </div>
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 }

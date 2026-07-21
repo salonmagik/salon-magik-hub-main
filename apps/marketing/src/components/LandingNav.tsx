@@ -1,6 +1,4 @@
 import { Link } from "react-router-dom";
-import { SalonMagikLogo } from "@/components/SalonMagikLogo";
-import { Button } from "@ui/button";
 
 interface LandingNavProps {
   isWaitlistMode: boolean;
@@ -13,40 +11,58 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
   const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || defaultSalonAppUrl).replace(/\/$/, "");
 
   return (
-    <nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-      <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between">
-        {/* Responsive logo: xs on mobile, sm on desktop */}
-        <div className="sm:hidden">
-          <SalonMagikLogo size="xs" />
+    <nav className="sticky top-0 z-50 bg-brand-cream">
+      <div className="mx-auto flex max-w-[1180px] items-center justify-between px-8 py-[18px]">
+        {/* Logo */}
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[7px] bg-brand-purple">
+            <svg width="15" height="15" viewBox="0 0 32 32" fill="none">
+              <path
+                d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
+                stroke="#F4C84E"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+              />
+              <circle cx="16" cy="16" r="2.3" fill="#fff" />
+            </svg>
+          </span>
+          <span className="font-serif text-[22px] font-semibold tracking-[0.3px] text-brand-ink">
+            Salon Magik
+          </span>
         </div>
-        <div className="hidden sm:block">
-          <SalonMagikLogo size="sm" />
+
+        {/* Nav links — hidden on mobile */}
+        <div className="hidden items-center gap-9 md:flex">
+          <Link to="/pricing" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Pricing</Link>
+          <Link to="/support" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Support</Link>
         </div>
-        
-        <div className="flex items-center gap-2 sm:gap-4">
-          <Link to="/pricing">
-            <Button variant="ghost" size="sm" className="text-xs sm:text-sm px-2 sm:px-4">
-              Pricing
-            </Button>
-          </Link>
+
+        {/* CTAs */}
+        <div className="flex items-center gap-5">
           {!isLoading && !isWaitlistMode && (
             <>
-              <a href={`${salonAppUrl}/login`} className="hidden sm:block">
-                <Button variant="ghost" size="sm" className="text-sm">
-                  Log in
-                </Button>
+              <a
+                href={`${salonAppUrl}/login`}
+                className="hidden text-[15px] text-brand-ink transition-colors hover:text-brand-purple md:block"
+              >
+                Log in
               </a>
-              <a href={`${salonAppUrl}/signup`}>
-                <Button size="sm" className="text-xs sm:text-sm px-3 sm:px-4">
-                  Get started
-                </Button>
+              <a
+                href={`${salonAppUrl}/signup`}
+                className="rounded-full bg-brand-ink px-[22px] py-[11px] text-[14.5px] text-white transition-colors hover:bg-brand-purple"
+              >
+                Start free
               </a>
             </>
           )}
           {!isLoading && isWaitlistMode && (
-            <Button size="sm" onClick={onWaitlistClick} className="text-xs sm:text-sm px-3 sm:px-4">
+            <button
+              type="button"
+              onClick={onWaitlistClick}
+              className="rounded-full bg-brand-ink px-[22px] py-[11px] text-[14.5px] text-white transition-colors hover:bg-brand-purple"
+            >
               Exclusive access
-            </Button>
+            </button>
           )}
         </div>
       </div>

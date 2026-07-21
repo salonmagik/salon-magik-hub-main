@@ -1,8 +1,6 @@
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
-import { Button } from "@ui/button";
-import { Alert, AlertDescription } from "@ui/alert";
-import { CheckCircle2, User, Building2, MapPin, Users, Sparkles } from "lucide-react";
+import { CheckCircle2, User, Building2, MapPin, Users, Sparkles, Loader2 } from "lucide-react";
+import { cn } from "@shared/utils";
 import type { UserRole } from "./RoleStep";
 import type { ProfileInfo } from "./ProfileStep";
 import type { OwnerInviteInfo } from "./OwnerInviteStep";
@@ -64,6 +62,40 @@ const COUNTRY_NAMES: Record<string, string> = {
   ZA: "South Africa",
 };
 
+function ReviewCard({ icon: Icon, title, children, highlight }: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+  highlight?: "amber";
+}) {
+  return (
+    <div className={cn(
+      "rounded-[12px] border p-4",
+      highlight === "amber"
+        ? "border-amber-200 bg-amber-50"
+        : "border-black/[0.06] bg-black/[0.02]",
+    )}>
+      <div className={cn(
+        "mb-3 flex items-center gap-2 text-[13px] font-medium",
+        highlight === "amber" ? "text-amber-700" : "text-black/60",
+      )}>
+        <Icon className="h-3.5 w-3.5" />
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="text-[13px]">
+      <span className="text-black/40">{label}: </span>
+      <span className="font-medium text-gray-800">{value}</span>
+    </div>
+  );
+}
+
 export function ReviewStep({
   role,
   profile,
@@ -81,237 +113,163 @@ export function ReviewStep({
 }: ReviewStepProps) {
   const formatDays = (days: string[]) => {
     const dayMap: Record<string, string> = {
-      monday: "Mon",
-      tuesday: "Tue",
-      wednesday: "Wed",
-      thursday: "Thu",
-      friday: "Fri",
-      saturday: "Sat",
-      sunday: "Sun",
+      monday: "Mon", tuesday: "Tue", wednesday: "Wed",
+      thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
     };
     return days.map((d) => dayMap[d]).join(", ");
   };
 
-  const formatTime = (time: string) => {
-    return time.slice(0, 5); // "09:00:00" -> "09:00"
-  };
+  const formatTime = (time: string) => time.slice(0, 5);
 
   return (
-    <>
-      <CardHeader>
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-          <CheckCircle2 className="w-6 h-6 text-primary" />
+    <div className="p-7">
+      <div className="mb-6">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10">
+          <CheckCircle2 className="h-5 w-5 text-[#2E1F4E]" />
         </div>
-        <CardTitle>Review your setup</CardTitle>
-        <CardDescription>
+        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+          Review your setup
+        </h2>
+        <p className="mt-1 text-[14px] text-black/45">
           Please review the information below before completing your setup.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Role & Profile */}
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <User className="w-4 h-4 text-primary" />
-            Your Profile
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Role:</span>{" "}
-              <span className="font-medium">{ROLE_NAMES[role]}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Name:</span>{" "}
-              <span className="font-medium">{profile.firstName} {profile.lastName}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Email:</span>{" "}
-              <span className="font-medium">{profile.email}</span>
-            </div>
-            {profile.phone && (
-              <div>
-                <span className="text-muted-foreground">Phone:</span>{" "}
-                <span className="font-medium">{profile.phone}</span>
-              </div>
-            )}
-          </div>
-        </div>
+        </p>
+      </div>
 
-        {/* Owner Invite (if applicable) */}
+      <div className="space-y-3">
+        {/* Profile */}
+        <ReviewCard icon={User} title="Your Profile">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            <Row label="Role" value={ROLE_NAMES[role]} />
+            <Row label="Name" value={`${profile.firstName} ${profile.lastName}`} />
+            <Row label="Email" value={profile.email} />
+            {profile.phone && <Row label="Phone" value={profile.phone} />}
+          </div>
+        </ReviewCard>
+
+        {/* Owner invite */}
         {ownerInvite && (
-          <div className="border rounded-lg p-4 space-y-3 border-amber-200 bg-amber-50">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
-              <Users className="w-4 h-4" />
-              Owner Invitation
+          <ReviewCard icon={Users} title="Owner Invitation" highlight="amber">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              <Row label="Name" value={ownerInvite.name} />
+              <Row label="Email" value={ownerInvite.email} />
+              {ownerInvite.phone && <Row label="Phone" value={ownerInvite.phone} />}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              <div>
-                <span className="text-muted-foreground">Role:</span>{" "}
-                <span className="font-medium">Owner</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Name:</span>{" "}
-                <span className="font-medium">{ownerInvite.name}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Email:</span>{" "}
-                <span className="font-medium">{ownerInvite.email}</span>
-              </div>
-              {ownerInvite.phone && (
-                <div>
-                  <span className="text-muted-foreground">Phone:</span>{" "}
-                  <span className="font-medium">{ownerInvite.phone}</span>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-amber-600">
+            <p className="mt-2 text-[12px] text-amber-600">
               An invitation will be sent after setup.
             </p>
-          </div>
+          </ReviewCard>
         )}
 
         {/* Plan */}
-        <div className="border rounded-lg p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="w-4 h-4 text-primary" />
-            Subscription Plan
-          </div>
-          <div className="text-sm">
-            <span className="font-medium">{PLAN_NAMES[plan]}</span>
-            <span className="text-muted-foreground"> – {trialDays}-day free trial</span>
-          </div>
-        </div>
+        <ReviewCard icon={Sparkles} title="Subscription Plan">
+          <p className="text-[13px]">
+            <span className="font-medium text-gray-800">{PLAN_NAMES[plan]}</span>
+            <span className="text-black/40"> — {trialDays}-day free trial</span>
+          </p>
+        </ReviewCard>
 
+        {/* Chain billing */}
         {plan === "chain" && chainSummary && (
-          <div className="border rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Sparkles className="w-4 h-4 text-primary" />
-              Chain Billing Preview
+          <ReviewCard icon={Sparkles} title="Chain Billing Preview">
+            <div className="space-y-1">
+              <Row label="Configured branches" value={chainSummary.configuredLocations} />
+              <Row
+                label="Estimated monthly"
+                value={`${chainSummary.currency} ${chainSummary.estimatedMonthlyTotal.toLocaleString()}`}
+              />
+              {chainSummary.expectedBillingDate && (
+                <Row label="Billing starts" value={chainSummary.expectedBillingDate} />
+              )}
+              {chainSummary.requiresCustom && (
+                <p className="mt-1.5 text-[12px] text-amber-700">
+                  Stores above 10 are pending custom pricing approval.
+                </p>
+              )}
             </div>
-            <p className="text-sm">
-              Configured stores: <span className="font-medium">{chainSummary.configuredLocations}</span>
-            </p>
-            <p className="text-sm">
-              Estimated monthly charge:{" "}
-              <span className="font-medium">
-                {chainSummary.currency} {chainSummary.estimatedMonthlyTotal.toLocaleString()}
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Expected billing date: {chainSummary.expectedBillingDate || "Next billing cycle"}
-            </p>
-            {chainSummary.requiresCustom && (
-              <p className="text-xs text-amber-700">
-                This setup includes custom-tier stores. Onboarding continues, but stores above 10 remain pending approval.
-              </p>
-            )}
-          </div>
+          </ReviewCard>
         )}
 
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="w-4 h-4 text-primary" />
-            Promo Code
-          </div>
+        {/* Promo code */}
+        <ReviewCard icon={Sparkles} title="Promo Code">
           <div className="flex gap-2">
             <Input
               value={promoCode}
               onChange={(event) => onPromoCodeChange?.(event.target.value.toUpperCase())}
               placeholder="Enter promo code"
+              className="h-9 text-[13px]"
             />
-            <Button
+            <button
               type="button"
-              variant="outline"
               onClick={onApplyPromo}
               disabled={!promoCode.trim() || isApplyingPromo}
+              className="flex items-center gap-1.5 rounded-[8px] border border-black/[0.1] px-3.5 text-[13px] font-medium text-black/60 transition-colors hover:border-black/20 hover:text-black/80 disabled:opacity-40"
             >
-              {isApplyingPromo ? "Applying..." : "Apply"}
-            </Button>
+              {isApplyingPromo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Apply
+            </button>
           </div>
           {promoPreview ? (
-            <Alert variant={promoPreview.valid ? "default" : "destructive"}>
-              <AlertDescription>
-                {promoPreview.valid ? (
-                  <>
-                    <span className="font-medium">{promoPreview.campaignName}</span>
-                    {" · "}
-                    {promoPreview.discountType === "fixed"
-                      ? promoPreview.discountValue
-                      : `${promoPreview.discountValue}% off`}
-                    {" · "}
-                    {promoPreview.maxUsesPerTenant} use{promoPreview.maxUsesPerTenant === 1 ? "" : "s"}
-                    {" · "}
-                    {promoPreview.billingTargets?.join(", ")}
-                  </>
-                ) : (
-                  promoPreview.message
-                )}
-              </AlertDescription>
-            </Alert>
+            <div className={cn(
+              "mt-2 rounded-[8px] px-3 py-2 text-[12.5px]",
+              promoPreview.valid
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-red-50 text-red-600",
+            )}>
+              {promoPreview.valid ? (
+                <>
+                  <span className="font-medium">{promoPreview.campaignName}</span>
+                  {" · "}
+                  {promoPreview.discountType === "fixed"
+                    ? promoPreview.discountValue
+                    : `${promoPreview.discountValue}% off`}
+                  {promoPreview.billingTargets?.length
+                    ? ` · ${promoPreview.billingTargets.join(", ")}`
+                    : ""}
+                </>
+              ) : (
+                promoPreview.message
+              )}
+            </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              Promo codes are optional. If valid, your discount will be attached when onboarding completes.
+            <p className="mt-1.5 text-[12px] text-black/35">
+              Optional. If valid, your discount is attached when setup completes.
             </p>
           )}
-        </div>
+        </ReviewCard>
 
-        {/* Business & Location */}
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Building2 className="w-4 h-4 text-primary" />
-            Business Details
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Name:</span>{" "}
-              <span className="font-medium">{business.name}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Country:</span>{" "}
-              <span className="font-medium">{COUNTRY_NAMES[business.country] || business.country}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Currency:</span>{" "}
-              <span className="font-medium">{business.currency}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">City:</span>{" "}
-              <span className="font-medium">{business.city}</span>
-            </div>
+        {/* Business */}
+        <ReviewCard icon={Building2} title="Business Details">
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            <Row label="Name" value={business.name} />
+            <Row label="Country" value={COUNTRY_NAMES[business.country] || business.country} />
+            <Row label="Currency" value={business.currency} />
+            <Row label="City" value={business.city} />
           </div>
           {plan !== "chain" && (
-            <div className="text-sm">
-              <span className="text-muted-foreground">Hours:</span>{" "}
-              <span className="font-medium">
-                {formatTime(business.openingTime)} – {formatTime(business.closingTime)}
-              </span>
-              <br />
-              <span className="text-muted-foreground">Open:</span>{" "}
-              <span className="font-medium">{formatDays(business.openingDays)}</span>
+            <div className="mt-2 space-y-1">
+              <Row label="Hours" value={`${formatTime(business.openingTime)} – ${formatTime(business.closingTime)}`} />
+              <Row label="Open" value={formatDays(business.openingDays)} />
             </div>
           )}
-        </div>
+        </ReviewCard>
 
-        {/* Multi-branch (Chain only) */}
+        {/* Branches */}
         {locations && locations.locations.length > 0 && (
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <MapPin className="w-4 h-4 text-primary" />
-              Branches ({locations.locations.length})
-            </div>
-            <div className="space-y-2">
+          <ReviewCard icon={MapPin} title={`Branches (${locations.locations.length})`}>
+            <div className="space-y-1.5">
               {locations.locations.map((loc, idx) => (
-                <div key={loc.id} className="text-sm flex items-center gap-2">
-                  <span className="font-medium">{loc.name || `Branch ${idx + 1}`}</span>
-                  <span className="text-muted-foreground">– {loc.city}</span>
+                <div key={loc.id} className="flex items-center gap-2 text-[13px]">
+                  <span className="font-medium text-gray-800">{loc.name || `Branch ${idx + 1}`}</span>
+                  <span className="text-black/40">— {loc.city}</span>
                   {loc.isDefault && (
-                    <span className="text-xs text-primary">(Default)</span>
+                    <span className="text-[11px] text-[#2E1F4E]">(Default)</span>
                   )}
                 </div>
               ))}
             </div>
-          </div>
+          </ReviewCard>
         )}
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 }

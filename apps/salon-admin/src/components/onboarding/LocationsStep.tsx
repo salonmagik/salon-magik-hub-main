@@ -1,7 +1,5 @@
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { Button } from "@ui/button";
 import { Switch } from "@ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { MapPin, Plus, Trash2, Star } from "lucide-react";
@@ -153,19 +151,22 @@ export function LocationsStep({
   };
 
   return (
-    <>
-      <CardHeader>
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-          <MapPin className="w-6 h-6 text-primary" />
+    <div className="p-7">
+      <div className="mb-6">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10">
+          <MapPin className="h-5 w-5 text-[#2E1F4E]" />
         </div>
-        <CardTitle>Your branches</CardTitle>
-        <CardDescription>
+        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+          Your branches
+        </h2>
+        <p className="mt-1 text-[14px] text-black/45">
           Add all your salon branches. You can add more later.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+
+      <div className="space-y-4">
         {/* Toggle options */}
-        <div className="space-y-3 p-4 bg-muted rounded-lg">
+        <div className="space-y-3 rounded-[12px] bg-black/[0.03] p-4">
           <div className="flex items-center justify-between">
             <Label htmlFor="sameCountry" className="cursor-pointer">
               All branches in the same country
@@ -199,7 +200,7 @@ export function LocationsStep({
         </div>
 
         {/* Location cards */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {config.locations.map((location, index) => (
             <div
               key={location.id}
@@ -219,24 +220,22 @@ export function LocationsStep({
                 </div>
                 <div className="flex items-center gap-2">
                   {!location.isDefault && (
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="sm"
                       onClick={() => setDefaultLocation(location.id)}
+                      className="rounded-[6px] px-2.5 py-1 text-[12px] text-black/45 transition-colors hover:bg-black/[0.04] hover:text-black/70"
                     >
                       Set as default
-                    </Button>
+                    </button>
                   )}
                   {config.locations.length > 1 && (
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
                       onClick={() => removeLocation(location.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-[6px] text-red-400 transition-colors hover:bg-red-50"
                     >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </div>
@@ -364,20 +363,19 @@ export function LocationsStep({
           ))}
         </div>
 
-        <Button
+        <button
           type="button"
-          variant="outline"
-          className="w-full"
           onClick={addLocation}
           disabled={!canAddMoreLocations}
+          className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-black/[0.12] py-3 text-[13.5px] font-medium text-black/45 transition-colors hover:border-black/20 hover:text-black/65 disabled:opacity-40"
         >
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="h-4 w-4" />
           {canAddMoreLocations ? "Add location" : "Location limit reached"}
-        </Button>
-        <p className="text-xs text-muted-foreground text-center">
+        </button>
+        <p className="text-center text-[12px] text-black/35">
           Configured {config.locations.length} of {resolvedMaxLocations} locations.
         </p>
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 }

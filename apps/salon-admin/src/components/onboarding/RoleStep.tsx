@@ -1,5 +1,3 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
-import { Users, Crown, Shield, UserCheck, User } from "lucide-react";
 import { cn } from "@shared/utils";
 
 export type UserRole = "owner" | "manager" | "supervisor" | "receptionist" | "staff";
@@ -12,86 +10,93 @@ interface RoleStepProps {
 const ROLES = [
   {
     id: "owner" as UserRole,
+    emoji: "👑",
     title: "Owner",
     description: "Full access to all features, billing, and settings",
-    icon: Crown,
   },
   {
     id: "manager" as UserRole,
+    emoji: "🛡️",
     title: "Manager",
     description: "Manage staff, appointments, and daily operations",
-    icon: Shield,
   },
   {
     id: "supervisor" as UserRole,
+    emoji: "✅",
     title: "Supervisor",
     description: "Oversee staff and handle customer issues",
-    icon: UserCheck,
   },
   {
     id: "receptionist" as UserRole,
+    emoji: "📋",
     title: "Receptionist",
     description: "Book appointments and manage customer check-ins",
-    icon: Users,
   },
   {
     id: "staff" as UserRole,
+    emoji: "✂️",
     title: "Staff",
     description: "View assigned appointments and update status",
-    icon: User,
   },
 ];
 
 export function RoleStep({ selectedRole, onRoleSelect }: RoleStepProps) {
   return (
-    <>
-      <CardHeader>
-        <CardTitle>What's your role?</CardTitle>
-        <CardDescription>
+    <div className="p-7">
+      <div className="mb-6">
+        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+          What's your role?
+        </h2>
+        <p className="mt-1 text-[14px] text-black/45">
           Select the role that best describes your position at the salon.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
         {ROLES.map((role) => {
-          const Icon = role.icon;
           const isSelected = selectedRole === role.id;
-          
           return (
             <button
               key={role.id}
               type="button"
               onClick={() => onRoleSelect(role.id)}
               className={cn(
-                "w-full flex items-start gap-4 p-4 rounded-lg border text-left transition-colors",
+                "flex w-full items-center gap-4 rounded-[14px] border px-4 py-3.5 text-left transition-colors",
                 isSelected
-                  ? "bg-primary/5 border-primary"
-                  : "bg-background border-input hover:bg-muted"
+                  ? "border-[#2E1F4E] bg-[#2E1F4E]/[0.04]"
+                  : "border-black/[0.08] bg-white hover:bg-black/[0.02]",
               )}
             >
-              <div className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                isSelected ? "bg-primary/10" : "bg-muted"
-              )}>
-                <Icon className={cn(
-                  "w-5 h-5",
-                  isSelected ? "text-primary" : "text-muted-foreground"
-                )} />
+              <div
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[20px]",
+                  isSelected ? "bg-[#2E1F4E]/10" : "bg-black/[0.04]",
+                )}
+              >
+                {role.emoji}
               </div>
               <div>
-                <p className={cn(
-                  "font-medium",
-                  isSelected && "text-primary"
-                )}>
+                <p
+                  className={cn(
+                    "text-[14.5px] font-medium",
+                    isSelected ? "text-[#2E1F4E]" : "text-gray-800",
+                  )}
+                >
                   {role.title}
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  {role.description}
-                </p>
+                <p className="mt-0.5 text-[13px] text-black/45">{role.description}</p>
               </div>
+              {isSelected && (
+                <div className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2E1F4E]">
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )}
             </button>
           );
         })}
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 }

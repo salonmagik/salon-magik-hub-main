@@ -5,12 +5,10 @@ import { useToast } from "@ui/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
-import { Button } from "@ui/button";
-import { Card } from "@ui/card";
-import { Progress } from "@ui/progress";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
+import { cn } from "@shared/utils";
 
 import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
 import { OwnerInviteStep, type OwnerInviteInfo } from "@/components/onboarding/OwnerInviteStep";
@@ -32,6 +30,22 @@ import {
 import { getGoogleProfileFields } from "@/lib/authCompletion";
 
 type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
+
+function SegmentProgress({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="flex gap-1.5">
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={cn(
+            "h-[3px] flex-1 rounded-full transition-colors duration-300",
+            i < current ? "bg-[#F4C84E]" : "bg-black/10",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
 
 export default function OnboardingPage() {
   const navigate = useNavigate();
@@ -63,7 +77,6 @@ export default function OnboardingPage() {
   }, [expectedChainLocationsInput]);
   const effectiveExpectedChainLocations = expectedChainLocations ?? 2;
 
-  // Step data
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
 
   const [ownerInvite, setOwnerInvite] = useState<OwnerInviteInfo>({
@@ -106,7 +119,6 @@ export default function OnboardingPage() {
   } | null>(null);
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
-  // Get user info from auth metadata (collected during signup or Google OAuth)
   const googleProfile = getGoogleProfileFields(user);
   const firstName = googleProfile.firstName;
   const lastName = googleProfile.lastName;
@@ -114,14 +126,12 @@ export default function OnboardingPage() {
   const phone = googleProfile.phone;
   const googleOAuthIntent = readGoogleOAuthIntent();
 
-  // Determine step flow based on role and plan
   const isOwner = selectedRole === "owner";
   const isChain = selectedPlan === "chain";
   const chainPlan = (plans || []).find((plan) => plan.slug === "chain");
 
-  // Get currency based on selected country
-  const currency = businessInfo.country 
-    ? getCurrencyForCountry(businessInfo.country) 
+  const currency = businessInfo.country
+    ? getCurrencyForCountry(businessInfo.country)
     : "USD";
 
   const { data: chainQuote } = useChainPriceQuote(
@@ -153,7 +163,6 @@ export default function OnboardingPage() {
   const stepFlow = getStepFlow();
   const currentStepIndex = stepFlow.indexOf(step);
   const totalSteps = stepFlow.length;
-  const progress = step === "complete" ? 100 : ((currentStepIndex + 1) / totalSteps) * 100;
 
   const canProceed = (): boolean => {
     switch (step) {
@@ -162,18 +171,22 @@ export default function OnboardingPage() {
       case "owner-invite":
         return ownerInvite.name.trim() !== "" && ownerInvite.email.trim() !== "";
       case "business":
-        return businessInfo.name.trim() !== "" && 
-               businessInfo.country !== "" && 
-               businessInfo.city.trim() !== "" &&
-               businessInfo.openingDays.length > 0;
+        return (
+          businessInfo.name.trim() !== "" &&
+          businessInfo.country !== "" &&
+          businessInfo.city.trim() !== "" &&
+          businessInfo.openingDays.length > 0
+        );
       case "plan":
         if (!selectedPlan) return false;
         if (selectedPlan !== "chain") return true;
         if (expectedChainLocations == null) return false;
         return Boolean(chainQuote);
       case "locations":
-        return locationsConfig.locations.length > 0 && 
-               locationsConfig.locations.every((loc) => loc.city.trim() !== "");
+        return (
+          locationsConfig.locations.length > 0 &&
+          locationsConfig.locations.every((loc) => loc.city.trim() !== "")
+        );
       case "review":
         if (promoCode.trim() && !promoPreview?.valid) return false;
         if (!isChain) return true;
@@ -187,8 +200,7 @@ export default function OnboardingPage() {
     const currentIndex = stepFlow.indexOf(step);
     if (currentIndex < stepFlow.length - 1) {
       const next = stepFlow[currentIndex + 1];
-      
-      // Initialize locations when entering locations step
+
       if (next === "locations" && locationsConfig.locations.length !== Math.max(1, effectiveExpectedChainLocations)) {
         const totalLocations = Math.max(1, effectiveExpectedChainLocations);
         const initialLocations: LocationInfo[] = Array.from({ length: totalLocations }).map((_, index) => ({
@@ -205,7 +217,7 @@ export default function OnboardingPage() {
         }));
         setLocationsConfig((prev) => ({ ...prev, locations: initialLocations }));
       }
-      
+
       setStep(next);
     } else {
       handleSubmit();
@@ -265,7 +277,6 @@ export default function OnboardingPage() {
       const tenantId = crypto.randomUUID();
       let creatorDefaultLocationId: string | null = null;
 
-      // 1. Create the tenant
       const { error: tenantError } = await supabase.from("tenants").insert({
         id: tenantId,
         name: businessInfo.name,
@@ -279,7 +290,6 @@ export default function OnboardingPage() {
 
       if (tenantError) throw tenantError;
 
-      // 2. Create the user's role
       const { error: roleError } = await supabase.from("user_roles").insert({
         user_id: user.id,
         tenant_id: tenantId,
@@ -288,7 +298,6 @@ export default function OnboardingPage() {
 
       if (roleError) throw roleError;
 
-      // 3. Update user profile with auth metadata
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
@@ -299,7 +308,6 @@ export default function OnboardingPage() {
 
       if (profileError) console.error("Profile update error:", profileError);
 
-      // 4. Create locations
       if (isChain && locationsConfig.locations.length > 0) {
         const expectedLocations = Math.max(1, effectiveExpectedChainLocations);
         const configuredLocations = Math.max(
@@ -368,7 +376,6 @@ export default function OnboardingPage() {
           if (requestError) throw requestError;
         }
       } else {
-        // Single location for Solo/Studio
         const { data: insertedLocation, error: locationError } = await supabase
           .from("locations")
           .insert({
@@ -400,7 +407,6 @@ export default function OnboardingPage() {
         if (assignmentError) throw assignmentError;
       }
 
-      // 5. Create communication credits
       const { error: creditsError } = await supabase.from("communication_credits").insert({
         tenant_id: tenantId,
         balance: selectedPlan === "chain" ? 500 : selectedPlan === "studio" ? 100 : 30,
@@ -409,15 +415,12 @@ export default function OnboardingPage() {
 
       if (creditsError) throw creditsError;
 
-      // 6. Seed default role permissions
       try {
         await seedDefaultPermissions(tenantId);
       } catch (permError) {
         console.error("Permission seeding error:", permError);
-        // Don't block onboarding if permission seeding fails
       }
 
-      // 7. Send owner invitation for non-owners
       if (!isOwner && ownerInvite.email) {
         try {
           await supabase.functions.invoke("send-staff-invitation", {
@@ -434,7 +437,6 @@ export default function OnboardingPage() {
           });
         } catch (inviteError) {
           console.error("Owner invitation error:", inviteError);
-          // Don't block onboarding if invitation fails
         }
       }
 
@@ -464,7 +466,8 @@ export default function OnboardingPage() {
           console.error("Promo claim error:", promoClaimError);
           toast({
             title: "Promo not attached",
-            description: "Your salon was created, but the promo code could not be attached. You can try again later in billing if it is still valid.",
+            description:
+              "Your salon was created, but the promo code could not be attached. You can try again later in billing if it is still valid.",
             variant: "destructive",
           });
         } else if (promoClaimData?.success) {
@@ -478,30 +481,31 @@ export default function OnboardingPage() {
         }
       }
 
-      // Send welcome email (fire-and-forget — don't block onboarding on delivery)
       if (!isOwner && ownerInvite.email) {
-        // Staff set up the salon on behalf of the owner — send a "setup complete" email
-        supabase.functions.invoke("send-welcome-email", {
-          body: {
-            tenantId,
-            type: "staff_setup_for_owner",
-            ownerName: `${firstName} ${lastName}`.trim() || "there",
-            salonName: businessInfo.name,
-            invitedOwnerName: ownerInvite.name || ownerInvite.email,
-          },
-        }).catch((err) => console.warn("Welcome email (staff_setup_for_owner) failed:", err));
+        supabase.functions
+          .invoke("send-welcome-email", {
+            body: {
+              tenantId,
+              type: "staff_setup_for_owner",
+              ownerName: `${firstName} ${lastName}`.trim() || "there",
+              salonName: businessInfo.name,
+              invitedOwnerName: ownerInvite.name || ownerInvite.email,
+            },
+          })
+          .catch((err) => console.warn("Welcome email (staff_setup_for_owner) failed:", err));
       } else {
-        // Standard owner onboarding
-        supabase.functions.invoke("send-welcome-email", {
-          body: {
-            tenantId,
-            type: "owner",
-            ownerName: `${firstName} ${lastName}`.trim() || "there",
-            salonName: businessInfo.name,
-            plan: selectedPlan,
-            trialDays: onboardingTrialDays,
-          },
-        }).catch((err) => console.warn("Welcome email (owner) failed:", err));
+        supabase.functions
+          .invoke("send-welcome-email", {
+            body: {
+              tenantId,
+              type: "owner",
+              ownerName: `${firstName} ${lastName}`.trim() || "there",
+              salonName: businessInfo.name,
+              plan: selectedPlan,
+              trialDays: onboardingTrialDays,
+            },
+          })
+          .catch((err) => console.warn("Welcome email (owner) failed:", err));
       }
 
       await refreshTenants();
@@ -531,7 +535,7 @@ export default function OnboardingPage() {
 
   if (step === "complete") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="flex min-h-screen items-center justify-center bg-[#F8F6F2] p-4">
         <WelcomeModal
           initialPlan={selectedPlan || "solo"}
           currency={businessInfo.currency || "NGN"}
@@ -545,7 +549,6 @@ export default function OnboardingPage() {
     );
   }
 
-  // Create profile info for ReviewStep (using auth data)
   const profileInfo = {
     firstName,
     lastName,
@@ -556,165 +559,178 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="border-b bg-card">
-        <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <SalonMagikLogo size="md" />
-            <span className="text-sm text-muted-foreground">
+    <div className="flex min-h-screen flex-col bg-[#F8F6F2]">
+      {/* Top bar */}
+      <div className="bg-white px-8 py-5 shadow-[0_1px_0_rgba(0,0,0,0.06)]">
+        <div className="mx-auto flex max-w-[560px] flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <SalonMagikLogo size="sm" />
+            <span className="text-[13px] text-black/40">
               Step {currentStepIndex + 1} of {totalSteps}
             </span>
           </div>
-          <Progress value={progress} className="h-2" />
+          <SegmentProgress current={currentStepIndex + 1} total={totalSteps} />
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        <Card className="w-full max-w-lg">
-          {step === "role" && (
-            <RoleStep
-              selectedRole={selectedRole}
-              onRoleSelect={setSelectedRole}
-            />
-          )}
+      <div className="flex flex-1 items-start justify-center px-4 py-10">
+        <div className="w-full max-w-[560px]">
+          <div className="rounded-[20px] border border-black/[0.06] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.06)]">
 
-          {step === "owner-invite" && (
-            <OwnerInviteStep
-              ownerInfo={ownerInvite}
-              onChange={setOwnerInvite}
-            />
-          )}
-
-          {step === "business" && (
-            <BusinessStep
-              businessInfo={businessInfo}
-              onChange={setBusinessInfo}
-            />
-          )}
-
-          {step === "plan" && (
-            <>
-              <PlanStep
-                selectedPlan={selectedPlan}
-                onPlanSelect={setSelectedPlan}
-                currency={currency}
-              />
-              {isChain && (
-                <div className="px-6 pb-4 space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="expectedLocations">How many branches do you have?</Label>
-                    <Input
-                      id="expectedLocations"
-                      type="number"
-                      min={1}
-                      value={expectedChainLocationsInput}
-                      onChange={(event) => setExpectedChainLocationsInput(event.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Chain tiers apply to additional branches beyond the first.
-                    </p>
-                  </div>
-
-                  {chainQuote && (
-                    <div className="rounded-md border p-3 text-sm">
-                      <p className="font-medium">
-                        Estimated monthly total: {currency} {chainQuote.total_price.toLocaleString()}
-                      </p>
-                      {chainQuote.requires_custom ? (
-                        <p className="mt-2 text-amber-700">
-                          This tier is marked as custom. You can continue onboarding; activation beyond 10 branches will be pending approval.
-                        </p>
-                      ) : (
-                        <ul className="mt-2 space-y-1 text-muted-foreground">
-                          {chainQuote.breakdown.map((item, index) => (
-                            <li key={`${item.tier_label}-${index}`}>
-                              {item.tier_label}: {item.locations} location(s)
-                              {item.subtotal != null ? ` - ${currency} ${Number(item.subtotal).toLocaleString()}` : " - custom"}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-
-          {step === "locations" && (
-            <LocationsStep
-              config={locationsConfig}
-              businessName={businessInfo.name}
-              defaultCountry={businessInfo.country}
-              defaultTimezone={businessInfo.timezone}
-              defaultOpeningTime={businessInfo.openingTime}
-              defaultClosingTime={businessInfo.closingTime}
-              defaultOpeningDays={businessInfo.openingDays}
-              maxLocations={Math.max(1, effectiveExpectedChainLocations)}
-              onChange={setLocationsConfig}
-            />
-          )}
-
-          {step === "review" && (
-            <ReviewStep
-              role={selectedRole!}
-              profile={profileInfo}
-              ownerInvite={isOwner ? null : ownerInvite}
-              plan={selectedPlan!}
-              business={businessInfo}
-              locations={isChain ? locationsConfig : null}
-              chainSummary={
-                isChain && configuredChainQuote
-                  ? {
-                      configuredLocations: configuredChainLocations,
-                      estimatedMonthlyTotal: Number(configuredChainQuote.total_price || 0),
-                      currency,
-                      expectedBillingDate: new Date(onboardingTrialEndsAt).toLocaleDateString(),
-                      requiresCustom: configuredChainQuote.requires_custom,
-                    }
-                  : null
-              }
-              trialDays={onboardingTrialDays}
-              promoCode={promoCode}
-              onPromoCodeChange={(value) => {
-                setPromoCode(value);
-                setPromoPreview(null);
-              }}
-              onApplyPromo={handleApplyPromo}
-              isApplyingPromo={isApplyingPromo}
-              promoPreview={promoPreview}
-            />
-          )}
-
-          {/* Navigation */}
-          <div className="flex items-center justify-between p-6 pt-0">
-            {currentStepIndex > 0 ? (
-              <Button variant="ghost" onClick={prevStep} disabled={isLoading}>
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </Button>
-            ) : (
-              <div />
+            {step === "role" && (
+              <RoleStep selectedRole={selectedRole} onRoleSelect={setSelectedRole} />
             )}
-            <Button onClick={nextStep} disabled={!canProceed() || isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Setting up...
-                </>
-              ) : step === "review" ? (
-                "Complete Setup"
+
+            {step === "owner-invite" && (
+              <OwnerInviteStep ownerInfo={ownerInvite} onChange={setOwnerInvite} />
+            )}
+
+            {step === "business" && (
+              <BusinessStep businessInfo={businessInfo} onChange={setBusinessInfo} />
+            )}
+
+            {step === "plan" && (
+              <>
+                <PlanStep
+                  selectedPlan={selectedPlan}
+                  onPlanSelect={setSelectedPlan}
+                  currency={currency}
+                />
+                {isChain && (
+                  <div className="space-y-3 px-6 pb-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="expectedLocations">How many branches do you have?</Label>
+                      <Input
+                        id="expectedLocations"
+                        type="number"
+                        min={1}
+                        value={expectedChainLocationsInput}
+                        onChange={(event) => setExpectedChainLocationsInput(event.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Chain tiers apply to additional branches beyond the first.
+                      </p>
+                    </div>
+
+                    {chainQuote && (
+                      <div className="rounded-[12px] border border-black/[0.06] bg-[#F8F6F2] p-4 text-sm">
+                        <p className="font-medium text-black/80">
+                          Estimated monthly total: {currency} {chainQuote.total_price.toLocaleString()}
+                        </p>
+                        {chainQuote.requires_custom ? (
+                          <p className="mt-2 text-amber-700">
+                            This tier is marked as custom. You can continue onboarding; activation beyond 10
+                            branches will be pending approval.
+                          </p>
+                        ) : (
+                          <ul className="mt-2 space-y-1 text-black/50">
+                            {chainQuote.breakdown.map((item, index) => (
+                              <li key={`${item.tier_label}-${index}`}>
+                                {item.tier_label}: {item.locations} location(s)
+                                {item.subtotal != null
+                                  ? ` — ${currency} ${Number(item.subtotal).toLocaleString()}`
+                                  : " — custom"}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {step === "locations" && (
+              <LocationsStep
+                config={locationsConfig}
+                businessName={businessInfo.name}
+                defaultCountry={businessInfo.country}
+                defaultTimezone={businessInfo.timezone}
+                defaultOpeningTime={businessInfo.openingTime}
+                defaultClosingTime={businessInfo.closingTime}
+                defaultOpeningDays={businessInfo.openingDays}
+                maxLocations={Math.max(1, effectiveExpectedChainLocations)}
+                onChange={setLocationsConfig}
+              />
+            )}
+
+            {step === "review" && (
+              <ReviewStep
+                role={selectedRole!}
+                profile={profileInfo}
+                ownerInvite={isOwner ? null : ownerInvite}
+                plan={selectedPlan!}
+                business={businessInfo}
+                locations={isChain ? locationsConfig : null}
+                chainSummary={
+                  isChain && configuredChainQuote
+                    ? {
+                        configuredLocations: configuredChainLocations,
+                        estimatedMonthlyTotal: Number(configuredChainQuote.total_price || 0),
+                        currency,
+                        expectedBillingDate: new Date(onboardingTrialEndsAt).toLocaleDateString(),
+                        requiresCustom: configuredChainQuote.requires_custom,
+                      }
+                    : null
+                }
+                trialDays={onboardingTrialDays}
+                promoCode={promoCode}
+                onPromoCodeChange={(value) => {
+                  setPromoCode(value);
+                  setPromoPreview(null);
+                }}
+                onApplyPromo={handleApplyPromo}
+                isApplyingPromo={isApplyingPromo}
+                promoPreview={promoPreview}
+              />
+            )}
+
+            {/* Navigation */}
+            <div className="flex items-center justify-between border-t border-black/[0.06] px-6 py-5">
+              {currentStepIndex > 0 ? (
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 text-[14px] text-black/45 transition-colors hover:text-black/70 disabled:opacity-40"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back
+                </button>
               ) : (
-                <>
-                  Continue
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </>
+                <div />
               )}
-            </Button>
+
+              <button
+                type="button"
+                onClick={nextStep}
+                disabled={!canProceed() || isLoading}
+                className={cn(
+                  "flex items-center gap-2 rounded-full px-6 py-[11px] text-[14.5px] font-medium transition-colors",
+                  canProceed() && !isLoading
+                    ? "bg-[#2E1F4E] text-white hover:bg-[#3A2660]"
+                    : "cursor-not-allowed bg-black/10 text-black/30",
+                )}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Setting up...
+                  </>
+                ) : step === "review" ? (
+                  "Complete setup"
+                ) : (
+                  <>
+                    Continue
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

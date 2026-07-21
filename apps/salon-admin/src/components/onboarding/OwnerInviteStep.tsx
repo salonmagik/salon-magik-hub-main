@@ -1,8 +1,6 @@
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
-import { Crown } from "lucide-react";
 
 export interface OwnerInviteInfo {
   name: string;
@@ -21,20 +19,24 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
   };
 
   return (
-    <>
-      <CardHeader>
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-          <Crown className="w-6 h-6 text-primary" />
+    <div className="p-7">
+      <div className="mb-6">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10 text-[22px]">
+          👑
         </div>
-        <CardTitle>Invite the salon owner</CardTitle>
-        <CardDescription>
-          Since you're not the owner, we'll need to invite them to complete the setup. 
-          They'll have access to billing and financial settings.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="ownerName">Owner's name *</Label>
+        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+          Invite the salon owner
+        </h2>
+        <p className="mt-1 text-[14px] text-black/45">
+          Since you're not the owner, we'll send them an invitation to complete billing setup.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="ownerName" className="text-[13.5px] font-medium text-gray-700">
+            Owner's name *
+          </Label>
           <Input
             id="ownerName"
             placeholder="Jane Smith"
@@ -43,8 +45,10 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="ownerEmail">Owner's email *</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="ownerEmail" className="text-[13.5px] font-medium text-gray-700">
+            Owner's email *
+          </Label>
           <Input
             id="ownerEmail"
             type="email"
@@ -60,11 +64,11 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
           onChange={(value) => handleChange("phone", value)}
         />
 
-        <p className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
-          We'll send an invitation to the owner's email. They can complete the setup 
-          and grant you access to financial features.
-        </p>
-      </CardContent>
-    </>
+        <div className="rounded-[10px] bg-black/[0.03] px-4 py-3 text-[13px] text-black/50">
+          We'll send an invitation to the owner's email. They can complete the setup and grant you
+          access to financial features.
+        </div>
+      </div>
+    </div>
   );
 }

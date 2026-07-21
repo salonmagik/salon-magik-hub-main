@@ -22,6 +22,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Questrial", "sans-serif"],
+        serif: ["Fraunces", "Georgia", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",
