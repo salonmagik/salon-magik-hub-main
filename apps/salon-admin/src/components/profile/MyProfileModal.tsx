@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@ui/avatar";
 import { Badge } from "@ui/badge";
@@ -278,6 +278,9 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>My Profile</DialogTitle>
+          <DialogDescription className="sr-only">
+            Manage your profile, phone number, and active sessions.
+          </DialogDescription>
         </DialogHeader>
 
         {cropUrl ? (

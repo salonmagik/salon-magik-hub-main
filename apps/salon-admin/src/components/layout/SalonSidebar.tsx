@@ -68,7 +68,7 @@ import {
 } from "@ui/dialog";
 
 // User profile section component
-function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
+function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExpanded: boolean; isMobileOpen: boolean; onCloseMobile: () => void }) {
   const { user, profile } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -86,7 +86,7 @@ function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean;
     <>
       <button
         type="button"
-        onClick={() => setProfileOpen(true)}
+        onClick={() => { onCloseMobile(); setProfileOpen(true); }}
         className={cn(
           "flex items-center gap-3 px-3 py-2.5 mt-2 w-full rounded-lg transition-colors hover:bg-white/10 cursor-pointer",
           !isExpanded && !isMobileOpen && "justify-center"
@@ -797,7 +797,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         ))}
 
         {/* User Info */}
-        <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} />
+        <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} onCloseMobile={() => setIsMobileOpen(false)} />
 
         <button
           onClick={() => setConfirmSignOutOpen(true)}
