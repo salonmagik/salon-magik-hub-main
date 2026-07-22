@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { cn } from "@shared/utils";
 
 interface LandingNavProps {
   isWaitlistMode: boolean;
@@ -6,15 +7,22 @@ interface LandingNavProps {
   onWaitlistClick?: () => void;
 }
 
+const NAV_LINKS = [
+  { to: "/pricing", label: "Pricing" },
+  { to: "/faq", label: "FAQ" },
+  { to: "/support", label: "Support" },
+];
+
 export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: LandingNavProps) {
   const defaultSalonAppUrl = import.meta.env.DEV ? "http://localhost:8080" : "https://app.salonmagik.com";
   const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || defaultSalonAppUrl).replace(/\/$/, "");
+  const { pathname } = useLocation();
 
   return (
     <nav className="sticky top-0 z-50 bg-brand-cream">
       <div className="mx-auto flex max-w-[1180px] items-center justify-between px-8 py-[18px]">
-        {/* Logo */}
-        <div className="flex items-center gap-2">
+        {/* Logo — clickable, routes to home */}
+        <Link to="/" className="flex items-center gap-2">
           <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[7px] bg-brand-purple">
             <svg width="15" height="15" viewBox="0 0 32 32" fill="none">
               <path
@@ -29,13 +37,28 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
           <span className="font-sans text-[19px] font-semibold tracking-[0.2px] text-brand-ink">
             Salon Magik
           </span>
-        </div>
+        </Link>
 
         {/* Nav links — hidden on mobile */}
         <div className="hidden items-center gap-9 md:flex">
-          <Link to="/pricing" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Pricing</Link>
-          <Link to="/faq" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">FAQ</Link>
-          <Link to="/support" className="text-[15px] text-brand-ink/70 transition-colors hover:text-brand-ink">Support</Link>
+          {NAV_LINKS.map(({ to, label }) => {
+            const isActive = pathname === to;
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={cn(
+                  "relative pb-[3px] text-[15px] transition-colors",
+                  isActive ? "text-brand-ink" : "text-brand-ink/70 hover:text-brand-ink",
+                )}
+              >
+                {label}
+                {isActive && (
+                  <span className="absolute bottom-0 left-0 h-[2px] w-1/2 rounded-full bg-brand-yellow" />
+                )}
+              </Link>
+            );
+          })}
         </div>
 
         {/* CTAs */}

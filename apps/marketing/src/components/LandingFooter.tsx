@@ -94,7 +94,7 @@ export function LandingFooter() {
         {/* Links */}
         <div className="grid grid-cols-2 gap-10 pb-[50px] pt-[50px] sm:grid-cols-[1.6fr_1fr_1fr]">
           <div className="col-span-2 sm:col-span-1">
-            <div className="mb-3.5 flex items-center gap-2 font-questrial text-[20px] text-white">
+            <Link to="/" className="mb-3.5 flex items-center gap-2 font-questrial text-[20px] text-white transition-opacity hover:opacity-80">
               <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center">
                 <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
                   <path
@@ -107,7 +107,7 @@ export function LandingFooter() {
                 </svg>
               </span>
               Salon Magik
-            </div>
+            </Link>
             <p className="max-w-[260px] text-[13.5px] leading-relaxed text-white/60">
               The booking and business management platform built specifically for African beauty professionals.
             </p>

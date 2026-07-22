@@ -5,6 +5,8 @@ const types = [
   { emoji: "💅🏾", name: "Nail studios", desc: "Manicure, pedicure, extensions" },
   { emoji: "💈", name: "Barbershops", desc: "Cuts, shaves, grooming" },
   { emoji: "🧖🏾", name: "Spas & wellness", desc: "Massage, facials, body treatments" },
+  { emoji: "✂️", name: "Freelance stylists", desc: "Home service, chair rental, mobile" },
+  { emoji: "🎨", name: "Tattoo studios", desc: "Custom art, piercings, long sessions" },
 ];
 
 export function BusinessTypesSection() {
@@ -21,7 +23,7 @@ export function BusinessTypesSection() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-5 md:grid-cols-3">
           {types.map((t) => (
             <div
               key={t.name}

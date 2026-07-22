@@ -4,20 +4,25 @@ import { MarketingLayout } from "@/components/MarketingLayout";
 export default function SupportPage() {
   return (
     <MarketingLayout>
-      <section className="px-8 py-16">
-        <div className="mx-auto max-w-[720px]">
-          <Link to="/" className="mb-8 inline-flex items-center gap-1.5 text-[14px] text-brand-ink/50 transition-colors hover:text-brand-ink">
-            ← Back to home
-          </Link>
-
-          <h1 className="font-serif text-[clamp(32px,4vw,44px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
+      {/* Centered hero — consistent with Pricing + FAQ pages */}
+      <section className="px-8 pb-0 pt-16 text-center">
+        <div className="mx-auto max-w-[580px]">
+          <div className="mb-4 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+            <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
             Support
+          </div>
+          <h1 className="font-serif text-[clamp(32px,4vw,48px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
+            We're here to help.
           </h1>
-          <p className="mt-4 text-[17px] leading-relaxed text-brand-ink/55">
-            We're here to help you get the most out of Salon Magik.
+          <p className="mx-auto mt-4 max-w-[420px] text-[17px] leading-relaxed text-brand-ink/55">
+            Get help setting up, troubleshoot an issue, or just ask a question.
           </p>
+        </div>
+      </section>
 
-          <div className="mt-10 grid gap-5 sm:grid-cols-2">
+      <section className="px-8 pb-[80px] pt-[56px]">
+        <div className="mx-auto max-w-[720px]">
+          <div className="grid gap-5 sm:grid-cols-2">
             <div className="rounded-[18px] border border-brand-ink/8 bg-white p-6">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[10px] bg-brand-lilac-bg">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="text-brand-purple">

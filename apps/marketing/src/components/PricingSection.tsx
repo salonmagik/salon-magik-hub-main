@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { cn } from "@shared/utils";
 import { usePlans, usePlanFeatures } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
@@ -169,14 +170,21 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
                     )}
                   </div>
 
-                  <ul className="mb-8 mt-6 flex flex-1 flex-col gap-[13px]">
-                    {planFeatures.map((f) => (
+                  <ul className="mt-6 flex flex-col gap-[13px]">
+                    {planFeatures.slice(0, 5).map((f) => (
                       <li key={f.id} className="flex items-start gap-2.5 text-[14.5px] text-brand-ink/75">
                         <Check />
                         {f.feature_text}
                       </li>
                     ))}
                   </ul>
+                  <Link
+                    to="/pricing"
+                    className="mb-6 mt-4 block text-[13px] font-medium text-brand-purple hover:underline"
+                  >
+                    View all details →
+                  </Link>
+                  <div className="flex-1" />
 
                   {isChain ? (
                     <a

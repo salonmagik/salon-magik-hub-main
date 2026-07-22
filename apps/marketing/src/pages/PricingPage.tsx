@@ -406,7 +406,7 @@ export default function PricingPage() {
       {/* Add-ons */}
       <section className="px-8 py-[80px]">
         <div className="mx-auto max-w-[1180px]">
-          <div className="mb-10">
+          <div className="mb-10 ">
             <div className="mb-3 flex items-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
               <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
               Add-ons
@@ -420,7 +420,7 @@ export default function PricingPage() {
               { name: "Extra communication credits", desc: "Top up your SMS and notification credits when your monthly allocation runs low.", price: "Starting from ₵5 / bundle", available: true },
               { name: "Location check-in for staff", desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.", available: false },
               { name: "WhatsApp messaging", desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.", available: false },
-              { name: "Custom booking domain", desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).", available: false },
+              { name: "Custom booking domain", desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).", available: true },
             ].map((addon) => (
               <div
                 key={addon.name}

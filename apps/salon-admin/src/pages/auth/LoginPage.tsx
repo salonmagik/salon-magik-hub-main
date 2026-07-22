@@ -443,6 +443,7 @@ export default function LoginPage() {
 		<AuthLayout
 			title="Welcome back"
 			subtitle="Sign in to your salon management dashboard"
+			variant="login"
 		>
 			<AlertDialog open={showGoogleSignupPrompt}>
 				<AlertDialogContent

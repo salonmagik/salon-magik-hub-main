@@ -213,6 +213,12 @@
   display: none;
 }
 
+/* ── Auth panel slide cycling animation ── */
+@keyframes authFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Route-loading lemniscate animation ── */
 @keyframes morphCycle {
   0%   { opacity: 0; transform: scale(0.82) rotate(-8deg); }
