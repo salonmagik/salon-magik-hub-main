@@ -164,6 +164,17 @@
 .morph-icon:nth-child(4) { animation-delay: -7.5s; }
 .morph-icon:nth-child(5) { animation-delay: -10s; }
 
+/* ── Feature carousel marquee ── */
+@keyframes feature-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.feature-marquee {
+  animation: feature-marquee 60s linear infinite;
+  will-change: transform;
+}
+.feature-marquee:hover { animation-play-state: paused; }
+
 .auth-background {
   background: linear-gradient(135deg, hsl(var(--auth-gradient-start)) 0%, hsl(var(--auth-gradient-end)) 100%);
 }
