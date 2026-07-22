@@ -30,7 +30,7 @@ const defaultTemplate = {
       ${createButton("Reset password", resetLink)}
       ${paragraph("This link expires in 1 hour. If you didn’t request this, you can ignore this email.")}
       ${paragraph(
-        `If the button doesn't work, copy and paste this link:<br/><a href="${resetLink}" style="color: #2563EB; word-break: break-all;">${resetLink}</a>`
+        `If the button doesn't work, copy and paste this link:<br/><a href="${resetLink}" style="color: #2E1F4E; word-break: break-all;">${resetLink}</a>`
       )}
     `;
     return wrapEmailTemplate(content, { mode: "product" });
