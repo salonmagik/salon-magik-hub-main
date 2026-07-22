@@ -56,7 +56,21 @@ function NailPolishIcon() {
   );
 }
 
-const morphIcons = [ScissorsIcon, CombIcon, BlowDryerIcon, MirrorIcon, NailPolishIcon];
+function SalonMagikIcon() {
+  return (
+    <svg viewBox="0 0 32 32" fill="none" className="h-full w-full">
+      <path
+        d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
+        stroke="#F4C84E"
+        strokeWidth="2.8"
+        strokeLinecap="round"
+      />
+      <circle cx="16" cy="16" r="2.2" fill="#ffffff" />
+    </svg>
+  );
+}
+
+const morphIcons = [ScissorsIcon, CombIcon, BlowDryerIcon, MirrorIcon, NailPolishIcon, SalonMagikIcon];
 
 export function LandingFooter() {
   return (
