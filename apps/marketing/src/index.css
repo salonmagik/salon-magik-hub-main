@@ -170,7 +170,7 @@
   to   { transform: translateX(-50%); }
 }
 .feature-marquee {
-  animation: feature-marquee 60s linear infinite;
+  animation: feature-marquee 90s linear infinite;
   will-change: transform;
 }
 .feature-marquee:hover { animation-play-state: paused; }
