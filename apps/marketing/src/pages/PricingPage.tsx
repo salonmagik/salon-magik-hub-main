@@ -4,6 +4,7 @@ import { usePlans, usePlanFeatures, usePlanLimits } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
 import { useWaitlistMode } from "@/hooks/useFeatureFlags";
 import { MarketingLayout } from "@/components/MarketingLayout";
+import { PlanCard } from "@/components/PlanCard";
 import { cn } from "@shared/utils";
 
 const SUPPORTED_CURRENCIES = [
@@ -21,14 +22,6 @@ const salonAppUrl = (
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_SALON_APP_URL) ||
   defaultSalonAppUrl
 ).replace(/\/$/, "");
-
-function Check() {
-  return (
-    <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full bg-brand-purple text-[10px] text-brand-yellow">
-      ✓
-    </span>
-  );
-}
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
@@ -69,11 +62,6 @@ export default function PricingPage() {
 
   const getPlanLimit = (planId: string) => limits?.find((l) => l.plan_id === planId);
 
-  const formatAmt = (v: number | null | undefined) => {
-    if (v == null) return "0";
-    return Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  };
-
   useEffect(() => {
     const saved = localStorage.getItem(PRICING_CURRENCY_STORAGE_KEY);
     if (saved && SUPPORTED_CURRENCIES.some((item) => item.code === saved)) {
@@ -97,372 +85,472 @@ export default function PricingPage() {
   const symbol = getCurrencySymbol(currency);
 
   return (
-    <MarketingLayout>
-      {/* Hero */}
-      <section className="px-8 pb-0 pt-16 text-center">
-        <div className="mx-auto max-w-[600px]">
-          <div className="mb-4 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
-            <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
-            Pricing
-          </div>
-          <h1 className="font-serif text-[clamp(32px,4vw,48px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
-            Simple, transparent pricing.
-          </h1>
-          <p className="mx-auto mt-4 max-w-[440px] text-[17px] leading-relaxed text-brand-ink/55">
-            All plans include a {trialDays}-day free trial. No credit card required to start.
-          </p>
-        </div>
+		<MarketingLayout>
+			{/* Hero */}
+			<section className="px-8 pb-0 pt-16 text-center">
+				<div className="mx-auto max-w-[600px]">
+					<h1 className="font-serif text-[clamp(32px,4vw,48px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
+						Simple, transparent pricing.
+					</h1>
+					<p className="mx-auto mt-4 max-w-[440px] text-[17px] leading-relaxed text-brand-ink/55">
+						All plans include a {trialDays}-day free trial. No credit card
+						required to start.
+					</p>
+				</div>
 
-        {/* Toggles */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-          <div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
-            {SUPPORTED_CURRENCIES.map((c) => (
-              <button
-                key={c.code}
-                type="button"
-                onClick={() => { setCurrency(c.code); localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, c.code); }}
-                className={cn(
-                  "rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
-                  currency === c.code ? "bg-brand-purple text-white" : "text-brand-ink/60 hover:text-brand-ink",
-                )}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
+				{/* Toggles */}
+				<div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+					<div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
+						{SUPPORTED_CURRENCIES.map((c) => (
+							<button
+								key={c.code}
+								type="button"
+								onClick={() => {
+									setCurrency(c.code);
+									localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, c.code);
+								}}
+								className={cn(
+									"rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
+									currency === c.code
+										? "bg-brand-purple text-white"
+										: "text-brand-ink/60 hover:text-brand-ink",
+								)}
+							>
+								{c.label}
+							</button>
+						))}
+					</div>
 
-          <div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
-            {([false, true] as const).map((annual) => (
-              <button
-                key={String(annual)}
-                type="button"
-                onClick={() => setIsAnnual(annual)}
-                className={cn(
-                  "rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
-                  isAnnual === annual ? "bg-brand-purple text-white" : "text-brand-ink/60 hover:text-brand-ink",
-                )}
-              >
-                {annual ? `Annual · save up to ${maxSavingsPct ?? "—"}%/yr` : "Monthly"}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+					<div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
+						{([false, true] as const).map((annual) => (
+							<button
+								key={String(annual)}
+								type="button"
+								onClick={() => setIsAnnual(annual)}
+								className={cn(
+									"rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
+									isAnnual === annual
+										? "bg-brand-purple text-white"
+										: "text-brand-ink/60 hover:text-brand-ink",
+								)}
+							>
+								{annual
+									? `Annual · save up to ${maxSavingsPct ?? "—"}%/yr`
+									: "Monthly"}
+							</button>
+						))}
+					</div>
+				</div>
+			</section>
 
-      {/* Plan cards — same as PricingSection on landing */}
-      <section className="px-8 pb-[80px] pt-[48px]">
-        <div className="mx-auto max-w-[1180px]">
-          {isLoading ? (
-            <div className="grid grid-cols-1 gap-[22px] md:grid-cols-3">
-              {[0, 1, 2].map((i) => <div key={i} className="h-[500px] animate-pulse rounded-[20px] bg-white/60" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 items-stretch gap-[22px] md:grid-cols-3">
-              {(plans ?? []).map((plan) => {
-                const price = getPlanPrice(plan.id);
-                const monthlyPrice = getMonthlyPrice(plan.id);
-                const planFeatures = getPlanFeatures(plan.id);
-                const planLimit = getPlanLimit(plan.id);
-                const savingsPct = getSavingsPct(plan.id);
-                const isChain = plan.slug === "chain";
+			{/* Plan cards — same as PricingSection on landing */}
+			<section className="px-8 pb-[80px] pt-[48px]">
+				<div className="mx-auto max-w-[1180px]">
+					{isLoading ? (
+						<div className="grid grid-cols-1 gap-[22px] md:grid-cols-3">
+							{[0, 1, 2].map((i) => (
+								<div
+									key={i}
+									className="h-[500px] animate-pulse rounded-[20px] bg-white/60"
+								/>
+							))}
+						</div>
+					) : (
+						<div className="grid grid-cols-1 items-stretch gap-[22px] md:grid-cols-3">
+							{(plans ?? []).map((plan) => (
+								<PlanCard
+									key={plan.id}
+									plan={plan}
+									price={getPlanPrice(plan.id)}
+									monthlyPrice={getMonthlyPrice(plan.id)}
+									savingsPct={getSavingsPct(plan.id)}
+									features={getPlanFeatures(plan.id)}
+									limit={getPlanLimit(plan.id)}
+									isAnnual={isAnnual}
+									isWaitlistMode={isWaitlistMode}
+									symbol={symbol}
+									salonAppUrl={salonAppUrl}
+								/>
+							))}
+						</div>
+					)}
+				</div>
+			</section>
 
-                return (
-                  <div
-                    key={plan.id}
-                    className={cn(
-                      "relative flex flex-col rounded-[20px] border-[1.5px] bg-white px-7 py-8",
-                      plan.is_recommended
-                        ? "border-brand-purple shadow-[0_30px_60px_rgba(46,31,78,0.14)]"
-                        : "border-brand-ink/8",
-                    )}
-                  >
-                    {plan.is_recommended && (
-                      <span className="absolute -top-[13px] left-7 rounded-full bg-brand-purple px-3 py-[5px] text-[11.5px] tracking-[0.03em] text-white">
-                        Most set up for teams
-                      </span>
-                    )}
+			{/* Comparison table */}
+			<section className="bg-brand-cream-dim px-8 py-[80px]">
+				<div className="mx-auto max-w-[1180px]">
+					<div className="mb-12 text-center">
+						<div className="mb-3 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+							<span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
+							Compare plans
+						</div>
+						<h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
+							What's included in each plan
+						</h2>
+					</div>
 
-                    <div className="font-serif text-[22px] text-brand-ink">{plan.name}</div>
-                    <div className="mt-1.5 text-[13.5px] text-brand-ink/50">{plan.description}</div>
+					<div className="overflow-x-auto">
+						<table className="w-full min-w-[560px] border-collapse">
+							<thead>
+								<tr>
+									<th className="w-[42%] pb-6 text-left text-[13px] font-medium uppercase tracking-[0.06em] text-brand-ink/40">
+										Feature
+									</th>
+									{(plans ?? []).map((plan) => (
+										<th
+											key={plan.id}
+											className={cn(
+												"pb-6 text-center text-[14px] font-medium",
+												plan.is_recommended
+													? "text-brand-purple"
+													: "text-brand-ink",
+											)}
+										>
+											{plan.name}
+											{plan.is_recommended && (
+												<span className="ml-2 inline-block rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] text-brand-purple">
+													Popular
+												</span>
+											)}
+										</th>
+									))}
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-brand-ink/[0.06]">
+								{!isLoading && (
+									<>
+										<tr className="bg-brand-ink/[0.02]">
+											<td
+												colSpan={4}
+												className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40"
+											>
+												Capacity
+											</td>
+										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Locations
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim
+															? lim.max_locations > 1
+																? `Up to ${lim.max_locations}`
+																: "1"
+															: "—"}
+													</td>
+												);
+											})}
+										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Staff accounts
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim
+															? lim.max_staff === 1
+																? "Owner only"
+																: lim.max_staff >= 999
+																	? "Unlimited"
+																	: `Up to ${lim.max_staff}`
+															: "—"}
+													</td>
+												);
+											})}
+										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Messages / month
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim ? lim.monthly_messages.toLocaleString() : "—"}
+													</td>
+												);
+											})}
+										</tr>
 
-                    <div className="mt-5">
-                      {price != null ? (
-                        <>
-                          <div className="font-serif text-[40px] leading-none text-brand-ink">
-                            {symbol}{formatAmt(price)}
-                            <span className="font-sans text-[14px] text-brand-ink/50"> / month</span>
-                          </div>
-                          {isAnnual && savingsPct ? (
-                            <div className="mt-1.5 text-[12.5px] font-medium text-brand-yellow line-through decoration-brand-yellow/60">
-                              {symbol}{formatAmt(monthlyPrice)}/mo without annual
-                            </div>
-                          ) : (
-                            <div className="mt-1 text-[12.5px] text-brand-ink/45">
-                              Save up to {savingsPct ?? "—"}% with annual billing
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="font-serif text-[32px] leading-none text-brand-ink">Custom</div>
-                      )}
-                    </div>
+										{[
+											{
+												category: "Bookings",
+												rows: [
+													{
+														label: "Online booking page",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Client reminders (SMS)",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Appointment management",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Package & voucher sales",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Recurring bookings",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+												],
+											},
+											{
+												category: "Business",
+												rows: [
+													{
+														label: "Services & products catalog",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Payment tracking",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Sales reports",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Staff performance reports",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Multi-location dashboard",
+														solo: false,
+														studio: false,
+														chain: true,
+													},
+												],
+											},
+											{
+												category: "Team",
+												rows: [
+													{
+														label: "Staff role management",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Permission controls",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+												],
+											},
+											{
+												category: "Support",
+												rows: [
+													{
+														label: "Email & chat support",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Priority support",
+														solo: false,
+														studio: false,
+														chain: true,
+													},
+													{
+														label: "Dedicated onboarding",
+														solo: false,
+														studio: false,
+														chain: true,
+													},
+												],
+											},
+										].map(({ category, rows }) => {
+											const planSlugs = (plans ?? []).map((p) => p.slug);
+											return (
+												<Fragment key={category}>
+													<tr className="bg-brand-ink/[0.02]">
+														<td
+															colSpan={4}
+															className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40"
+														>
+															{category}
+														</td>
+													</tr>
+													{rows.map((row) => (
+														<tr key={row.label}>
+															<td className="py-4 text-[14.5px] text-brand-ink/75">
+																{row.label}
+															</td>
+															{planSlugs.map((slug) => {
+																const val =
+																	slug === "solo"
+																		? row.solo
+																		: slug === "studio"
+																			? row.studio
+																			: row.chain;
+																return (
+																	<td key={slug} className="py-4 text-center">
+																		{val ? (
+																			<span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">
+																				✓
+																			</span>
+																		) : (
+																			<span className="text-[20px] text-brand-ink/20">
+																				—
+																			</span>
+																		)}
+																	</td>
+																);
+															})}
+														</tr>
+													))}
+												</Fragment>
+											);
+										})}
+									</>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
 
-                    {planLimit && (
-                      <div className="mt-5 rounded-[10px] bg-brand-lilac-bg px-4 py-3 text-[13px] text-brand-ink/70">
-                        <div>{planLimit.max_locations === 1 ? "1 location" : `${planLimit.max_locations} locations`}</div>
-                        <div className="mt-1">
-                          {planLimit.max_staff === 1 ? "Owner only" : `Up to ${planLimit.max_staff} staff`}
-                        </div>
-                        <div className="mt-1">{planLimit.monthly_messages} messages / month</div>
-                      </div>
-                    )}
+			{/* Add-ons */}
+			<section className="px-8 py-[80px]">
+				<div className="mx-auto max-w-[1180px]">
+					<div className="mb-10 flex flex-col items-center justify-center">
+						<div className="mb-3 flex items-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+							<span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
+							Add-ons
+						</div>
+						<h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
+							Extend your plan
+						</h2>
+						<p className="mt-2 text-[16px] text-brand-ink/55">
+							Optional extras you can add to any plan, or unlock as your
+							business grows.
+						</p>
+					</div>
 
-                    <ul className="mb-8 mt-6 flex flex-1 flex-col gap-[13px]">
-                      {planFeatures.map((f) => (
-                        <li key={f.id} className="flex items-start gap-2.5 text-[14.5px] text-brand-ink/75">
-                          <Check />
-                          {f.feature_text}
-                        </li>
-                      ))}
-                    </ul>
+					<div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+						{[
+							{
+								name: "Extra communication credits",
+								desc: "Top up your SMS and notification credits when your monthly allocation runs low.",
+								price: "Starting from ₵5 / bundle",
+								available: true,
+							},
+							{
+								name: "Location check-in for staff",
+								desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.",
+								available: false,
+							},
+							{
+								name: "WhatsApp messaging",
+								desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.",
+								available: false,
+							},
+							{
+								name: "Custom booking domain",
+								desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).",
+								available: true,
+							},
+						].map((addon) => (
+							<div
+								key={addon.name}
+								className={cn(
+									"rounded-[18px] border p-6",
+									addon.available
+										? "border-brand-ink/8 bg-white"
+										: "border-dashed border-brand-ink/10 bg-brand-cream-dim",
+								)}
+							>
+								<div className="mb-3 flex items-start justify-between gap-3">
+									<div className="font-serif text-[18px] font-medium text-brand-ink">
+										{addon.name}
+									</div>
+									{addon.available ? (
+										<span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700">
+											Available
+										</span>
+									) : (
+										<span className="shrink-0 rounded-full bg-brand-yellow/20 px-3 py-1 text-[11.5px] font-medium text-brand-purple">
+											Coming soon
+										</span>
+									)}
+								</div>
+								<p className="text-[14px] text-brand-ink/55">{addon.desc}</p>
+								{"price" in addon && addon.price && (
+									<p className="mt-3 text-[13.5px] font-medium text-brand-purple">
+										{addon.price}
+									</p>
+								)}
+							</div>
+						))}
+					</div>
+				</div>
+			</section>
 
-                    {isChain ? (
-                      <a
-                        href="mailto:hello@salonmagik.com"
-                        className="block w-full rounded-full border-[1.5px] border-brand-purple py-[13px] text-center text-[14.5px] font-medium text-brand-purple transition-colors hover:bg-brand-lilac-bg"
-                      >
-                        Talk to us
-                      </a>
-                    ) : isWaitlistMode ? (
-                      <Link
-                        to="/#waitlist"
-                        className={cn(
-                          "block w-full rounded-full py-[13px] text-center text-[14.5px] font-medium transition-colors",
-                          plan.is_recommended
-                            ? "bg-brand-ink text-white hover:bg-brand-purple"
-                            : "border-[1.5px] border-brand-purple text-brand-purple hover:bg-brand-lilac-bg",
-                        )}
-                      >
-                        Join waitlist
-                      </Link>
-                    ) : (
-                      <a
-                        href={`${salonAppUrl}/signup`}
-                        className={cn(
-                          "block w-full rounded-full py-[13px] text-center text-[14.5px] font-medium transition-colors",
-                          plan.is_recommended
-                            ? "bg-brand-ink text-white hover:bg-brand-purple"
-                            : "border-[1.5px] border-brand-purple text-brand-purple hover:bg-brand-lilac-bg",
-                        )}
-                      >
-                        Start free
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Comparison table */}
-      <section className="bg-brand-cream-dim px-8 py-[80px]">
-        <div className="mx-auto max-w-[1180px]">
-          <div className="mb-12 text-center">
-            <div className="mb-3 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
-              <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
-              Compare plans
-            </div>
-            <h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
-              What's included in each plan
-            </h2>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse">
-              <thead>
-                <tr>
-                  <th className="w-[42%] pb-6 text-left text-[13px] font-medium uppercase tracking-[0.06em] text-brand-ink/40">
-                    Feature
-                  </th>
-                  {(plans ?? []).map((plan) => (
-                    <th key={plan.id} className={cn("pb-6 text-center text-[14px] font-medium", plan.is_recommended ? "text-brand-purple" : "text-brand-ink")}>
-                      {plan.name}
-                      {plan.is_recommended && (
-                        <span className="ml-2 inline-block rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] text-brand-purple">
-                          Popular
-                        </span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-brand-ink/[0.06]">
-                {!isLoading && (
-                  <>
-                    <tr className="bg-brand-ink/[0.02]">
-                      <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">Capacity</td>
-                    </tr>
-                    <tr>
-                      <td className="py-4 text-[14.5px] text-brand-ink/75">Locations</td>
-                      {(plans ?? []).map((plan) => {
-                        const lim = getPlanLimit(plan.id);
-                        return (
-                          <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
-                            {lim ? (lim.max_locations > 1 ? `Up to ${lim.max_locations}` : "1") : "—"}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    <tr>
-                      <td className="py-4 text-[14.5px] text-brand-ink/75">Staff accounts</td>
-                      {(plans ?? []).map((plan) => {
-                        const lim = getPlanLimit(plan.id);
-                        return (
-                          <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">
-                            {lim ? lim.max_staff === 1 ? "Owner only" : lim.max_staff >= 999 ? "Unlimited" : `Up to ${lim.max_staff}` : "—"}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    <tr>
-                      <td className="py-4 text-[14.5px] text-brand-ink/75">Messages / month</td>
-                      {(plans ?? []).map((plan) => {
-                        const lim = getPlanLimit(plan.id);
-                        return <td key={plan.id} className="py-4 text-center text-[14.5px] text-brand-ink">{lim ? lim.monthly_messages.toLocaleString() : "—"}</td>;
-                      })}
-                    </tr>
-
-                    {[
-                      {
-                        category: "Bookings",
-                        rows: [
-                          { label: "Online booking page", solo: true, studio: true, chain: true },
-                          { label: "Client reminders (SMS)", solo: true, studio: true, chain: true },
-                          { label: "Appointment management", solo: true, studio: true, chain: true },
-                          { label: "Package & voucher sales", solo: true, studio: true, chain: true },
-                          { label: "Recurring bookings", solo: false, studio: true, chain: true },
-                        ],
-                      },
-                      {
-                        category: "Business",
-                        rows: [
-                          { label: "Services & products catalog", solo: true, studio: true, chain: true },
-                          { label: "Payment tracking", solo: true, studio: true, chain: true },
-                          { label: "Sales reports", solo: true, studio: true, chain: true },
-                          { label: "Staff performance reports", solo: false, studio: true, chain: true },
-                          { label: "Multi-location dashboard", solo: false, studio: false, chain: true },
-                        ],
-                      },
-                      {
-                        category: "Team",
-                        rows: [
-                          { label: "Staff role management", solo: false, studio: true, chain: true },
-                          { label: "Permission controls", solo: false, studio: true, chain: true },
-                        ],
-                      },
-                      {
-                        category: "Support",
-                        rows: [
-                          { label: "Email & chat support", solo: true, studio: true, chain: true },
-                          { label: "Priority support", solo: false, studio: false, chain: true },
-                          { label: "Dedicated onboarding", solo: false, studio: false, chain: true },
-                        ],
-                      },
-                    ].map(({ category, rows }) => {
-                      const planSlugs = (plans ?? []).map((p) => p.slug);
-                      return (
-                        <Fragment key={category}>
-                          <tr className="bg-brand-ink/[0.02]">
-                            <td colSpan={4} className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40">{category}</td>
-                          </tr>
-                          {rows.map((row) => (
-                            <tr key={row.label}>
-                              <td className="py-4 text-[14.5px] text-brand-ink/75">{row.label}</td>
-                              {planSlugs.map((slug) => {
-                                const val = slug === "solo" ? row.solo : slug === "studio" ? row.studio : row.chain;
-                                return (
-                                  <td key={slug} className="py-4 text-center">
-                                    {val
-                                      ? <span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">✓</span>
-                                      : <span className="text-[20px] text-brand-ink/20">—</span>}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </Fragment>
-                      );
-                    })}
-                  </>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* Add-ons */}
-      <section className="px-8 py-[80px]">
-        <div className="mx-auto max-w-[1180px]">
-          <div className="mb-10 ">
-            <div className="mb-3 flex items-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
-              <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
-              Add-ons
-            </div>
-            <h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">Extend your plan</h2>
-            <p className="mt-2 text-[16px] text-brand-ink/55">Optional extras you can add to any plan, or unlock as your business grows.</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            {[
-              { name: "Extra communication credits", desc: "Top up your SMS and notification credits when your monthly allocation runs low.", price: "Starting from ₵5 / bundle", available: true },
-              { name: "Location check-in for staff", desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.", available: false },
-              { name: "WhatsApp messaging", desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.", available: false },
-              { name: "Custom booking domain", desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).", available: true },
-            ].map((addon) => (
-              <div
-                key={addon.name}
-                className={cn("rounded-[18px] border p-6", addon.available ? "border-brand-ink/8 bg-white" : "border-dashed border-brand-ink/10 bg-brand-cream-dim")}
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="font-serif text-[18px] font-medium text-brand-ink">{addon.name}</div>
-                  {addon.available
-                    ? <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700">Available</span>
-                    : <span className="shrink-0 rounded-full bg-brand-yellow/20 px-3 py-1 text-[11.5px] font-medium text-brand-purple">Coming soon</span>}
-                </div>
-                <p className="text-[14px] text-brand-ink/55">{addon.desc}</p>
-                {"price" in addon && addon.price && (
-                  <p className="mt-3 text-[13.5px] font-medium text-brand-purple">{addon.price}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ teaser */}
-      <section className="bg-brand-cream-dim px-8 py-[80px] text-center">
-        <div className="mx-auto max-w-[520px]">
-          <h2 className="font-serif text-[clamp(22px,3vw,30px)] font-medium text-brand-ink">Still have questions?</h2>
-          <p className="mt-3 text-[15px] text-brand-ink/55">We've answered the most common ones. If yours isn't there, reach out and we'll get back to you.</p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
-            <Link
-              to="/faq"
-              className="rounded-full border-[1.5px] border-brand-purple px-7 py-[13px] text-[15px] font-medium text-brand-purple transition-colors hover:bg-brand-lilac-bg"
-            >
-              View all FAQs
-            </Link>
-            <a
-              href="mailto:hello@salonmagik.com"
-              className="rounded-full bg-brand-ink px-7 py-[13px] text-[15px] font-medium text-white transition-colors hover:bg-brand-purple"
-            >
-              Contact support
-            </a>
-          </div>
-        </div>
-      </section>
-    </MarketingLayout>
-  );
+			{/* FAQ teaser */}
+			<section className="bg-brand-cream-dim px-8 py-[80px] text-center">
+				<div className="mx-auto max-w-[520px]">
+					<h2 className="font-serif text-[clamp(22px,3vw,30px)] font-medium text-brand-ink">
+						Still have questions?
+					</h2>
+					<p className="mt-3 text-[15px] text-brand-ink/55">
+						We've answered the most common ones. If yours isn't there, reach out
+						and we'll get back to you.
+					</p>
+					<div className="mt-7 flex flex-wrap items-center justify-center gap-4">
+						<Link
+							to="/faq"
+							className="rounded-full border-[1.5px] border-brand-purple px-7 py-[13px] text-[15px] font-medium text-brand-purple transition-colors hover:bg-brand-lilac-bg"
+						>
+							View all FAQs
+						</Link>
+						<a
+							href="mailto:hello@salonmagik.com"
+							className="rounded-full bg-brand-ink px-7 py-[13px] text-[15px] font-medium text-white transition-colors hover:bg-brand-purple"
+						>
+							Contact support
+						</a>
+					</div>
+				</div>
+			</section>
+		</MarketingLayout>
+	);
 }

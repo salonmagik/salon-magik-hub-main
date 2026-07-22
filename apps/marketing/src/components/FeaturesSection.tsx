@@ -113,7 +113,7 @@ export function FeaturesSection() {
       <FeatureBlock
         tag="Booking"
         heading="Clients book themselves. Your calendar fills itself."
-        description="Share one link. Clients pick a service, a stylist and a time that works, and it lands straight on your calendar — no back-and-forth required."
+        description="Share one link. Clients pick a service, a stylist and a time that works, and it lands straight on your calendar. No back-and-forth required."
         bullets={[
           "Real-time availability across every stylist",
           "Automatic deposits for high-demand slots",

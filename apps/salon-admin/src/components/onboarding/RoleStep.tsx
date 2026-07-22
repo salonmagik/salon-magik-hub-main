@@ -22,7 +22,7 @@ const ROLES = [
   },
   {
     id: "supervisor" as UserRole,
-    emoji: "✅",
+    emoji: "🧑🏾‍💼",
     title: "Supervisor",
     description: "Oversee staff and handle customer issues",
   },

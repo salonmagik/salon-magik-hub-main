@@ -39,7 +39,7 @@ const MARKETS = [
     emoji: "🤸🏾",
     color: "dark" as const,
     label: "Freelance & mobile stylist",
-    headline: "Work from home, rent a chair, go mobile — your booking link travels with you.",
+    headline: "Work from home, rent a chair, go mobile. Your booking link travels with you!",
     tags: ["Personal booking link", "Anywhere access", "Client history"],
   },
   {
@@ -47,7 +47,7 @@ const MARKETS = [
     emoji: "🎨",
     color: "gold" as const,
     label: "Tattoo & piercing studio",
-    headline: "Long sessions, custom work, big deposits. Handle the art — we'll handle the calendar.",
+    headline: "Long sessions, custom work, big deposits. Handle the art we'll handle the calendar.",
     tags: ["Deposit collection", "Duration blocking", "Client reference notes"],
   },
 ];
@@ -131,9 +131,9 @@ export default function ForSalonsPage() {
       {/* CTA */}
       <section className="bg-brand-purple-deep px-8 py-[72px] text-center">
         <h2 className="font-serif text-[clamp(26px,3.5vw,38px)] font-medium leading-[1.15] tracking-[-0.3px] text-white">
-          Ready to run your business with less chaos?
+          Ready to run your beauty business with less chaos?
         </h2>
-        <p className="mt-4 text-[16px] text-brand-lilac">No card needed. Up and running in under 10 minutes.</p>
+        <p className="mt-4 text-[16px] text-brand-lilac">No card needed. Up and running in under 5 minutes.</p>
         <a
           href={`${salonAppUrl}/signup`}
           className="mt-8 inline-block rounded-full bg-brand-yellow px-8 py-[15px] text-[15.5px] font-medium text-brand-purple-deep transition-transform hover:-translate-y-0.5"

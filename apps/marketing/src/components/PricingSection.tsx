@@ -1,22 +1,14 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { cn } from "@shared/utils";
 import { usePlans, usePlanFeatures } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
+import { PlanCard } from "@/components/PlanCard";
 
 type Currency = "GHS" | "NGN";
 
 interface PricingSectionProps {
   isWaitlistMode: boolean;
   onWaitlistClick?: () => void;
-}
-
-function Check() {
-  return (
-    <span className="flex h-[18px] w-[18px] flex-shrink-0 items-center justify-center rounded-full bg-brand-purple text-[10px] text-brand-yellow">
-      ✓
-    </span>
-  );
 }
 
 export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSectionProps) {
@@ -39,6 +31,9 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
     if (isAnnual && row.annual_price > 0) return row.effective_monthly;
     return row.monthly_price;
   };
+
+  const getMonthlyPrice = (planId: string) =>
+    pricing?.find((p) => p.plan_id === planId)?.monthly_price ?? null;
 
   const getPlanFeatures = (planId: string) =>
     (features ?? []).filter((f) => f.plan_id === planId).sort((a, b) => a.sort_order - b.sort_order);
@@ -71,7 +66,6 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
 
         {/* Toggles */}
         <div className="mb-10 flex flex-wrap items-center justify-center gap-4">
-          {/* Currency toggle */}
           <div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
             {(["GHS", "NGN"] as Currency[]).map((c) => (
               <button
@@ -90,7 +84,6 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
             ))}
           </div>
 
-          {/* Billing toggle */}
           <div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
             {[false, true].map((annual) => (
               <button
@@ -121,107 +114,22 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
           </div>
         ) : (
           <div className="grid grid-cols-1 items-stretch gap-[22px] md:grid-cols-3">
-            {(plans ?? []).map((plan) => {
-              const price = getPlanPrice(plan.id);
-              const planFeatures = getPlanFeatures(plan.id);
-              const savingsPct = getSavingsPct(plan.id);
-              const isChain = plan.slug === "chain";
-
-              return (
-                <div
-                  key={plan.id}
-                  className={cn(
-                    "relative flex flex-col rounded-[20px] border-[1.5px] bg-white px-7 py-8",
-                    plan.is_recommended
-                      ? "border-brand-purple shadow-[0_30px_60px_rgba(46,31,78,0.14)]"
-                      : "border-brand-ink/8",
-                  )}
-                >
-                  {plan.is_recommended && (
-                    <span className="absolute -top-[13px] left-7 rounded-full bg-brand-purple px-3 py-[5px] text-[11.5px] tracking-[0.03em] text-white">
-                      Most set up for teams
-                    </span>
-                  )}
-
-                  <div className="font-serif text-[22px] text-brand-ink">{plan.name}</div>
-                  <div className="mt-1.5 text-[13.5px] text-brand-ink/50">{plan.description}</div>
-
-                  <div className="mt-5">
-                    {price != null ? (
-                      <>
-                        <div className="font-serif text-[40px] leading-none text-brand-ink">
-                          {symbol}{price.toLocaleString()}
-                          <span className="font-sans text-[14px] text-brand-ink/50"> / month</span>
-                        </div>
-                        {isAnnual && savingsPct ? (
-                          <div className="mt-1.5 text-[12.5px]">
-                            <span className="font-medium text-brand-yellow line-through decoration-brand-yellow/60">
-                              {symbol}{pricing?.find((p) => p.plan_id === plan.id)?.monthly_price?.toLocaleString()}/mo without annual
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="mt-1 text-[12.5px] text-brand-ink/45">
-                            Save up to {getSavingsPct(plan.id) ?? "—"}% with annual billing
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="font-serif text-[32px] leading-none text-brand-ink">Custom</div>
-                    )}
-                  </div>
-
-                  <ul className="mt-6 flex flex-col gap-[13px]">
-                    {planFeatures.slice(0, 5).map((f) => (
-                      <li key={f.id} className="flex items-start gap-2.5 text-[14.5px] text-brand-ink/75">
-                        <Check />
-                        {f.feature_text}
-                      </li>
-                    ))}
-                  </ul>
-                  <Link
-                    to="/pricing"
-                    className="mb-6 mt-4 block text-[13px] font-medium text-brand-purple hover:underline"
-                  >
-                    View all details →
-                  </Link>
-                  <div className="flex-1" />
-
-                  {isChain ? (
-                    <a
-                      href="#"
-                      className="block w-full rounded-full border-[1.5px] border-brand-purple py-[13px] text-center text-[14.5px] font-medium text-brand-purple transition-colors hover:bg-brand-lilac-bg"
-                    >
-                      Talk to us
-                    </a>
-                  ) : isWaitlistMode ? (
-                    <button
-                      type="button"
-                      onClick={onWaitlistClick}
-                      className={cn(
-                        "w-full rounded-full py-[13px] text-[14.5px] font-medium transition-colors",
-                        plan.is_recommended
-                          ? "bg-brand-ink text-white hover:bg-brand-purple"
-                          : "border-[1.5px] border-brand-purple text-brand-purple hover:bg-brand-lilac-bg",
-                      )}
-                    >
-                      Start free
-                    </button>
-                  ) : (
-                    <a
-                      href={`${salonAppUrl}/signup`}
-                      className={cn(
-                        "block w-full rounded-full py-[13px] text-center text-[14.5px] font-medium transition-colors",
-                        plan.is_recommended
-                          ? "bg-brand-ink text-white hover:bg-brand-purple"
-                          : "border-[1.5px] border-brand-purple text-brand-purple hover:bg-brand-lilac-bg",
-                      )}
-                    >
-                      Start free
-                    </a>
-                  )}
-                </div>
-              );
-            })}
+            {(plans ?? []).map((plan) => (
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                price={getPlanPrice(plan.id)}
+                monthlyPrice={getMonthlyPrice(plan.id)}
+                savingsPct={getSavingsPct(plan.id)}
+                features={getPlanFeatures(plan.id)}
+                isAnnual={isAnnual}
+                isWaitlistMode={isWaitlistMode}
+                onWaitlistClick={onWaitlistClick}
+                symbol={symbol}
+                salonAppUrl={salonAppUrl}
+                compact
+              />
+            ))}
           </div>
         )}
 

@@ -11,8 +11,8 @@ const types = [
 
 export function BusinessTypesSection() {
   return (
-    <section className="bg-brand-cream px-8 py-[90px]">
-      <div className="mx-auto max-w-[1180px]">
+    <section className="bg-brand-cream px-8">
+      <div className="mx-auto mt-16 lg:mt-20 max-w-[1180px]">
         <div className="mb-10 text-center">
           <div className="mb-4 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
             <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />

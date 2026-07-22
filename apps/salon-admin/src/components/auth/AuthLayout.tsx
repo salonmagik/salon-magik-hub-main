@@ -38,12 +38,12 @@ const LOGIN_SLIDES = [
     card2: { label: "Last booking", value: "2 hours ago" },
   },
   {
-    quote: "Every appointment, every client, every payment — all in one place.",
+    quote: "Every appointment, every client, every payment. All in one place.",
     card1: { label: "Today's schedule", value: "Ready to view" },
     card2: { label: "Client records", value: "All up to date" },
   },
   {
-    quote: "Your reminders went out. Your clients are ready. Your business runs.",
+    quote: "Your reminders went out. Your clients are ready. Your business is winning.",
     card1: { label: "Reminders sent", value: "Delivered" },
     card2: { label: "Revenue tracked", value: "This week" },
   },
@@ -103,7 +103,7 @@ export function AuthLayout({ children, title, subtitle, variant = "signup" }: Au
           <blockquote
             className="mb-5 text-white"
             style={{
-              fontFamily: "Fraunces, serif",
+              fontFamily: "Questrial, serif",
               fontSize: "clamp(20px, 2vw, 26px)",
               fontWeight: 500,
               lineHeight: 1.28,

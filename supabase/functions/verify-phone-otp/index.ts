@@ -66,15 +66,33 @@ serve(async (req) => {
       .update({ used: true })
       .eq("id", token.id);
 
-    const { data: sessionData, error: sessionError } = await (admin.auth.admin as any).createSession({
-      user_id: token.user_id,
-    });
+    // supabase-js v2 removed the createSession/signInAsUser SDK wrapper;
+    // call the GoTrue admin endpoint directly.
+    const sessionRes = await fetch(
+      `${supabaseUrl}/auth/v1/admin/users/${token.user_id}/session`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({}),
+      },
+    );
 
-    const access_token = sessionData?.session?.access_token;
-    const refresh_token = sessionData?.session?.refresh_token;
+    if (!sessionRes.ok) {
+      const errBody = await sessionRes.json().catch(() => ({})) as Record<string, unknown>;
+      console.error("[verify-phone-otp] session creation error:", errBody);
+      return json({ error: "Failed to create session. Please try again." }, 500);
+    }
 
-    if (sessionError || !access_token || !refresh_token) {
-      console.error("[verify-phone-otp] createSession error:", sessionError);
+    const sessionJson = await sessionRes.json() as Record<string, unknown>;
+    const access_token = sessionJson.access_token as string | undefined;
+    const refresh_token = sessionJson.refresh_token as string | undefined;
+
+    if (!access_token || !refresh_token) {
+      console.error("[verify-phone-otp] session missing tokens:", sessionJson);
       return json({ error: "Failed to create session. Please try again." }, 500);
     }
 

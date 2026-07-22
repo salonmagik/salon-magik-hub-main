@@ -76,10 +76,6 @@ export default function FAQPage() {
       {/* Centered hero — consistent with Pricing + Support pages */}
       <section className="px-8 pb-0 pt-16 text-center">
         <div className="mx-auto max-w-[580px]">
-          <div className="mb-4 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
-            <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
-            FAQ
-          </div>
           <h1 className="font-serif text-[clamp(32px,4vw,48px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
             Questions, answered.
           </h1>

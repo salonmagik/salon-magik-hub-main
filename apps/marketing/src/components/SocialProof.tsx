@@ -1,4 +1,11 @@
-export function SocialProof() {
+import { usePlans } from "@/hooks";
+
+export function SocialProof () {
+    const { data: plans } = usePlans();
+  const trialDays =
+		plans?.find((p) => p.is_recommended)?.trial_days ??
+		plans?.[0]?.trial_days ??
+		14;
   return (
     <div className="bg-brand-purple-deep px-8 py-10">
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-6">
@@ -22,11 +29,11 @@ export function SocialProof() {
             <span className="text-[11.5px] text-white/50">Now onboarding</span>
           </div>
           <div className="text-right">
-            <b className="block font-serif text-[20px] text-brand-yellow">14 days</b>
+            <b className="block font-serif text-[20px] text-brand-yellow">{trialDays} days</b>
             <span className="text-[11.5px] text-white/50">Free trial</span>
           </div>
           <div className="text-right">
-            <b className="block font-serif text-[20px] text-brand-yellow">GH &amp; NG</b>
+            <b className="block font-serif text-[20px] text-brand-yellow">🇬🇭 🇳🇬</b>
             <span className="text-[11.5px] text-white/50">Built locally</span>
           </div>
         </div>

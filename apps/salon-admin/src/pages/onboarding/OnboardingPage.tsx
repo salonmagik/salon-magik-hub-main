@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -51,11 +51,15 @@ function SegmentProgress({ currentIndex, total }: { currentIndex: number; total:
   );
 }
 
+const VALID_PLAN_SLUGS: SubscriptionPlan[] = ["solo", "studio", "chain"];
+
 export default function OnboardingPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, refreshTenants } = useAuth();
   const { data: plans } = usePlans();
+  const [searchParams] = useSearchParams();
+  const planFromUrl = searchParams.get("plan") as SubscriptionPlan | null;
   const { data: trialSetting } = useQuery({
     queryKey: ["default-trial-days"],
     queryFn: async () => {
@@ -89,7 +93,9 @@ export default function OnboardingPage() {
     phone: "",
   });
 
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
+    planFromUrl && VALID_PLAN_SLUGS.includes(planFromUrl) ? planFromUrl : null,
+  );
 
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
     name: "",
@@ -737,7 +743,7 @@ export default function OnboardingPage() {
               )}
             </button>
           </div>
-          <p className="mt-5 text-center text-[12.5px] text-black/35">No credit card needed · takes about 3 minutes</p>
+          <p className="mt-5 text-center text-[12.5px] text-black/35">No credit card needed · takes about 2 minutes</p>
         </div>
       </div>
     </div>
