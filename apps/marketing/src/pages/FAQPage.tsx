@@ -32,7 +32,7 @@ const FAQ_CATEGORIES = [
   {
     category: "Features",
     items: [
-      { q: "Is WhatsApp messaging supported?", a: "Not yet — it's on our roadmap. Today, messaging runs through SMS and email broadcasts, plus automatic birthday and reactivation messages." },
+      { q: "Is WhatsApp messaging supported?", a: "Not yet — it's on our roadmap. Today you can send personalised promotional messages and automated reminders to your clients via SMS and email, and birthday messages are sent automatically on your clients' birthdays. WhatsApp is coming soon." },
       { q: "Can I manage multiple locations?", a: "Yes. The Chain plan supports multiple branches with a unified dashboard, shared client records, and per-location reporting." },
       { q: "Does Salon Magik have a mobile app?", a: "The web app is fully responsive and works great on mobile. A dedicated native app is on our roadmap." },
       { q: "Can I customise my booking page?", a: "Yes — you can set your brand colour, upload a banner image, add a short bio, and toggle availability. More customisation options are coming." },

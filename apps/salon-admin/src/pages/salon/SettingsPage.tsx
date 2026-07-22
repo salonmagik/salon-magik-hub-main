@@ -693,6 +693,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		emailTransactionAlerts: true,
 		inAppTransactionAlerts: true,
 		emailDailyDigest: false,
+		emailBirthdayMessages: true,
 	});
 
 	const [bookingSettings, setBookingSettings] = useState({
@@ -1107,6 +1108,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				inAppTransactionAlerts:
 					dbNotificationSettings.in_app_transaction_alerts,
 				emailDailyDigest: dbNotificationSettings.email_daily_digest,
+				emailBirthdayMessages: dbNotificationSettings.email_birthday_messages ?? true,
 			});
 		}
 	}, [dbNotificationSettings]);
@@ -1122,6 +1124,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			email_transaction_alerts: notificationSettings.emailTransactionAlerts,
 			in_app_transaction_alerts: notificationSettings.inAppTransactionAlerts,
 			email_daily_digest: notificationSettings.emailDailyDigest,
+		email_birthday_messages: notificationSettings.emailBirthdayMessages,
 		});
 	};
 
@@ -2113,6 +2116,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			emailTransactionAlerts: "email_transaction_alerts",
 			inAppTransactionAlerts: "in_app_transaction_alerts",
 			emailDailyDigest: "email_daily_digest",
+			emailBirthdayMessages: "email_birthday_messages",
 		};
 
 		const success = await saveNotificationSettings({
@@ -2282,6 +2286,22 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						disabled={notificationsSaving}
 						onCheckedChange={(checked) =>
 							handleNotificationToggle("emailDailyDigest", checked)
+						}
+					/>
+				</div>
+
+				<div className="flex items-center justify-between py-2">
+					<div>
+						<p className="font-medium">Birthday messages</p>
+						<p className="text-sm text-muted-foreground">
+							Automatically email clients on their birthday (requires birthday on their profile)
+						</p>
+					</div>
+					<Switch
+						checked={notificationSettings.emailBirthdayMessages}
+						disabled={notificationsSaving}
+						onCheckedChange={(checked) =>
+							handleNotificationToggle("emailBirthdayMessages", checked)
 						}
 					/>
 				</div>
