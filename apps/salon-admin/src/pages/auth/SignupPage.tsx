@@ -409,7 +409,6 @@ export default function SignupPage() {
           }}
           error={shouldShowError("phone") ? validation.errors.phone : undefined}
           disabled={isLoading}
-          defaultCountry="GH"
         />
 
         <AuthInput

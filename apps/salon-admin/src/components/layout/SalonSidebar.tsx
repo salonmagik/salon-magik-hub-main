@@ -279,7 +279,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           children: [
             { label: "Branch Profile", icon: Building2, path: "/salon/branch-settings?tab=profile" },
             { label: "Branch Hours", icon: CalendarX2, path: "/salon/branch-settings?tab=hours" },
-            { label: "Active Sessions", icon: Shield, path: "/salon/branch-settings?tab=sessions" },
           ],
         };
       }

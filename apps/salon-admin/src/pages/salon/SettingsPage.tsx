@@ -127,7 +127,6 @@ const BASE_SETTINGS_TABS = [
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
 	{ id: "custom-domain", label: "Custom Domain", icon: Globe },
-	{ id: "sessions", label: "Active Sessions", icon: Shield },
 ] as const;
 
 const weekDays = [
@@ -270,7 +269,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			return [
 				{ id: "profile", label: "Branch Profile", icon: Building2 },
 				{ id: "hours", label: "Branch Hours", icon: Clock },
-				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
 		}
 		if (resolvedScope === "business") {
