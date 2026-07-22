@@ -316,8 +316,8 @@ export default function PricingPage() {
 														chain: true,
 													},
 													{
-														label: "Recurring bookings",
-														solo: false,
+														label: "Prepaid service packages",
+														solo: true,
 														studio: true,
 														chain: true,
 													},

@@ -60,7 +60,7 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
             One price, everything included.
           </h2>
           <p className="text-[16px] text-brand-ink/60">
-            No setup fees, no per-text charges. Start free, upgrade when your team grows.
+            No setup fees. Unlimited email — SMS credits included in every plan, top up only when you need more.
           </p>
         </div>
 

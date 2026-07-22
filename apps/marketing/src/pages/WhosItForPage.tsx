@@ -15,7 +15,7 @@ const MARKETS = [
     color: "dark" as const,
     label: "Small salon (2–6 staff)",
     headline: "Full team, full visibility. Every chair on one calendar.",
-    tags: ["Team calendars", "Commission tracking", "Role access"],
+    tags: ["Team calendars", "Revenue reports", "Role access"],
   },
   {
     id: "chain",
