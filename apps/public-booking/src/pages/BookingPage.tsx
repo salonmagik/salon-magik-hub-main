@@ -15,12 +15,12 @@ import {
   type PublicCategory,
 } from "@/hooks";
 import type { PublicCatalogMode } from "@/hooks/usePublicCatalog";
+import { BrandLoader } from "@ui/brand-loader";
 import { BookingLayout } from "./components/BookingLayout";
 import { SalonHeader } from "./components/SalonHeader";
 import { CatalogView } from "./components/CatalogView";
 import { BookingWizard } from "./components/BookingWizard";
 import { PaymentStatusDialog } from "./components/PaymentStatusDialog";
-import { Skeleton } from "@ui/skeleton";
 import { Button } from "@ui/button";
 import {
   Dialog,
@@ -179,20 +179,7 @@ function BookingPageContent() {
   }, [locationIds]);
 
   if (isLoading) {
-    return (
-      <BookingCartProvider scopeKey={cartScopeKey}>
-        <BookingLayout onCartClick={() => {}} cartCount={0}>
-          <div className="space-y-6">
-            <Skeleton className="h-40 w-full rounded-xl" />
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, i) => (
-                <Skeleton key={i} className="h-64 rounded-xl" />
-              ))}
-            </div>
-          </div>
-        </BookingLayout>
-      </BookingCartProvider>
-    );
+    return <BrandLoader fullScreen />;
   }
 
   if (notFound || !salon) {

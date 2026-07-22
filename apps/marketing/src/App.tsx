@@ -1,12 +1,14 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { useEffect } from "react";
-import LandingPage from "@/pages/LandingPage";
-import PricingPage from "@/pages/PricingPage";
-import SupportPage from "@/pages/SupportPage";
-import TermsPage from "@/pages/TermsPage";
-import PrivacyPage from "@/pages/PrivacyPage";
-import FAQPage from "@/pages/FAQPage";
-import ForSalonsPage from "@/pages/ForSalonsPage";
+import { Suspense, lazy, useEffect } from "react";
+import { BrandLoader } from "@ui/brand-loader";
+
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
+const PricingPage = lazy(() => import("@/pages/PricingPage"));
+const SupportPage = lazy(() => import("@/pages/SupportPage"));
+const TermsPage = lazy(() => import("@/pages/TermsPage"));
+const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
+const FAQPage = lazy(() => import("@/pages/FAQPage"));
+const ForSalonsPage = lazy(() => import("@/pages/ForSalonsPage"));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -18,18 +20,20 @@ function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <div className="page-reveal">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/support" element={<SupportPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/faq" element={<FAQPage />} />
-          <Route path="/for-salons" element={<ForSalonsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
+      <Suspense fallback={<BrandLoader fullScreen />}>
+        <div className="page-reveal">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/support" element={<SupportPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/faq" element={<FAQPage />} />
+            <Route path="/for-salons" element={<ForSalonsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </Suspense>
     </BrowserRouter>
   );
 }
