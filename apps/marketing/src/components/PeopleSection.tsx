@@ -1,3 +1,5 @@
+import manSalonClientImg from "@/assets/man-salon-client.jpg";
+
 function Check() {
   return (
     <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">
@@ -10,12 +12,13 @@ export function PeopleSection() {
   return (
     <section className="bg-white px-8 py-[110px]">
       <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-16 md:grid-cols-2">
-        {/* Photo placeholder */}
-        <div className="flex aspect-[4/5] items-center justify-center rounded-3xl border-[1.5px] border-dashed border-brand-purple/25 bg-gradient-to-b from-brand-lilac-bg to-brand-cream-dim">
-          <div className="max-w-[220px] text-center leading-relaxed text-brand-purple">
-            <b className="mb-1.5 block font-serif text-[16px]">Photo placeholder</b>
-            Stylist at work with a client — real photography goes here once available
-          </div>
+        {/* Photo */}
+        <div className="overflow-hidden rounded-3xl">
+          <img
+            src={manSalonClientImg}
+            alt="Stylist at work with a client"
+            className="aspect-[4/5] w-full object-cover object-center"
+          />
         </div>
 
         {/* Copy */}

@@ -1,4 +1,5 @@
 import { usePlans } from "@/hooks";
+import founderImg from "@/assets/founder-photo.png";
 
 export function SocialProof () {
     const { data: plans } = usePlans();
@@ -9,14 +10,11 @@ export function SocialProof () {
   return (
     <div className="bg-brand-purple-deep px-8 py-10">
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-6">
-        {/* Avatar placeholder */}
-        <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-lilac to-brand-purple-soft text-center text-[10.5px] leading-snug text-white/80">
-          Founder<br />photo
-        </div>
+        <img src={founderImg} alt="Founder of Salon Magik" className="h-14 w-14 flex-shrink-0 rounded-full object-cover object-top" />
 
         {/* Quote */}
         <p className="min-w-[260px] flex-1 font-serif text-[15px] italic text-brand-lilac">
-          "I built this after watching salon owners I know run their whole business out of a notebook and a group chat. There had to be a better way."
+          "I built this after watching salon owners I know, run their whole business out of a notebook and a group chat. There had to be a better way."
           <b className="mt-1.5 block font-sans text-[12.5px] font-normal not-italic text-white/50">
             Founder, Salon Magik
           </b>

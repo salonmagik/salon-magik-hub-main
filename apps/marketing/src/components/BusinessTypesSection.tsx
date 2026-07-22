@@ -6,7 +6,7 @@ const types = [
   { emoji: "💈", name: "Barbershops", desc: "Cuts, shaves, grooming" },
   { emoji: "🧖🏾", name: "Spas & wellness", desc: "Massage, facials, body treatments" },
   { emoji: "✂️", name: "Freelance stylists", desc: "Home service, chair rental, mobile" },
-  { emoji: "🎨", name: "Tattoo studios", desc: "Custom art, piercings, long sessions" },
+  { emoji: "🎨", name: "Tattoo studios", desc: "Custom art, piercings, tattoo sessions" },
 ];
 
 export function BusinessTypesSection() {
@@ -16,7 +16,7 @@ export function BusinessTypesSection() {
         <div className="mb-10 text-center">
           <div className="mb-4 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
             <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
-            Who it's for
+            Who's it for
           </div>
           <h2 className="font-serif text-[clamp(26px,3.5vw,36px)] font-medium leading-[1.18] tracking-[-0.3px] text-brand-ink">
             Built for every beauty business.
@@ -38,7 +38,7 @@ export function BusinessTypesSection() {
 
         <div className="mt-10 text-center">
           <Link
-            to="/for-salons"
+            to="/whos-it-for"
             className="inline-flex items-center gap-1.5 text-[15px] font-medium text-brand-purple transition-colors hover:text-brand-purple-deep"
           >
             Learn more about who Salon Magik is built for →

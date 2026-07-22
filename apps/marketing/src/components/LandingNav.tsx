@@ -8,6 +8,7 @@ interface LandingNavProps {
 }
 
 const NAV_LINKS = [
+  { to: "/whos-it-for", label: "Who's it for" },
   { to: "/pricing", label: "Pricing" },
   { to: "/faq", label: "FAQ" },
   { to: "/support", label: "Support" },

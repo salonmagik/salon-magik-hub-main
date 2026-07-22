@@ -8,7 +8,7 @@ const SupportPage = lazy(() => import("@/pages/SupportPage"));
 const TermsPage = lazy(() => import("@/pages/TermsPage"));
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage"));
 const FAQPage = lazy(() => import("@/pages/FAQPage"));
-const ForSalonsPage = lazy(() => import("@/pages/ForSalonsPage"));
+const WhosItForPage = lazy(() => import("@/pages/WhosItForPage"));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -29,7 +29,7 @@ function App() {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/faq" element={<FAQPage />} />
-            <Route path="/for-salons" element={<ForSalonsPage />} />
+            <Route path="/whos-it-for" element={<WhosItForPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
