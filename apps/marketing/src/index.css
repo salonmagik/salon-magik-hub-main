@@ -171,10 +171,15 @@
 .skeleton { @apply animate-pulse bg-muted rounded; }
 .hover-lift { @apply transition-transform duration-200; }
 .hover-lift:hover { transform: translateY(-2px); }
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-transparent; }
+/* Smooth scroll — native CSS, zero JS cost */
+html { scroll-behavior: smooth; }
+
+/* Scrollbar — grain only, no visible track */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/30; }
+::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/40; }
+* { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
