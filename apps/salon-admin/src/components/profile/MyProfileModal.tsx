@@ -488,14 +488,14 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
                             <DeviceIcon type={s.device_type} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium leading-snug">
-                              {[s.device_type === "mobile" ? "Mobile" : s.device_type === "tablet" ? "Tablet" : "Desktop", s.browser_name].filter(Boolean).join(" · ")}
+                            <div className="text-sm font-medium leading-snug flex items-center flex-wrap gap-1.5">
+                              <span>{[s.device_type === "mobile" ? "Mobile" : s.device_type === "tablet" ? "Tablet" : "Desktop", s.browser_name].filter(Boolean).join(" · ")}</span>
                               {isCurrent && (
-                                <Badge variant="secondary" className="ml-2 text-[10px] py-0 h-4">
+                                <Badge variant="secondary" className="text-[10px] py-0 h-4">
                                   This device
                                 </Badge>
                               )}
-                            </p>
+                            </div>
                             <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                               <Clock className="w-3 h-3 shrink-0" />
                               {formatDistanceToNow(new Date(s.last_activity_at), { addSuffix: true })}
