@@ -728,6 +728,7 @@ export default function OnboardingPage() {
                 plan={selectedPlan!}
                 business={businessInfo}
                 locations={isChain ? locationsConfig : null}
+                onEditStep={(s) => setStep(s)}
                 chainSummary={
                   isChain && configuredChainQuote
                     ? {
