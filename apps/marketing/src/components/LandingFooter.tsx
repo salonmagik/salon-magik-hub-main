@@ -101,7 +101,7 @@ export function LandingFooter() {
             Salon Magik
           </div>
           <p className="mt-[18px] text-[14px] text-white/45">
-            Bookings, staff, payments and messaging, all in one place.
+            Bookings, staff, payments, messaging and more, all in one place.
           </p>
         </div>
 

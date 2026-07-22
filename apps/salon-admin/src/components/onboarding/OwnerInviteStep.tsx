@@ -36,13 +36,14 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
   return (
     <div className="p-7">
       <div className="mb-6">
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10">
-          <Crown className="h-5 w-5 text-[#2E1F4E]" strokeWidth={1.6} />
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <Crown className="h-3.5 w-3.5" strokeWidth={2} />
+          Owner invite
         </div>
-        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           Invite the salon owner
         </h2>
-        <p className="mt-1 text-[14px] text-black/45">
+        <p className="mt-1.5 text-[14px] text-black/45">
           Since you're not the owner, we'll send them an invitation to complete billing setup.
         </p>
       </div>

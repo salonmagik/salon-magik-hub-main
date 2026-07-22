@@ -13,7 +13,7 @@ interface FeatureCard {
 }
 
 const FEATURES: FeatureCard[] = [
-  { icon: CalendarCheck,   title: "Online booking",           tagline: "Clients book 24/7 — no app download required"           },
+  { icon: CalendarCheck,   title: "Online booking",           tagline: "Clients book 24/7, no app download required"           },
   { icon: Bell,            title: "Appointment reminders",    tagline: "Email and SMS before every visit, automatically"        },
   { icon: Cake,            title: "Birthday messages",        tagline: "Auto-sent the morning of, no effort needed"             },
   { icon: RefreshCw,       title: "Client reactivation",      tagline: "Automatic nudges to clients who've gone quiet"          },
@@ -21,10 +21,10 @@ const FEATURES: FeatureCard[] = [
   { icon: Globe,           title: "Custom domain",            tagline: "Your booking page on your own URL"                      },
   { icon: LayoutDashboard, title: "Client portal",            tagline: "Clients view their history and rebook themselves"       },
   { icon: ClipboardCheck,  title: "Approval-gated bookings",  tagline: "Review and confirm every request before it's set"      },
-  { icon: Package,         title: "Prepaid packages",         tagline: "Sell bundles of sessions — clients pay upfront"         },
+  { icon: Package,         title: "Prepaid packages",         tagline: "Sell bundles of sessions, clients pay upfront"         },
   { icon: Tag,             title: "Vouchers",                 tagline: "Create and redeem discount vouchers in-app"             },
   { icon: Megaphone,       title: "SMS broadcast",            tagline: "Send promos to your entire client list in one go"      },
-  { icon: CreditCard,      title: "Mobile money & cards",     tagline: "MoMo, cards, and cash — all tracked in one place"      },
+  { icon: CreditCard,      title: "Mobile money & cards",     tagline: "MoMo, cards, and cash, all tracked in one place"      },
   { icon: Star,            title: "VIP client tracking",      tagline: "Instantly spot your most loyal and highest-value clients" },
   { icon: Palette,         title: "Custom booking page",      tagline: "Your brand colours, banner image, and domain"          },
   { icon: MessageCircle,   title: "WhatsApp (coming soon)",   tagline: "Send messages on the channel clients already use"      },
@@ -36,7 +36,7 @@ const FEATURES: FeatureCard[] = [
   { icon: ShoppingBag,     title: "Products storefront",      tagline: "Sell retail products alongside your services"          },
   { icon: Newspaper,       title: "Daily digest",             tagline: "Morning email summary of every appointment ahead"      },
   { icon: FileText,        title: "Client notes",             tagline: "Preferences, allergies, and visit history saved"       },
-  { icon: Layers,          title: "Booking page themes",      tagline: "Default or ecommerce layout — switch any time"         },
+  { icon: Layers,          title: "Booking page themes",      tagline: "Default or ecommerce layout, switch any time"         },
   { icon: Mail,            title: "Email campaigns",          tagline: "Personalised messages to filtered client lists"        },
 ];
 

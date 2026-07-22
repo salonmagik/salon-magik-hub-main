@@ -45,10 +45,14 @@ export function RoleStep({ selectedRole, onRoleSelect }: RoleStepProps) {
   return (
     <div className="p-7">
       <div className="mb-6">
-        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
+          Your role
+        </div>
+        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           What's your role?
         </h2>
-        <p className="mt-1 text-[14px] text-black/45">
+        <p className="mt-1.5 text-[14px] text-black/45">
           Select the role that best describes your position at the salon.
         </p>
       </div>
@@ -62,7 +66,7 @@ export function RoleStep({ selectedRole, onRoleSelect }: RoleStepProps) {
               type="button"
               onClick={() => onRoleSelect(role.id)}
               className={cn(
-                "flex w-full items-center gap-4 rounded-[14px] border px-4 py-3.5 text-left transition-colors",
+                "flex w-full items-center gap-4 rounded-[22px] border px-5 py-4 text-left transition-colors",
                 isSelected
                   ? "border-[#2E1F4E] bg-[#2E1F4E]/[0.04]"
                   : "border-black/[0.08] bg-white hover:bg-black/[0.02]",

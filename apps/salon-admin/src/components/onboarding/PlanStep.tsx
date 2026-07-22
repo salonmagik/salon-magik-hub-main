@@ -64,11 +64,15 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
   return (
     <div className="p-7">
       <div className="mb-6">
-        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
-          Choose your plan
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
+          Subscription
+        </div>
+        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+          Pick what fits your business.
         </h2>
-        <p className="mt-1 text-[14px] text-black/45">
-          Start with a {trialDays}-day free trial. No credit card required.
+        <p className="mt-1.5 text-[14px] text-black/45">
+          You can change plans anytime from Settings.
         </p>
       </div>
 
@@ -79,28 +83,28 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
       ) : (
         <div className="space-y-4">
           {/* Billing cycle toggle */}
-          <div className="flex rounded-full border border-black/[0.08] bg-black/[0.03] p-1">
+          <div className="inline-flex rounded-full border border-black/[0.08] bg-black/[0.04] p-1">
             {(["monthly", "annual"] as const).map((cycle) => (
               <button
                 key={cycle}
                 type="button"
                 onClick={() => setBillingCycle(cycle)}
                 className={cn(
-                  "flex-1 rounded-full py-2 text-[13.5px] font-medium transition-colors",
+                  "rounded-full px-5 py-2 text-[13.5px] font-medium transition-colors",
                   billingCycle === cycle
                     ? "bg-white text-gray-900 shadow-sm"
                     : "text-black/45 hover:text-black/70",
                 )}
               >
                 {cycle === "monthly" ? "Monthly" : (
-                  <>Annual <span className="text-[11px] text-[#2E1F4E]">Save {maxAnnualSavings}%</span></>
+                  <>Annual{" "}<span className="text-[11.5px] font-semibold text-[#2E1F4E]">Save {maxAnnualSavings}%</span></>
                 )}
               </button>
             ))}
           </div>
 
           {/* Plan cards */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {plans?.map((plan) => {
               const isSelected = selectedPlan === plan.slug;
               const priceInfo = getPrice(plan.slug);
@@ -111,52 +115,56 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
                   type="button"
                   onClick={() => onPlanSelect(plan.slug as SubscriptionPlan)}
                   className={cn(
-                    "relative w-full rounded-[14px] border px-4 py-4 text-left transition-colors",
+                    "relative w-full rounded-[22px] border px-6 py-6 text-left transition-colors",
                     isSelected
                       ? "border-[#2E1F4E] bg-[#2E1F4E]/[0.04]"
                       : "border-black/[0.08] bg-white hover:bg-black/[0.02]",
                   )}
                 >
                   {plan.is_recommended && (
-                    <span className="absolute -top-[10px] left-4 rounded-full bg-[#2E1F4E] px-2.5 py-[3px] text-[11px] font-medium text-white">
+                    <span className="absolute -top-[11px] left-5 rounded-full bg-[#2E1F4E] px-3 py-[4px] text-[11px] font-medium text-white">
                       Most popular
                     </span>
                   )}
 
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p
-                        className={cn(
-                          "font-serif text-[17px] font-medium capitalize",
-                          isSelected ? "text-[#2E1F4E]" : "text-gray-900",
-                        )}
-                      >
-                        {plan.name}
-                      </p>
-                      <p className="mt-0.5 text-[13px] text-black/45">{plan.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className={cn("font-serif text-[20px] font-medium", isSelected ? "text-[#2E1F4E]" : "text-gray-900")}>
+                  {/* Name + price row */}
+                  <div className="flex items-start justify-between gap-4">
+                    <p
+                      className={cn(
+                        "font-serif text-[22px] font-medium capitalize leading-tight",
+                        isSelected ? "text-[#2E1F4E]" : "text-gray-900",
+                      )}
+                    >
+                      {plan.name}
+                    </p>
+                    <div className="shrink-0 text-right">
+                      <p className={cn("font-serif text-[26px] font-medium leading-none", isSelected ? "text-[#2E1F4E]" : "text-gray-900")}>
                         {formatCurrency(priceInfo.price, currency)}
                       </p>
-                      <p className="text-[11px] text-black/40">
+                      <p className="mt-1 text-[11.5px] text-black/40">
                         {priceInfo.period}
                         {priceInfo.note && <span className="block">{priceInfo.note}</span>}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1">
+                  {/* Description */}
+                  <p className="mt-2.5 text-[13.5px] leading-snug text-black/45">{plan.description}</p>
+
+                  {/* Features */}
+                  <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
                     {plan.features.slice(0, 6).map((feature) => (
-                      <div key={feature.id} className="flex items-center gap-1.5 text-[12.5px] text-black/55">
-                        <Check className="h-3.5 w-3.5 shrink-0 text-[#2E1F4E]" />
+                      <div key={feature.id} className="flex items-center gap-2 text-[13px] text-black/60">
+                        <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-[#2E1F4E]">
+                          <Check className="h-[10px] w-[10px] text-white" strokeWidth={3} />
+                        </span>
                         {feature.feature_text}
                       </div>
                     ))}
                   </div>
 
                   {priceInfo.savings > 0 && (
-                    <div className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-medium text-emerald-700">
+                    <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-medium text-emerald-700">
                       Save {priceInfo.savings}% vs monthly
                     </div>
                   )}

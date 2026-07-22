@@ -153,13 +153,14 @@ export function LocationsStep({
   return (
     <div className="p-7">
       <div className="mb-6">
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10">
-          <MapPin className="h-5 w-5 text-[#2E1F4E]" />
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
+          Locations
         </div>
-        <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
+        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           Your branches
         </h2>
-        <p className="mt-1 text-[14px] text-black/45">
+        <p className="mt-1.5 text-[14px] text-black/45">
           Add all your salon branches. You can add more later.
         </p>
       </div>
@@ -279,7 +280,7 @@ export function LocationsStep({
                     <SelectContent>
                       {marketCountries.map((c) => (
                         <SelectItem key={c.code} value={c.code}>
-                          {c.name}
+                          {c.flag} {c.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

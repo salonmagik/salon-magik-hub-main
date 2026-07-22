@@ -14,7 +14,7 @@ export function SocialProof () {
 
         {/* Quote */}
         <p className="min-w-[260px] flex-1 font-serif text-[15px] italic text-brand-lilac">
-          "I built this after watching salon owners I know, run their whole business out of a notebook and a group chat. There had to be a better way."
+          "I built this after watching owners I know, run their whole business out of a notebook and a group chat. There had to be a better way."
           <b className="mt-1.5 block font-sans text-[12.5px] font-normal not-italic text-white/50">
             Founder, Salon Magik
           </b>

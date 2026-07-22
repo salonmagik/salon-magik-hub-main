@@ -40,7 +40,7 @@ interface ReviewStepProps {
     billingTargets?: string[];
     campaignEndsAt?: string | null;
   } | null;
-  onEditStep?: (step: "owner-invite" | "business" | "plan") => void;
+  onEditStep?: (step: "role" | "owner-invite" | "business" | "plan") => void;
 }
 
 const PLAN_NAMES: Record<SubscriptionPlan, string> = {
@@ -90,7 +90,7 @@ function ReviewCard({
   editLabel?: string;
 }) {
   return (
-    <div className="rounded-[18px] border border-black/[0.07] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+    <div className="rounded-[22px] border border-black/[0.07] bg-white p-6 px-7 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#2E1F4E]/8">
@@ -158,7 +158,11 @@ export function ReviewStep({
 
       <div className="space-y-3.5">
         {/* Profile */}
-        <ReviewCard icon={User} title="Your profile">
+        <ReviewCard
+          icon={User}
+          title="Your profile"
+          onEdit={onEditStep ? () => onEditStep("role") : undefined}
+        >
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <Field label="Name" value={`${profile.firstName} ${profile.lastName}`} />
             <Field label="Role" value={ROLE_NAMES[role]} />
@@ -232,7 +236,7 @@ export function ReviewStep({
               type="button"
               onClick={onApplyPromo}
               disabled={!promoCode.trim() || isApplyingPromo}
-              className="flex items-center gap-1.5 rounded-[8px] border border-black/[0.1] px-4 text-[13.5px] font-medium text-black/60 transition-colors hover:border-black/20 hover:text-black/80 disabled:opacity-40"
+              className="flex items-center gap-1.5 rounded-full border border-black/[0.1] px-4 text-[13.5px] font-medium text-black/60 transition-colors hover:border-black/20 hover:text-black/80 disabled:opacity-40"
             >
               {isApplyingPromo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               Apply
@@ -328,6 +332,10 @@ export function ReviewStep({
           </ReviewCard>
         )}
       </div>
+
+      <p className="mt-6 text-center text-[12.5px] text-black/35">
+        You can change any of this later from Settings
+      </p>
     </div>
   );
 }
