@@ -178,8 +178,14 @@ export default function OnboardingPage() {
     switch (step) {
       case "role":
         return selectedRole !== null;
-      case "owner-invite":
-        return ownerInvite.name.trim() !== "" && ownerInvite.email.trim() !== "";
+      case "owner-invite": {
+        const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return (
+          ownerInvite.name.trim() !== "" &&
+          ownerInvite.email.trim() !== "" &&
+          emailRe.test(ownerInvite.email.trim())
+        );
+      }
       case "business":
         return (
           businessInfo.name.trim() !== "" &&
@@ -569,7 +575,55 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F8F6F2]">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#F8F6F2]">
+      {/* Decorative scattered salon icons */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 select-none">
+        {/* Scissors — top right */}
+        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "7%", right: "8%", opacity: 0.07, transform: "rotate(18deg)" }}>
+          <circle cx="8" cy="22" r="4.5" stroke="#2E1F4E" strokeWidth="2" />
+          <circle cx="8" cy="10" r="4.5" stroke="#2E1F4E" strokeWidth="2" />
+          <line x1="11.5" y1="19.5" x2="27" y2="7" stroke="#2E1F4E" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="11.5" y1="12.5" x2="27" y2="25" stroke="#2E1F4E" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+        {/* Comb — top left */}
+        <svg width="30" height="30" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "14%", left: "6%", opacity: 0.065, transform: "rotate(-25deg)" }}>
+          <rect x="3" y="8" width="26" height="8" rx="2" stroke="#2E1F4E" strokeWidth="2" />
+          {[7, 11, 15, 19, 23].map((x) => (
+            <line key={x} x1={x} y1="16" x2={x} y2="25" stroke="#2E1F4E" strokeWidth="2" strokeLinecap="round" />
+          ))}
+        </svg>
+        {/* Nail polish — mid left */}
+        <svg width="24" height="24" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "42%", left: "4%", opacity: 0.06, transform: "rotate(-14deg)" }}>
+          <rect x="11" y="3" width="10" height="7" rx="2" stroke="#2E1F4E" strokeWidth="2" />
+          <line x1="16" y1="7" x2="16" y2="11" stroke="#2E1F4E" strokeWidth="1.5" strokeLinecap="round" />
+          <path d="M11 10 Q9 12 9 15 L9 26 Q9 29 16 29 Q23 29 23 26 L23 15 Q23 12 21 10 Z" stroke="#2E1F4E" strokeWidth="2" />
+        </svg>
+        {/* Mirror — mid right */}
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "46%", right: "5%", opacity: 0.065, transform: "rotate(10deg)" }}>
+          <ellipse cx="16" cy="12" rx="9" ry="10" stroke="#2E1F4E" strokeWidth="2" />
+          <line x1="16" y1="22" x2="16" y2="29" stroke="#2E1F4E" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="11" y1="29" x2="21" y2="29" stroke="#2E1F4E" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        {/* Blow dryer — bottom right */}
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="absolute" style={{ bottom: "12%", right: "9%", opacity: 0.07, transform: "rotate(-20deg)" }}>
+          <ellipse cx="13" cy="13" rx="9" ry="7" stroke="#2E1F4E" strokeWidth="2" />
+          <path d="M21 10 L27 8 L27 18 L21 16" stroke="#2E1F4E" strokeWidth="2" strokeLinejoin="round" />
+          <path d="M9 19 Q7 23 7 27" stroke="#2E1F4E" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        {/* Lemniscate logo — bottom left, larger */}
+        <svg width="44" height="44" viewBox="0 0 32 32" fill="none" className="absolute" style={{ bottom: "16%", left: "7%", opacity: 0.06 }}>
+          <path d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z" stroke="#2E1F4E" strokeWidth="2.5" strokeLinecap="round" />
+          <circle cx="16" cy="16" r="2" fill="#2E1F4E" />
+        </svg>
+        {/* Small scissors — upper center-right */}
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "28%", right: "14%", opacity: 0.055, transform: "rotate(40deg)" }}>
+          <circle cx="8" cy="22" r="4.5" stroke="#2E1F4E" strokeWidth="2" />
+          <circle cx="8" cy="10" r="4.5" stroke="#2E1F4E" strokeWidth="2" />
+          <line x1="11.5" y1="19.5" x2="27" y2="7" stroke="#2E1F4E" strokeWidth="2.2" strokeLinecap="round" />
+          <line x1="11.5" y1="12.5" x2="27" y2="25" stroke="#2E1F4E" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      </div>
+
       {/* Top nav */}
       <div className="flex items-center justify-between px-8 py-5">
         <SalonMagikLogo size="sm" />

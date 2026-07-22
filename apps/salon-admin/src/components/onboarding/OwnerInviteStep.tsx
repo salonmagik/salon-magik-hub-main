@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
+import { Crown } from "lucide-react";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 
 export interface OwnerInviteInfo {
@@ -13,16 +15,29 @@ interface OwnerInviteStepProps {
   onChange: (info: OwnerInviteInfo) => void;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
+  const [touched, setTouched] = useState({ name: false, email: false });
+
   const handleChange = (field: keyof OwnerInviteInfo, value: string) => {
     onChange({ ...ownerInfo, [field]: value });
   };
 
+  const nameError = touched.name && !ownerInfo.name.trim() ? "Owner's name is required" : null;
+  const emailError = touched.email
+    ? !ownerInfo.email.trim()
+      ? "Owner's email is required"
+      : !EMAIL_RE.test(ownerInfo.email.trim())
+        ? "Enter a valid email address"
+        : null
+    : null;
+
   return (
     <div className="p-7">
       <div className="mb-6">
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10 text-[22px]">
-          👑
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2E1F4E]/10">
+          <Crown className="h-5 w-5 text-[#2E1F4E]" strokeWidth={1.6} />
         </div>
         <h2 className="font-serif text-[22px] font-medium leading-snug tracking-[-0.2px] text-gray-900">
           Invite the salon owner
@@ -42,7 +57,10 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
             placeholder="Jane Smith"
             value={ownerInfo.name}
             onChange={(e) => handleChange("name", e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+            className={nameError ? "border-red-400 focus-visible:ring-red-300" : ""}
           />
+          {nameError && <p className="text-[12px] text-red-500">{nameError}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -55,7 +73,10 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
             placeholder="owner@salon.com"
             value={ownerInfo.email}
             onChange={(e) => handleChange("email", e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+            className={emailError ? "border-red-400 focus-visible:ring-red-300" : ""}
           />
+          {emailError && <p className="text-[12px] text-red-500">{emailError}</p>}
         </div>
 
         <AuthPhoneInput

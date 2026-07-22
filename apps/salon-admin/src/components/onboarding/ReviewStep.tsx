@@ -72,8 +72,8 @@ function ReviewCard({ icon: Icon, title, children, highlight }: {
     <div className={cn(
       "rounded-[12px] border p-4",
       highlight === "amber"
-        ? "border-amber-200 bg-amber-50"
-        : "border-black/[0.06] bg-black/[0.02]",
+        ? "border-amber-200 bg-amber-50/60"
+        : "border-black/[0.07] bg-white",
     )}>
       <div className={cn(
         "mb-3 flex items-center gap-2 text-[13px] font-medium",

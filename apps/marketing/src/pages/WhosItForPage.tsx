@@ -60,8 +60,8 @@ const ROWS = [
 
 function BizCard({ icon: Icon, name, tagline, border }: BizType & { border: string }) {
   return (
-    <div style={{ background: border, padding: "1px", borderRadius: "18px", flexShrink: 0 }}>
-      <div className="w-[220px] rounded-[17px] bg-white p-5 shadow-[0_4px_16px_rgba(0,0,0,0.05)]">
+    <div style={{ background: border, padding: "1px", borderRadius: "18px", flexShrink: 0, overflow: "hidden" }}>
+      <div className="w-[220px] bg-white p-5">
         <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-brand-purple/8">
           <Icon className="h-[18px] w-[18px] text-brand-purple" strokeWidth={1.6} />
         </div>
@@ -74,55 +74,43 @@ function BizCard({ icon: Icon, name, tagline, border }: BizType & { border: stri
 
 export default function WhosItForPage() {
   return (
-    <MarketingLayout>
-      {/* Hero */}
-      <section className="px-8 pb-12 pt-16 text-center">
-        <h1 className="mx-auto max-w-[700px] font-serif text-[clamp(32px,4.5vw,50px)] font-medium leading-[1.1] tracking-[-0.4px] text-brand-ink">
-          Built for every type of beauty business.
-        </h1>
-        <p className="mx-auto mt-5 max-w-[520px] text-[17px] leading-relaxed text-brand-ink/55">
-          Hair, nails, skin, wellness — if you book clients and run a team, Salon Magik is built for you.
-        </p>
-      </section>
+		<MarketingLayout>
+			{/* Hero */}
+			<section className="px-8 pb-12 pt-16 text-center">
+				<h1 className="mx-auto max-w-[700px] font-serif text-[clamp(32px,4.5vw,50px)] font-medium leading-[1.1] tracking-[-0.4px] text-brand-ink">
+					30+ business types. One platform.
+				</h1>
+				<p className="mx-auto mt-5 max-w-[520px] text-[17px] leading-relaxed text-brand-ink/55">
+					Whether you're cutting, braiding, doing nails, or running a medspa.
+					Salon Magik runs the back office while you focus on the craft.
+				</p>
+			</section>
 
-      {/* Marquee rows */}
-      <section className="overflow-hidden bg-white pb-[90px] pt-8">
-        <div className="mx-auto mb-14 max-w-[680px] px-8 text-center">
-          <div className="mb-4 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
-            <span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
-            Every beauty business
-          </div>
-          <h2 className="font-serif text-[clamp(26px,3.2vw,38px)] font-medium leading-[1.18] tracking-[-0.3px] text-brand-ink">
-            30+ business types. One platform.
-          </h2>
-          <p className="mx-auto mt-4 max-w-[500px] text-[16px] leading-relaxed text-brand-ink/55">
-            Whether you're cutting, braiding, doing nails, or running a medspa — Salon Magik runs the back office while you focus on the craft.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          {ROWS.map(({ items, border, duration, reverse }, rowIdx) => {
-            const doubled = [...items, ...items];
-            return (
-              <div key={rowIdx} className="relative py-2">
-                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-white to-transparent" />
-                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-white to-transparent" />
-                <div
-                  className="feature-marquee flex gap-4 [width:max-content]"
-                  style={{
-                    animationDuration: duration,
-                    animationDirection: reverse ? "reverse" : "normal",
-                  }}
-                >
-                  {doubled.map((item, i) => (
-                    <BizCard key={i} border={border} {...item} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </MarketingLayout>
-  );
+			{/* Marquee rows */}
+			<section className="overflow-hidden bg-white pb-[90px] pt-8">
+				<div className="flex flex-col gap-4">
+					{ROWS.map(({ items, border, duration, reverse }, rowIdx) => {
+						const doubled = [...items, ...items];
+						return (
+							<div key={rowIdx} className="relative py-2">
+								<div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-white to-transparent" />
+								<div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-white to-transparent" />
+								<div
+									className="feature-marquee flex gap-4 [width:max-content]"
+									style={{
+										animationDuration: duration,
+										animationDirection: reverse ? "reverse" : "normal",
+									}}
+								>
+									{doubled.map((item, i) => (
+										<BizCard key={i} border={border} {...item} />
+									))}
+								</div>
+							</div>
+						);
+					})}
+				</div>
+			</section>
+		</MarketingLayout>
+	);
 }
