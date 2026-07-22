@@ -573,13 +573,9 @@ export default function OnboardingPage() {
       {/* Top nav */}
       <div className="flex items-center justify-between px-8 py-5">
         <SalonMagikLogo size="sm" />
-        <div className="flex items-center gap-1 text-[13px] text-black/45">
-          <span>Step {currentStepIndex + 1} of {totalSteps}</span>
-          <span className="mx-1">·</span>
-          <a href="/login" className="text-[#2E1F4E] hover:underline">
-            Already have an account? Log in
-          </a>
-        </div>
+        <span className="text-[13px] text-black/45">
+          Step {currentStepIndex + 1} of {totalSteps}
+        </span>
       </div>
 
       {/* Wizard */}
