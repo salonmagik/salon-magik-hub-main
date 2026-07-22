@@ -289,16 +289,18 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              <Route
-                path="/salon/cash-tracker"
-                element={
-                  <ProtectedRoute>
-                    <ModuleProtectedRoute module="journal">
-                      <JournalPage />
-                    </ModuleProtectedRoute>
-                  </ProtectedRoute>
-                }
-              />
+              {import.meta.env.DEV && (
+                <Route
+                  path="/salon/cash-tracker"
+                  element={
+                    <ProtectedRoute>
+                      <ModuleProtectedRoute module="journal">
+                        <JournalPage />
+                      </ModuleProtectedRoute>
+                    </ProtectedRoute>
+                  }
+                />
+              )}
               <Route
                 path="/salon/staff"
                 element={

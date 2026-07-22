@@ -144,7 +144,7 @@ const mainNavItems: NavItem[] = [
   { label: "Transactions", icon: CreditCard, path: "/salon/transactions", module: "payments" },
   { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
-  { label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" },
+  ...(import.meta.env.DEV ? [{ label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" } as NavItem] : []),
   { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
   { label: "All Notifications", icon: Bell, path: "/salon/all-notifications", module: "notifications" },
   { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
@@ -714,7 +714,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           <SalonMagikLogo variant="white" size="sm" />
         ) : (
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center mx-auto">
-            <Scissors className="w-5 h-5 text-white" />
+            <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+              <path d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z" stroke="#F4C84E" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="16" cy="16" r="2.1" fill="#ffffff" />
+            </svg>
           </div>
         )}
         {isMobileOpen && (
