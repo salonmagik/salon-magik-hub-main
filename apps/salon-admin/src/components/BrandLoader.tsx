@@ -1,17 +1,39 @@
+import { useEffect, useState } from "react";
 import { cn } from "@shared/utils";
 
 interface BrandLoaderProps {
   fullScreen?: boolean;
+  /** Static label override. Omit to show cycling salon phrases. */
   label?: string;
   className?: string;
   /** kept for API compatibility; has no effect */
   size?: "sm" | "md" | "lg";
 }
 
+const SALON_PHRASES = [
+  "Styling...",
+  "Trimming...",
+  "Retouching...",
+  "Blending...",
+  "Finishing up...",
+];
+
+function useCyclingPhrase() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIdx((i) => (i + 1) % SALON_PHRASES.length), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return SALON_PHRASES[idx];
+}
+
 export function BrandLoader({ fullScreen = false, label, className }: BrandLoaderProps) {
+  const phrase = useCyclingPhrase();
+  const displayText = label ?? phrase;
+
   const spinner = (
     <div className={cn("flex flex-col items-center gap-3", className)}>
-      <div className="relative h-[52px] w-[52px]">
+      <div className="relative h-[52px] w-[52px] loader-spin">
         {[0, 1, 2, 3, 4].map((i) => (
           <div
             key={i}
@@ -30,7 +52,9 @@ export function BrandLoader({ fullScreen = false, label, className }: BrandLoade
           </div>
         ))}
       </div>
-      {label && <p className="text-sm text-muted-foreground">{label}</p>}
+      <p key={displayText} className="loading-text text-sm text-muted-foreground">
+        {displayText}
+      </p>
     </div>
   );
 

@@ -232,3 +232,16 @@
   opacity: 0;
   animation: morphCycle 12.5s infinite;
 }
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+.loader-spin {
+  animation: spinSlow 2.5s linear infinite;
+}
+@keyframes loadingTextFade {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.loading-text {
+  animation: loadingTextFade 0.35s ease forwards;
+}
