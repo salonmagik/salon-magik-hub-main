@@ -1,4 +1,5 @@
 import { cn } from "@shared/utils";
+import { Crown, ShieldCheck, UserCheck, ClipboardList, Scissors, type LucideIcon } from "lucide-react";
 
 export type UserRole = "owner" | "manager" | "supervisor" | "receptionist" | "staff";
 
@@ -7,34 +8,34 @@ interface RoleStepProps {
   onRoleSelect: (role: UserRole) => void;
 }
 
-const ROLES = [
+const ROLES: { id: UserRole; icon: LucideIcon; title: string; description: string }[] = [
   {
-    id: "owner" as UserRole,
-    emoji: "👑",
+    id: "owner",
+    icon: Crown,
     title: "Owner",
     description: "Full access to all features, billing, and settings",
   },
   {
-    id: "manager" as UserRole,
-    emoji: "🛡️",
+    id: "manager",
+    icon: ShieldCheck,
     title: "Manager",
     description: "Manage staff, appointments, and daily operations",
   },
   {
-    id: "supervisor" as UserRole,
-    emoji: "🧑🏾‍💼",
+    id: "supervisor",
+    icon: UserCheck,
     title: "Supervisor",
     description: "Oversee staff and handle customer issues",
   },
   {
-    id: "receptionist" as UserRole,
-    emoji: "📋",
+    id: "receptionist",
+    icon: ClipboardList,
     title: "Receptionist",
     description: "Book appointments and manage customer check-ins",
   },
   {
-    id: "staff" as UserRole,
-    emoji: "✂️",
+    id: "staff",
+    icon: Scissors,
     title: "Staff",
     description: "View assigned appointments and update status",
   },
@@ -69,11 +70,14 @@ export function RoleStep({ selectedRole, onRoleSelect }: RoleStepProps) {
             >
               <div
                 className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[20px]",
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]",
                   isSelected ? "bg-[#2E1F4E]/10" : "bg-black/[0.04]",
                 )}
               >
-                {role.emoji}
+                <role.icon
+                  className={cn("h-[18px] w-[18px]", isSelected ? "text-[#2E1F4E]" : "text-black/40")}
+                  strokeWidth={1.6}
+                />
               </div>
               <div>
                 <p

@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
+import { Scissors, Gem, Zap, Leaf, Briefcase, PenLine, type LucideIcon } from "lucide-react";
 
-const types = [
-  { emoji: "💇🏾‍♀️", name: "Hair salons", desc: "Braiding, styling, treatments" },
-  { emoji: "💅🏾", name: "Nail studios", desc: "Manicure, pedicure, extensions" },
-  { emoji: "💈", name: "Barbershops", desc: "Cuts, shaves, grooming" },
-  { emoji: "🧖🏾", name: "Spas & wellness", desc: "Massage, facials, body treatments" },
-  { emoji: "✂️", name: "Freelance stylists", desc: "Home service, chair rental, mobile" },
-  { emoji: "🎨", name: "Tattoo studios", desc: "Custom art, piercings, tattoo sessions" },
+const types: { icon: LucideIcon; name: string; desc: string }[] = [
+  { icon: Scissors,  name: "Hair salons",        desc: "Braiding, styling, treatments"         },
+  { icon: Gem,       name: "Nail studios",        desc: "Manicure, pedicure, extensions"        },
+  { icon: Zap,       name: "Barbershops",         desc: "Cuts, shaves, grooming"                },
+  { icon: Leaf,      name: "Spas & wellness",     desc: "Massage, facials, body treatments"     },
+  { icon: Briefcase, name: "Freelance stylists",  desc: "Home service, chair rental, mobile"    },
+  { icon: PenLine,   name: "Tattoo studios",      desc: "Custom art, piercings, tattoo sessions" },
 ];
 
 export function BusinessTypesSection() {
@@ -29,7 +30,9 @@ export function BusinessTypesSection() {
               key={t.name}
               className="rounded-[18px] border border-brand-ink/8 bg-white px-6 py-7"
             >
-              <div className="mb-4 text-[36px] leading-none">{t.emoji}</div>
+              <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-[11px] bg-brand-purple/8">
+                <t.icon className="h-5 w-5 text-brand-purple" strokeWidth={1.6} />
+              </div>
               <div className="font-serif text-[17px] font-medium text-brand-ink">{t.name}</div>
               <div className="mt-1 text-[13px] text-brand-ink/55">{t.desc}</div>
             </div>
