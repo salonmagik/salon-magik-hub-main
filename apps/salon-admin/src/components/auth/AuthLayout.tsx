@@ -68,7 +68,7 @@ export function AuthLayout({ children, title, subtitle, variant = "signup" }: Au
     <div className="flex min-h-screen flex-col lg:h-screen lg:flex-row lg:overflow-hidden">
       {/* ── Left panel (dark purple) ── */}
       <div
-        className="flex shrink-0 flex-row items-center justify-between gap-4 px-6 py-5 lg:flex-1 lg:flex-col lg:items-start lg:justify-between lg:px-11 lg:py-11"
+        className="relative flex shrink-0 flex-row items-center justify-between gap-4 overflow-hidden px-6 py-5 lg:flex-1 lg:flex-col lg:items-start lg:justify-between lg:px-11 lg:py-11"
         style={{
           background:
             "linear-gradient(160deg, #1F1536 0%, #2E1F4E 60%, #3A2660 100%)",
@@ -76,6 +76,48 @@ export function AuthLayout({ children, title, subtitle, variant = "signup" }: Au
             "radial-gradient(circle at 85% 10%, rgba(244,200,78,0.10), transparent 45%), linear-gradient(160deg, #1F1536 0%, #2E1F4E 60%, #3A2660 100%)",
         }}
       >
+        {/* Decorative scattered salon icons */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 select-none">
+          {/* Scissors — top right */}
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "8%", right: "10%", opacity: 0.12, transform: "rotate(18deg)" }}>
+            <circle cx="8" cy="22" r="4.5" stroke="white" strokeWidth="2" />
+            <circle cx="8" cy="10" r="4.5" stroke="white" strokeWidth="2" />
+            <line x1="11.5" y1="19.5" x2="27" y2="7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+            <line x1="11.5" y1="12.5" x2="27" y2="25" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+          {/* Nail polish — bottom left */}
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" className="absolute" style={{ bottom: "16%", left: "8%", opacity: 0.10, transform: "rotate(-12deg)" }}>
+            <rect x="11" y="3" width="10" height="7" rx="2" stroke="white" strokeWidth="2" />
+            <line x1="16" y1="7" x2="16" y2="11" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M11 10 Q9 12 9 15 L9 26 Q9 29 16 29 Q23 29 23 26 L23 15 Q23 12 21 10 Z" stroke="white" strokeWidth="2" />
+          </svg>
+          {/* Mirror — mid left */}
+          <svg width="18" height="18" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "42%", left: "5%", opacity: 0.09, transform: "rotate(8deg)" }}>
+            <ellipse cx="16" cy="12" rx="9" ry="10" stroke="white" strokeWidth="2" />
+            <line x1="16" y1="22" x2="16" y2="29" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+            <line x1="11" y1="29" x2="21" y2="29" stroke="white" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          {/* Blow dryer — bottom right */}
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" className="absolute" style={{ bottom: "8%", right: "8%", opacity: 0.11, transform: "rotate(-20deg)" }}>
+            <ellipse cx="13" cy="13" rx="9" ry="7" stroke="white" strokeWidth="2" />
+            <path d="M21 10 L27 8 L27 18 L21 16" stroke="white" strokeWidth="2" strokeLinejoin="round" />
+            <path d="M9 19 Q7 23 7 27" stroke="white" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          {/* Comb — top left */}
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "22%", left: "6%", opacity: 0.08, transform: "rotate(-30deg)" }}>
+            <rect x="3" y="8" width="26" height="8" rx="2" stroke="white" strokeWidth="2" />
+            {[7, 11, 15, 19, 23].map((x) => (
+              <line key={x} x1={x} y1="16" x2={x} y2="25" stroke="white" strokeWidth="2" strokeLinecap="round" />
+            ))}
+          </svg>
+          {/* Scissors small — mid right */}
+          <svg width="15" height="15" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "65%", right: "6%", opacity: 0.08, transform: "rotate(40deg)" }}>
+            <circle cx="8" cy="22" r="4.5" stroke="white" strokeWidth="2" />
+            <circle cx="8" cy="10" r="4.5" stroke="white" strokeWidth="2" />
+            <line x1="11.5" y1="19.5" x2="27" y2="7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+            <line x1="11.5" y1="12.5" x2="27" y2="25" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+        </div>
         {/* Logo */}
         <div className="flex items-center gap-2 font-semibold text-white" style={{ fontSize: 19 }}>
           <svg
