@@ -2,6 +2,7 @@ import { useState } from "react";
 import { cn } from "@shared/utils";
 import { MarketingLayout } from "@/components/MarketingLayout";
 import { usePlans } from "@/hooks/usePlans";
+import { usePlanPricing } from "@/hooks/usePlanPricing";
 
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
@@ -26,8 +27,19 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 export default function FAQPage() {
   const { data: plans } = usePlans();
+  const { data: pricing } = usePlanPricing("USD");
   const trialDays =
     plans?.find((p) => p.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
+
+  const maxSavingsPct = plans
+    ?.map((plan) => {
+      const row = pricing?.find((p) => p.plan_id === plan.id);
+      if (!row?.annual_price || !row?.monthly_price) return null;
+      const saving = ((row.monthly_price - row.annual_price / 12) / row.monthly_price) * 100;
+      return saving > 0 ? Math.round(saving) : null;
+    })
+    .filter((v): v is number => v !== null)
+    .reduce((a, b) => Math.max(a, b), 0) || null;
 
   const FAQ_CATEGORIES = [
     {
@@ -44,7 +56,7 @@ export default function FAQPage() {
       items: [
         { q: "Can I move between plans as my team grows?", a: "Yes, you can upgrade or downgrade at any time from your settings. Your data, clients and history move with you." },
         { q: "What happens when my trial ends?", a: "You'll be asked to choose a plan. If you don't, your account goes into read-only mode — nothing is deleted. You can reactivate any time." },
-        { q: "Is there a discount for annual billing?", a: "Yes. Annual plans save you up to 8% compared to monthly billing, depending on your plan." },
+        { q: "Is there a discount for annual billing?", a: `Yes. Annual plans save you up to ${maxSavingsPct ?? 8}% compared to monthly billing, depending on your plan.` },
       ],
     },
     {
