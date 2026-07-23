@@ -120,14 +120,7 @@ import { useNavigate, Link } from "react-router-dom";
 								</Link>
 							</div>
 						</form>
-						<div className="mt-6 rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800">
-							<p className="font-medium">Were you just invited?</p>
-							<p className="mt-0.5 text-blue-700">
-								Your account is already set up — do <strong>not</strong> sign up through any other page.
-								Use your email and the temporary password from your invite email here.
-							</p>
-						</div>
-						<p className="mt-4 text-center text-xs text-muted-foreground">
+						<p className="mt-6 text-center text-xs text-muted-foreground">
 							Only authorized personnel can access this system.
 						</p>
 					</CardContent>
