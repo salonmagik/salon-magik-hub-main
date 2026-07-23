@@ -7,10 +7,10 @@ const corsHeaders = {
 };
 
 // Ghana uses one key (all SMS types share the same gateway).
-// Nigeria uses two keys: transactional ("Salon Magik") and promotional ("SalonMagik").
+// Nigeria uses two separate gateway keys — one per message type.
 const ARKESEL_API_KEY_GH = Deno.env.get("ARKESEL_API_KEY_GH");
-const ARKESEL_API_KEY_NG = Deno.env.get("ARKESEL_API_KEY_NG");
-const ARKESEL_API_KEY_NG_PROMO = Deno.env.get("ARKESEL_API_KEY_NG_PROMO");
+const ARKESEL_API_KEY_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_TRANSACTIONAL");
+const ARKESEL_API_KEY_NG_PROMOTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_PROMOTIONAL");
 
 interface BalanceResult {
   balance: unknown;
@@ -73,11 +73,11 @@ serve(async (req) => {
       ARKESEL_API_KEY_GH
         ? fetchBalance(ARKESEL_API_KEY_GH, "GH")
         : Promise.resolve({ balance: null, error: "Not configured" }),
-      ARKESEL_API_KEY_NG
-        ? fetchBalance(ARKESEL_API_KEY_NG, "NG-transactional")
+      ARKESEL_API_KEY_NG_TRANSACTIONAL
+        ? fetchBalance(ARKESEL_API_KEY_NG_TRANSACTIONAL, "NG-transactional")
         : Promise.resolve({ balance: null, error: "Not configured" }),
-      ARKESEL_API_KEY_NG_PROMO
-        ? fetchBalance(ARKESEL_API_KEY_NG_PROMO, "NG-promotional")
+      ARKESEL_API_KEY_NG_PROMOTIONAL
+        ? fetchBalance(ARKESEL_API_KEY_NG_PROMOTIONAL, "NG-promotional")
         : Promise.resolve({ balance: null, error: "Not configured" }),
     ]);
 

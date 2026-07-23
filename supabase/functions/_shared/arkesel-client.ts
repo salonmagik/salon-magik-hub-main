@@ -1,17 +1,15 @@
 const ARKESEL_API_BASE = "https://sms.arkesel.com/api/v2";
-// Country-specific API keys.
-// Ghana: one key for all SMS types.
-// Nigeria: separate keys per gateway — ARKESEL_API_KEY_NG for transactional,
-// ARKESEL_API_KEY_NG_PROMO for promotional (falls back to ARKESEL_API_KEY_NG if not set).
+// Ghana: one API key covers all SMS types.
+// Nigeria: two separate gateway keys — transactional (OTPs) and promotional (everything else).
 const ARKESEL_API_KEY_GH = Deno.env.get("ARKESEL_API_KEY_GH");
-const ARKESEL_API_KEY_NG = Deno.env.get("ARKESEL_API_KEY_NG");
-const ARKESEL_API_KEY_NG_PROMO = Deno.env.get("ARKESEL_API_KEY_NG_PROMO");
-// Nigeria has two mandated sender IDs — one per gateway type (cannot be the same).
+const ARKESEL_API_KEY_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_TRANSACTIONAL");
+const ARKESEL_API_KEY_NG_PROMOTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_PROMOTIONAL");
+// Nigeria mandates separate registered sender IDs per gateway (cannot share the same name).
 // Transactional (OTPs only): "Salon Magik" (with space)
-// Promotional (broadcasts, reminders, campaigns): "SalonMagik" (no space)
+// Promotional (bulk, reminders, campaigns, manual): "SalonMagik" (no space)
 const ARKESEL_SENDER_ID_GH = Deno.env.get("ARKESEL_SENDER_ID_GH") ?? "SalonMagik";
-const ARKESEL_SENDER_ID_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_SENDER_ID_NG") ?? "Salon Magik";
-const ARKESEL_SENDER_ID_NG_PROMOTIONAL = Deno.env.get("ARKESEL_SENDER_ID_NG_PROMO") ?? "SalonMagik";
+const ARKESEL_SENDER_ID_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_SENDER_ID_NG_TRANSACTIONAL") ?? "Salon Magik";
+const ARKESEL_SENDER_ID_NG_PROMOTIONAL = Deno.env.get("ARKESEL_SENDER_ID_NG_PROMOTIONAL") ?? "SalonMagik";
 
 export interface ArkeselSMSResult {
   ID: string;
@@ -43,7 +41,7 @@ function detectCountry(phone: string): "NG" | "GH" | null {
 }
 
 // Resolve the sender ID for a given recipient and use case.
-// Nigeria mandates separate registered sender IDs per gateway type — tenant overrides are ignored.
+// Nigeria mandates separate registered sender IDs per gateway — tenant overrides are not allowed.
 // Ghana: tenant's custom sender ID takes precedence over the platform default.
 export function resolveArkeselSenderId(
   recipientPhone: string,
@@ -60,15 +58,18 @@ export function resolveArkeselSenderId(
 }
 
 // Select the correct Arkesel API key for the given phone number and use case.
-// Nigeria promotional → ARKESEL_API_KEY_NG_PROMO (falls back to ARKESEL_API_KEY_NG).
-// Nigeria transactional → ARKESEL_API_KEY_NG.
-// Ghana / unknown → ARKESEL_API_KEY_GH.
+// Nigeria promotional → ARKESEL_API_KEY_NG_PROMOTIONAL
+// Nigeria transactional → ARKESEL_API_KEY_NG_TRANSACTIONAL
+// Ghana / unknown → ARKESEL_API_KEY_GH
 function getApiKeyForPhone(phone: string, useCase: "transactional" | "promotional" = "transactional"): string {
   const country = detectCountry(phone);
   if (country === "NG") {
-    if (useCase === "promotional" && ARKESEL_API_KEY_NG_PROMO) return ARKESEL_API_KEY_NG_PROMO;
-    if (!ARKESEL_API_KEY_NG) throw new Error("ARKESEL_API_KEY_NG not configured");
-    return ARKESEL_API_KEY_NG;
+    if (useCase === "promotional") {
+      if (!ARKESEL_API_KEY_NG_PROMOTIONAL) throw new Error("ARKESEL_API_KEY_NG_PROMOTIONAL not configured");
+      return ARKESEL_API_KEY_NG_PROMOTIONAL;
+    }
+    if (!ARKESEL_API_KEY_NG_TRANSACTIONAL) throw new Error("ARKESEL_API_KEY_NG_TRANSACTIONAL not configured");
+    return ARKESEL_API_KEY_NG_TRANSACTIONAL;
   }
   if (!ARKESEL_API_KEY_GH) throw new Error("ARKESEL_API_KEY_GH not configured");
   return ARKESEL_API_KEY_GH;
