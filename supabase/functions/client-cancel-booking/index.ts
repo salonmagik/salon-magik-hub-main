@@ -6,6 +6,7 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
+import { heading, paragraph } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -139,14 +140,13 @@ serve(async (req) => {
           subject: `Client cancellation at ${tenant?.name || "your salon"}`,
           salonName: tenant?.name || "Salon Magik",
           salonLogoUrl: tenant?.logo_url,
-          htmlContent: `
-            <h2 style="color: #2563EB; margin-bottom: 16px;">Appointment cancelled by client</h2>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${appointment.customer?.full_name || "Unknown customer"}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>When:</strong> ${scheduledText}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Branch:</strong> ${locationName}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Items:</strong> ${servicesList}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Reason:</strong> ${reason.trim()}</p>
-          `,
+          htmlContent:
+            heading("Appointment cancelled by client") +
+            paragraph(`<strong>Customer:</strong> ${appointment.customer?.full_name || "Unknown customer"}`) +
+            paragraph(`<strong>When:</strong> ${scheduledText}`) +
+            paragraph(`<strong>Branch:</strong> ${locationName}`) +
+            paragraph(`<strong>Items:</strong> ${servicesList}`) +
+            paragraph(`<strong>Reason:</strong> ${reason.trim()}`),
         });
       }
     }
