@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
@@ -283,6 +283,14 @@ export default function OnboardingPage() {
       setIsApplyingPromo(false);
     }
   };
+
+  // Auto-validate a pre-filled promo code the moment the review step is reached.
+  useEffect(() => {
+    if (step === "review" && promoCode.trim() && !promoPreview && !isApplyingPromo) {
+      void handleApplyPromo();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const handleSubmit = async () => {
     if (!user || !selectedRole || !selectedPlan) return;
