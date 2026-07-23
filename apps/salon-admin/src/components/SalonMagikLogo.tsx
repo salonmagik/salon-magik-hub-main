@@ -33,12 +33,6 @@ export function SalonMagikLogo({
         xmlns="http://www.w3.org/2000/svg"
         style={{ flexShrink: 0 }}
       >
-        {/* <rect
-          width="32"
-          height="32"
-          rx={rx}
-          fill={isWhite ? "rgba(255,255,255,0.2)" : "#2E1F4E"}
-        /> */}
         <path
           d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
           stroke="#F4C84E"

@@ -33,6 +33,7 @@ export function FAQSection() {
     },
   ];
 
+
   return (
     <section className="bg-brand-cream-dim px-8 py-[100px]">
       <div className="mx-auto max-w-[760px]">
