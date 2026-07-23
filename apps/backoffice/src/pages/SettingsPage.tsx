@@ -450,6 +450,14 @@ export default function BackofficeSettingsPage() {
         .eq("is_active", true);
       if (plansError) throw plansError;
 
+      // Extend all currently-trialing tenants: recalculate trial_ends_at from their created_at
+      // so every active trial reflects the new global period.
+      const { error: tenantsError } = await (supabase.rpc as any)(
+        "extend_trialing_tenants_trial",
+        { p_days: safeDays },
+      );
+      if (tenantsError) throw tenantsError;
+
       await writeAuditLog("default_trial_days_updated", backofficeUser?.user_id, { days: safeDays });
       return safeDays;
     },
