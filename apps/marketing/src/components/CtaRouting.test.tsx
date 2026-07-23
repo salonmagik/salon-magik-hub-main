@@ -30,7 +30,7 @@ describe("marketing CTA routing", () => {
       "href",
       "https://preview.salonmagik.app/login"
     );
-    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /start free/i })).toHaveAttribute(
       "href",
       "https://preview.salonmagik.app/signup"
     );
@@ -49,7 +49,7 @@ describe("marketing CTA routing", () => {
       </MemoryRouter>
     );
 
-    const signupLinks = screen.getAllByRole("link", { name: /get started free/i });
+    const signupLinks = screen.getAllByRole("link", { name: /start free/i });
     expect(signupLinks).toHaveLength(2);
     signupLinks.forEach((link) =>
       expect(link).toHaveAttribute("href", "https://preview.salonmagik.app/signup")

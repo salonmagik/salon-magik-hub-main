@@ -1,21 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { Link } from "react-router-dom";
 import { usePlans, usePlanFeatures, usePlanLimits } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
 import { useWaitlistMode } from "@/hooks/useFeatureFlags";
-import { SalonMagikLogo } from "@/components/SalonMagikLogo";
-import { Button } from "@ui/button";
-import { Card } from "@ui/card";
-import { Switch } from "@ui/switch";
-import { Badge } from "@ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@ui/select";
-import { Check, Loader2, ArrowLeft, Sparkles } from "lucide-react";
+import { MarketingLayout } from "@/components/MarketingLayout";
+import { PlanCard } from "@/components/PlanCard";
+import { cn } from "@shared/utils";
 
 const SUPPORTED_CURRENCIES = [
   { code: "USD", label: "USD ($)" },
@@ -23,6 +13,15 @@ const SUPPORTED_CURRENCIES = [
   { code: "GHS", label: "GHS (₵)" },
 ];
 const PRICING_CURRENCY_STORAGE_KEY = "pricing_currency_preference";
+
+const defaultSalonAppUrl =
+  typeof import.meta !== "undefined" && import.meta.env?.DEV
+    ? "http://localhost:8080"
+    : "https://app.salonmagik.com";
+const salonAppUrl = (
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_SALON_APP_URL) ||
+  defaultSalonAppUrl
+).replace(/\/$/, "");
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
@@ -35,64 +34,33 @@ export default function PricingPage() {
   const { data: pricing, isLoading: pricingLoading } = usePlanPricing(currency);
 
   const isLoading = plansLoading || pricingLoading;
-  const trialDays = plans?.find((plan) => plan.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
-
-  const getEquivalentMonthly = (planId: string) => {
-		const planPricing = pricing?.find((p) => p.plan_id === planId);
-		if (!planPricing) return null;
-
-		if (planPricing.annual_price > 0) {
-			return planPricing.annual_price / 12;
-		}
-
-		return planPricing.effective_monthly;
-	};
+  const trialDays =
+    plans?.find((p) => p.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
 
   const getPlanPrice = (planId: string) => {
-    const planPricing = pricing?.find((p) => p.plan_id === planId);
-    if (!planPricing) return null;
-
-    const equivalentMonthly = getEquivalentMonthly(planId);
-		return isAnnual
-			? (equivalentMonthly ?? planPricing.effective_monthly)
-			: planPricing.monthly_price;
+    const row = pricing?.find((p) => p.plan_id === planId);
+    if (!row) return null;
+    if (isAnnual && row.annual_price > 0) return row.effective_monthly;
+    return row.monthly_price;
   };
 
-  const getPlanAnnualTotal = (planId: string) => {
-    const planPricing = pricing?.find((p) => p.plan_id === planId);
-    return planPricing?.annual_price || 0;
+  const getMonthlyPrice = (planId: string) =>
+    pricing?.find((p) => p.plan_id === planId)?.monthly_price ?? null;
+
+  const getSavingsPct = (planId: string) => {
+    const row = pricing?.find((p) => p.plan_id === planId);
+    if (!row || !row.annual_price || !row.monthly_price) return null;
+    const saving = ((row.monthly_price - row.annual_price / 12) / row.monthly_price) * 100;
+    return saving > 0 ? Math.round(saving) : null;
   };
 
-  const getPlanFeatures = (planId: string) => {
-    return features?.filter((f) => f.plan_id === planId).sort((a, b) => a.sort_order - b.sort_order) || [];
-  };
+  const maxSavingsPct =
+    plans?.map((p) => getSavingsPct(p.id)).filter(Boolean).reduce((a, b) => Math.max(a!, b!), 0) ?? null;
 
-  const getPlanLimit = (planId: string) => {
-    return limits?.find((l) => l.plan_id === planId);
-  };
+  const getPlanFeatures = (planId: string) =>
+    (features ?? []).filter((f) => f.plan_id === planId).sort((a, b) => a.sort_order - b.sort_order);
 
-  const faqs = [
-    {
-      q: "Is there a free trial?",
-      a: `Yes! All plans include a ${trialDays}-day free trial. No credit card required to start.`,
-    },
-    {
-      q: "Can I change plans later?",
-      a: "Absolutely. Upgrade or downgrade anytime. Changes take effect on your next billing cycle.",
-    },
-    {
-      q: "What payment methods do you accept?",
-      a: "We accept all major credit cards via Stripe. In Nigeria and Ghana, we also support Paystack for local cards and bank transfers.",
-    },
-    {
-      q: "What are communication credits?",
-      a: "Credits are used for SMS and WhatsApp notifications to your clients. Each plan includes a monthly allocation, and you can purchase more if needed.",
-    },
-    {
-      q: "Do you offer refunds?",
-      a: "Yes. If you're not satisfied within the first 30 days, contact support for a full refund.",
-    },
-  ];
+  const getPlanLimit = (planId: string) => limits?.find((l) => l.plan_id === planId);
 
   useEffect(() => {
     const saved = localStorage.getItem(PRICING_CURRENCY_STORAGE_KEY);
@@ -100,309 +68,489 @@ export default function PricingPage() {
       setCurrency(saved);
       return;
     }
-
-    let isMounted = true;
+    let mounted = true;
     (async () => {
       try {
-        const response = await fetch("https://ipapi.co/json/", {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-        if (!response.ok) throw new Error("Geo lookup failed");
-        const geo = await response.json();
-        const code = String(geo?.country_code || geo?.country || "").toUpperCase();
+        const res = await fetch("https://ipapi.co/json/", { headers: { Accept: "application/json" } });
+        if (!res.ok) throw new Error();
+        const geo = await res.json();
+        const code = String(geo?.country_code || "").toUpperCase();
         const detected = code === "NG" ? "NGN" : code === "GH" ? "GHS" : "USD";
-
-        if (isMounted) {
-          setCurrency(detected);
-          localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, detected);
-        }
-      } catch {
-        if (isMounted) {
-          setCurrency("USD");
-        }
-      }
+        if (mounted) { setCurrency(detected); localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, detected); }
+      } catch { if (mounted) setCurrency("USD"); }
     })();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
-  const formatAmount = (value: number | null | undefined) => {
-    if (value == null || Number.isNaN(Number(value))) return "0.00";
-    return Number(value).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
+  const symbol = getCurrencySymbol(currency);
 
   return (
-		<div className="min-h-screen bg-background">
-			{/* Navigation */}
-			<nav className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-				<div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-					<Link to="/">
-						<SalonMagikLogo size="md" />
-					</Link>
-					<div className="flex items-center gap-4">
-						{!isWaitlistMode && (
-							<>
-								<Link to="/login">
-									<Button variant="ghost" size="sm">
-										Log in
-									</Button>
-								</Link>
-								<Link to="/signup">
-									<Button size="sm">Get started</Button>
-								</Link>
-							</>
-						)}
-					</div>
-				</div>
-			</nav>
-
-			{/* Header */}
-			<section className="py-12 px-4">
-				<div className="max-w-6xl mx-auto text-center">
-					<Link
-						to="/"
-						className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
-					>
-						<ArrowLeft className="w-4 h-4" />
-						Back to home
-					</Link>
-					<h1 className="text-4xl font-semibold mb-4">
-						Simple, transparent pricing
+		<MarketingLayout>
+			{/* Hero */}
+			<section className="px-8 pb-0 pt-16 text-center">
+				<div className="mx-auto max-w-[600px]">
+					<h1 className="font-serif text-[clamp(32px,4vw,48px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
+						Simple, transparent pricing.
 					</h1>
-					<p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-						Choose the plan that fits your salon. All plans include a {trialDays}-day
-						free trial.
+					<p className="mx-auto mt-4 max-w-[440px] text-[17px] leading-relaxed text-brand-ink/55">
+						All plans include a {trialDays}-day free trial. No credit card
+						required to start.
 					</p>
+				</div>
 
-					{/* Billing Toggle & Currency Selector */}
-					<div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-8">
-						<div className="flex items-center gap-3">
-							<span
-								className={!isAnnual ? "font-medium" : "text-muted-foreground"}
+				{/* Toggles */}
+				<div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+					<div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
+						{SUPPORTED_CURRENCIES.map((c) => (
+							<button
+								key={c.code}
+								type="button"
+								onClick={() => {
+									setCurrency(c.code);
+									localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, c.code);
+								}}
+								className={cn(
+									"rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
+									currency === c.code
+										? "bg-brand-purple text-white"
+										: "text-brand-ink/60 hover:text-brand-ink",
+								)}
 							>
-								Monthly
-							</span>
-							<Switch checked={isAnnual} onCheckedChange={setIsAnnual} />
-							<span
-								className={isAnnual ? "font-medium" : "text-muted-foreground"}
-							>
-								Annual
-							</span>
-							{isAnnual && (
-								<Badge
-									variant="secondary"
-									className="bg-success/10 text-success"
-								>
-									Annual discount applied
-								</Badge>
-							)}
-						</div>
+								{c.label}
+							</button>
+						))}
+					</div>
 
-						<Select
-              value={currency}
-              onValueChange={(value) => {
-                setCurrency(value);
-                localStorage.setItem(PRICING_CURRENCY_STORAGE_KEY, value);
-              }}
-            >
-							<SelectTrigger className="w-32">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{SUPPORTED_CURRENCIES.map((c) => (
-									<SelectItem key={c.code} value={c.code}>
-										{c.label}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+					<div className="flex rounded-full border border-brand-ink/12 bg-white p-1">
+						{([false, true] as const).map((annual) => (
+							<button
+								key={String(annual)}
+								type="button"
+								onClick={() => setIsAnnual(annual)}
+								className={cn(
+									"rounded-full px-4 py-1.5 text-[13.5px] transition-colors",
+									isAnnual === annual
+										? "bg-brand-purple text-white"
+										: "text-brand-ink/60 hover:text-brand-ink",
+								)}
+							>
+								{annual
+									? `Annual · save up to ${maxSavingsPct ?? "—"}%/yr`
+									: "Monthly"}
+							</button>
+						))}
 					</div>
 				</div>
 			</section>
 
-			{/* Pricing Cards */}
-			<section className="pb-16 px-4">
-				<div className="max-w-6xl mx-auto">
+			{/* Plan cards — same as PricingSection on landing */}
+			<section className="px-8 pb-[80px] pt-[48px]">
+				<div className="mx-auto max-w-[1180px]">
 					{isLoading ? (
-						<div className="flex items-center justify-center py-12">
-							<Loader2 className="w-8 h-8 animate-spin text-primary" />
+						<div className="grid grid-cols-1 gap-[22px] md:grid-cols-3">
+							{[0, 1, 2].map((i) => (
+								<div
+									key={i}
+									className="h-[500px] animate-pulse rounded-[20px] bg-white/60"
+								/>
+							))}
 						</div>
 					) : (
-						<div className="grid md:grid-cols-3 gap-6">
-							{plans?.map((plan) => {
-								const price = getPlanPrice(plan.id);
-								const annualTotal = getPlanAnnualTotal(plan.id);
-								const equivalentMonthly = getEquivalentMonthly(plan.id);
-								const planFeatures = getPlanFeatures(plan.id);
-								const planLimit = getPlanLimit(plan.id);
-								const symbol = getCurrencySymbol(currency);
-
-								return (
-									<Card
-										key={plan.id}
-										className={`p-6 relative ${
-											plan.is_recommended
-												? "border-primary border-2 shadow-lg"
-												: ""
-										}`}
-									>
-										{plan.is_recommended && (
-											<Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
-												Most Popular
-											</Badge>
-										)}
-
-										<div className="mb-6">
-											<h3 className="text-xl font-semibold mb-1">
-												{plan.name}
-											</h3>
-											<p className="text-sm text-muted-foreground">
-												{plan.description}
-											</p>
-										</div>
-
-										<div className="mb-6">
-											<div className="flex items-baseline gap-1">
-												<span className="text-3xl font-bold">
-													{symbol}
-													{formatAmount(price)}
-												</span>
-												<span className="text-muted-foreground">/month</span>
-											</div>
-											{isAnnual && (
-												<div className="text-sm text-muted-foreground mt-1 space-y-0.5">
-													<p>
-														{symbol}
-														{formatAmount(annualTotal)} billed annually
-													</p>
-													<p>
-														Equivalent monthly: {symbol}
-														{formatAmount(equivalentMonthly)}
-													</p>
-												</div>
-											)}
-										</div>
-
-										{/* Limits Summary */}
-										{planLimit && (
-											<div className="mb-6 p-3 bg-muted/50 rounded-lg text-sm space-y-1">
-												<p>
-													<span className="font-medium">
-														{planLimit.max_locations}
-													</span>{" "}
-													{planLimit.max_locations === 1
-														? "location"
-														: "locations"}
-												</p>
-												<p>
-													<span className="font-medium">
-														{planLimit.max_staff === 1
-															? "Owner only"
-															: `Up to ${planLimit.max_staff} staff`}
-													</span>
-												</p>
-												<p>
-													<span className="font-medium">
-														{planLimit.monthly_messages}
-													</span>{" "}
-													messages/month
-												</p>
-											</div>
-										)}
-
-										{/* Features */}
-										<ul className="space-y-3 mb-6">
-											{planFeatures.map((feature) => (
-												<li
-													key={feature.id}
-													className="flex items-start gap-2 text-sm"
-												>
-													<Check className="w-4 h-4 text-success mt-0.5 shrink-0" />
-													<span>{feature.feature_text}</span>
-												</li>
-											))}
-										</ul>
-
-										{isWaitlistMode ? (
-											<Link to="/#waitlist">
-												<Button
-													variant={plan.is_recommended ? "default" : "outline"}
-													className="w-full"
-												>
-													<Sparkles className="w-4 h-4 mr-2" />
-													Join waitlist
-												</Button>
-											</Link>
-										) : (
-											<Link to="/signup">
-												<Button
-													variant={plan.is_recommended ? "default" : "outline"}
-													className="w-full"
-												>
-													Start free trial
-												</Button>
-											</Link>
-										)}
-									</Card>
-								);
-							})}
+						<div className="grid grid-cols-1 items-stretch gap-[22px] md:grid-cols-3">
+							{(plans ?? []).map((plan) => (
+								<PlanCard
+									key={plan.id}
+									plan={plan}
+									price={getPlanPrice(plan.id)}
+									monthlyPrice={getMonthlyPrice(plan.id)}
+									savingsPct={getSavingsPct(plan.id)}
+									features={getPlanFeatures(plan.id)}
+									limit={getPlanLimit(plan.id)}
+									isAnnual={isAnnual}
+									isWaitlistMode={isWaitlistMode}
+									symbol={symbol}
+									salonAppUrl={salonAppUrl}
+								/>
+							))}
 						</div>
 					)}
 				</div>
 			</section>
 
-			{/* FAQ Section */}
-			<section className="py-16 bg-surface px-4">
-				<div className="max-w-3xl mx-auto">
-					<h2 className="text-2xl font-semibold text-center mb-8">
-						Frequently asked questions
-					</h2>
-					<div className="space-y-6">
-						{faqs.map((faq) => (
-							<div key={faq.q}>
-								<h3 className="font-medium mb-2">{faq.q}</h3>
-								<p className="text-muted-foreground">{faq.a}</p>
+			{/* Comparison table */}
+			<section className="bg-brand-cream-dim px-8 py-[80px]">
+				<div className="mx-auto max-w-[1180px]">
+					<div className="mb-12 text-center">
+						<div className="mb-3 flex items-center justify-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+							<span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
+							Compare plans
+						</div>
+						<h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
+							What's included in each plan
+						</h2>
+					</div>
+
+					<div className="overflow-x-auto">
+						<table className="w-full min-w-[560px] border-collapse">
+							<thead>
+								<tr>
+									<th className="w-[42%] pb-6 text-left text-[13px] font-medium uppercase tracking-[0.06em] text-brand-ink/40">
+										Feature
+									</th>
+									{(plans ?? []).map((plan) => (
+										<th
+											key={plan.id}
+											className={cn(
+												"pb-6 text-center text-[14px] font-medium",
+												plan.is_recommended
+													? "text-brand-purple"
+													: "text-brand-ink",
+											)}
+										>
+											{plan.name}
+											{plan.is_recommended && (
+												<span className="ml-2 inline-block rounded-full bg-brand-purple/10 px-2 py-0.5 text-[11px] text-brand-purple">
+													Popular
+												</span>
+											)}
+										</th>
+									))}
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-brand-ink/[0.06]">
+								{!isLoading && (
+									<>
+										<tr className="bg-brand-ink/[0.02]">
+											<td
+												colSpan={4}
+												className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40"
+											>
+												Capacity
+											</td>
+										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Locations
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim
+															? lim.max_locations > 1
+																? `Up to ${lim.max_locations}`
+																: "1"
+															: "—"}
+													</td>
+												);
+											})}
+										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Staff accounts
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim
+															? lim.max_staff === 1
+																? "Owner only"
+																: lim.max_staff >= 999
+																	? "Unlimited"
+																	: `Up to ${lim.max_staff}`
+															: "—"}
+													</td>
+												);
+											})}
+										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Messages / month
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim ? lim.monthly_messages.toLocaleString() : "—"}
+													</td>
+												);
+											})}
+										</tr>
+
+										{[
+											{
+												category: "Bookings",
+												rows: [
+													{
+														label: "Online booking page",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Client reminders (SMS)",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Appointment management",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Package & voucher sales",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Prepaid service packages",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+												],
+											},
+											{
+												category: "Business",
+												rows: [
+													{
+														label: "Services & products catalog",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Payment tracking",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Sales reports",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Staff performance reports",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Multi-location dashboard",
+														solo: false,
+														studio: false,
+														chain: true,
+													},
+												],
+											},
+											{
+												category: "Team",
+												rows: [
+													{
+														label: "Staff role management",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Permission controls",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+												],
+											},
+											{
+												category: "Support",
+												rows: [
+													{
+														label: "Email & chat support",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Priority support",
+														solo: false,
+														studio: false,
+														chain: true,
+													},
+													{
+														label: "Dedicated onboarding",
+														solo: false,
+														studio: false,
+														chain: true,
+													},
+												],
+											},
+										].map(({ category, rows }) => {
+											const planSlugs = (plans ?? []).map((p) => p.slug);
+											return (
+												<Fragment key={category}>
+													<tr className="bg-brand-ink/[0.02]">
+														<td
+															colSpan={4}
+															className="px-0 py-2.5 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-brand-ink/40"
+														>
+															{category}
+														</td>
+													</tr>
+													{rows.map((row) => (
+														<tr key={row.label}>
+															<td className="py-4 text-[14.5px] text-brand-ink/75">
+																{row.label}
+															</td>
+															{planSlugs.map((slug) => {
+																const val =
+																	slug === "solo"
+																		? row.solo
+																		: slug === "studio"
+																			? row.studio
+																			: row.chain;
+																return (
+																	<td key={slug} className="py-4 text-center">
+																		{val ? (
+																			<span className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-brand-purple text-[11px] text-brand-yellow">
+																				✓
+																			</span>
+																		) : (
+																			<span className="text-[20px] text-brand-ink/20">
+																				—
+																			</span>
+																		)}
+																	</td>
+																);
+															})}
+														</tr>
+													))}
+												</Fragment>
+											);
+										})}
+									</>
+								)}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</section>
+
+			{/* Add-ons */}
+			<section className="px-8 py-[80px]">
+				<div className="mx-auto max-w-[1180px]">
+					<div className="mb-10 flex flex-col items-center justify-center">
+						<div className="mb-3 flex items-center gap-2 text-[12.5px] font-medium uppercase tracking-[0.08em] text-brand-purple">
+							<span className="inline-block h-[1.5px] w-[18px] bg-brand-yellow" />
+							Add-ons
+						</div>
+						<h2 className="font-serif text-[clamp(24px,3vw,34px)] font-medium tracking-[-0.3px] text-brand-ink">
+							Extend your plan
+						</h2>
+						<p className="mt-2 text-[16px] text-brand-ink/55">
+							Optional extras you can add to any plan, or unlock as your
+							business grows.
+						</p>
+					</div>
+
+					<div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+						{[
+							{
+								name: "Extra communication credits",
+								desc: "Top up your SMS and notification credits when your monthly allocation runs low.",
+								price: "Starting from ₵5 / bundle",
+								available: true,
+							},
+							{
+								name: "Location check-in for staff",
+								desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.",
+								available: false,
+							},
+							{
+								name: "WhatsApp messaging",
+								desc: "Send booking confirmations, reminders, and updates directly via WhatsApp.",
+								available: false,
+							},
+							{
+								name: "Custom booking domain",
+								desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).",
+								available: true,
+							},
+						].map((addon) => (
+							<div
+								key={addon.name}
+								className={cn(
+									"rounded-[18px] border p-6",
+									addon.available
+										? "border-brand-ink/8 bg-white"
+										: "border-dashed border-brand-ink/10 bg-brand-cream-dim",
+								)}
+							>
+								<div className="mb-3 flex items-start justify-between gap-3">
+									<div className="font-serif text-[18px] font-medium text-brand-ink">
+										{addon.name}
+									</div>
+									{addon.available ? (
+										<span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-[11.5px] font-medium text-emerald-700">
+											Available
+										</span>
+									) : (
+										<span className="shrink-0 rounded-full bg-brand-yellow/20 px-3 py-1 text-[11.5px] font-medium text-brand-purple">
+											Coming soon
+										</span>
+									)}
+								</div>
+								<p className="text-[14px] text-brand-ink/55">{addon.desc}</p>
+								{"price" in addon && addon.price && (
+									<p className="mt-3 text-[13.5px] font-medium text-brand-purple">
+										{addon.price}
+									</p>
+								)}
 							</div>
 						))}
 					</div>
 				</div>
 			</section>
 
-			{/* Footer */}
-			<footer className="border-t py-8 px-4">
-				<div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-					<SalonMagikLogo size="sm" />
-					<div className="flex items-center gap-6 text-sm text-muted-foreground">
-						<Link
-							to="/support"
-							className="hover:text-foreground transition-colors"
-						>
-							Support
-						</Link>
-						<Link
-							to="/terms"
-							className="hover:text-foreground transition-colors"
-						>
-							Terms
-						</Link>
-						<Link
-							to="/privacy"
-							className="hover:text-foreground transition-colors"
-						>
-							Privacy
-						</Link>
-					</div>
-					<p className="text-sm text-muted-foreground">
-						© {new Date().getFullYear()} Salon Magik
+			{/* FAQ teaser */}
+			<section className="bg-brand-cream-dim px-8 py-[80px] text-center">
+				<div className="mx-auto max-w-[520px]">
+					<h2 className="font-serif text-[clamp(22px,3vw,30px)] font-medium text-brand-ink">
+						Still have questions?
+					</h2>
+					<p className="mt-3 text-[15px] text-brand-ink/55">
+						We've answered the most common ones. If yours isn't there, reach out
+						and we'll get back to you.
 					</p>
+					<div className="mt-7 flex flex-wrap items-center justify-center gap-4">
+						<Link
+							to="/faq"
+							className="rounded-full border-[1.5px] border-brand-purple px-7 py-[13px] text-[15px] font-medium text-brand-purple transition-colors hover:bg-brand-lilac-bg"
+						>
+							View all FAQs
+						</Link>
+						<a
+							href="mailto:hello@salonmagik.com"
+							className="rounded-full bg-brand-ink px-7 py-[13px] text-[15px] font-medium text-white transition-colors hover:bg-brand-purple"
+						>
+							Contact support
+						</a>
+					</div>
 				</div>
-			</footer>
-		</div>
+			</section>
+		</MarketingLayout>
 	);
 }

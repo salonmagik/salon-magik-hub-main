@@ -121,7 +121,7 @@ serve(async (req) => {
         // SMS reminder
         if (setting.sms_appointment_reminders && customer?.phone) {
           try {
-            const senderName = resolveArkeselSenderId(customer.phone, tenant?.sms_sender_name);
+            const senderName = resolveArkeselSenderId(customer.phone, tenant?.sms_sender_name, "promotional");
 
             const apptDate = appt.scheduled_start
               ? new Date(appt.scheduled_start).toLocaleString("en-US", {
@@ -143,6 +143,7 @@ serve(async (req) => {
               to: customer.phone,
               from: senderName,
               message,
+              useCase: "promotional",
             });
             smsSent++;
           } catch (err) {

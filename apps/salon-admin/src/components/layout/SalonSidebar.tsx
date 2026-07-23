@@ -68,7 +68,7 @@ import {
 } from "@ui/dialog";
 
 // User profile section component
-function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean; isMobileOpen: boolean }) {
+function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExpanded: boolean; isMobileOpen: boolean; onCloseMobile: () => void }) {
   const { user, profile } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -86,7 +86,7 @@ function UserProfileSection({ isExpanded, isMobileOpen }: { isExpanded: boolean;
     <>
       <button
         type="button"
-        onClick={() => setProfileOpen(true)}
+        onClick={() => { onCloseMobile(); setProfileOpen(true); }}
         className={cn(
           "flex items-center gap-3 px-3 py-2.5 mt-2 w-full rounded-lg transition-colors hover:bg-white/10 cursor-pointer",
           !isExpanded && !isMobileOpen && "justify-center"
@@ -144,7 +144,7 @@ const mainNavItems: NavItem[] = [
   { label: "Transactions", icon: CreditCard, path: "/salon/transactions", module: "payments" },
   { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
   { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
-  { label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" },
+  ...(import.meta.env.DEV ? [{ label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" } as NavItem] : []),
   { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
   { label: "All Notifications", icon: Bell, path: "/salon/all-notifications", module: "notifications" },
   { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
@@ -227,11 +227,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
     const visibleItems = mainNavItems.filter((item) => {
       if (item.path === "/salon/overview/staff") {
-        return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && hasPermission("staff");
+        return activeContextType === "owner_hub" && hasPermission("staff");
       }
       if (item.path === "/salon/all-notifications") {
-        const branchCount = availableContexts.filter((c) => c.type === "location").length;
-        return activeContextType === "owner_hub" && currentTenant?.plan === "chain" && branchCount >= 2;
+        return activeContextType === "owner_hub";
       }
       if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
         return false;
@@ -250,18 +249,33 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       }
       return hasPermission(item.module) && isModuleAllowedInContext(item.module, activeContextType);
     });
-    if (currentTenant?.plan !== "chain") {
-      return visibleItems;
-    }
+    const isChain = currentTenant?.plan === "chain";
     return visibleItems.map((item) => {
       if (item.path === "/salon/settings") {
         if (activeContextType === "owner_hub") {
+          if (isChain) {
+            return {
+              ...item,
+              label: "Business Settings",
+              path: "/salon/business-settings",
+              children: [
+                { label: "Business Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
+                { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
+                { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
+                { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
+                { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
+                { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
+                { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
+                { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+              ],
+            };
+          }
           return {
             ...item,
             label: "Business Settings",
             path: "/salon/business-settings",
             children: [
-              { label: "Business Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
+              { label: "Salon Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
               { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
               { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
               { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
@@ -279,7 +293,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           children: [
             { label: "Branch Profile", icon: Building2, path: "/salon/branch-settings?tab=profile" },
             { label: "Branch Hours", icon: CalendarX2, path: "/salon/branch-settings?tab=hours" },
-            { label: "Active Sessions", icon: Shield, path: "/salon/branch-settings?tab=sessions" },
           ],
         };
       }
@@ -500,17 +513,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       if (routes.includes(currentPath)) {
         return currentPath;
       }
-      // Preserve intent between old/new settings routes when switching branch context.
+      // Preserve intent between old/new settings routes when switching context.
       if (currentPath === "/salon/settings" || currentPath === "/salon/branch-settings" || currentPath === "/salon/business-settings") {
-        if (contextType === "owner_hub" && routes.includes("/salon/business-settings")) {
+        if (contextType === "owner_hub") {
           return "/salon/business-settings";
         }
-        if (contextType === "location" && routes.includes("/salon/branch-settings")) {
-          return "/salon/branch-settings";
-        }
-        if (routes.includes("/salon/settings")) {
-          return "/salon/settings";
-        }
+        return "/salon/branch-settings";
       }
       return routes[0] || getFirstAllowedRoute(contextType, locationId);
     };
@@ -714,8 +722,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         {isExpanded || isMobileOpen ? (
           <SalonMagikLogo variant="white" size="sm" />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center mx-auto">
-            <Scissors className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 flex items-center justify-center mx-auto">
+            <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+              <path d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z" stroke="#F4C84E" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="16" cy="16" r="2.1" fill="#ffffff" />
+            </svg>
           </div>
         )}
         {isMobileOpen && (
@@ -745,7 +756,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       {(isExpanded || isMobileOpen) && !isAssignmentPending && availableContexts.length > 1 && (
         <div className="px-4 mb-2">
           <label htmlFor="context-switcher" className="mb-1 block text-[11px] font-medium text-white/70">
-            Interface
+            Switch
           </label>
           <select
             id="context-switcher"
@@ -798,7 +809,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         ))}
 
         {/* User Info */}
-        <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} />
+        <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} onCloseMobile={() => setIsMobileOpen(false)} />
 
         <button
           onClick={() => setConfirmSignOutOpen(true)}

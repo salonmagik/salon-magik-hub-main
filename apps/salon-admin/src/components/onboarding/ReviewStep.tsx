@@ -1,8 +1,9 @@
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
-import { Button } from "@ui/button";
-import { Alert, AlertDescription } from "@ui/alert";
-import { CheckCircle2, User, Building2, MapPin, Users, Sparkles } from "lucide-react";
+import {
+  User, Building2, MapPin, Users, Sparkles, Loader2, Tag, CheckCircle2,
+  type LucideIcon,
+} from "lucide-react";
+import { cn } from "@shared/utils";
 import type { UserRole } from "./RoleStep";
 import type { ProfileInfo } from "./ProfileStep";
 import type { OwnerInviteInfo } from "./OwnerInviteStep";
@@ -39,6 +40,7 @@ interface ReviewStepProps {
     billingTargets?: string[];
     campaignEndsAt?: string | null;
   } | null;
+  onEditStep?: (step: "role" | "owner-invite" | "business" | "plan") => void;
 }
 
 const PLAN_NAMES: Record<SubscriptionPlan, string> = {
@@ -64,6 +66,62 @@ const COUNTRY_NAMES: Record<string, string> = {
   ZA: "South Africa",
 };
 
+const ALL_DAYS = [
+  { key: "monday",    label: "Mon" },
+  { key: "tuesday",   label: "Tue" },
+  { key: "wednesday", label: "Wed" },
+  { key: "thursday",  label: "Thu" },
+  { key: "friday",    label: "Fri" },
+  { key: "saturday",  label: "Sat" },
+  { key: "sunday",    label: "Sun" },
+];
+
+function ReviewCard({
+  icon: Icon,
+  title,
+  children,
+  onEdit,
+  editLabel = "Edit",
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: React.ReactNode;
+  onEdit?: () => void;
+  editLabel?: string;
+}) {
+  return (
+    <div className="rounded-[22px] border border-black/[0.07] bg-white p-6 px-7 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#2E1F4E]/8">
+            <Icon className="h-[15px] w-[15px] text-[#2E1F4E]" strokeWidth={1.8} />
+          </div>
+          <h3 className="font-serif text-[15.5px] font-medium text-gray-900">{title}</h3>
+        </div>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-[13px] text-[#2E1F4E] transition-opacity hover:opacity-60"
+          >
+            {editLabel}
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.05em] text-black/38">{label}</p>
+      <p className="text-[14px] text-gray-800">{value}</p>
+    </div>
+  );
+}
+
 export function ReviewStep({
   role,
   profile,
@@ -78,240 +136,215 @@ export function ReviewStep({
   onApplyPromo,
   isApplyingPromo = false,
   promoPreview = null,
+  onEditStep,
 }: ReviewStepProps) {
-  const formatDays = (days: string[]) => {
-    const dayMap: Record<string, string> = {
-      monday: "Mon",
-      tuesday: "Tue",
-      wednesday: "Wed",
-      thursday: "Thu",
-      friday: "Fri",
-      saturday: "Sat",
-      sunday: "Sun",
-    };
-    return days.map((d) => dayMap[d]).join(", ");
-  };
-
-  const formatTime = (time: string) => {
-    return time.slice(0, 5); // "09:00:00" -> "09:00"
-  };
+  const formatTime = (time: string) => time.slice(0, 5);
 
   return (
-    <>
-      <CardHeader>
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-          <CheckCircle2 className="w-6 h-6 text-primary" />
+    <div className="p-7">
+      {/* Header */}
+      <div className="mb-7">
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
+          Almost there
         </div>
-        <CardTitle>Review your setup</CardTitle>
-        <CardDescription>
-          Please review the information below before completing your setup.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Role & Profile */}
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <User className="w-4 h-4 text-primary" />
-            Your Profile
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Role:</span>{" "}
-              <span className="font-medium">{ROLE_NAMES[role]}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Name:</span>{" "}
-              <span className="font-medium">{profile.firstName} {profile.lastName}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Email:</span>{" "}
-              <span className="font-medium">{profile.email}</span>
-            </div>
-            {profile.phone && (
-              <div>
-                <span className="text-muted-foreground">Phone:</span>{" "}
-                <span className="font-medium">{profile.phone}</span>
-              </div>
-            )}
-          </div>
-        </div>
+        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+          Review your setup
+        </h2>
+        <p className="mt-1.5 text-[14px] text-black/45">
+          Check everything below before we get your salon ready to go.
+        </p>
+      </div>
 
-        {/* Owner Invite (if applicable) */}
-        {ownerInvite && (
-          <div className="border rounded-lg p-4 space-y-3 border-amber-200 bg-amber-50">
-            <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
-              <Users className="w-4 h-4" />
-              Owner Invitation
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              <div>
-                <span className="text-muted-foreground">Role:</span>{" "}
-                <span className="font-medium">Owner</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Name:</span>{" "}
-                <span className="font-medium">{ownerInvite.name}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Email:</span>{" "}
-                <span className="font-medium">{ownerInvite.email}</span>
-              </div>
-              {ownerInvite.phone && (
-                <div>
-                  <span className="text-muted-foreground">Phone:</span>{" "}
-                  <span className="font-medium">{ownerInvite.phone}</span>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-amber-600">
-              An invitation will be sent after setup.
-            </p>
+      <div className="space-y-3.5">
+        {/* Profile */}
+        <ReviewCard
+          icon={User}
+          title="Your profile"
+          onEdit={onEditStep ? () => onEditStep("role") : undefined}
+        >
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <Field label="Name" value={`${profile.firstName} ${profile.lastName}`} />
+            <Field label="Role" value={ROLE_NAMES[role]} />
+            <Field label="Email" value={profile.email} />
+            {profile.phone && <Field label="Phone" value={profile.phone} />}
           </div>
+        </ReviewCard>
+
+        {/* Owner invite */}
+        {ownerInvite && (
+          <ReviewCard
+            icon={Users}
+            title="Owner invitation"
+            onEdit={onEditStep ? () => onEditStep("owner-invite") : undefined}
+          >
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <Field label="Name" value={ownerInvite.name} />
+              <Field label="Email" value={ownerInvite.email} />
+              {ownerInvite.phone && <Field label="Phone" value={ownerInvite.phone} />}
+            </div>
+            <p className="mt-3 text-[12.5px] text-amber-600">
+              An invitation will be sent after setup completes.
+            </p>
+          </ReviewCard>
         )}
 
         {/* Plan */}
-        <div className="border rounded-lg p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="w-4 h-4 text-primary" />
-            Subscription Plan
+        <ReviewCard
+          icon={Sparkles}
+          title="Subscription plan"
+          onEdit={onEditStep ? () => onEditStep("plan") : undefined}
+          editLabel="Change"
+        >
+          <div className="inline-flex items-center gap-2.5 rounded-full bg-[#2E1F4E]/8 px-4 py-[9px]">
+            <span className="text-[14px] font-medium text-[#2E1F4E]">{PLAN_NAMES[plan]}</span>
+            <span className="text-[13px] text-black/40">{trialDays}-day free trial, no card required</span>
           </div>
-          <div className="text-sm">
-            <span className="font-medium">{PLAN_NAMES[plan]}</span>
-            <span className="text-muted-foreground"> – {trialDays}-day free trial</span>
-          </div>
-        </div>
+        </ReviewCard>
 
+        {/* Chain billing */}
         {plan === "chain" && chainSummary && (
-          <div className="border rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Sparkles className="w-4 h-4 text-primary" />
-              Chain Billing Preview
+          <ReviewCard icon={Sparkles} title="Chain billing preview">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <Field label="Configured branches" value={chainSummary.configuredLocations} />
+              <Field
+                label="Estimated monthly"
+                value={`${chainSummary.currency} ${chainSummary.estimatedMonthlyTotal.toLocaleString()}`}
+              />
+              {chainSummary.expectedBillingDate && (
+                <Field label="Billing starts" value={chainSummary.expectedBillingDate} />
+              )}
             </div>
-            <p className="text-sm">
-              Configured stores: <span className="font-medium">{chainSummary.configuredLocations}</span>
-            </p>
-            <p className="text-sm">
-              Estimated monthly charge:{" "}
-              <span className="font-medium">
-                {chainSummary.currency} {chainSummary.estimatedMonthlyTotal.toLocaleString()}
-              </span>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Expected billing date: {chainSummary.expectedBillingDate || "Next billing cycle"}
-            </p>
             {chainSummary.requiresCustom && (
-              <p className="text-xs text-amber-700">
-                This setup includes custom-tier stores. Onboarding continues, but stores above 10 remain pending approval.
+              <p className="mt-3 text-[12.5px] text-amber-600">
+                Branches above 10 are pending custom pricing approval.
               </p>
             )}
-          </div>
+          </ReviewCard>
         )}
 
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Sparkles className="w-4 h-4 text-primary" />
-            Promo Code
-          </div>
+        {/* Promo code */}
+        <ReviewCard icon={Tag} title="Promo code">
           <div className="flex gap-2">
             <Input
               value={promoCode}
               onChange={(event) => onPromoCodeChange?.(event.target.value.toUpperCase())}
               placeholder="Enter promo code"
+              className="h-[44px] text-[13.5px]"
             />
-            <Button
+            <button
               type="button"
-              variant="outline"
               onClick={onApplyPromo}
-              disabled={!promoCode.trim() || isApplyingPromo}
+              disabled={!promoCode.trim() || isApplyingPromo || promoPreview?.valid === true}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-4 text-[13.5px] font-medium transition-colors disabled:opacity-40",
+                promoPreview?.valid
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-black/[0.1] text-black/60 hover:border-black/20 hover:text-black/80",
+              )}
             >
-              {isApplyingPromo ? "Applying..." : "Apply"}
-            </Button>
+              {isApplyingPromo ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : promoPreview?.valid ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : null}
+              {promoPreview?.valid ? "Applied" : "Apply"}
+            </button>
           </div>
           {promoPreview ? (
-            <Alert variant={promoPreview.valid ? "default" : "destructive"}>
-              <AlertDescription>
-                {promoPreview.valid ? (
-                  <>
-                    <span className="font-medium">{promoPreview.campaignName}</span>
-                    {" · "}
-                    {promoPreview.discountType === "fixed"
-                      ? promoPreview.discountValue
-                      : `${promoPreview.discountValue}% off`}
-                    {" · "}
-                    {promoPreview.maxUsesPerTenant} use{promoPreview.maxUsesPerTenant === 1 ? "" : "s"}
-                    {" · "}
-                    {promoPreview.billingTargets?.join(", ")}
-                  </>
-                ) : (
-                  promoPreview.message
-                )}
-              </AlertDescription>
-            </Alert>
+            <div className={cn(
+              "mt-2 rounded-[8px] px-3 py-2 text-[12.5px]",
+              promoPreview.valid ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600",
+            )}>
+              {promoPreview.valid ? (
+                <>
+                  <span className="font-medium">{promoPreview.campaignName}</span>
+                  {" · "}
+                  {promoPreview.discountType === "fixed"
+                    ? promoPreview.discountValue
+                    : `${promoPreview.discountValue}% off`}
+                  {promoPreview.billingTargets?.length
+                    ? ` · ${promoPreview.billingTargets.join(", ")}`
+                    : ""}
+                </>
+              ) : promoPreview.message}
+            </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              Promo codes are optional. If valid, your discount will be attached when onboarding completes.
+            <p className="mt-2 text-[12px] text-black/35">
+              Optional. If valid, your discount is attached when setup completes.
             </p>
           )}
-        </div>
+        </ReviewCard>
 
-        {/* Business & Location */}
-        <div className="border rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Building2 className="w-4 h-4 text-primary" />
-            Business Details
+        {/* Business details */}
+        <ReviewCard
+          icon={Building2}
+          title="Business details"
+          onEdit={onEditStep ? () => onEditStep("business") : undefined}
+        >
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+            <Field label="Business name" value={business.name} />
+            <Field label="Country" value={COUNTRY_NAMES[business.country] || business.country} />
+            <Field label="Currency" value={business.currency} />
+            <Field label="City" value={business.city} />
+            {plan !== "chain" && (
+              <Field
+                label="Hours"
+                value={`${formatTime(business.openingTime)} to ${formatTime(business.closingTime)}`}
+              />
+            )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Name:</span>{" "}
-              <span className="font-medium">{business.name}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Country:</span>{" "}
-              <span className="font-medium">{COUNTRY_NAMES[business.country] || business.country}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Currency:</span>{" "}
-              <span className="font-medium">{business.currency}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">City:</span>{" "}
-              <span className="font-medium">{business.city}</span>
-            </div>
-          </div>
+
           {plan !== "chain" && (
-            <div className="text-sm">
-              <span className="text-muted-foreground">Hours:</span>{" "}
-              <span className="font-medium">
-                {formatTime(business.openingTime)} – {formatTime(business.closingTime)}
-              </span>
-              <br />
-              <span className="text-muted-foreground">Open:</span>{" "}
-              <span className="font-medium">{formatDays(business.openingDays)}</span>
+            <div className="mt-5">
+              <p className="mb-2.5 text-[11px] font-medium uppercase tracking-[0.05em] text-black/38">
+                Open days
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {ALL_DAYS.map(({ key, label }) => {
+                  const isOpen = business.openingDays.includes(key);
+                  return (
+                    <span
+                      key={key}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-[12.5px] font-medium",
+                        isOpen
+                          ? "bg-[#2E1F4E]/10 text-[#2E1F4E]"
+                          : "bg-black/[0.05] text-black/30",
+                      )}
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           )}
-        </div>
+        </ReviewCard>
 
-        {/* Multi-branch (Chain only) */}
+        {/* Branches */}
         {locations && locations.locations.length > 0 && (
-          <div className="border rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <MapPin className="w-4 h-4 text-primary" />
-              Branches ({locations.locations.length})
-            </div>
+          <ReviewCard icon={MapPin} title={`Branches (${locations.locations.length})`}>
             <div className="space-y-2">
               {locations.locations.map((loc, idx) => (
-                <div key={loc.id} className="text-sm flex items-center gap-2">
-                  <span className="font-medium">{loc.name || `Branch ${idx + 1}`}</span>
-                  <span className="text-muted-foreground">– {loc.city}</span>
+                <div key={loc.id} className="flex items-center gap-2 text-[13.5px]">
+                  <span className="font-medium text-gray-800">{loc.name || `Branch ${idx + 1}`}</span>
+                  <span className="text-black/40">— {loc.city}</span>
                   {loc.isDefault && (
-                    <span className="text-xs text-primary">(Default)</span>
+                    <span className="rounded-full bg-[#2E1F4E]/8 px-2 py-0.5 text-[11px] text-[#2E1F4E]">
+                      Default
+                    </span>
                   )}
                 </div>
               ))}
             </div>
-          </div>
+          </ReviewCard>
         )}
-      </CardContent>
-    </>
+      </div>
+
+      <p className="mt-6 text-center text-[12.5px] text-black/35">
+        You can change any of this later from Settings
+      </p>
+    </div>
   );
 }

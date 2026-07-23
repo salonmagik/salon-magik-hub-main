@@ -1,15 +1,20 @@
 import { CheckCircle } from "lucide-react";
-
-const benefits = [
-  "14-day free trial, no card required",
-  "Works on any device — phone, tablet, or desktop",
-  "Multiple payment methods supported",
-  "WhatsApp notifications coming soon",
-  "Offline-first design for unreliable networks",
-  "Multi-location support from day one",
-];
+import { usePlans } from "@/hooks/usePlans";
 
 export function BenefitsSection() {
+  const { data: plans } = usePlans();
+  const trialDays =
+    plans?.find((p) => p.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
+
+  const benefits = [
+    `${trialDays}-day free trial, no card required`,
+    "Works on any device — phone, tablet, or desktop",
+    "Multiple payment methods supported",
+    "WhatsApp notifications coming soon",
+    "Offline-first design for unreliable networks",
+    "Multi-location support from day one",
+  ];
+
   return (
     <section className="py-16 bg-primary text-primary-foreground px-4">
       <div className="max-w-6xl mx-auto">
@@ -19,7 +24,7 @@ export function BenefitsSection() {
               Why you should sign up
             </h2>
             <p className="opacity-90 max-w-md">
-              Simple, powerful tools designed for modern salons, spas, and barbershops. 
+              Simple, powerful tools designed for modern salons, spas, and barbershops.
               Everything you need to run your business.
             </p>
           </div>

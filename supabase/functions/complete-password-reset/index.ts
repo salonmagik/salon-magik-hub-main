@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate, heading, paragraph, createAlertBox } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -15,71 +15,15 @@ interface CompleteResetRequest {
   password: string;
 }
 
-// Salon Magik Design System
-const STYLES = {
-  primaryColor: "#2563EB",
-  textColor: "#1f2937",
-  textMuted: "#4b5563",
-  textLight: "#6b7280",
-  textLighter: "#9ca3af",
-  surfaceColor: "#f5f7fa",
-  borderColor: "#e5e7eb",
-  warningBg: "#fef3c7",
-  warningBorder: "#f59e0b",
-  warningText: "#92400e",
-  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-};
-
 const passwordChangedTemplate = {
   subject: "Your Salon Magik password has been changed",
-  body_html: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: ${STYLES.surfaceColor}; font-family: ${STYLES.fontFamily};">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: ${STYLES.primaryColor}; font-style: italic; margin: 0; font-size: 32px; font-family: ${STYLES.fontFamily};">Salon Magik</h1>
-          </div>
-          
-          <h2 style="color: ${STYLES.textColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Password Changed Successfully</h2>
-          
-          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi there,</p>
-          
-          <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">
-            Your password has been successfully changed. You can now sign in with your new password.
-          </p>
-          
-          <div style="background: ${STYLES.warningBg}; border-radius: 8px; padding: 16px; margin: 24px 0; border-left: 4px solid ${STYLES.warningBorder};">
-            <p style="color: ${STYLES.warningText}; margin: 0; font-size: 14px; font-family: ${STYLES.fontFamily};">
-              <strong>Didn't make this change?</strong><br/>
-              If you didn't reset your password, please contact our support team immediately.
-            </p>
-          </div>
-          
-          <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
-          
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily}; margin: 0 0 4px;">
-            © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.
-          </p>
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily}; margin: 0;">
-            You're receiving this email because you use Salon Magik. We never share your data without consent.
-          </p>
-        </div>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`,
+  body_html: wrapEmailTemplate(
+    heading("Password Changed Successfully") +
+    paragraph("Hi there,") +
+    paragraph("Your password has been successfully changed. You can now sign in with your new password.") +
+    createAlertBox("<strong>Didn't make this change?</strong><br/>If you didn't reset your password, please contact our support team immediately.", "warning"),
+    { mode: "product" }
+  ),
 };
 
 const handler = async (req: Request): Promise<Response> => {

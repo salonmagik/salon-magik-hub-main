@@ -187,7 +187,7 @@ serve(async (req) => {
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
-          await sendSms(resolveArkeselSenderId(customer.phone, tenantSenderId), customer.phone, message);
+          await sendSms(resolveArkeselSenderId(customer.phone, tenantSenderId, "promotional"), customer.phone, message);
         } else if (channel === "whatsapp") {
           throw new Error("WhatsApp channel is not yet available");
         }

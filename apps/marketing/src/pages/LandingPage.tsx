@@ -4,9 +4,12 @@ import {
   LandingNav,
   LandingHero,
   CountryLaunchStrip,
-  BusinessTypes,
   FeaturesSection,
-  BenefitsSection,
+  PricingSection,
+  BusinessTypesSection,
+  SocialProof,
+  PeopleSection,
+  FAQSection,
   CTASection,
   LandingFooter,
   WaitlistDialog,
@@ -20,40 +23,52 @@ export default function LandingPage() {
   const [geoInterestSource, setGeoInterestSource] = useState<"hero_cta" | "footer_cta" | "launch_section">("hero_cta");
 
   return (
-    <div className="min-h-screen bg-background">
-      <LandingNav 
-        isWaitlistMode={isWaitlistMode} 
-        isLoading={isLoading} 
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <LandingHero 
-        isWaitlistMode={isWaitlistMode} 
-        isLoading={isLoading}
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <CountryLaunchStrip
-        isEnabled={isGeoInterestEnabled}
-        onOpenInterest={() => {
-          setGeoInterestSource("launch_section");
-          setGeoInterestOpen(true);
-        }}
-      />
-      <BusinessTypes onWaitlistClick={() => setWaitlistOpen(true)} isWaitlistMode={isWaitlistMode} />
-      <FeaturesSection />
-      <BenefitsSection />
-      <CTASection 
-        isWaitlistMode={isWaitlistMode}
-        onWaitlistClick={() => setWaitlistOpen(true)}
-      />
-      <LandingFooter />
-      
-      <WaitlistDialog open={waitlistOpen} onOpenChange={setWaitlistOpen} mode="waitlist" source="footer_cta" />
-      <WaitlistDialog
-        open={geoInterestOpen}
-        onOpenChange={setGeoInterestOpen}
-        mode="interest"
-        source={geoInterestSource}
-      />
-    </div>
-  );
+		<div className="min-h-screen bg-brand-cream">
+			<LandingNav
+				isWaitlistMode={isWaitlistMode}
+				isLoading={isLoading}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+			<LandingHero
+				isWaitlistMode={isWaitlistMode}
+				isLoading={isLoading}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+			<CountryLaunchStrip
+				isEnabled={isGeoInterestEnabled}
+				onOpenInterest={() => {
+					setGeoInterestSource("launch_section");
+					setGeoInterestOpen(true);
+				}}
+			/>
+			<SocialProof />
+			<BusinessTypesSection />
+			<FeaturesSection />
+			<PricingSection
+				isWaitlistMode={isWaitlistMode}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+
+			<PeopleSection />
+			<FAQSection />
+			<CTASection
+				isWaitlistMode={isWaitlistMode}
+				onWaitlistClick={() => setWaitlistOpen(true)}
+			/>
+			<LandingFooter />
+
+			<WaitlistDialog
+				open={waitlistOpen}
+				onOpenChange={setWaitlistOpen}
+				mode="waitlist"
+				source="footer_cta"
+			/>
+			<WaitlistDialog
+				open={geoInterestOpen}
+				onOpenChange={setGeoInterestOpen}
+				mode="interest"
+				source={geoInterestSource}
+			/>
+		</div>
+	);
 }

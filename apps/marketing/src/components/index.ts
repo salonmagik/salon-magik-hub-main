@@ -1,10 +1,14 @@
 export { LandingNav } from "./LandingNav";
 export { LandingHero } from "./LandingHero";
 export { CountryLaunchStrip } from "./CountryLaunchStrip";
-export { BusinessTypes } from "./BusinessTypes";
+export { SocialProof } from "./SocialProof";
+export { BusinessTypesSection } from "./BusinessTypesSection";
 export { FeaturesSection } from "./FeaturesSection";
-export { BenefitsSection } from "./BenefitsSection";
+export { PricingSection } from "./PricingSection";
+export { PeopleSection } from "./PeopleSection";
+export { FAQSection } from "./FAQSection";
 export { CTASection } from "./CTASection";
 export { LandingFooter } from "./LandingFooter";
 export { WaitlistDialog } from "./WaitlistDialog";
 export { SalonMagikLogo } from "./SalonMagikLogo";
+export { MarketingLayout } from "./MarketingLayout";

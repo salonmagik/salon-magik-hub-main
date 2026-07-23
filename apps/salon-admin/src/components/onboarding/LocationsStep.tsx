@@ -1,7 +1,5 @@
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { Button } from "@ui/button";
 import { Switch } from "@ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { MapPin, Plus, Trash2, Star } from "lucide-react";
@@ -153,134 +151,132 @@ export function LocationsStep({
   };
 
   return (
-    <>
-      <CardHeader>
-        <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
-          <MapPin className="w-6 h-6 text-primary" />
+    <div className="p-7">
+      <div className="mb-6">
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
+          <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
+          Locations
         </div>
-        <CardTitle>Your branches</CardTitle>
-        <CardDescription>
+        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+          Your branches
+        </h2>
+        <p className="mt-1.5 text-[14px] text-black/45">
           Add all your salon branches. You can add more later.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </p>
+      </div>
+
+      <div className="space-y-4">
         {/* Toggle options */}
-        <div className="space-y-3 p-4 bg-muted rounded-lg">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="sameCountry" className="cursor-pointer">
-              All branches in the same country
-            </Label>
-            <Switch
-              id="sameCountry"
-              checked={config.sameCountry}
-              onCheckedChange={(v) => handleToggleChange("sameCountry", v)}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="sameName" className="cursor-pointer">
-              All branches share the business name
-            </Label>
-            <Switch
-              id="sameName"
-              checked={config.sameName}
-              onCheckedChange={(v) => handleToggleChange("sameName", v)}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="sameHours" className="cursor-pointer">
-              All branches have the same hours
-            </Label>
-            <Switch
-              id="sameHours"
-              checked={config.sameHours}
-              onCheckedChange={(v) => handleToggleChange("sameHours", v)}
-            />
-          </div>
+        <div className="rounded-[18px] bg-[#2E1F4E]/[0.07] overflow-hidden">
+          {[
+            { id: "sameCountry", label: "All branches in the same country", field: "sameCountry" as const },
+            { id: "sameName", label: "All branches share the business name", field: "sameName" as const },
+            { id: "sameHours", label: "All branches have the same hours", field: "sameHours" as const },
+          ].map(({ id, label, field }, i, arr) => (
+            <div key={id}>
+              <div className="flex items-center justify-between gap-4 px-6 py-[18px]">
+                <Label htmlFor={id} className="cursor-pointer text-[15px] text-gray-800">
+                  {label}
+                </Label>
+                <Switch
+                  id={id}
+                  checked={config[field]}
+                  onCheckedChange={(v) => handleToggleChange(field, v)}
+                />
+              </div>
+              {i < arr.length - 1 && (
+                <div className="mx-6 border-t border-black/[0.07]" />
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Location cards */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {config.locations.map((location, index) => (
             <div
               key={location.id}
               className={cn(
-                "border rounded-lg p-4 space-y-3",
-                location.isDefault && "border-primary bg-primary/5"
+                "rounded-[22px] border bg-white p-6 space-y-4 transition-colors",
+                location.isDefault
+                  ? "border-[#2E1F4E]"
+                  : "border-black/[0.08]",
               )}
             >
+              {/* Card header */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Branch {index + 1}</span>
+                <div className="flex items-center gap-2.5">
+                  <p className="text-[17px] font-bold text-gray-900">
+                    Branch {index + 1}
+                  </p>
                   {location.isDefault && (
-                    <span className="text-xs text-primary flex items-center gap-1">
-                      <Star className="w-3 h-3 fill-primary" /> Default
+                    <span className="flex items-center gap-1.5 rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-medium text-gray-600">
+                      <Star className="h-3 w-3 fill-gray-600" /> Default
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {!location.isDefault && (
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="sm"
                       onClick={() => setDefaultLocation(location.id)}
+                      className="rounded-full px-3 py-1.5 text-[12px] font-medium text-black/45 transition-colors hover:bg-black/[0.04] hover:text-black/70"
                     >
                       Set as default
-                    </Button>
+                    </button>
                   )}
                   {config.locations.length > 1 && (
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
                       onClick={() => removeLocation(location.id)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-red-400 transition-colors hover:bg-red-50"
                     >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Name</Label>
+                  <Label className="text-[13.5px] font-medium text-gray-700">Name</Label>
                   <Input
                     placeholder="Branch name"
                     value={location.name}
                     onChange={(e) => updateLocation(location.id, { name: e.target.value })}
                     disabled={config.sameName}
+                    className="h-[44px] text-[14px]"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">City *</Label>
+                  <Label className="text-[13.5px] font-medium text-gray-700">City *</Label>
                   <Input
                     placeholder="City"
                     value={location.city}
                     onChange={(e) => updateLocation(location.id, { city: e.target.value })}
+                    className="h-[44px] text-[14px]"
                   />
                 </div>
               </div>
 
               {!config.sameCountry && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Country</Label>
+                  <Label className="text-[13.5px] font-medium text-gray-700">Country</Label>
                   <Select
                     value={location.country}
                     onValueChange={(v) => {
                       const timezone = MARKET_TIMEZONES[v] ?? location.timezone;
-                      updateLocation(location.id, {
-                        country: v,
-                        timezone,
-                      });
+                      updateLocation(location.id, { country: v, timezone });
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-[44px] text-[14px]">
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
                       {marketCountries.map((c) => (
                         <SelectItem key={c.code} value={c.code}>
-                          {c.name}
+                          {c.flag} {c.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -289,11 +285,12 @@ export function LocationsStep({
               )}
 
               <div className="space-y-1.5">
-                <Label className="text-xs">Address</Label>
+                <Label className="text-[13.5px] font-medium text-gray-700">Address</Label>
                 <Input
                   placeholder="Street address"
                   value={location.address}
                   onChange={(e) => updateLocation(location.id, { address: e.target.value })}
+                  className="h-[44px] text-[14px]"
                 />
               </div>
 
@@ -301,12 +298,12 @@ export function LocationsStep({
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Opens</Label>
+                      <Label className="text-[13.5px] font-medium text-gray-700">Opens</Label>
                       <Select
                         value={location.openingTime}
                         onValueChange={(v) => updateLocation(location.id, { openingTime: v })}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-[44px] text-[14px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -319,12 +316,12 @@ export function LocationsStep({
                       </Select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Closes</Label>
+                      <Label className="text-[13.5px] font-medium text-gray-700">Closes</Label>
                       <Select
                         value={location.closingTime}
                         onValueChange={(v) => updateLocation(location.id, { closingTime: v })}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="h-[44px] text-[14px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -338,19 +335,19 @@ export function LocationsStep({
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Open days</Label>
-                    <div className="flex gap-1">
+                  <div className="space-y-2">
+                    <Label className="text-[13.5px] font-medium text-gray-700">Open days</Label>
+                    <div className="flex gap-1.5">
                       {DAYS_OF_WEEK.map((day) => (
                         <button
                           key={day.id}
                           type="button"
                           onClick={() => toggleDay(location.id, day.id)}
                           className={cn(
-                            "w-8 h-8 rounded-full text-xs font-medium transition-colors",
+                            "h-8 w-8 rounded-full text-[12.5px] font-medium transition-colors",
                             location.openingDays.includes(day.id)
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:bg-muted/80"
+                              ? "bg-[#2E1F4E] text-white"
+                              : "bg-black/[0.05] text-black/40 hover:bg-black/[0.09] hover:text-black/60",
                           )}
                         >
                           {day.label}
@@ -364,20 +361,19 @@ export function LocationsStep({
           ))}
         </div>
 
-        <Button
+        <button
           type="button"
-          variant="outline"
-          className="w-full"
           onClick={addLocation}
           disabled={!canAddMoreLocations}
+          className="flex w-full items-center justify-center gap-2 rounded-[16px] border border-dashed border-black/[0.12] py-3.5 text-[13.5px] font-medium text-black/45 transition-colors hover:border-black/20 hover:text-black/65 disabled:opacity-40"
         >
-          <Plus className="w-4 h-4 mr-2" />
+          <Plus className="h-4 w-4" />
           {canAddMoreLocations ? "Add location" : "Location limit reached"}
-        </Button>
-        <p className="text-xs text-muted-foreground text-center">
+        </button>
+        <p className="text-center text-[12px] text-black/35">
           Configured {config.locations.length} of {resolvedMaxLocations} locations.
         </p>
-      </CardContent>
-    </>
+      </div>
+    </div>
   );
 }

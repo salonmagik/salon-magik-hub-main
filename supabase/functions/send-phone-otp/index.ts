@@ -48,7 +48,8 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!profile?.user_id) {
-      // Return generic success to avoid phone enumeration
+      // No profile found — silent success to avoid phone enumeration, but log for debugging.
+      console.warn(`[send-phone-otp] no profile found for phone prefix +${phone.slice(1, 4)}`);
       return json({ success: true });
     }
 
@@ -112,8 +113,9 @@ serve(async (req) => {
     console.log(`[send-phone-otp] Sending OTP to ${phone} for user ${profile.user_id}`);
     const smsResult = await sendArkeselSMS({
       to: phone,
-      from: resolveArkeselSenderId(phone),
+      from: resolveArkeselSenderId(phone, null, "transactional"),
       message: `Your Salon Magik sign-in code is: ${otp}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`,
+      useCase: "transactional",
     });
     console.log(`[send-phone-otp] SMS sent successfully. Message ID: ${JSON.stringify(smsResult?.data)}`);
 

@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useClientAuth } from "@/hooks";
-import { Loader2 } from "lucide-react";
+import { BrandLoader } from "@ui/brand-loader";
 
 interface ClientProtectedRouteProps {
   children: React.ReactNode;
@@ -17,14 +17,7 @@ export function ClientProtectedRoute({ children }: ClientProtectedRouteProps) {
   const location = useLocation();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <BrandLoader fullScreen />;
   }
 
   if (!isAuthenticated) {
@@ -44,14 +37,7 @@ export function ClientPublicOnlyRoute({ children }: { children: React.ReactNode 
   const location = useLocation();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <BrandLoader fullScreen />;
   }
 
   if (isAuthenticated) {

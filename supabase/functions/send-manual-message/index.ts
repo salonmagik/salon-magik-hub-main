@@ -290,7 +290,7 @@ const handler = async (req: Request): Promise<Response> => {
         success = true;
 
       } else if (message.channel === "sms") {
-        const senderID = resolveArkeselSenderId(message.customer.phone, message.tenant.sms_sender_name);
+        const senderID = resolveArkeselSenderId(message.customer.phone, message.tenant.sms_sender_name, "promotional");
 
         if (!message.customer?.phone) {
           throw new Error("Customer phone number not found");
@@ -301,6 +301,7 @@ const handler = async (req: Request): Promise<Response> => {
           to: message.customer.phone,
           from: senderID,
           message: messageRecord.message as string,
+          useCase: "promotional",
         });
         extractArkeselMessageId(smsResponse);
 

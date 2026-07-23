@@ -6,6 +6,7 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
+import { heading, paragraph } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -67,7 +68,8 @@ serve(async (req) => {
         scheduled_start,
         location:locations(name, address, city),
         customer:customers(id, user_id, full_name, email),
-        services:appointment_services(service_name)
+        services:appointment_services(service_name),
+        tenant:tenants(name, logo_url)
       `)
       .eq("id", appointmentId)
       .single();
@@ -102,11 +104,8 @@ serve(async (req) => {
       });
     }
 
-    const { data: tenant } = await admin
-      .from("tenants")
-      .select("name, logo_url")
-      .eq("id", appointment.tenant_id)
-      .single();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tenant = (appointment as any).tenant as { name: string; logo_url: string | null } | null;
 
     const servicesList = appointment.services?.map((service: { service_name: string }) => service.service_name).join(", ") || "appointment";
     const scheduledText = appointment.scheduled_start
@@ -139,14 +138,13 @@ serve(async (req) => {
           subject: `Client cancellation at ${tenant?.name || "your salon"}`,
           salonName: tenant?.name || "Salon Magik",
           salonLogoUrl: tenant?.logo_url,
-          htmlContent: `
-            <h2 style="color: #2563EB; margin-bottom: 16px;">Appointment cancelled by client</h2>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${appointment.customer?.full_name || "Unknown customer"}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>When:</strong> ${scheduledText}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Branch:</strong> ${locationName}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Items:</strong> ${servicesList}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Reason:</strong> ${reason.trim()}</p>
-          `,
+          htmlContent:
+            heading("Appointment cancelled by client") +
+            paragraph(`<strong>Customer:</strong> ${appointment.customer?.full_name || "Unknown customer"}`) +
+            paragraph(`<strong>When:</strong> ${scheduledText}`) +
+            paragraph(`<strong>Branch:</strong> ${locationName}`) +
+            paragraph(`<strong>Items:</strong> ${servicesList}`) +
+            paragraph(`<strong>Reason:</strong> ${reason.trim()}`),
         });
       }
     }

@@ -13,7 +13,7 @@ interface ProtectedRouteProps {
 }
 
 function LoadingScreen() {
-  return <BrandLoader fullScreen size="lg" label="Loading…" />;
+  return <BrandLoader fullScreen />;
 }
 
 export function ProtectedRoute({ children, requireOnboarding = true }: ProtectedRouteProps) {

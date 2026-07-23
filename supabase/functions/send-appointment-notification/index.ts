@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress } from "../_shared/email-template.ts";
+import { buildFromAddress, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -26,202 +26,116 @@ interface NotificationRequest {
   newTime?: string;
 }
 
-// Salon Magik Design System
-const STYLES = {
-  primaryColor: "#2563EB",
-  textColor: "#1f2937",
-  textMuted: "#4b5563",
-  textLight: "#6b7280",
-  textLighter: "#9ca3af",
-  surfaceColor: "#f5f7fa",
-  borderColor: "#e5e7eb",
-  fontFamily: "'Questrial', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-};
+const P = EMAIL_STYLES.primaryColor;   // #2E1F4E brand purple
+const A = EMAIL_STYLES.accentColor;    // #F4C84E gold
+const T = EMAIL_STYLES.textMuted;
+const S = EMAIL_STYLES.surfaceColor;
+const F = EMAIL_STYLES.fontFamily;
 
-// Build email wrapper with salon branding
-function buildEmailWrapper(
-  content: string,
-  salonName: string,
-  salonLogoUrl?: string,
-  locationChipLabel?: string
-): string {
-  // Header with salon branding
-  let headerSection = `
-    <div style="text-align: center; margin-bottom: 32px;">
-      <h1 style="color: ${STYLES.primaryColor}; margin: 0 0 8px 0; font-size: 28px; font-family: ${STYLES.fontFamily};">${salonName}</h1>
-      <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
-    </div>
-  `;
-
-  if (salonLogoUrl) {
-    headerSection = `
-      <div style="text-align: center; margin-bottom: 32px;">
-        <img src="${salonLogoUrl}" alt="${salonName} Logo" style="max-height: 60px; max-width: 200px; margin-bottom: 16px;" />
-        <p style="color: ${STYLES.textMuted}; font-size: 12px; margin: 0; font-family: ${STYLES.fontFamily};">Powered by Salon Magik</p>
-      </div>
-    `;
-  }
-
-  const locationChipSection = locationChipLabel
-    ? `
-      <div style="text-align: center; margin: -12px 0 24px;">
-        <span style="display: inline-block; padding: 6px 12px; border-radius: 9999px; border: 1px solid #93c5fd; background-color: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 600; font-family: ${STYLES.fontFamily};">
-          ${locationChipLabel}
-        </span>
-      </div>
-    `
-    : "";
-
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Questrial&display=swap');
-  </style>
-</head>
-<body style="margin: 0; padding: 0; background-color: ${STYLES.surfaceColor}; font-family: ${STYLES.fontFamily};">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td align="center" style="padding: 40px 20px;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 40px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          ${headerSection}
-          ${locationChipSection}
-          
-          <div style="font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};">
-            ${content}
-          </div>
-          
-          <hr style="border: none; border-top: 1px solid ${STYLES.borderColor}; margin: 32px 0;" />
-          
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily}; margin: 0 0 4px;">
-            © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.
-          </p>
-          <p style="color: ${STYLES.textLighter}; font-size: 12px; text-align: center; font-family: ${STYLES.fontFamily}; margin: 0;">
-            You're receiving this email because you've booked a salon partner or use Salon Magik as a business. We never share your data without consent.
-          </p>
-        </div>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
+function infoBox(rows: string): string {
+  return `<div style="background:${S};border-radius:10px;padding:20px 24px;margin:24px 0;border-left:4px solid ${P};font-family:${F};font-size:15px;line-height:1.6;color:${EMAIL_STYLES.textColor};">${rows}</div>`;
+}
+function row(label: string, value: string): string {
+  return `<p style="margin:0 0 8px;font-family:${F};"><strong>${label}:</strong> ${value}</p>`;
+}
+function heading(text: string): string {
+  return `<h2 style="color:${P};margin:0 0 20px;font-size:24px;font-weight:700;font-family:${F};">${text}</h2>`;
+}
+function para(text: string): string {
+  return `<p style="color:${T};font-size:16px;line-height:1.7;margin:0 0 16px;font-family:${F};">${text}</p>`;
 }
 
-// Default email templates
 const defaultTemplates: Record<AppointmentAction, { subject: string; body: string }> = {
   scheduled: {
     subject: "Appointment Confirmed at {{salon_name}}",
     body: `
-      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Confirmed!</h2>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been confirmed.</p>
-      
-      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
-        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Date:</strong> {{appointment_date}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Time:</strong> {{appointment_time}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Total:</strong> {{total_amount}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Location:</strong> {{location}}</p>
-      </div>
-      
-      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We look forward to seeing you!</p>
-      <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you need to reschedule or cancel, please contact us.</p>
+      ${heading("Appointment Confirmed!")}
+      ${para("Hi {{customer_name}},")}
+      ${para("Your appointment at <strong>{{salon_name}}</strong> has been confirmed.")}
+      ${infoBox(`
+        ${row("Date", "{{appointment_date}}")}
+        ${row("Time", "{{appointment_time}}")}
+        ${row("Services", "{{services}}")}
+        ${row("Total", "{{total_amount}}")}
+        ${row("Location", "{{location}}")}
+      `)}
+      ${para("We look forward to seeing you!")}
     `,
   },
   completed: {
     subject: "Thank you for visiting {{salon_name}}!",
     body: `
-      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Thank You for Visiting!</h2>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been completed.</p>
-      
-      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
-        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Total:</strong> {{total_amount}}</p>
-      </div>
-      
-      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We hope you enjoyed your visit and look forward to seeing you again soon!</p>
+      ${heading("Thank You for Visiting!")}
+      ${para("Hi {{customer_name}},")}
+      ${para("Your appointment at <strong>{{salon_name}}</strong> has been completed.")}
+      ${infoBox(`
+        ${row("Services", "{{services}}")}
+        ${row("Total", "{{total_amount}}")}
+      `)}
+      ${para("We hope you enjoyed your visit and look forward to seeing you again soon!")}
     `,
   },
   cancelled: {
     subject: "Appointment Cancelled at {{salon_name}}",
     body: `
-      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Cancelled</h2>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been cancelled.</p>
-      
-      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
-        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Original Date:</strong> {{appointment_date}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
-        {{#if reason}}
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Reason:</strong> {{reason}}</p>
-        {{/if}}
-      </div>
-      
-      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We hope to serve you again in the future.</p>
-      <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you have any questions, please contact us.</p>
+      ${heading("Appointment Cancelled")}
+      ${para("Hi {{customer_name}},")}
+      ${para("Your appointment at <strong>{{salon_name}}</strong> has been cancelled.")}
+      ${infoBox(`
+        ${row("Original Date", "{{appointment_date}}")}
+        ${row("Services", "{{services}}")}
+        {{#if reason}}${row("Reason", "{{reason}}")}{{/if}}
+      `)}
+      ${para("We hope to serve you again soon. Please don't hesitate to get in touch if you have any questions.")}
     `,
   },
   rescheduled: {
     subject: "Appointment Rescheduled at {{salon_name}}",
     body: `
-      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Rescheduled</h2>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Your appointment at <strong>{{salon_name}}</strong> has been rescheduled.</p>
-      
-      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
-        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>New Date:</strong> {{new_date}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>New Time:</strong> {{new_time}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Total:</strong> {{total_amount}}</p>
-      </div>
-      
-      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">See you at the new time!</p>
+      ${heading("Appointment Rescheduled")}
+      ${para("Hi {{customer_name}},")}
+      ${para("Your appointment at <strong>{{salon_name}}</strong> has been rescheduled.")}
+      ${infoBox(`
+        ${row("New Date", "{{new_date}}")}
+        ${row("New Time", "{{new_time}}")}
+        ${row("Services", "{{services}}")}
+        ${row("Total", "{{total_amount}}")}
+      `)}
+      ${para("See you at the new time!")}
     `,
   },
   reminder: {
-    subject: "Reminder: Upcoming Appointment at {{salon_name}}",
+    subject: "Reminder: Your Appointment at {{salon_name}}",
     body: `
-      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Appointment Reminder</h2>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">This is a friendly reminder about your upcoming appointment at <strong>{{salon_name}}</strong>.</p>
-      
-      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
-        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Date:</strong> {{appointment_date}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Time:</strong> {{appointment_time}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Location:</strong> {{location}}</p>
-      </div>
-      
-      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We look forward to seeing you!</p>
-      <p style="color: ${STYLES.textLighter}; font-size: 12px; font-family: ${STYLES.fontFamily};">If you need to reschedule or cancel, please contact us as soon as possible.</p>
+      ${heading("Appointment Reminder")}
+      ${para("Hi {{customer_name}},")}
+      ${para("This is a friendly reminder about your upcoming appointment at <strong>{{salon_name}}</strong>.")}
+      ${infoBox(`
+        ${row("Date", "{{appointment_date}}")}
+        ${row("Time", "{{appointment_time}}")}
+        ${row("Services", "{{services}}")}
+        ${row("Location", "{{location}}")}
+      `)}
+      ${para("We look forward to seeing you! If you need to reschedule or cancel, please contact us as soon as possible.")}
     `,
   },
   branch_unavailable: {
     subject: "Action Needed: Your {{salon_name}} Appointment",
     body: `
-      <h2 style="color: ${STYLES.primaryColor}; margin-bottom: 16px; font-size: 24px; font-family: ${STYLES.fontFamily};">Please Reschedule Your Appointment</h2>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">Hi {{customer_name}},</p>
-      <p style="color: ${STYLES.textMuted}; font-size: 16px; line-height: 1.6; font-family: ${STYLES.fontFamily};">One of our branches is temporarily unavailable, so your appointment needs to be rescheduled.</p>
-
-      <div style="background: ${STYLES.surfaceColor}; padding: 20px; border-radius: 8px; margin: 24px 0; border-left: 4px solid ${STYLES.primaryColor};">
-        <p style="margin: 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Original Date:</strong> {{appointment_date}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Original Time:</strong> {{appointment_time}}</p>
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>Services:</strong> {{services}}</p>
-        {{#if reason}}
-        <p style="margin: 8px 0 0; font-family: ${STYLES.fontFamily}; color: ${STYLES.textColor};"><strong>How to reschedule:</strong> {{reason}}</p>
-        {{/if}}
-      </div>
-
-      <p style="color: ${STYLES.textLight}; font-size: 14px; font-family: ${STYLES.fontFamily};">We are sorry for the inconvenience and appreciate your understanding.</p>
+      ${heading("Please Reschedule Your Appointment")}
+      ${para("Hi {{customer_name}},")}
+      ${para("One of our branches is temporarily unavailable, so your appointment needs to be rescheduled. We're sorry for the inconvenience.")}
+      ${infoBox(`
+        ${row("Original Date", "{{appointment_date}}")}
+        ${row("Original Time", "{{appointment_time}}")}
+        ${row("Services", "{{services}}")}
+        {{#if reason}}${row("How to reschedule", "{{reason}}")}{{/if}}
+      `)}
+      ${para("We appreciate your understanding and look forward to seeing you soon.")}
     `,
   },
 };
 
-// Map action to template type
 const actionToTemplateType: Record<AppointmentAction, string> = {
   scheduled: "appointment_confirmation",
   completed: "appointment_completed",
@@ -232,7 +146,6 @@ const actionToTemplateType: Record<AppointmentAction, string> = {
 };
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -245,7 +158,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { appointmentId, action, reason, newDate, newTime }: NotificationRequest = await req.json();
 
-    // Validate required fields
     if (!appointmentId || !action) {
       throw new Error("Missing required fields: appointmentId and action");
     }
@@ -254,41 +166,38 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Invalid action type");
     }
 
-    // Fetch appointment with customer, services, and tenant details
     const { data: appointment, error: aptError } = await supabase
       .from("appointments")
       .select(`
         *,
         customer:customers(id, full_name, email),
         services:appointment_services(service_name, price),
-        location:locations(name, address, city)
+        location:locations(name, address, city),
+        tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan)
       `)
       .eq("id", appointmentId)
       .single();
 
     if (aptError || !appointment) {
-      console.error("Failed to fetch appointment:", aptError);
-      throw new Error("Appointment not found");
+      console.error("Failed to fetch appointment:", JSON.stringify(aptError));
+      throw new Error(`Appointment not found: ${aptError?.message || "unknown"}`);
     }
 
-    // Get customer email
     const customerEmail = appointment.customer?.email;
     if (!customerEmail) {
       console.log("No customer email found, skipping notification");
       return new Response(
         JSON.stringify({ success: false, message: "No customer email" }),
-        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
       );
     }
 
-    // Fetch tenant info including logo
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("name, currency, logo_url, plan")
-      .eq("id", appointment.tenant_id)
-      .single();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tenant = (appointment as any).tenant as { name: string; currency: string; logo_url: string | null; banner_urls: string[] | null; plan: string } | null;
+    if (!tenant) {
+      console.error("Tenant not found for appointment:", appointment.id, "tenant_id:", appointment.tenant_id);
+    }
 
-    // Try to fetch custom template
     const templateType = actionToTemplateType[action];
     const { data: customTemplate } = await supabase
       .from("email_templates")
@@ -298,41 +207,33 @@ const handler = async (req: Request): Promise<Response> => {
       .eq("is_active", true)
       .single();
 
-    // Use custom template or default
-    const template = customTemplate 
+    const template = customTemplate
       ? { subject: customTemplate.subject, body: customTemplate.body_html }
       : defaultTemplates[action];
 
-    // Format appointment data for template
-    const servicesList = appointment.services?.map((s: any) => s.service_name).join(", ") || "N/A";
-    const totalAmount = `${tenant?.currency || "USD"} ${Number(appointment.total_amount).toFixed(2)}`;
-    const locationText = appointment.location 
+    const servicesList = appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A";
+    const totalAmount = `${tenant?.currency || "GHS"} ${Number(appointment.total_amount).toFixed(2)}`;
+    const locationText = appointment.location
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
       : "N/A";
-    const locationChipLabel =
-      tenant?.plan === "chain" && appointment.location?.name
-        ? `Branch: ${appointment.location.name}`
-        : undefined;
 
-    // Format dates
     let appointmentDate = "TBD";
     let appointmentTime = "TBD";
     if (appointment.scheduled_start) {
       const date = new Date(appointment.scheduled_start);
-      appointmentDate = date.toLocaleDateString("en-US", { 
-        weekday: "long", 
-        year: "numeric", 
-        month: "long", 
-        day: "numeric" 
+      appointmentDate = date.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       });
-      appointmentTime = date.toLocaleTimeString("en-US", { 
-        hour: "numeric", 
-        minute: "2-digit", 
-        hour12: true 
+      appointmentTime = date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
       });
     }
 
-    // Replace template variables
     let emailSubject = template.subject;
     let emailBody = template.body;
 
@@ -354,30 +255,35 @@ const handler = async (req: Request): Promise<Response> => {
       emailBody = emailBody.replace(new RegExp(key, "g"), value);
     }
 
-    // Handle conditional blocks (simple implementation)
-    emailBody = emailBody.replace(/\{\{#if reason\}\}([\s\S]*?)\{\{\/if\}\}/g, 
-      reason ? "$1" : "");
+    emailBody = emailBody.replace(/\{\{#if reason\}\}([\s\S]*?)\{\{\/if\}\}/g, reason ? "$1" : "");
 
-    // Wrap content with salon branding
-    const fullEmailHtml = buildEmailWrapper(
-      emailBody,
-      tenant?.name || "Salon Magik",
-      tenant?.logo_url || undefined,
-      locationChipLabel
-    );
+    // For chain plan tenants, prepend a branch chip to the email body
+    const salonName = tenant?.name || "Our Salon";
+    const isChain = tenant?.plan === "chain";
+    const locationName = appointment.location?.name;
+    const branchChip = isChain && locationName
+      ? `<p style="margin:0 0 20px;"><span style="display:inline-block;padding:6px 14px;border-radius:9999px;background:${EMAIL_STYLES.primaryLight};color:${P};font-size:12px;font-weight:600;font-family:${F};">Branch: ${locationName}</span></p>`
+      : "";
+
+    const fullEmailHtml = wrapEmailTemplate(branchChip + emailBody, {
+      mode: "salon",
+      salonName,
+      salonLogoUrl: tenant?.logo_url ?? undefined,
+      salonBannerUrl: tenant?.banner_urls?.[0] ?? undefined,
+    });
 
     const fromAddress = buildFromAddress({
       mode: "salon",
-      salonName: tenant?.name || "Salon Magik",
+      salonName,
       fromEmail,
     });
-    
+
     console.log("Sending email with from address:", fromAddress);
-    
+
     const emailResponse = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -397,7 +303,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Email sent successfully:", emailData);
 
-    // Log to message_logs table
     await supabase.from("message_logs").insert({
       tenant_id: appointment.tenant_id,
       customer_id: appointment.customer?.id,
@@ -412,7 +317,6 @@ const handler = async (req: Request): Promise<Response> => {
       credits_used: 0,
     });
 
-    // Update last_reminder_sent_at if this is a reminder
     if (action === "reminder") {
       await supabase
         .from("appointments")
@@ -422,13 +326,14 @@ const handler = async (req: Request): Promise<Response> => {
 
     return new Response(
       JSON.stringify({ success: true, emailId: emailData.id }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal server error";
     console.error("Error in send-appointment-notification function:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      JSON.stringify({ error: message }),
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
     );
   }
 };
