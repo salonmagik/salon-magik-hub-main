@@ -68,7 +68,8 @@ serve(async (req) => {
         scheduled_start,
         location:locations(name, address, city),
         customer:customers(id, user_id, full_name, email),
-        services:appointment_services(service_name)
+        services:appointment_services(service_name),
+        tenant:tenants(name, logo_url)
       `)
       .eq("id", appointmentId)
       .single();
@@ -103,11 +104,8 @@ serve(async (req) => {
       });
     }
 
-    const { data: tenant } = await admin
-      .from("tenants")
-      .select("name, logo_url")
-      .eq("id", appointment.tenant_id)
-      .single();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tenant = (appointment as any).tenant as { name: string; logo_url: string | null } | null;
 
     const servicesList = appointment.services?.map((service: { service_name: string }) => service.service_name).join(", ") || "appointment";
     const scheduledText = appointment.scheduled_start

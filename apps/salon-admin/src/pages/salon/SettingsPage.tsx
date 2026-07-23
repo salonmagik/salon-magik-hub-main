@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import {
@@ -127,6 +127,7 @@ const BASE_SETTINGS_TABS = [
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
 	{ id: "custom-domain", label: "Custom Domain", icon: Globe },
+	{ id: "sessions", label: "Active Sessions", icon: Shield },
 ] as const;
 
 const weekDays = [
@@ -172,6 +173,7 @@ type BookingThemeKey = "default" | "ecommerce";
 type BookingSettingsSubTab = "booking_config";
 
 export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
+	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [isSaving, setIsSaving] = useState(false);
 	const [paymentSuccessModal, setPaymentSuccessModal] = useState<{
@@ -187,6 +189,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		activeLocationId,
 		refreshTenants,
 	} = useAuth();
+
+	// /salon/settings is a legacy unscoped URL — always redirect to the correct scoped page.
+	useEffect(() => {
+		if (scope !== "auto") return;
+		const dest = activeContextType === "owner_hub" ? "/salon/business-settings" : "/salon/branch-settings";
+		navigate(dest + (searchParams.toString() ? `?${searchParams.toString()}` : ""), { replace: true });
+	}, [scope, activeContextType, navigate, searchParams]);
+
 	const {
 		locations,
 		defaultLocation,
@@ -3700,6 +3710,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		notifications: { title: "Notifications", subtitle: "Configure email and SMS notifications for appointments and updates." },
 		subscription: { title: "Subscription", subtitle: "Manage your plan, billing, and add-ons." },
 		"custom-domain": { title: "Custom Domain", subtitle: "Connect your own domain to your public booking page." },
+		sessions: { title: "Active Sessions", subtitle: "View and manage active login sessions across your account." },
 	};
 
 	const settingsContent = (

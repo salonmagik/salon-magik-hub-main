@@ -47,7 +47,7 @@ const activityIcons: Record<string, typeof Calendar> = {
 
 export default function SalonDashboard() {
   const navigate = useNavigate();
-  const { currentTenant, profile, currentRole, activeContextType } = useAuth();
+  const { currentTenant, profile, currentRole, activeContextType, setActiveContext, canUseOwnerHub } = useAuth();
   const { hasPermission } = usePermissions();
   const {
     stats,
@@ -207,7 +207,12 @@ export default function SalonDashboard() {
                   size="sm"
                   variant="outline"
                   className="border-destructive/30 hover:bg-destructive/20 text-destructive"
-                  onClick={() => navigate("/salon/settings?tab=payout-destinations")}
+                  onClick={async () => {
+                    if (canUseOwnerHub && activeContextType !== "owner_hub") {
+                      await setActiveContext("owner_hub", null);
+                    }
+                    navigate("/salon/transactions?tab=payouts");
+                  }}
                 >
                   Set Up Payouts
                 </Button>
