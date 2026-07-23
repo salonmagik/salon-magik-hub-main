@@ -1,10 +1,15 @@
 const ARKESEL_API_BASE = "https://sms.arkesel.com/api/v2";
-// Country-specific API keys. Ghana (233) uses ARKESEL_API_KEY_GH; Nigeria (234) uses ARKESEL_API_KEY_NG.
+// Ghana: one API key covers all SMS types.
+// Nigeria: two separate gateway keys — transactional (OTPs) and promotional (everything else).
 const ARKESEL_API_KEY_GH = Deno.env.get("ARKESEL_API_KEY_GH");
-const ARKESEL_API_KEY_NG = Deno.env.get("ARKESEL_API_KEY_NG");
-// Registered sender IDs per country. Each must match what's approved on the Arkesel dashboard.
+const ARKESEL_API_KEY_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_TRANSACTIONAL");
+const ARKESEL_API_KEY_NG_PROMOTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_PROMOTIONAL");
+// Nigeria mandates separate registered sender IDs per gateway (cannot share the same name).
+// Transactional (OTPs only): "Salon Magik" (with space)
+// Promotional (bulk, reminders, campaigns, manual): "SalonMagik" (no space)
 const ARKESEL_SENDER_ID_GH = Deno.env.get("ARKESEL_SENDER_ID_GH") ?? "SalonMagik";
-const ARKESEL_SENDER_ID_NG = Deno.env.get("ARKESEL_SENDER_ID_NG") ?? "Salon Magik";
+const ARKESEL_SENDER_ID_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_SENDER_ID_NG_TRANSACTIONAL") ?? "Salon Magik";
+const ARKESEL_SENDER_ID_NG_PROMOTIONAL = Deno.env.get("ARKESEL_SENDER_ID_NG_PROMOTIONAL") ?? "SalonMagik";
 
 export interface ArkeselSMSResult {
   ID: string;
@@ -35,20 +40,36 @@ function detectCountry(phone: string): "NG" | "GH" | null {
   return null;
 }
 
-// Resolve the sender ID to use for a given recipient phone number.
-// Tenant override takes precedence; otherwise falls back to the country-registered sender name.
-export function resolveArkeselSenderId(recipientPhone: string, tenantSenderId?: string | null): string {
+// Resolve the sender ID for a given recipient and use case.
+// Nigeria mandates separate registered sender IDs per gateway — tenant overrides are not allowed.
+// Ghana: tenant's custom sender ID takes precedence over the platform default.
+export function resolveArkeselSenderId(
+  recipientPhone: string,
+  tenantSenderId?: string | null,
+  useCase: "transactional" | "promotional" = "transactional",
+): string {
+  if (detectCountry(recipientPhone) === "NG") {
+    return useCase === "promotional"
+      ? ARKESEL_SENDER_ID_NG_PROMOTIONAL
+      : ARKESEL_SENDER_ID_NG_TRANSACTIONAL;
+  }
   if (tenantSenderId?.trim()) return tenantSenderId.trim();
-  return detectCountry(recipientPhone) === "NG" ? ARKESEL_SENDER_ID_NG : ARKESEL_SENDER_ID_GH;
+  return ARKESEL_SENDER_ID_GH;
 }
 
-// Select the correct Arkesel API key for the given phone number.
-// Nigeria (+234) → ARKESEL_API_KEY_NG; Ghana (+233) and unknown → ARKESEL_API_KEY_GH.
-function getApiKeyForPhone(phone: string): string {
+// Select the correct Arkesel API key for the given phone number and use case.
+// Nigeria promotional → ARKESEL_API_KEY_NG_PROMOTIONAL
+// Nigeria transactional → ARKESEL_API_KEY_NG_TRANSACTIONAL
+// Ghana / unknown → ARKESEL_API_KEY_GH
+function getApiKeyForPhone(phone: string, useCase: "transactional" | "promotional" = "transactional"): string {
   const country = detectCountry(phone);
   if (country === "NG") {
-    if (!ARKESEL_API_KEY_NG) throw new Error("ARKESEL_API_KEY_NG not configured");
-    return ARKESEL_API_KEY_NG;
+    if (useCase === "promotional") {
+      if (!ARKESEL_API_KEY_NG_PROMOTIONAL) throw new Error("ARKESEL_API_KEY_NG_PROMOTIONAL not configured");
+      return ARKESEL_API_KEY_NG_PROMOTIONAL;
+    }
+    if (!ARKESEL_API_KEY_NG_TRANSACTIONAL) throw new Error("ARKESEL_API_KEY_NG_TRANSACTIONAL not configured");
+    return ARKESEL_API_KEY_NG_TRANSACTIONAL;
   }
   if (!ARKESEL_API_KEY_GH) throw new Error("ARKESEL_API_KEY_GH not configured");
   return ARKESEL_API_KEY_GH;
@@ -89,8 +110,9 @@ export async function sendArkeselSMS(options: {
   message: string;
   useCase?: "transactional" | "promotional";
 }): Promise<ArkeselSMSResponse> {
+  const resolvedUseCase = options.useCase ?? "transactional";
   const country = detectCountry(options.to);
-  const apiKey = getApiKeyForPhone(options.to);
+  const apiKey = getApiKeyForPhone(options.to, resolvedUseCase);
   const response = await fetch(`${ARKESEL_API_BASE}/sms/send`, {
     method: "POST",
     headers: {
@@ -98,7 +120,7 @@ export async function sendArkeselSMS(options: {
       "api-key": apiKey,
     },
     body: JSON.stringify(
-      buildSendBody(options.from, options.message, [normalizePhone(options.to)], country, options.useCase ?? "transactional"),
+      buildSendBody(options.from, options.message, [normalizePhone(options.to)], country, resolvedUseCase),
     ),
   });
   return handleArkeselResponse(response, "send");
@@ -110,11 +132,12 @@ export async function sendArkeselBulkSMS(options: {
   message: string;
   useCase?: "transactional" | "promotional";
 }): Promise<ArkeselSMSResponse> {
+  const resolvedUseCase = options.useCase ?? "transactional";
   // Group recipients by country so each Arkesel call uses the right API key and payload shape.
   const byKey = new Map<string, { apiKey: string; country: "NG" | "GH" | null; phones: string[] }>();
   for (const phone of options.to) {
     const country = detectCountry(phone);
-    const apiKey = getApiKeyForPhone(phone);
+    const apiKey = getApiKeyForPhone(phone, resolvedUseCase);
     const group = byKey.get(apiKey) ?? { apiKey, country, phones: [] };
     group.phones.push(phone);
     byKey.set(apiKey, group);
@@ -131,7 +154,7 @@ export async function sendArkeselBulkSMS(options: {
         "api-key": apiKey,
       },
       body: JSON.stringify(
-        buildSendBody(options.from, options.message, phones.map(normalizePhone), country, options.useCase ?? "transactional"),
+        buildSendBody(options.from, options.message, phones.map(normalizePhone), country, resolvedUseCase),
       ),
     });
     lastResponse = await handleArkeselResponse(response, "bulk-send");

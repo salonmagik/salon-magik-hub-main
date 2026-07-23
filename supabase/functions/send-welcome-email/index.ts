@@ -139,7 +139,7 @@ serve(async (req) => {
             <span style="color: #16a34a;">✓</span> Owner invitation sent to ${ownerName}
           </p>
           <p style="margin: 0; color: ${EMAIL_STYLES.textMuted}; font-size: 14px; display: flex; gap: 8px;">
-            <span style="color: #2563EB;">→</span> Owner will receive an email to set up their account
+            <span style="color: ${EMAIL_STYLES.accentColor};">→</span> Owner will receive an email to set up their account
           </p>
         </div>
         ${paragraph(`In the meantime, you can continue setting up ${salonName} — add services, configure locations, and invite the rest of the team.`)}

@@ -113,8 +113,9 @@ serve(async (req) => {
     console.log(`[send-phone-otp] Sending OTP to ${phone} for user ${profile.user_id}`);
     const smsResult = await sendArkeselSMS({
       to: phone,
-      from: resolveArkeselSenderId(phone),
+      from: resolveArkeselSenderId(phone, null, "transactional"),
       message: `Your Salon Magik sign-in code is: ${otp}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`,
+      useCase: "transactional",
     });
     console.log(`[send-phone-otp] SMS sent successfully. Message ID: ${JSON.stringify(smsResult?.data)}`);
 

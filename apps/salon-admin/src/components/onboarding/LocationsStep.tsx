@@ -154,6 +154,7 @@ export function LocationsStep({
     <div className="p-7">
       <div className="mb-6">
         <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
           <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
           Locations
         </div>
@@ -167,15 +168,15 @@ export function LocationsStep({
 
       <div className="space-y-4">
         {/* Toggle options */}
-        <div className="rounded-[18px] bg-[#2E1F4E]/[0.04] px-5 py-4 space-y-3.5">
+        <div className="rounded-[18px] bg-[#2E1F4E]/[0.07] overflow-hidden">
           {[
             { id: "sameCountry", label: "All branches in the same country", field: "sameCountry" as const },
             { id: "sameName", label: "All branches share the business name", field: "sameName" as const },
             { id: "sameHours", label: "All branches have the same hours", field: "sameHours" as const },
           ].map(({ id, label, field }, i, arr) => (
             <div key={id}>
-              <div className="flex items-center justify-between gap-4">
-                <Label htmlFor={id} className="cursor-pointer text-[13.5px] font-medium text-gray-700">
+              <div className="flex items-center justify-between gap-4 px-6 py-[18px]">
+                <Label htmlFor={id} className="cursor-pointer text-[15px] text-gray-800">
                   {label}
                 </Label>
                 <Switch
@@ -185,7 +186,7 @@ export function LocationsStep({
                 />
               </div>
               {i < arr.length - 1 && (
-                <div className="mt-3.5 border-t border-black/[0.06]" />
+                <div className="mx-6 border-t border-black/[0.07]" />
               )}
             </div>
           ))}
@@ -197,24 +198,21 @@ export function LocationsStep({
             <div
               key={location.id}
               className={cn(
-                "rounded-[22px] border p-6 space-y-4 transition-colors",
+                "rounded-[22px] border bg-white p-6 space-y-4 transition-colors",
                 location.isDefault
-                  ? "border-[#2E1F4E] bg-[#2E1F4E]/[0.03]"
-                  : "border-black/[0.08] bg-white",
+                  ? "border-[#2E1F4E]"
+                  : "border-black/[0.08]",
               )}
             >
               {/* Card header */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <p className={cn(
-                    "text-[14px] font-semibold",
-                    location.isDefault ? "text-[#2E1F4E]" : "text-gray-900",
-                  )}>
+                <div className="flex items-center gap-2.5">
+                  <p className="text-[17px] font-bold text-gray-900">
                     Branch {index + 1}
                   </p>
                   {location.isDefault && (
-                    <span className="flex items-center gap-1 rounded-full bg-[#2E1F4E] px-2.5 py-[3px] text-[11px] font-medium text-white">
-                      <Star className="h-2.5 w-2.5 fill-white" /> Default
+                    <span className="flex items-center gap-1.5 rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-medium text-gray-600">
+                      <Star className="h-3 w-3 fill-gray-600" /> Default
                     </span>
                   )}
                 </div>

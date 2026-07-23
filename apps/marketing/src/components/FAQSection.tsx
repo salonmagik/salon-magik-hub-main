@@ -1,32 +1,38 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@shared/utils";
-
-const faqs = [
-  {
-    q: "Do I need a card to start?",
-    a: "No. Every plan starts with a 14-day free trial and no card is required to begin.",
-  },
-  {
-    q: "Can my clients book without downloading an app?",
-    a: "Yes. Clients book through your own link — no app download and no account required on their end.",
-  },
-  {
-    q: "Can I move between plans as my team grows?",
-    a: "Yes, you can upgrade or downgrade at any time from your settings. Your data, clients and history move with you.",
-  },
-  {
-    q: "Do you support mobile money and cards?",
-    a: "Yes, both are supported at checkout, and you can track the split between them from your payments dashboard.",
-  },
-  {
-    q: "Is WhatsApp messaging supported?",
-    a: "Not yet — it's on our roadmap. Today, messaging runs through SMS and email broadcasts, plus automatic birthday and reactivation messages.",
-  },
-];
+import { usePlans } from "@/hooks/usePlans";
 
 export function FAQSection() {
+  const { data: plans } = usePlans();
+  const trialDays =
+    plans?.find((p) => p.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
+
   const [open, setOpen] = useState<number | null>(null);
+
+  const faqs = [
+    {
+      q: "Do I need a card to start?",
+      a: `No. Every plan starts with a ${trialDays}-day free trial and no card is required to begin.`,
+    },
+    {
+      q: "Can my clients book without downloading an app?",
+      a: "Yes. Clients book through your own link — no app download and no account required on their end.",
+    },
+    {
+      q: "Can I move between plans as my team grows?",
+      a: "Yes, you can upgrade or downgrade at any time from your settings. Your data, clients and history move with you.",
+    },
+    {
+      q: "Do you support mobile money and cards?",
+      a: "Yes, both are supported at checkout, and you can track the split between them from your payments dashboard.",
+    },
+    {
+      q: "Is WhatsApp messaging supported?",
+      a: "Not yet — it's on our roadmap. Today, messaging runs through SMS and email broadcasts, plus automatic birthday and reactivation messages.",
+    },
+  ];
+
 
   return (
     <section className="bg-brand-cream-dim px-8 py-[100px]">

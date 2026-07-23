@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { createButton } from "../_shared/email-template.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -296,11 +297,7 @@ serve(async (req) => {
         <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
           If you <strong>don't recognise this sign-in</strong>, you can review and end active sessions immediately.
         </p>
-        <div style="text-align:center;margin:0 0 32px;">
-          <a href="${reviewUrl}" style="display:inline-block;background:#2563EB;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:6px;text-decoration:none;">
-            Review my sessions
-          </a>
-        </div>
+        ${createButton("Review my sessions", reviewUrl)}
         <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0 0 4px;">
           © 2026 Salon Magik — A product of The Gray Avenue LTD. All rights reserved.
         </p>

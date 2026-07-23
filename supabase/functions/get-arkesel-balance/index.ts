@@ -6,29 +6,42 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Ghana uses one key (all SMS types share the same gateway).
+// Nigeria uses two separate gateway keys — one per message type.
 const ARKESEL_API_KEY_GH = Deno.env.get("ARKESEL_API_KEY_GH");
-const ARKESEL_API_KEY_NG = Deno.env.get("ARKESEL_API_KEY_NG");
+const ARKESEL_API_KEY_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_TRANSACTIONAL");
+const ARKESEL_API_KEY_NG_PROMOTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_PROMOTIONAL");
 
-async function fetchBalance(apiKey: string): Promise<{ balance: string | number | null; error?: string }> {
+interface BalanceResult {
+  sms_balance: number | null;
+  main_balance: string | null;
+  error?: string;
+}
+
+async function fetchBalance(apiKey: string, label: string): Promise<BalanceResult> {
   try {
-    const url = new URL("https://sms.arkesel.com/sms/api");
-    url.searchParams.set("action", "check-balance");
-    url.searchParams.set("api_key", apiKey);
-    url.searchParams.set("response", "json");
-
-    const res = await fetch(url.toString());
+    const res = await fetch("https://sms.arkesel.com/api/v2/clients/balance-details", {
+      method: "GET",
+      headers: {
+        "api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+    });
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    console.log(`[get-arkesel-balance] ${label} HTTP ${res.status}:`, JSON.stringify(body));
 
     if (!res.ok) {
       return { balance: null, error: (body?.message as string) || `HTTP ${res.status}` };
     }
-
-    // v1 API returns { balance: "...", status: "success" } at the top level
-    const balance = body?.balance ?? null;
-    if (body?.status && body.status !== "success" && balance == null) {
-      return { balance: null, error: (body?.message as string) || String(body?.status) };
+    if ((body?.status as string) === "error") {
+      return { sms_balance: null, main_balance: null, error: (body?.message as string) || "API returned error" };
     }
-    return { balance: balance as string | number | null };
+    // Response: { status: "success", data: { sms_balance: 73, main_balance: "GHS 0.2" } }
+    const data = body?.data as Record<string, unknown> | null | undefined;
+    return {
+      sms_balance: (data?.sms_balance as number) ?? null,
+      main_balance: (data?.main_balance as string) ?? null,
+    };
   } catch (err) {
     return { balance: null, error: err instanceof Error ? err.message : "Request failed" };
   }
@@ -44,7 +57,6 @@ serve(async (req) => {
     });
 
   try {
-    // Verify caller is an authenticated backoffice user
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const authClient = createClient(supabaseUrl, supabaseAnonKey, {
@@ -53,7 +65,6 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await authClient.auth.getUser();
     if (authError || !user) return json({ error: "Unauthorized" }, 401);
 
-    // Verify backoffice role
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(supabaseUrl, serviceKey);
     const { data: bo } = await adminClient
@@ -63,12 +74,19 @@ serve(async (req) => {
       .maybeSingle();
     if (!bo) return json({ error: "Forbidden" }, 403);
 
-    const [gh, ng] = await Promise.all([
-      ARKESEL_API_KEY_GH ? fetchBalance(ARKESEL_API_KEY_GH) : Promise.resolve({ balance: null, error: "Not configured" }),
-      ARKESEL_API_KEY_NG ? fetchBalance(ARKESEL_API_KEY_NG) : Promise.resolve({ balance: null, error: "Not configured" }),
+    const [gh, ng_transactional, ng_promotional] = await Promise.all([
+      ARKESEL_API_KEY_GH
+        ? fetchBalance(ARKESEL_API_KEY_GH, "GH")
+        : Promise.resolve({ balance: null, error: "Not configured" }),
+      ARKESEL_API_KEY_NG_TRANSACTIONAL
+        ? fetchBalance(ARKESEL_API_KEY_NG_TRANSACTIONAL, "NG-transactional")
+        : Promise.resolve({ balance: null, error: "Not configured" }),
+      ARKESEL_API_KEY_NG_PROMOTIONAL
+        ? fetchBalance(ARKESEL_API_KEY_NG_PROMOTIONAL, "NG-promotional")
+        : Promise.resolve({ balance: null, error: "Not configured" }),
     ]);
 
-    return json({ gh, ng });
+    return json({ gh, ng_transactional, ng_promotional });
   } catch (err) {
     console.error("get-arkesel-balance error:", err);
     return json({ error: "Internal server error" }, 500);

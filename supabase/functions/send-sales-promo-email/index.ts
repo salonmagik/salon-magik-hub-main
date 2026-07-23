@@ -4,6 +4,7 @@ import {
   wrapEmailTemplate,
   buildFromAddress,
   paragraph,
+  createButton,
 } from "../_shared/email-template.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -46,6 +47,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
+    // Always point sign-up/login URLs to the salon app, not the backoffice origin.
+    const salonAppUrl = Deno.env.get("SALON_APP_URL") || "https://app.salonmagik.com";
 
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const caller = createClient(supabaseUrl, supabaseAnonKey, {
@@ -145,7 +148,7 @@ serve(async (req) => {
 
     const { data: varsData, error: varsError } = await (admin.rpc as any)("get_sales_promo_email_vars", {
       p_promo_code_id: promoCodeId,
-      p_origin: req.headers.get("origin"),
+      p_origin: salonAppUrl,
     });
 
     if (varsError) {
@@ -157,8 +160,15 @@ serve(async (req) => {
     }
 
     const vars = (varsData || {}) as Record<string, unknown>;
-    const subjectTemplate = campaign.email_subject_template || "Your {{campaign_name}} Salon Magik promo code";
-    const bodyTemplate = campaign.email_body_template || paragraph("Your promo code is {{promo_code}}.");
+    const subjectTemplate = campaign.email_subject_template || "Welcome to Salon Magik, here's your invite";
+    const bodyTemplate = campaign.email_body_template ||
+      `<h2 style="color:#111827;margin:0 0 20px 0;font-size:24px;font-weight:700;letter-spacing:-0.01em;line-height:1.3;">Hi {{recipient_firstname}},</h2>` +
+      `<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0 0 18px 0;">Welcome to Salon Magik. You&#39;ve been invited to join, and we&#39;ve set aside a promo code just for your account.</p>` +
+      `<table role="presentation" style="width:100%;border-collapse:collapse;margin:24px 0;"><tr><td style="background:#f8f6f2;border-radius:12px;padding:24px;text-align:center;"><p style="margin:0 0 8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#9ca3af;">Your promo code</p><p style="margin:0;font-size:30px;font-weight:700;letter-spacing:6px;color:#2E1F4E;font-family:monospace,'Courier New';">{{promo_code}}</p></td></tr></table>` +
+      `{{discount_line}}<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0 0 18px 0;">It&#39;s reserved for this account and valid through <strong>{{expires_date}}</strong>.</p>` +
+      createButton("Start free trial →", "{{signup_url}}") +
+      `<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0 0 18px 0;">Questions getting set up? Just reply to this email &#x2014; a real person will get back to you.</p>` +
+      `<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0;">Welcome aboard,<br/><strong>The Salon Magik team</strong></p>`;
     const subject = applyTemplate(subjectTemplate, vars);
     const body = applyTemplate(bodyTemplate, vars);
     const html = wrapEmailTemplate(body, { mode: "product" });

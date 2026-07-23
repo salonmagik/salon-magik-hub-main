@@ -172,14 +172,15 @@ const handler = async (req: Request): Promise<Response> => {
         *,
         customer:customers(id, full_name, email),
         services:appointment_services(service_name, price),
-        location:locations(name, address, city)
+        location:locations(name, address, city),
+        tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan)
       `)
       .eq("id", appointmentId)
       .single();
 
     if (aptError || !appointment) {
-      console.error("Failed to fetch appointment:", aptError);
-      throw new Error("Appointment not found");
+      console.error("Failed to fetch appointment:", JSON.stringify(aptError));
+      throw new Error(`Appointment not found: ${aptError?.message || "unknown"}`);
     }
 
     const customerEmail = appointment.customer?.email;
@@ -191,11 +192,11 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const { data: tenant } = await supabase
-      .from("tenants")
-      .select("name, currency, logo_url, banner_url, plan")
-      .eq("id", appointment.tenant_id)
-      .single();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tenant = (appointment as any).tenant as { name: string; currency: string; logo_url: string | null; banner_urls: string[] | null; plan: string } | null;
+    if (!tenant) {
+      console.error("Tenant not found for appointment:", appointment.id, "tenant_id:", appointment.tenant_id);
+    }
 
     const templateType = actionToTemplateType[action];
     const { data: customTemplate } = await supabase
@@ -268,7 +269,7 @@ const handler = async (req: Request): Promise<Response> => {
       mode: "salon",
       salonName,
       salonLogoUrl: tenant?.logo_url ?? undefined,
-      salonBannerUrl: tenant?.banner_url ?? undefined,
+      salonBannerUrl: tenant?.banner_urls?.[0] ?? undefined,
     });
 
     const fromAddress = buildFromAddress({

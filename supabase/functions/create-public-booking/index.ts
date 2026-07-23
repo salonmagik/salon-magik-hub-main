@@ -6,6 +6,7 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
+import { heading, paragraph, EMAIL_STYLES } from "../_shared/email-template.ts";
 import {
   getPaystackKeyForCurrency,
   validateCurrencyMatch,
@@ -146,16 +147,12 @@ function renderBookingSummary(items: CartItem[], currency: string) {
 function buildActionButton(url: string, label: string, variant: "primary" | "secondary" | "ghost" = "primary") {
   const styles =
     variant === "primary"
-      ? "background:#2563EB;color:#ffffff;border:1px solid #2563EB;"
+      ? `background:${EMAIL_STYLES.accentColor};color:${EMAIL_STYLES.primaryColor};border:1px solid ${EMAIL_STYLES.accentColor};`
       : variant === "secondary"
-        ? "background:#eff6ff;color:#1d4ed8;border:1px solid #93c5fd;"
-        : "background:#ffffff;color:#111827;border:1px solid #d1d5db;";
+        ? `background:${EMAIL_STYLES.primaryLight};color:${EMAIL_STYLES.primaryColor};border:1px solid ${EMAIL_STYLES.primaryColor}33;`
+        : `background:#ffffff;color:${EMAIL_STYLES.textColor};border:1px solid ${EMAIL_STYLES.borderColor};`;
 
-  return `
-    <a href="${url}" style="display:inline-block;padding:12px 18px;border-radius:999px;text-decoration:none;font-weight:600;margin:0 8px 8px 0;${styles}">
-      ${label}
-    </a>
-  `;
+  return `<a href="${url}" style="display:inline-block;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:700;font-size:14px;margin:0 8px 8px 0;font-family:${EMAIL_STYLES.fontFamily};${styles}">${label}</a>`;
 }
 
 serve(async (req) => {
@@ -492,8 +489,8 @@ serve(async (req) => {
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     const bookingSummaryHtml = renderBookingSummary(items, tenant.currency || "USD");
     const paymentLine = approvalRequired
-      ? `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.</p>`
-      : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Payment status: pending checkout completion.</p>`;
+      ? paragraph("This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.")
+      : paragraph("Payment status: pending checkout completion.");
     const hasServiceLikeItems = items.some((item) => item.type === "service" || item.type === "package");
     const hasProductOnlyItems = items.every((item) => item.type === "product");
     const isSingleReviewItem = items.length === 1;
@@ -536,17 +533,14 @@ serve(async (req) => {
         to: [customer.email],
         subject: approvalRequired ? `Booking review started at ${tenant.name}` : `Booking received at ${tenant.name}`,
         salonName: tenant.name,
-        htmlContent: `
-          <h2 style="color: #2563EB; margin-bottom: 16px;">${approvalRequired ? "Your booking is awaiting review" : "Your booking is in"}</h2>
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi ${customer.firstName},</p>
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">We’ve received your booking with <strong>${tenant.name}</strong>.</p>
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Booking reference:</strong> ${reference}</p>
-          ${paymentLine}
-          <div style="margin: 24px 0;">
-            ${bookingSummaryHtml}
-          </div>
-          <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}</p>
-        `,
+        htmlContent:
+          heading(approvalRequired ? "Your booking is awaiting review" : "Your booking is in") +
+          paragraph(`Hi ${customer.firstName},`) +
+          paragraph(`We’ve received your booking with <strong>${tenant.name}</strong>.`) +
+          paragraph(`<strong>Booking reference:</strong> ${reference}`) +
+          paymentLine +
+          `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
+          paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}`),
       });
     }
 
@@ -560,16 +554,13 @@ serve(async (req) => {
           to: recipients.map((recipient) => recipient.email),
           subject: approvalRequired ? `Booking approval required at ${tenant.name}` : `New booking at ${tenant.name}`,
           salonName: tenant.name,
-          htmlContent: `
-            <h2 style="color: #2563EB; margin-bottom: 16px;">${approvalRequired ? "Booking approval required" : "New booking received"}</h2>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customerFullName}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Booking reference:</strong> ${reference}</p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}</p>
-            <div style="margin: 24px 0;">
-              ${bookingSummaryHtml}
-            </div>
-            ${reviewActionsHtml}
-          `,
+          htmlContent:
+            heading(approvalRequired ? "Booking approval required" : "New booking received") +
+            paragraph(`<strong>Customer:</strong> ${customerFullName}`) +
+            paragraph(`<strong>Booking reference:</strong> ${reference}`) +
+            paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}`) +
+            `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
+            reviewActionsHtml,
         });
       }
     }

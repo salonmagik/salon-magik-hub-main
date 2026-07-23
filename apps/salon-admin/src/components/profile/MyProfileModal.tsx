@@ -275,7 +275,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { handleDiscard(); cancelEditPhone(); onClose(); } }}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>My Profile</DialogTitle>
           <DialogDescription className="sr-only">
