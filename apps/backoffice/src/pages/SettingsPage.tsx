@@ -443,11 +443,19 @@ export default function BackofficeSettingsPage() {
         );
       if (error) throw error;
 
+      // Propagate to plans.trial_days so the marketing site and salon-admin reflect the change.
+      const { error: plansError } = await supabase
+        .from("plans")
+        .update({ trial_days: safeDays })
+        .eq("is_active", true);
+      if (plansError) throw plansError;
+
       await writeAuditLog("default_trial_days_updated", backofficeUser?.user_id, { days: safeDays });
       return safeDays;
     },
     onSuccess: (days) => {
       queryClient.invalidateQueries({ queryKey: ["platform-settings", "default_trial_days"] });
+      queryClient.invalidateQueries({ queryKey: ["plans"] });
       setTrialDaysDraft(days);
       toast.success("Default trial period updated.");
     },
