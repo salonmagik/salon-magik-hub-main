@@ -13,7 +13,8 @@ const ARKESEL_API_KEY_NG_TRANSACTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_TRANSA
 const ARKESEL_API_KEY_NG_PROMOTIONAL = Deno.env.get("ARKESEL_API_KEY_NG_PROMOTIONAL");
 
 interface BalanceResult {
-  balance: unknown;
+  sms_balance: number | null;
+  main_balance: string | null;
   error?: string;
 }
 
@@ -33,12 +34,14 @@ async function fetchBalance(apiKey: string, label: string): Promise<BalanceResul
       return { balance: null, error: (body?.message as string) || `HTTP ${res.status}` };
     }
     if ((body?.status as string) === "error") {
-      return { balance: null, error: (body?.message as string) || "API returned error" };
+      return { sms_balance: null, main_balance: null, error: (body?.message as string) || "API returned error" };
     }
-    // v2 response: { status: "success", data: { balance: "123.45", ... } }
+    // Response: { status: "success", data: { sms_balance: 73, main_balance: "GHS 0.2" } }
     const data = body?.data as Record<string, unknown> | null | undefined;
-    const balance = data?.balance ?? body?.balance ?? null;
-    return { balance };
+    return {
+      sms_balance: (data?.sms_balance as number) ?? null,
+      main_balance: (data?.main_balance as string) ?? null,
+    };
   } catch (err) {
     return { balance: null, error: err instanceof Error ? err.message : "Request failed" };
   }

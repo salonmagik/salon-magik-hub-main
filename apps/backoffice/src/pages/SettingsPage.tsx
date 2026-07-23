@@ -336,7 +336,7 @@ export default function BackofficeSettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("get-arkesel-balance");
       if (error) throw error;
-      type BalanceEntry = { balance: string | number | null; error?: string };
+      type BalanceEntry = { sms_balance: number | null; main_balance: string | null; error?: string };
       return data as { gh: BalanceEntry; ng_transactional: BalanceEntry; ng_promotional: BalanceEntry };
     },
     staleTime: 5 * 60 * 1000,
@@ -1230,9 +1230,15 @@ export default function BackofficeSettingsPage() {
                           {entry?.error ? (
                             <p className="mt-1 text-sm text-destructive">{entry.error}</p>
                           ) : (
-                            <p className="mt-1 text-2xl font-semibold">
-                              {entry?.balance != null ? String(entry.balance) : "—"}
-                            </p>
+                            <>
+                              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                                {entry?.sms_balance != null ? entry.sms_balance.toLocaleString() : "—"}
+                                <span className="ml-1.5 text-sm font-normal text-muted-foreground">credits</span>
+                              </p>
+                              {entry?.main_balance && (
+                                <p className="mt-0.5 text-xs text-muted-foreground">{entry.main_balance}</p>
+                              )}
+                            </>
                           )}
                         </div>
                       );
