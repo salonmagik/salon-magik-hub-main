@@ -406,7 +406,7 @@ async function processBulkSMS(
 
         const smsResponse = await sendArkeselSMS({
           to: customer.phone,
-          from: resolveArkeselSenderId(customer.phone, tenantSenderId),
+          from: resolveArkeselSenderId(customer.phone, tenantSenderId, "promotional"),
           message: resolvedMessage,
           useCase: "promotional",
         });
