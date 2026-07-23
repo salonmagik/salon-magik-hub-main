@@ -74,9 +74,9 @@ serve(async (req) => {
 
     const { data: backofficeUser, error: backofficeError } = await admin
       .from("backoffice_users")
-      .select("id, role, totp_enabled")
+      .select("id, role, is_active")
       .eq("user_id", user.id)
-      .eq("totp_enabled", true)
+      .eq("is_active", true)
       .maybeSingle();
 
     if (backofficeError || !backofficeUser) {
