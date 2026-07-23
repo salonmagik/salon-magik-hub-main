@@ -1,6 +1,6 @@
 import { Input } from "@ui/input";
 import {
-  User, Building2, MapPin, Users, Sparkles, Loader2, Tag,
+  User, Building2, MapPin, Users, Sparkles, Loader2, Tag, CheckCircle2,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@shared/utils";
@@ -235,11 +235,20 @@ export function ReviewStep({
             <button
               type="button"
               onClick={onApplyPromo}
-              disabled={!promoCode.trim() || isApplyingPromo}
-              className="flex items-center gap-1.5 rounded-full border border-black/[0.1] px-4 text-[13.5px] font-medium text-black/60 transition-colors hover:border-black/20 hover:text-black/80 disabled:opacity-40"
+              disabled={!promoCode.trim() || isApplyingPromo || promoPreview?.valid === true}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-4 text-[13.5px] font-medium transition-colors disabled:opacity-40",
+                promoPreview?.valid
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-black/[0.1] text-black/60 hover:border-black/20 hover:text-black/80",
+              )}
             >
-              {isApplyingPromo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Apply
+              {isApplyingPromo ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : promoPreview?.valid ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : null}
+              {promoPreview?.valid ? "Applied" : "Apply"}
             </button>
           </div>
           {promoPreview ? (
