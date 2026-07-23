@@ -58,6 +58,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
         phone: formData.phone || undefined,
         email: formData.email || undefined,
         notes: formData.notes || undefined,
+        birthday: formData.dateOfBirth || undefined,
       });
 
       if (result) {

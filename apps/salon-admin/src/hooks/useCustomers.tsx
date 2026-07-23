@@ -120,6 +120,7 @@ export function useCustomers() {
     phone?: string;
     email?: string;
     notes?: string;
+    birthday?: string;
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -169,6 +170,7 @@ export function useCustomers() {
           phone: data.phone?.trim() || null,
           email: normalizedEmail || null,
           notes: data.notes || null,
+          birthday: data.birthday || null,
         })
         .select()
         .single();

@@ -4,20 +4,54 @@
 @tailwind components;
 @tailwind utilities;
 
-/* The shared --sidebar-* tokens default to a colored (blue/white-text) sidebar
-   for apps that want that look. Backoffice uses a light sidebar instead, so
-   override them here — every Sidebar sub-component (mobile sheet, menu sub-items,
-   hover/active states) already references these vars by default, so this is
-   the one place that needs to change rather than chasing each component. */
+/* Backoffice uses a light sidebar — override the shared dark-purple sidebar tokens. */
 @layer base {
   :root {
-    --sidebar-background: 40 14% 96%;
-    --sidebar-foreground: 220 15% 15%;
-    --sidebar-primary: 220 91% 54%;
+    --sidebar-background: 262 30% 97%;
+    --sidebar-foreground: 290 9% 8%;
+    --sidebar-primary: 262 43% 21%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 40 12% 90%;
-    --sidebar-accent-foreground: 220 91% 54%;
-    --sidebar-border: 40 10% 88%;
-    --sidebar-ring: 220 91% 54%;
+    --sidebar-accent: 262 20% 92%;
+    --sidebar-accent-foreground: 262 43% 21%;
+    --sidebar-border: 262 15% 90%;
+    --sidebar-ring: 42 89% 63%;
   }
 }
+
+@keyframes morphCycle {
+  0%   { opacity: 0; transform: scale(0.82) rotate(-8deg); }
+  4%   { opacity: 1; transform: scale(1) rotate(0deg); }
+  18%  { opacity: 1; transform: scale(1) rotate(0deg); }
+  22%  { opacity: 0; transform: scale(0.82) rotate(8deg); }
+  100% { opacity: 0; }
+}
+.morph-icon {
+  position: absolute; inset: 0;
+  opacity: 0;
+  animation: morphCycle 12.5s infinite;
+}
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+.loader-spin {
+  animation: spinSlow 2.5s linear infinite;
+}
+@keyframes loadingTextFade {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.loading-text {
+  animation: loadingTextFade 0.35s ease forwards;
+}
+
+/* Smooth scroll — native CSS, zero JS cost */
+html { scroll-behavior: smooth; }
+
+/* Scrollbar — grain only, no visible track */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/40; }
+* { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }

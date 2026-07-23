@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
 
       const defaultSubject = "Daily digest for {{salon_name}}";
       const defaultBody = `
-        <h2 style="color: #2563EB; margin-bottom: 16px;">Daily Digest</h2>
+        <h2 style="color: #2E1F4E; margin-bottom: 16px;">Daily Digest</h2>
         <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi {{first_name}},</p>
         <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Here is your daily summary for {{salon_name}}.</p>
         <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin: 24px 0;">

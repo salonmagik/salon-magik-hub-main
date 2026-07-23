@@ -48,7 +48,8 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!profile?.user_id) {
-      // Return generic success to avoid phone enumeration
+      // No profile found — silent success to avoid phone enumeration, but log for debugging.
+      console.warn(`[send-phone-otp] no profile found for phone prefix +${phone.slice(1, 4)}`);
       return json({ success: true });
     }
 

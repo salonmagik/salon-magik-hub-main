@@ -167,7 +167,8 @@ export default function SignupPage() {
         return;
       }
 
-      navigate("/onboarding", { replace: true });
+      const planParam = searchParams.get("plan");
+      navigate(planParam ? `/onboarding?plan=${encodeURIComponent(planParam)}` : "/onboarding", { replace: true });
     };
 
     void continueGoogleSignup();
@@ -408,7 +409,6 @@ export default function SignupPage() {
           }}
           error={shouldShowError("phone") ? validation.errors.phone : undefined}
           disabled={isLoading}
-          defaultCountry="GH"
         />
 
         <AuthInput

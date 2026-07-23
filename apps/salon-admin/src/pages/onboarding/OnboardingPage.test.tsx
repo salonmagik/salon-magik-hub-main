@@ -4,6 +4,7 @@ import OnboardingPage from "./OnboardingPage";
 
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 
 vi.mock("@tanstack/react-query", () => ({

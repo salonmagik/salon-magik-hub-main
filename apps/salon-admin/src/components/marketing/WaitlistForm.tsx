@@ -314,7 +314,7 @@ export function WaitlistForm({ compact = false }: WaitlistFormProps) {
                   <SelectContent>
                     {selectableCountries.map((country) => (
                       <SelectItem key={country.code} value={country.code}>
-                        {country.name}
+                        {country.flag} {country.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

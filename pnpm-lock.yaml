@@ -445,6 +445,9 @@ importers:
 
   apps/marketing:
     dependencies:
+      '@fontsource/fraunces':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/questrial':
         specifier: ^5.2.8
         version: 5.2.8
@@ -819,6 +822,9 @@ importers:
 
   apps/salon-admin:
     dependencies:
+      '@fontsource/fraunces':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@fontsource/questrial':
         specifier: ^5.2.8
         version: 5.2.8
@@ -1483,6 +1489,9 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+
+  '@fontsource/fraunces@5.3.0':
+    resolution: {integrity: sha512-LEHTOBiZufQzAvnAe2rZ8ZknbDS28Q9kzwb0L+gZJEmjLGr8hhZ/5NuHXwDuHBWhVXYoiGGXmrb0H6Ko/RrHTg==}
 
   '@fontsource/questrial@5.2.8':
     resolution: {integrity: sha512-KetCQoMwGVGRu7k71pDL3R9xQBaFw2jj7yL5KLLv+69RoGqYGldebfGiHspOjaZvSe355lLJ5qbatdYq+Bl+ZA==}
@@ -4338,6 +4347,8 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
 
   '@floating-ui/utils@0.2.10': {}
+
+  '@fontsource/fraunces@5.3.0': {}
 
   '@fontsource/questrial@5.2.8': {}
 

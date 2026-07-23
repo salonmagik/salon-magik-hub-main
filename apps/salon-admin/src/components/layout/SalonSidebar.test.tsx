@@ -50,6 +50,10 @@ vi.mock("@/components/session/NewDeviceReviewModal", () => ({
   NewDeviceReviewModal: () => null,
 }));
 
+vi.mock("@/components/profile/MyProfileModal", () => ({
+  MyProfileModal: () => null,
+}));
+
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: vi.fn(),
 }));

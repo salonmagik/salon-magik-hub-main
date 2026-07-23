@@ -19,6 +19,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Questrial", "sans-serif"],
+        serif: ["Fraunces", "Georgia", "serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -68,6 +69,18 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        brand: {
+          purple: "hsl(var(--brand-purple))",
+          "purple-deep": "hsl(var(--brand-purple-deep))",
+          "purple-soft": "hsl(var(--brand-purple-soft))",
+          lilac: "hsl(var(--brand-lilac))",
+          "lilac-dim": "hsl(var(--brand-lilac-dim))",
+          "lilac-bg": "hsl(var(--brand-lilac-bg))",
+          yellow: "hsl(var(--brand-yellow))",
+          ink: "hsl(var(--brand-ink))",
+          cream: "hsl(var(--brand-cream))",
+          "cream-dim": "hsl(var(--brand-cream-dim))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

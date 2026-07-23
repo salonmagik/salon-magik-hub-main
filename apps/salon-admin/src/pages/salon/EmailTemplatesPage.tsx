@@ -44,6 +44,7 @@ const EMAIL_TEMPLATE_TYPES = [
   { type: "welcome_email", label: "Welcome Email", category: "account" },
   { type: "password_reset", label: "Password Reset", category: "account" },
   { type: "staff_invitation", label: "Staff Invitation", category: "account" },
+  { type: "birthday_message", label: "Birthday Message", category: "marketing" },
 ];
 
 // Default email templates
@@ -55,6 +56,10 @@ const DEFAULT_TEMPLATES: Record<string, { subject: string; body_html: string }> 
   appointment_reminder: {
     subject: "Reminder: Your appointment tomorrow - {{salon_name}}",
     body_html: "<p>Hi {{customer_name}},</p><p>This is a friendly reminder about your appointment at {{salon_name}} tomorrow at {{appointment_time}}.</p><p>See you soon!</p>",
+  },
+  birthday_message: {
+    subject: "Happy Birthday from {{salon_name}}! 🎂",
+    body_html: "<p>Hi {{first_name}},</p><p>Wishing you a wonderful birthday from everyone at {{salon_name}}! You deserve to feel amazing today — treat yourself.</p><p>We're grateful to have you as a valued client and look forward to seeing you soon.</p><p>With love,<br /><strong>{{salon_name}}</strong></p>",
   },
 };
 

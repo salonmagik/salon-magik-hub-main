@@ -308,9 +308,9 @@ Deno.serve(async (req) => {
         `
           ${heading("You’ve been added to Salon Magik BackOffice")}
           ${paragraph(`Your BackOffice access has been created with role <strong>${roleTemplate.name}</strong>.`)}
-          ${paragraph(`<strong>Sign-in email:</strong> ${email}`)}
-          ${paragraph(`<strong>Temporary password:</strong> <code style=\"background:#e5e7eb;padding:4px 8px;border-radius:4px;\">${tempPassword}</code>`)}
+          ${paragraph(`<strong>Sign-in email:</strong> ${email}<br/><strong>Temporary password:</strong> <code style="background:#e5e7eb;padding:4px 8px;border-radius:4px;font-family:monospace;">${tempPassword}</code>`)}
           ${createButton("Go to BackOffice login", loginUrl)}
+          ${smallText("⚠️ Important: your account is already set up. Do NOT sign up or create a new account — use the login page above with your email and the temporary password above.")}
           ${smallText("You must change this password at first login before you can access the dashboard.")}
           ${smallText("After login, you can set up 2FA with an authenticator app.")}
         `,
