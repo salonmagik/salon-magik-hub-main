@@ -157,8 +157,15 @@ serve(async (req) => {
     }
 
     const vars = (varsData || {}) as Record<string, unknown>;
-    const subjectTemplate = campaign.email_subject_template || "Your {{campaign_name}} Salon Magik promo code";
-    const bodyTemplate = campaign.email_body_template || paragraph("Your promo code is {{promo_code}}.");
+    const subjectTemplate = campaign.email_subject_template || "Welcome to Salon Magik, here's your invite";
+    const bodyTemplate = campaign.email_body_template ||
+      `<h2 style="color:#111827;margin:0 0 20px 0;font-size:24px;font-weight:700;letter-spacing:-0.01em;line-height:1.3;">Hi {{recipient_firstname}},</h2>` +
+      `<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0 0 18px 0;">Welcome to Salon Magik. You&#39;ve been invited to join, and we&#39;ve set aside a promo code just for your account.</p>` +
+      `<table role="presentation" style="width:100%;border-collapse:collapse;margin:24px 0;"><tr><td style="background:#f8f6f2;border-radius:12px;padding:24px;text-align:center;"><p style="margin:0 0 8px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:#9ca3af;">Your promo code</p><p style="margin:0;font-size:30px;font-weight:700;letter-spacing:6px;color:#2E1F4E;font-family:monospace,'Courier New';">{{promo_code}}</p></td></tr></table>` +
+      `{{discount_line}}<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0 0 18px 0;">It&#39;s reserved for this account and valid through <strong>{{expires_date}}</strong>.</p>` +
+      `<table role="presentation" style="margin:32px auto;border-collapse:collapse;"><tr><td style="border-radius:100px;background-color:#F4C84E;"><a href="{{signup_url}}" style="background-color:#F4C84E;color:#2E1F4E;padding:15px 36px;text-decoration:none;border-radius:100px;display:inline-block;font-weight:700;font-size:15px;letter-spacing:0.02em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Start free trial &#x2192;</a></td></tr></table>` +
+      `<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0 0 18px 0;">Questions getting set up? Just reply to this email &#x2014; a real person will get back to you.</p>` +
+      `<p style="color:#4b5563;font-size:16px;line-height:1.7;margin:0;">Welcome aboard,<br/><strong>The Salon Magik team</strong></p>`;
     const subject = applyTemplate(subjectTemplate, vars);
     const body = applyTemplate(bodyTemplate, vars);
     const html = wrapEmailTemplate(body, { mode: "product" });
