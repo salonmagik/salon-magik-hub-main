@@ -207,7 +207,7 @@ export default function SalonDashboard() {
                   size="sm"
                   variant="outline"
                   className="border-destructive/30 hover:bg-destructive/20 text-destructive"
-                  onClick={() => navigate("/salon/transactions?tab=payouts")}
+                  onClick={() => navigate("/salon/settings?tab=payout-destinations")}
                 >
                   Set Up Payouts
                 </Button>
