@@ -83,6 +83,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [loginMode, setLoginMode] = useState<LoginMode>("email");
   const [showGoogleSignupPrompt, setShowGoogleSignupPrompt] = useState(false);
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
   const googleOAuthIntent = readGoogleOAuthIntent();
   const promoCodeFromUrl = searchParams.get("promo");
   const reviewSessions = searchParams.get("review-sessions") === "true";
@@ -203,6 +205,12 @@ export default function LoginPage() {
       });
 
       if (error) {
+        const isUnconfirmed =
+          error.message?.toLowerCase().includes("email not confirmed") ||
+          error.message?.toLowerCase().includes("email_not_confirmed");
+        if (isUnconfirmed) {
+          setShowResendVerification(true);
+        }
         toast({
           title: "Login failed",
           description: error.message,
@@ -327,6 +335,30 @@ export default function LoginPage() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email) return;
+    setResendingVerification(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-email-verification", {
+        body: { mode: "resend", email, origin: window.location.origin },
+      });
+      if (error || data?.error) {
+        let message = data?.error || error?.message || "Failed to resend verification email";
+        if (error && typeof error === "object" && "context" in error && (error as any).context) {
+          try { const p = await (error as any).context.json(); message = p?.error || message; } catch { /* no-op */ }
+        }
+        toast({ title: "Resend failed", description: message, variant: "destructive" });
+      } else {
+        setShowResendVerification(false);
+        toast({ title: "Verification email sent", description: "Check your inbox and click the link to confirm your email." });
+      }
+    } catch {
+      toast({ title: "Error", description: "Could not resend. Please try again.", variant: "destructive" });
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -582,6 +614,23 @@ export default function LoginPage() {
 					<AuthButton type="submit" isLoading={isLoading}>
 						Sign in
 					</AuthButton>
+
+					{showResendVerification && (
+						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-800">
+							<p className="font-medium">Your email isn't confirmed yet.</p>
+							<p className="mt-0.5 text-amber-700 text-xs">
+								Check your inbox for a verification link, or resend it below.
+							</p>
+							<button
+								type="button"
+								onClick={handleResendVerification}
+								disabled={resendingVerification || !email}
+								className="mt-2 text-xs font-semibold text-amber-900 underline underline-offset-2 hover:opacity-70 disabled:opacity-40"
+							>
+								{resendingVerification ? "Sending…" : "Resend verification email"}
+							</button>
+						</div>
+					)}
 				</form>
 			)}
 

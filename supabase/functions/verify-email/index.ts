@@ -47,18 +47,7 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Mark token as verified
-    const { error: updateError } = await supabase
-      .from("email_verification_tokens")
-      .update({ verified_at: new Date().toISOString() })
-      .eq("id", tokenData.id);
-
-    if (updateError) {
-      console.error("Failed to update token:", updateError);
-      throw new Error("Failed to verify email");
-    }
-
-    // Update user's email confirmation status using admin API
+    // Confirm email in auth FIRST — if this fails, don't mark the token used
     if (tokenData.user_id) {
       const { error: userUpdateError } = await supabase.auth.admin.updateUserById(
         tokenData.user_id,
@@ -66,9 +55,33 @@ const handler = async (req: Request): Promise<Response> => {
       );
 
       if (userUpdateError) {
-        console.error("Failed to confirm user email:", userUpdateError);
-        // Don't fail the request - token is already verified
+        console.error("Failed to confirm user email in auth:", userUpdateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to confirm your email. Please try clicking the link again or request a new one." }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
       }
+
+      // Verify the update actually took effect
+      const { data: confirmedUser } = await supabase.auth.admin.getUserById(tokenData.user_id);
+      if (!confirmedUser?.user?.email_confirmed_at) {
+        console.error("email_confirmed_at not set after updateUserById for user:", tokenData.user_id);
+        return new Response(
+          JSON.stringify({ error: "Email confirmation did not save. Please try again or request a new verification link." }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
+
+    // Mark token as verified only after auth is confirmed
+    const { error: updateError } = await supabase
+      .from("email_verification_tokens")
+      .update({ verified_at: new Date().toISOString() })
+      .eq("id", tokenData.id);
+
+    if (updateError) {
+      console.error("Failed to update token verified_at:", updateError);
+      // Auth is already confirmed — log but don't fail the user experience
     }
 
     console.log("Email verified successfully for:", tokenData.email);

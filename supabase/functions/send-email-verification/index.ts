@@ -87,19 +87,29 @@ const handler = async (req: Request): Promise<Response> => {
       mode = "resend",
     }: EmailVerificationRequest = await req.json();
 
-    if (!email || !firstName) {
+    if (!email) {
       return new Response(
-        JSON.stringify({ error: "Email and firstName are required" }),
+        JSON.stringify({ error: "Email is required" }),
         { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
     const normalizedEmail = email.toLowerCase();
-    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+
+    // firstName is required for signup; for resend, fall back to extracting from email
+    const resolvedFirstName = firstName || (mode !== "signup" ? normalizedEmail.split("@")[0] : null);
+    if (!resolvedFirstName) {
+      return new Response(
+        JSON.stringify({ error: "First name is required for signup" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const fullName = [resolvedFirstName, lastName].filter(Boolean).join(" ").trim();
     const userMetadata = {
-      first_name: firstName,
+      first_name: resolvedFirstName,
       last_name: lastName || null,
-      full_name: fullName || firstName,
+      full_name: fullName || resolvedFirstName,
       phone: phone || null,
       email_verified: false,
     };
@@ -218,13 +228,13 @@ const handler = async (req: Request): Promise<Response> => {
     const platformTemplate = await fetchPlatformTemplate(supabase, "email_verification", "email");
     const defaultSubject = "Welcome to Salon Magik – verify your email";
     const defaultBody = `
-      ${heading(`Welcome, ${firstName}!`)}
+      ${heading(`Welcome, ${resolvedFirstName}!`)}
       ${paragraph("Thanks for signing up to Salon Magik. Verify your email to secure your account and unlock your workspace.")}
       ${createButton("Verify email", verificationLink)}
       ${paragraph("This link expires in 24 hours. If you didn’t sign up, you can safely ignore this email.")}
     `;
     const templateValues = {
-      first_name: firstName,
+      first_name: resolvedFirstName,
       verification_link: verificationLink,
       verification_link_button: createButton("Verify email", verificationLink),
     };
