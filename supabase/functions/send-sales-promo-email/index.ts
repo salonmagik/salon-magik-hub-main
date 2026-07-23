@@ -46,6 +46,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
+    // Always point sign-up/login URLs to the salon app, not the backoffice origin.
+    const salonAppUrl = Deno.env.get("SALON_APP_URL") || "https://app.salonmagik.com";
 
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const caller = createClient(supabaseUrl, supabaseAnonKey, {
@@ -145,7 +147,7 @@ serve(async (req) => {
 
     const { data: varsData, error: varsError } = await (admin.rpc as any)("get_sales_promo_email_vars", {
       p_promo_code_id: promoCodeId,
-      p_origin: req.headers.get("origin"),
+      p_origin: salonAppUrl,
     });
 
     if (varsError) {
