@@ -336,7 +336,8 @@ export default function BackofficeSettingsPage() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("get-arkesel-balance");
       if (error) throw error;
-      return data as { gh: { balance: string | number | null; error?: string }; ng: { balance: string | number | null; error?: string } };
+      type BalanceEntry = { balance: string | number | null; error?: string };
+      return data as { gh: BalanceEntry; ng_transactional: BalanceEntry; ng_promotional: BalanceEntry };
     },
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -1214,12 +1215,17 @@ export default function BackofficeSettingsPage() {
                 {arkeselBalanceLoading ? (
                   <p className="text-sm text-muted-foreground">Fetching balances…</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    {(["gh", "ng"] as const).map((market) => {
-                      const entry = arkeselBalance?.[market];
-                      const label = market === "gh" ? "Ghana (GH)" : "Nigeria (NG)";
+                  <div className="grid grid-cols-3 gap-4">
+                    {(
+                      [
+                        { key: "gh", label: "Ghana (GH)" },
+                        { key: "ng_transactional", label: "Nigeria — Transactional" },
+                        { key: "ng_promotional", label: "Nigeria — Promotional" },
+                      ] as const
+                    ).map(({ key, label }) => {
+                      const entry = arkeselBalance?.[key];
                       return (
-                        <div key={market} className="rounded-lg border p-4">
+                        <div key={key} className="rounded-lg border p-4">
                           <p className="text-sm text-muted-foreground">{label}</p>
                           {entry?.error ? (
                             <p className="mt-1 text-sm text-destructive">{entry.error}</p>

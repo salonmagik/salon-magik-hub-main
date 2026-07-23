@@ -35,8 +35,10 @@ async function fetchBalance(apiKey: string, label: string): Promise<BalanceResul
     if ((body?.status as string) === "error") {
       return { balance: null, error: (body?.message as string) || "API returned error" };
     }
-    // Return full data so callers can inspect all balance types (sms, promotional, transactional, etc.)
-    return { balance: body?.data ?? body };
+    // v2 response: { status: "success", data: { balance: "123.45", ... } }
+    const data = body?.data as Record<string, unknown> | null | undefined;
+    const balance = data?.balance ?? body?.balance ?? null;
+    return { balance };
   } catch (err) {
     return { balance: null, error: err instanceof Error ? err.message : "Request failed" };
   }
