@@ -154,6 +154,7 @@ export function LocationsStep({
     <div className="p-7">
       <div className="mb-6">
         <div className="mb-3 flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.07em] text-[#2E1F4E]">
+          <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
           <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
           Locations
         </div>
