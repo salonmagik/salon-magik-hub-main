@@ -227,7 +227,7 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 	};
 
 	const hydrateFromSession = useCallback(
-		async (session: Session | null) => {
+		async (session: Session | null, event?: string) => {
 			if (!session?.user) {
 				clearAuthState();
 				return;
@@ -265,6 +265,15 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 
 			if (backofficeUser) {
 				void touchBackofficeSession(session, session.user.id);
+
+				// For non-TOTP users, record last_login_at on fresh sign-in.
+				// TOTP-enabled users have this handled inside verifyTotp() instead.
+				if (event === "SIGNED_IN" && !backofficeUser.totp_enabled) {
+					void supabase
+						.from("backoffice_users")
+						.update({ last_login_at: new Date().toISOString() })
+						.eq("user_id", session.user.id);
+				}
 			}
 		},
 		[clearAuthState, touchBackofficeSession],
@@ -285,7 +294,7 @@ export function BackofficeAuthProvider({ children }: { children: ReactNode }) {
 					return;
 				}
 
-				void hydrateFromSession(session).catch((error) => {
+				void hydrateFromSession(session, event).catch((error) => {
 					console.error("BackOffice auth change handling error:", error);
 					if (isMounted) {
 						setState((prev) => ({ ...prev, isLoading: false }));
