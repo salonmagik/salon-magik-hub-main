@@ -124,6 +124,17 @@ export function useRefunds() {
     }
   };
 
+  const updateRefundStatusLocally = useCallback(
+    (refundId: string, status: RefundWithDetails["status"]) => {
+      setRefunds((current) =>
+        current.map((refund) =>
+          refund.id === refundId ? { ...refund, status } : refund,
+        ),
+      );
+    },
+    [],
+  );
+
   const pendingRefunds = refunds.filter((r) => r.status === "pending");
   const approvedRefunds = refunds.filter((r) => r.status === "approved" || r.status === "completed");
   const rejectedRefunds = refunds.filter((r) => r.status === "rejected");
@@ -138,5 +149,6 @@ export function useRefunds() {
     refetch: fetchRefunds,
     approveRefund,
     rejectRefund,
+    updateRefundStatusLocally,
   };
 }

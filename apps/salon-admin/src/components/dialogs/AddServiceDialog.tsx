@@ -1,11 +1,18 @@
 import { useEffect, useState, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { Scissors, Clock, Loader2, Plus } from "lucide-react";
+import { Scissors, Loader2, Plus } from "lucide-react";
 import { useServices } from "@/hooks/useServices";
 import { useAuth } from "@/hooks/useAuth";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
@@ -48,7 +55,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
     category: "",
     price: "",
     duration: "60",
-    buffer: "15",
     description: "",
     images: [] as string[],
     locationIds: [] as string[],
@@ -112,7 +118,6 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
       category: "",
       price: "",
       duration: "60",
-      buffer: "15",
       description: "",
       images: [],
       locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
@@ -161,18 +166,22 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto mx-4">
-        <DialogHeader className="flex flex-row items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Scissors className="w-5 h-5 text-primary" />
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 bg-white p-5 shadow-2xl sm:max-h-[92vh] sm:max-w-[560px] sm:p-[34px]">
+        <DialogHeader className="mb-7 flex flex-row items-center gap-3.5 pr-10 text-left">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#f2eefa]">
+            <Scissors className="h-5 w-5 text-[#2e1f4e]" />
           </div>
-          <div>
-            <DialogTitle className="text-xl">Add Service</DialogTitle>
-            <p className="text-sm text-muted-foreground">Create a new service offering</p>
+          <div className="min-w-0">
+            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px] text-[#141014]">
+              Add service
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 text-[13px] text-[#141014]/60">
+              Create a new service offering
+            </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit} className="space-y-[18px]">
           {isChainTier && (
             <LocationScopePicker
               locations={scopedLocations}
@@ -187,29 +196,29 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             </p>
           )}
 
-          {/* Name & Category Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>
-                Service Name <span className="text-destructive">*</span>
+          <div className="grid grid-cols-1 gap-[18px]">
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">
+                Service name <span className="text-[#2e1f4e]">*</span>
               </Label>
               <Input
                 placeholder="e.g. Haircut & Style"
+                className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
                 value={formData.name}
                 onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label>Category</Label>
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">Category</Label>
               <Select
                 value={formData.category}
                 onValueChange={(v) => setFormData((prev) => ({ ...prev, category: v === "none" ? "" : v }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus:ring-[#f2eefa] focus:ring-offset-0">
                   <SelectValue placeholder="Select a category (optional)" />
                 </SelectTrigger>
-              <SelectContent>
+                <SelectContent>
                   <SelectItem value="none">No category</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
@@ -235,74 +244,64 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
             </div>
           </div>
 
-          {/* Price, Currency, Duration Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>
-                Price <span className="text-destructive">*</span>
+          <div className="grid grid-cols-1 gap-3.5 min-[480px]:grid-cols-3">
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">
+                Price <span className="text-[#2e1f4e]">*</span>
               </Label>
               <div className="relative">
-                {/* <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
                 <Input
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="pl-8 pr-3"
+                  className="h-[46px] rounded-lg border-[#141014]/10 pl-8 pr-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
                   value={formData.price}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, price: formatAmountInput(e.target.value) }))
                   }
                   required
                 />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#141014]/42">
+                  {currencySymbol}
+                </span>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Currency</Label>
-              <Input value={selectedCurrency} disabled />
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">Currency</Label>
+              <Input
+                value={selectedCurrency}
+                disabled
+                className="h-[46px] rounded-lg border-[#141014]/10 bg-[#f1ece3] px-3.5 text-[14.5px] text-[#141014]/42 opacity-100 shadow-none disabled:opacity-100"
+              />
             </div>
-            <div className="space-y-2">
-              <Label>
-                Duration (minutes) <span className="text-destructive">*</span>
+            <div className="space-y-[7px]">
+              <Label className="whitespace-nowrap text-[13.5px] font-normal text-[#141014]/60">
+                Duration (min) <span className="text-[#2e1f4e]">*</span>
               </Label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="number"
-                  className="pl-9"
-                  value={formData.duration}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, duration: e.target.value }))}
-                  required
-                />
-              </div>
+              <Input
+                type="number"
+                min="1"
+                className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
+                value={formData.duration}
+                onChange={(e) => setFormData((prev) => ({ ...prev, duration: e.target.value }))}
+                required
+              />
             </div>
           </div>
 
-          {/* Buffer */}
-          <div className="space-y-2">
-            <Label>Buffer (minutes)</Label>
-            <Input
-              type="number"
-              className="max-w-32"
-              value={formData.buffer}
-              onChange={(e) => setFormData((prev) => ({ ...prev, buffer: e.target.value }))}
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label>Description</Label>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">Description</Label>
             <Textarea
               placeholder="Outline what this service includes."
+              className="min-h-[96px] resize-y rounded-lg border-[#141014]/10 px-3.5 py-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
             />
           </div>
 
-          {/* Images */}
-          <div className="space-y-2">
-            <Label>Images (Optional)</Label>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">Images (optional)</Label>
             <ImageUploadZone
               images={formData.images}
               onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
@@ -310,20 +309,25 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               onThumbnailIndexChange={setThumbnailIndex}
               maxImages={2}
               disabled={isSubmitting}
+              dropzoneClassName="min-h-[132px] rounded-[14px] border-[1.5px] border-[#141014]/10 bg-white p-7 hover:border-[#2e1f4e]/40 hover:bg-[#fbf9f6]"
             />
           </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse gap-2 pt-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="w-full sm:w-auto"
+              className="h-11 w-full rounded-full border-[#141014]/10 px-5 text-[14.5px] font-medium shadow-none hover:bg-[#f1ece3] min-[480px]:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !isFormValid} className="w-full sm:w-auto">
+            <Button
+              type="submit"
+              disabled={isSubmitting || !isFormValid}
+              className="h-11 w-full rounded-full bg-[#141014] px-5 text-[14.5px] font-medium text-white hover:bg-[#2e1f4e] min-[480px]:w-auto"
+            >
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Create service
             </Button>

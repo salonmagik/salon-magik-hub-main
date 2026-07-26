@@ -49,26 +49,26 @@ export function DeleteConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            <AlertDialogTitle className="text-destructive">
+      <AlertDialogContent className="w-[calc(100%_-_1.5rem)] gap-0 rounded-[22px] border-0 p-5 shadow-2xl sm:max-w-[480px] sm:p-[34px]">
+        <AlertDialogHeader className="space-y-0 text-left">
+          <div className="mb-4 flex items-center gap-2.5 text-[#a23b3b]">
+            <AlertTriangle className="h-5 w-5 shrink-0" strokeWidth={1.8} />
+            <AlertDialogTitle className="text-[19px] font-normal tracking-[-0.2px] text-[#a23b3b]">
               {itemCount > 1
                 ? `Delete ${itemCount} Items?`
                 : `Delete "${itemName}"?`}
             </AlertDialogTitle>
           </div>
-          <AlertDialogDescription>
+          <AlertDialogDescription className="text-[14.5px] leading-[1.6] text-[#141014]/60">
             {description ||
               "The item(s) will be removed from your catalog and your booking site. You can still restore deleted item(s) from Bin."}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="py-4 space-y-2">
-          <Label htmlFor="confirm">
+        <div className="mt-[22px]">
+          <Label htmlFor="confirm" className="mb-2.5 block text-[14.5px] font-normal text-[#141014]">
             Type{" "}
-            <span className="font-mono font-bold bg-muted px-1.5 py-0.5 rounded">
+            <span className="rounded-md bg-[#f1ece3] px-2 py-[3px] font-mono text-[13.5px] font-normal">
               {confirmRequired}
             </span>{" "}
             to confirm
@@ -79,17 +79,23 @@ export function DeleteConfirmDialog({
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder={confirmRequired}
             autoComplete="off"
+            className="h-auto rounded-lg border-[#141014]/10 px-3.5 py-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa]"
           />
         </div>
 
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+        <AlertDialogFooter className="mt-6 gap-2.5 sm:space-x-0">
+          <AlertDialogCancel
+            className="h-11 rounded-full border-[#141014]/10 px-6 text-[14.5px] font-normal hover:bg-[#f1ece3]"
+            disabled={isLoading}
+          >
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleConfirm}
             disabled={!isConfirmed || isLoading}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="h-11 rounded-full bg-[#a23b3b] px-[22px] text-[14.5px] font-medium text-white hover:bg-[#8f3030] disabled:bg-[#f7e5e5] disabled:text-[#a23b3b]/50 disabled:opacity-100"
           >
-            {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Delete
           </AlertDialogAction>
         </AlertDialogFooter>

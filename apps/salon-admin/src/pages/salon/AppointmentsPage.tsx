@@ -175,6 +175,7 @@ export default function AppointmentsPage() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"pause" | "cancel" | "reschedule" | "schedule" | null>(null);
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDetails | null>(null);
+  const [notesAppointment, setNotesAppointment] = useState<AppointmentWithDetails | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
@@ -1016,7 +1017,7 @@ export default function AppointmentsPage() {
 
         {/* Tab-Specific Stats Grid */}
         {activeTab === "scheduled" ? (
-          <div className="flex gap-3 overflow-x-auto snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
             <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
                 <Calendar className="w-4 h-4 text-primary" />
@@ -1085,7 +1086,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
         ) : activeTab === "unscheduled" ? (
-          <div className="flex gap-3 overflow-x-auto snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
             <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
                 <Calendar className="w-4 h-4 text-primary" />
@@ -1417,7 +1418,7 @@ export default function AppointmentsPage() {
                   <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Customer</TableHead>
                   <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Service</TableHead>
                   <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
-                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Amount Due</TableHead>
+                  <TableHead className="min-w-[110px] whitespace-nowrap text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Amount Due</TableHead>
                   <TableHead />
                   <TableHead className="text-right" />
                 </TableRow>
@@ -1572,7 +1573,11 @@ export default function AppointmentsPage() {
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => handleRowClick(apt)}
+                            onClick={() => {
+                              if (apt.notes) {
+                                setNotesAppointment(apt);
+                              }
+                            }}
                             className={cn(
                               "text-xs whitespace-nowrap transition-colors",
                               apt.notes
@@ -1765,7 +1770,7 @@ export default function AppointmentsPage() {
           <button
             type="button"
             aria-label="Create appointment or walk-in"
-            className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
+            className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-primary  text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
           >
             <Plus className="w-6 h-6" />
           </button>
@@ -1830,6 +1835,38 @@ export default function AppointmentsPage() {
         invoiceId={selectedInvoiceId}
         onSuccess={handleRefetch}
       />
+
+      <Dialog open={!!notesAppointment} onOpenChange={(open) => !open && setNotesAppointment(null)}>
+        <DialogContent className="rounded-3xl p-5 sm:max-w-xl sm:p-8">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">
+              Notes for {notesAppointment?.customer?.full_name || "customer"}
+            </DialogTitle>
+            <DialogDescription>Appointment notes, newest first</DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 max-h-[60vh] overflow-y-auto overscroll-contain">
+            {notesAppointment?.notes ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  <span>
+                    {notesAppointment.scheduled_start
+                      ? format(new Date(notesAppointment.scheduled_start), "MMM d, yyyy 'at' h:mm a")
+                      : "Unscheduled appointment"}
+                  </span>
+                </div>
+                <div className="rounded-2xl border bg-card p-4 text-sm leading-6 whitespace-pre-wrap">
+                  {notesAppointment.notes}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+                No notes have been added to this appointment.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
         <DialogContent className="sm:max-w-3xl">

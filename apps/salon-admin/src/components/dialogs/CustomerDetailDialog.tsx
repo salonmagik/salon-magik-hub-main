@@ -37,7 +37,11 @@ import {
   Link as LinkIcon,
   CheckCircle,
   XCircle,
+  Scissors,
+  Package,
+  RotateCcw,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { SendMessageDialog } from "@/components/messaging/SendMessageDialog";
@@ -46,6 +50,7 @@ import { CreateInvoiceDialog } from "@/components/dialogs/CreateInvoiceDialog";
 import { useInvoices } from "@/hooks/useInvoices";
 import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import type { Tables } from "@supabase-client";
+import { getCurrencySymbol } from "@shared/currency";
 
 type Customer = Partial<CustomerWithVisitSummary> & Tables<"customers">;
 type AppointmentAttachment = Tables<"appointment_attachments">;
@@ -114,6 +119,28 @@ function isPurseEntryCredit(entryType: string): boolean {
   return ["customer_purse_topup", "customer_purse_reversal"].includes(entryType);
 }
 
+function SummaryTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="flex min-h-16 items-center gap-3 rounded-[12px] border border-border/60 px-4 py-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-[#f1eafa] text-primary">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="truncate font-medium">{value}</p>
+      </div>
+    </div>
+  );
+}
+
 export function CustomerDetailDialog({
   open,
   onOpenChange,
@@ -133,6 +160,7 @@ export function CustomerDetailDialog({
 
   const customerId = customer?.id;
   const currency = currentTenant?.currency || "USD";
+  const currencySymbol = getCurrencySymbol(currency);
   const { data: customerDetail, isLoading: customerDetailLoading } = useQuery({
     queryKey: ["customer-detail-dialog", currentTenant?.id, customerId, open],
     queryFn: async () => {
@@ -315,18 +343,18 @@ export function CustomerDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[24px] border-0 p-5 shadow-2xl sm:max-w-5xl sm:p-8">
         <DialogHeader>
           <DialogDescription className="sr-only">
             Customer profile, engagement summary, appointments, notes, and transaction history.
           </DialogDescription>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xl font-semibold">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#f1eafa] font-serif text-xl font-semibold text-primary">
                 {getInitials(customer.full_name)}
               </div>
               <div>
-                <DialogTitle className="text-xl">{customer.full_name}</DialogTitle>
+                <DialogTitle className="text-2xl font-medium">{customer.full_name}</DialogTitle>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge
                     variant="secondary"
@@ -347,10 +375,10 @@ export function CustomerDetailDialog({
                 <TooltipTrigger asChild>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="default"
                     onClick={() => setSendMessageDialogOpen(true)}
                     disabled={!canSendMessage}
-                    className="flex-shrink-0"
+                    className="h-11 flex-shrink-0 rounded-full px-6"
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />
                     Send Message
@@ -365,22 +393,20 @@ export function CustomerDetailDialog({
         </DialogHeader>
 
           <Tabs defaultValue="overview" className="mt-4">
-            <TabsList className="grid w-full grid-cols-7">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="appointments">Appointments</TabsTrigger>
-              <TabsTrigger value="invoices">Invoices</TabsTrigger>
-              <TabsTrigger value="notes">Notes</TabsTrigger>
-              <TabsTrigger value="messages">Messages</TabsTrigger>
-              <TabsTrigger value="transactions">Transactions</TabsTrigger>
-              <TabsTrigger value="purse">Salon Balance</TabsTrigger>
+            <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1">
+              <TabsTrigger value="overview" className="h-10 shrink-0 rounded-full px-6">Overview</TabsTrigger>
+              <TabsTrigger value="appointments" className="h-10 shrink-0 rounded-full px-6">Appointments</TabsTrigger>
+              <TabsTrigger value="invoices" className="h-10 shrink-0 rounded-full px-6">Invoices</TabsTrigger>
+              <TabsTrigger value="notes" className="h-10 shrink-0 rounded-full px-6">Notes</TabsTrigger>
+              <TabsTrigger value="messages" className="h-10 shrink-0 rounded-full px-6">Messages</TabsTrigger>
+              <TabsTrigger value="transactions" className="h-10 shrink-0 rounded-full px-6">Transactions</TabsTrigger>
+              <TabsTrigger value="purse" className="h-10 shrink-0 rounded-full px-6">Store Credit</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="mt-4 space-y-4">
               {/* Contact Info */}
-              <Card>
-                <CardContent className="p-4 space-y-3">
-                  <h4 className="font-medium text-sm text-muted-foreground">Contact Information</h4>
-
+              <Card className="rounded-[14px] border-border/60 shadow-none">
+                <CardContent className="space-y-3 p-5">
                   {customer.email && (
                     <div className="flex items-center gap-3">
                       <Mail className="w-4 h-4 text-muted-foreground" />
@@ -413,49 +439,39 @@ export function CustomerDetailDialog({
                 </CardContent>
               </Card>
 
-              {/* Notes */}
-              {customer.notes && (
-                <Card>
-                  <CardContent className="p-4">
-                    <h4 className="font-medium text-sm text-muted-foreground mb-2">Notes</h4>
-                    <p className="text-sm">{customer.notes}</p>
-                  </CardContent>
-                </Card>
-              )}
-
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground">Salon Balance</p>
-                    <p className="text-xl font-semibold">
-                      {currency} {Number(purse?.balance || 0).toFixed(2)}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Card className="rounded-[14px] border-border/60 shadow-none">
+                  <CardContent className="p-5">
+                    <p className="text-sm text-muted-foreground">Store credit</p>
+                    <p className="mt-1 font-serif text-2xl font-semibold">
+                      {currencySymbol}{Number(purse?.balance || 0).toFixed(2)}
                     </p>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardContent className="p-4">
+                <Card className="rounded-[14px] border-border/60 shadow-none">
+                  <CardContent className="p-5">
                     <p className="text-sm text-muted-foreground">Outstanding</p>
-                    <p className="text-xl font-semibold">
-                      {currency} {outstandingBalance.toFixed(2)}
+                    <p className="mt-1 font-serif text-2xl font-semibold text-[#8a6510]">
+                      {currencySymbol}{outstandingBalance.toFixed(2)}
                     </p>
                   </CardContent>
                 </Card>
               </div>
 
-              <Card>
-                <CardContent className="p-4">
-                  <h4 className="font-medium text-sm text-muted-foreground mb-3">Branches Visited</h4>
+              <Card className="rounded-[14px] border-border/60 shadow-none">
+                <CardContent className="p-5">
+                  <h4 className="mb-2 text-sm font-medium">Branches visited</h4>
                   {visitedLocations.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No branch visits recorded yet. This customer will appear here once an appointment is created.
+                      No branch visits recorded yet. This customer will appear here once an appointment is completed.
                     </p>
                   ) : (
                     <div className="space-y-2">
                       {visitedLocations.map((location) => (
                         <div
                           key={location.locationId}
-                          className="flex items-center justify-between rounded-lg border p-3"
+                          className="flex items-center justify-between rounded-[10px] border p-3"
                         >
                           <span className="text-sm font-medium">{location.locationName}</span>
                           <Badge variant="secondary">
@@ -468,19 +484,45 @@ export function CustomerDetailDialog({
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardContent className="p-4 space-y-3">
-                  <h4 className="font-medium text-sm text-muted-foreground">Customer Summary</h4>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <p>Most ordered service: <span className="font-medium">{engagementSummary?.most_ordered_service || "—"}</span></p>
-                    <p>Most ordered product: <span className="font-medium">{engagementSummary?.most_ordered_product || "—"}</span></p>
-                    <p>Refunds count: <span className="font-medium">{engagementSummary?.refunds_count ?? 0}</span></p>
-                    <p>Last transaction date: <span className="font-medium">{lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "—"}</span></p>
-                    <p>Last transaction date: <span className="font-medium">{lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "—"}</span></p>
-                    <p>Services completed: <span className="font-medium">{engagementSummary?.services_completed ?? 0}</span></p>
-                    <p>Products fulfilled: <span className="font-medium">{engagementSummary?.products_fulfilled ?? 0}</span></p>
-                    <p>Services cancelled: <span className="font-medium">{engagementSummary?.services_cancelled ?? 0}</span></p>
-                    <p>Services rescheduled: <span className="font-medium">{engagementSummary?.services_rescheduled ?? 0}</span></p>
+              {customer.notes && (
+                <Card className="rounded-[14px] border-border/60 shadow-none">
+                  <CardContent className="p-5">
+                    <h4 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">Notes</h4>
+                    <p className="text-sm">{customer.notes}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card className="rounded-[14px] border-border/60 shadow-none">
+                <CardContent className="space-y-5 p-5">
+                  <div>
+                    <h4 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Preferences</h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <SummaryTile
+                        icon={Scissors}
+                        label="Most ordered service"
+                        value={engagementSummary?.most_ordered_service || "None yet"}
+                      />
+                      <SummaryTile
+                        icon={Package}
+                        label="Most ordered product"
+                        value={engagementSummary?.most_ordered_product || "None yet"}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Activity</h4>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <SummaryTile icon={CheckCircle} label="Services completed" value={engagementSummary?.services_completed ?? 0} />
+                      <SummaryTile icon={XCircle} label="Services cancelled" value={engagementSummary?.services_cancelled ?? 0} />
+                      <SummaryTile icon={RotateCcw} label="Refunds" value={engagementSummary?.refunds_count ?? 0} />
+                      <SummaryTile
+                        icon={CreditCard}
+                        label="Last transaction"
+                        value={lastTransactionAt ? format(new Date(lastTransactionAt), "MMM d, yyyy") : "None yet"}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

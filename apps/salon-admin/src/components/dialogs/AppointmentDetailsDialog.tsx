@@ -12,7 +12,6 @@ import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Switch } from "@ui/switch";
 import { Label } from "@ui/label";
-import { Separator } from "@ui/separator";
 import { Skeleton } from "@ui/skeleton";
 import {
   Clock,
@@ -225,10 +224,10 @@ export function AppointmentDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="mx-4 max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center justify-between gap-2 flex-wrap">
-            <span>Appointment Details</span>
+      <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden sm:max-w-3xl">
+        <DialogHeader className="flex-shrink-0 border-b border-border/60 pb-5">
+          <DialogTitle className="flex flex-wrap items-center justify-between gap-3 text-2xl">
+            <span>Appointment details</span>
             <div className="flex items-center gap-2">
               {isGifted && (
                 <Badge variant="secondary" className="bg-purple-100 text-purple-700 gap-1">
@@ -244,11 +243,13 @@ export function AppointmentDetailsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide pr-2">
-          <div className="space-y-5 py-2 pr-2">
+        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+          <div className="space-y-4 py-1 pr-1">
             {/* Customer Info */}
-            <div className="flex items-start gap-3">
-              <User className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#f1eafa] text-primary">
+                <User className="h-5 w-5" />
+              </div>
               <div>
                 <p className="font-medium">
                   {appointment.customer?.full_name || "Walk-in Customer"}
@@ -263,8 +264,10 @@ export function AppointmentDetailsDialog({
             </div>
 
             {/* Booking Info */}
-            <div className="flex items-start gap-3">
-              <Calendar className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#fff2ce] text-[#8a6510]">
+                <Calendar className="h-5 w-5" />
+              </div>
               <div className="space-y-1">
                 <div>
                   <p className="font-medium">{scheduledDate}</p>
@@ -278,8 +281,10 @@ export function AppointmentDetailsDialog({
               </div>
             </div>
 
-            <div className="flex items-start gap-3">
-              <Package className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#e1f3ec] text-[#268766]">
+                <Package className="h-5 w-5" />
+              </div>
               <div className="space-y-1 text-sm">
                 <p className="font-medium">Confirmation</p>
                 <div className="flex flex-wrap items-center gap-2">
@@ -302,8 +307,10 @@ export function AppointmentDetailsDialog({
             </div>
 
             {(bookingReference || bookingMetadata?.gift || bookingMetadata?.delivery_address || bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled") && (
-              <div className="flex items-start gap-3">
-                <Package className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#f1eafa] text-primary">
+                  <Package className="h-5 w-5" />
+                </div>
                 <div className="space-y-2 text-sm">
                   <p className="font-medium">Booking Context</p>
                   {bookingReference && (
@@ -338,8 +345,10 @@ export function AppointmentDetailsDialog({
             )}
 
             {/* Services */}
-            <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#f1eafa] text-primary">
+                <Clock className="h-5 w-5" />
+              </div>
               <div className="flex-1">
                 <p className="font-medium mb-2">Services</p>
                 <div className="space-y-2">
@@ -370,8 +379,10 @@ export function AppointmentDetailsDialog({
             </div>
 
             {/* Products */}
-            <div className="flex items-start gap-3">
-              <ShoppingBag className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#fff2ce] text-[#8a6510]">
+                <ShoppingBag className="h-5 w-5" />
+              </div>
               <div className="flex-1">
                 <p className="font-medium mb-2">Products</p>
                 {productsLoading ? (
@@ -420,11 +431,11 @@ export function AppointmentDetailsDialog({
               </div>
             </div>
 
-            <Separator />
-
             {/* Payment Summary */}
-            <div className="flex items-start gap-3">
-              <CreditCard className="w-5 h-5 text-muted-foreground mt-0.5" />
+            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#e1f3ec] text-[#268766]">
+                <CreditCard className="h-5 w-5" />
+              </div>
               <div className="flex-1 space-y-2">
                 <p className="font-medium">Payment Summary</p>
                 {paidOffline && (
@@ -467,8 +478,10 @@ export function AppointmentDetailsDialog({
 
             {/* Notes */}
             {appointment.notes && (
-              <div className="flex items-start gap-3">
-                <FileText className="w-5 h-5 text-muted-foreground mt-0.5" />
+              <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-muted text-muted-foreground">
+                  <FileText className="h-5 w-5" />
+                </div>
                 <div>
                   <p className="font-medium">Notes</p>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">
@@ -478,10 +491,8 @@ export function AppointmentDetailsDialog({
               </div>
             )}
 
-            <Separator />
-
             {/* Gifted Toggle */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-[14px] border border-border/60 bg-muted/30 px-4 py-3">
               <div className="flex items-center gap-2">
                 <Gift className="w-4 h-4 text-muted-foreground" />
                 <Label htmlFor="gifted-toggle" className="text-sm cursor-pointer">
@@ -498,8 +509,8 @@ export function AppointmentDetailsDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-shrink-0 flex-col sm:flex-row gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="flex-shrink-0 flex-col gap-2 border-t border-border/60 pt-5 sm:flex-row">
+          <Button variant="outline" className="rounded-full px-6" onClick={() => onOpenChange(false)}>
             Close
           </Button>
           {isAwaitingApproval && onOpenApprovalAction && (
@@ -531,7 +542,7 @@ export function AppointmentDetailsDialog({
               </Button>
             </>
           )}
-          <Button onClick={handleGoToAppointments}>Go to Appointments</Button>
+          <Button className="rounded-full px-7" onClick={handleGoToAppointments}>Go to appointments</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

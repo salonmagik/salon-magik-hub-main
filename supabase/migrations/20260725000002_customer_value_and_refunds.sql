@@ -1243,8 +1243,8 @@ begin
     update public.appointments
     set amount_paid = greatest(0, amount_paid - p_amount),
     payment_status = case
-      when amount_paid - p_amount <= 0 then 'refunded_full'
-      else 'refunded_partial'
+      when amount_paid - p_amount <= 0 then 'refunded_full'::public.payment_status
+      else 'refunded_partial'::public.payment_status
     end,
     updated_at = now()
     where id = v_transaction.appointment_id;

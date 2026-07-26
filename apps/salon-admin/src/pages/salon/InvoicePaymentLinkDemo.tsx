@@ -21,7 +21,7 @@ export default function InvoicePaymentLinkDemo() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-3xl">
+    <div className="container mx-auto max-w-3xl p-3 sm:p-6">
       <Card>
         <CardHeader>
           <CardTitle>Invoice Payment Link Demo</CardTitle>
@@ -56,7 +56,7 @@ export default function InvoicePaymentLinkDemo() {
 
               {selectedInvoice && (
                 <div className="space-y-4 pt-4 border-t">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                     <div>
                       <span className="text-muted-foreground">Invoice Number:</span>
                       <p className="font-medium">{selectedInvoice.invoice_number}</p>

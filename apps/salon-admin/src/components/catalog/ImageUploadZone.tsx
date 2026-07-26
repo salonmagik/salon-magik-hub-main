@@ -14,6 +14,7 @@ interface ImageUploadZoneProps {
   disabled?: boolean;
   thumbnailIndex?: number;
   onThumbnailIndexChange?: (index: number) => void;
+  dropzoneClassName?: string;
 }
 
 export function ImageUploadZone({
@@ -23,6 +24,7 @@ export function ImageUploadZone({
   disabled = false,
   thumbnailIndex = 0,
   onThumbnailIndexChange,
+  dropzoneClassName,
 }: ImageUploadZoneProps) {
   const { currentTenant } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
@@ -204,7 +206,8 @@ export function ImageUploadZone({
             "flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-lg transition-colors cursor-pointer",
             disabled || isUploading
               ? "border-muted bg-muted/50 cursor-not-allowed"
-              : "border-border hover:border-primary/50 hover:bg-muted/50"
+              : "border-border hover:border-primary/50 hover:bg-muted/50",
+            dropzoneClassName,
           )}
         >
           {isUploading ? (

@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { SalonSidebar } from "./SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
@@ -77,6 +77,11 @@ const mockedUseAuth = vi.mocked(useAuth);
 const mockedUsePermissions = vi.mocked(usePermissions);
 const mockedUseNotifications = vi.mocked(useNotifications);
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
+
 describe("SalonSidebar access refresh modal", () => {
   it("shows role/location refresh modal for unread access update notifications", () => {
     mockedUseAuth.mockReturnValue({
@@ -139,5 +144,76 @@ describe("SalonSidebar access refresh modal", () => {
     expect(screen.getByText("Access Updated")).toBeInTheDocument();
     expect(screen.getByText(/Your role has been updated by an admin/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+  });
+
+  it("does not navigate when a touch gesture scrolls across a sidebar link", () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: "11111111-1111-1111-1111-111111111111", email: "staff@test.com" },
+      profile: { full_name: "Team User" },
+      currentTenant: {
+        id: "tenant-1",
+        name: "Tenant",
+        slug: "tenant",
+        plan: "chain",
+        subscription_status: "active",
+      },
+      activeContextType: "location",
+      activeLocationId: "loc-1",
+      availableContexts: [{ type: "location", locationId: "loc-1", label: "Main Location" }],
+      isAssignmentPending: false,
+      setActiveContext: vi.fn(),
+      getFirstAllowedRoute: vi.fn().mockResolvedValue("/salon/appointments"),
+      refreshTenants: vi.fn(),
+    } as any);
+    mockedUsePermissions.mockReturnValue({
+      hasPermission: vi.fn().mockReturnValue(true),
+      isLoading: false,
+    } as any);
+    mockedUseNotifications.mockReturnValue({
+      notifications: [],
+      unreadCount: 0,
+      urgentNotifications: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      markAsRead: vi.fn(),
+      markAllAsRead: vi.fn(),
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={["/salon/appointments"]}>
+        <SalonSidebar>
+          <LocationProbe />
+        </SalonSidebar>
+      </MemoryRouter>,
+    );
+
+    const reportsLink = screen.getAllByRole("link", { name: "Reports" })[0];
+    fireEvent.pointerDown(reportsLink, {
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    });
+    fireEvent.pointerMove(reportsLink, {
+      pointerId: 1,
+      isPrimary: true,
+      clientX: 20,
+      clientY: 48,
+    });
+    fireEvent.pointerCancel(reportsLink, { pointerId: 1 });
+    fireEvent.click(reportsLink);
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/salon/appointments");
+
+    fireEvent.pointerDown(reportsLink, {
+      pointerId: 2,
+      isPrimary: true,
+      clientX: 20,
+      clientY: 20,
+    });
+    fireEvent.click(reportsLink);
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/salon/reports");
   });
 });

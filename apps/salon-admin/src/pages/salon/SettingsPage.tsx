@@ -2149,7 +2149,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				</CardHeader>
 			)}
 			<CardContent className="space-y-4">
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Email appointment reminders</p>
 						<p className="text-sm text-muted-foreground">
@@ -2165,7 +2165,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">SMS appointment reminders</p>
 						<p className="text-sm text-muted-foreground">
@@ -2183,7 +2183,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 				{(notificationSettings.emailAppointmentReminders ||
 					notificationSettings.smsAppointmentReminders) && (
-					<div className="flex items-center justify-between py-2 pl-4 border-l-2 border-primary/20">
+					<div className="flex flex-col items-start gap-3 border-l-2 border-primary/20 py-2 pl-4 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<p className="font-medium text-sm">Reminder timing</p>
 							<p className="text-sm text-muted-foreground">
@@ -2218,7 +2218,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</div>
 				)}
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">New booking notifications</p>
 						<p className="text-sm text-muted-foreground">
@@ -2234,7 +2234,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Cancellation alerts</p>
 						<p className="text-sm text-muted-foreground">
@@ -2250,7 +2250,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Email transaction alerts</p>
 						<p className="text-sm text-muted-foreground">
@@ -2267,7 +2267,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">In-app transaction alerts</p>
 						<p className="text-sm text-muted-foreground">
@@ -2283,7 +2283,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Daily digest</p>
 						<p className="text-sm text-muted-foreground">
@@ -2299,7 +2299,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				<div className="flex items-center justify-between py-2">
+				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Birthday messages</p>
 						<p className="text-sm text-muted-foreground">

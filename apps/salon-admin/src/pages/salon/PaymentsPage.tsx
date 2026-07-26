@@ -18,6 +18,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -41,6 +42,10 @@ import {
   Search,
   MoreVertical,
   Banknote,
+  ChevronRight,
+  Plus,
+  FileText,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -56,7 +61,7 @@ import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
 import { supabase } from "@/lib/supabase";
-import { format } from "date-fns";
+import { endOfDay, endOfMonth, format, startOfDay, startOfMonth, subDays } from "date-fns";
 import { cn } from "@shared/utils";
 import { RequestRefundDialog } from "@/components/dialogs/RequestRefundDialog";
 import { RejectRefundDialog } from "@/components/dialogs/RejectRefundDialog";
@@ -66,6 +71,15 @@ import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
 import { CustomerBalancesPanel } from "@/components/payments/CustomerBalancesPanel";
+import { DateRangePicker, type DateRangePreset } from "@ui/date-range-picker";
+
+const TRANSACTION_RANGE_PRESETS: DateRangePreset[] = [
+  { label: "Today", getRange: () => { const now = new Date(); return { from: now, to: now }; } },
+  { label: "Last 7 days", getRange: () => { const now = new Date(); return { from: subDays(now, 6), to: now }; } },
+  { label: "Last 30 days", getRange: () => { const now = new Date(); return { from: subDays(now, 29), to: now }; } },
+  { label: "This month", getRange: () => { const now = new Date(); return { from: startOfMonth(now), to: endOfMonth(now) }; } },
+  { label: "Last 60 days", getRange: () => { const now = new Date(); return { from: subDays(now, 59), to: now }; } },
+];
 
 const methodLabels: Record<string, string> = {
   card: "Card",
@@ -73,7 +87,7 @@ const methodLabels: Record<string, string> = {
   cash: "Cash",
   pos: "POS",
   transfer: "Transfer",
-  purse: "Salon Balance",
+  purse: "Store Credit",
 };
 
 const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
@@ -93,8 +107,8 @@ const typeChips: Record<string, { label: string; className: string }> = {
   payment: { label: "Inflow", className: "bg-success/10 text-success" },
   deposit: { label: "Deposit", className: "bg-teal-100 text-teal-700" },
   refund: { label: "Outflow", className: "bg-orange-100 text-orange-700" },
-  purse_topup: { label: "Balance top-up", className: "bg-blue-100 text-blue-700" },
-  purse_redemption: { label: "Balance credit", className: "bg-purple-100 text-purple-700" },
+  purse_topup: { label: "Store credit top-up", className: "bg-blue-100 text-blue-700" },
+  purse_redemption: { label: "Store credit used", className: "bg-purple-100 text-purple-700" },
 };
 
 const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
@@ -109,13 +123,14 @@ export default function PaymentsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "all");
   const [payoutsSubTab, setPayoutsSubTab] = useState("history");
-  const [dateFilter, setDateFilter] = useState("all-time");
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [hubTypeFilter, setHubTypeFilter] = useState(() => searchParams.get("type") || "all");
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [refundRequestsOpen, setRefundRequestsOpen] = useState(false);
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [recordCashOpen, setRecordCashOpen] = useState(false);
   const [assigningBranchId, setAssigningBranchId] = useState<string | null>(null);
@@ -124,7 +139,12 @@ export default function PaymentsPage() {
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
-  const { refunds, pendingRefunds, refetch: refetchRefunds } = useRefunds();
+  const {
+    refunds,
+    pendingRefunds,
+    refetch: refetchRefunds,
+    updateRefundStatusLocally,
+  } = useRefunds();
   const { locations, isLoading: locationsLoading } = useSalonsOverview("today");
 
   const isOwnerHub = activeContextType === "owner_hub";
@@ -170,13 +190,11 @@ export default function PaymentsPage() {
   };
 
   const getDateRange = () => {
-    const now = new Date();
-    switch (dateFilter) {
-      case "today": { const t = new Date(); t.setHours(0,0,0,0); return { start: t, end: now }; }
-      case "week": { const w = new Date(); w.setDate(w.getDate()-7); return { start: w, end: now }; }
-      case "month": { const m = new Date(); m.setMonth(m.getMonth()-1); return { start: m, end: now }; }
-      default: return null;
-    }
+    if (!dateRange.from) return null;
+    return {
+      start: startOfDay(dateRange.from),
+      end: endOfDay(dateRange.to || dateRange.from),
+    };
   };
 
   const filteredTransactions = transactions.filter((txn) => {
@@ -283,24 +301,58 @@ export default function PaymentsPage() {
         : null;
     const canRefund = (txn.type === "payment" || txn.type === "deposit") && txn.customer_id && remainingRefundAmount > 0 && txn.status === "completed";
     const chip = typeChips[txn.type];
+    const serviceNames = txn.appointment?.services
+      ?.map((service) => service.service_name)
+      .filter(Boolean)
+      .join(", ");
+    const transactionDescription = [chip?.label, serviceNames].filter(Boolean).join(", ");
+
+    const refundAction = canRefund ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full">
+            <MoreVertical className="w-4 h-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
+          >
+            {canCompleteRefunds ? "Make refund" : "Request refund"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
 
     return (
-      <div
-        key={txn.id}
-        className="flex items-center justify-between p-3 rounded-lg bg-surface gap-3"
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={cn("w-9 h-9 rounded-full flex items-center justify-center shrink-0", isIncoming ? "bg-success/10" : "bg-destructive/10")}>
-            {isIncoming ? <ArrowUpRight className="w-4 h-4 text-success" /> : <ArrowDownLeft className="w-4 h-4 text-destructive" />}
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium text-sm truncate">{txn.customer?.full_name || "Guest"}</p>
-              {chip && (
-                <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0", chip.className)}>
-                  {chip.label}
-                </span>
+      <div key={txn.id} className="md:[&:last-child>div]:border-b-0">
+        <article className="rounded-[14px] border border-border/60 bg-white p-4 shadow-sm md:hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{txn.customer?.full_name || "Guest"}</p>
+              {showBranch && txn.appointment?.location?.name && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {txn.appointment.location.name}
+                </p>
               )}
+            </div>
+            <p className={cn("shrink-0 font-serif text-base font-semibold", isIncoming ? "text-success" : "text-destructive")}>
+              {isIncoming ? "+" : "-"}{formatCurrency(Number(txn.amount))}
+            </p>
+          </div>
+
+          <div className="mt-3 flex min-w-0 items-center gap-2.5">
+            <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]", isIncoming ? "bg-success/10" : "bg-destructive/10")}>
+              {isIncoming ? <ArrowUpRight className="h-4 w-4 text-success" /> : <ArrowDownLeft className="h-4 w-4 text-destructive" />}
+            </div>
+            <p className="min-w-0 truncate text-sm text-muted-foreground">
+              {[transactionDescription, methodLabels[txn.method] || txn.method].filter(Boolean).join(" · ")}
+            </p>
+          </div>
+
+          {(txn.payment_group_id || refundState || transactionRefunds.some((refund) => refund.status === "pending")) && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {txn.payment_group_id && (
                 <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
                   Split payment
@@ -316,62 +368,99 @@ export default function PaymentsPage() {
                   Refund pending
                 </span>
               )}
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(txn.created_at), "MMM d, yyyy")}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <Badge className={cn("rounded-full px-3 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
+              {refundAction}
+            </div>
+          </div>
+        </article>
+
+        <div className="hidden gap-3 border-b px-5 py-4 md:grid md:grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)] md:items-center">
+          <p className="text-sm text-muted-foreground">
+            {format(new Date(txn.created_at), "MMM d, yyyy")}
+          </p>
+          <p className="truncate font-medium">{txn.customer?.full_name || "Guest"}</p>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className={cn("w-9 h-9 rounded-full flex items-center justify-center shrink-0", isIncoming ? "bg-success/10" : "bg-destructive/10")}>
+              {isIncoming ? <ArrowUpRight className="w-4 h-4 text-success" /> : <ArrowDownLeft className="w-4 h-4 text-destructive" />}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {chip && (
+                  <span className="truncate text-sm font-medium">
+                    {transactionDescription}
+                  </span>
+                )}
+                {txn.payment_group_id && (
+                  <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                    Split payment
+                  </span>
+                )}
+                {refundState && (
+                  <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                    {refundState}
+                  </span>
+                )}
+                {!refundState && transactionRefunds.some((refund) => refund.status === "pending") && (
+                  <span className="rounded-full bg-warning-bg px-1.5 py-0.5 text-xs font-medium text-warning-foreground">
+                    Refund pending
+                  </span>
+                )}
+              </div>
               {showBranch && txn.appointment?.location?.name && (
-                <Badge variant="outline" className="text-xs shrink-0">{txn.appointment.location.name}</Badge>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {txn.appointment.location.name}
+                </p>
               )}
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
-              <span>{methodLabels[txn.method] || txn.method}</span>
-              <span>·</span>
-              <span>{format(new Date(txn.created_at), "MMM d, h:mm a")}</span>
-            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="text-right">
-            <p className={cn("font-semibold text-sm", isIncoming ? "text-success" : "text-destructive")}>
+          <p className="min-w-0 truncate whitespace-nowrap text-sm">{methodLabels[txn.method] || txn.method}</p>
+          <p className={cn("font-serif text-base font-semibold", isIncoming ? "text-success" : "text-destructive")}>
               {isIncoming ? "+" : "-"}{formatCurrency(Number(txn.amount))}
-            </p>
-            <Badge className={cn("text-xs", style.bg, style.text)}>{txn.status}</Badge>
+          </p>
+          <div className="flex items-center justify-start gap-2">
+            <Badge className={cn("rounded-full px-4 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
+            {refundAction}
           </div>
-          {canRefund && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
-                >
-                  {canCompleteRefunds ? "Make refund" : "Request refund"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </div>
     );
   };
 
+  const transactionTableHeader = (
+    <div className="hidden grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)] gap-3 border-b bg-muted/20 px-5 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
+      <span>Date</span>
+      <span>Customer</span>
+      <span>Type</span>
+      <span>Method</span>
+      <span>Amount</span>
+      <span>Status</span>
+    </div>
+  );
+
   // ─── Hub: All Transactions content ───────────────────────────────────────────
   const renderHubAllTransactions = () => (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
         {[
           { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
           { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
-          { title: "Customer Balances", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
+          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
         ].map((s) => {
           const Icon = s.icon;
           return (
-            <Card key={s.title}>
-              <CardContent className="p-4 flex items-center justify-between">
-                <div><p className="text-sm text-muted-foreground">{s.title}</p><p className="text-2xl font-semibold mt-1">{s.value}</p></div>
-                <div className={`p-2 rounded-lg ${s.bg}`}><Icon className={`w-5 h-5 ${s.color}`} /></div>
+            <Card key={s.title} className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
+                <div><p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p><p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p></div>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-[10px] ${s.bg}`}><Icon className={`h-5 w-5 ${s.color}`} /></div>
               </CardContent>
             </Card>
           );
@@ -380,64 +469,71 @@ export default function PaymentsPage() {
 
       {/* Pending Refunds */}
       {canCompleteRefunds && pendingRefunds.length > 0 && (
-        <Card className="border-warning bg-warning-bg/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-warning-foreground" />
-              Pending Refund Requests ({pendingRefunds.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {pendingRefunds.map((refund) => (
-              <div key={refund.id} className="flex items-center justify-between p-3 rounded-lg bg-background border">
-                <div>
-                  <p className="font-medium text-sm">{refund.customer?.full_name || "Unknown"}</p>
-                  <p className="text-xs text-muted-foreground">{formatCurrency(Number(refund.amount))} · {refund.refund_type.replace("_", " ")}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-destructive/10"
-                    onClick={() => { setSelectedRefund(refund); setRejectDialogOpen(true); }}><X className="w-3.5 h-3.5" /></Button>
-                  <Button size="sm" className="bg-success hover:bg-success/90"
-                    onClick={() => { setSelectedRefund(refund); setApproveDialogOpen(true); }}><Check className="w-3.5 h-3.5" /></Button>
-                </div>
+        <Card className="border-warning/40 bg-warning-bg/20">
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning-bg">
+                <AlertCircle className="h-5 w-5 text-warning-foreground" />
               </div>
-            ))}
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {pendingRefunds.length} refund {pendingRefunds.length === 1 ? "request" : "requests"} need review
+                </p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {formatCurrency(pendingRefunds.reduce((total, refund) => total + Number(refund.amount), 0))} pending in total
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" className="w-full bg-background sm:w-auto" onClick={() => setRefundRequestsOpen(true)}>
+              Review requests <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
           </CardContent>
         </Card>
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+      <div className="scrollbar-hide flex max-w-full items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
+        {[
+          { value: "all", label: "All" },
+          { value: "revenue", label: "Inflow" },
+          { value: "refunds", label: "Refunds" },
+          { value: "purse", label: "Store credit" },
+          { value: "cash", label: "Cash" },
+        ].map((filter) => (
+          <Button
+            key={filter.value}
+            type="button"
+            variant={hubTypeFilter === filter.value ? "default" : "outline"}
+            className="h-11 shrink-0 rounded-full px-6"
+            onClick={() => setHubTypeFilter(filter.value)}
+          >
+            {filter.label}
+          </Button>
+        ))}
+      </div>
+      <div className="flex flex-row items-center gap-3 sm:flex-wrap">
+        <div className="relative min-w-0 flex-1 sm:min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search customer or branch…" className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+          <Input placeholder="Search transactions…" className="h-12 rounded-[12px] bg-white pl-10 shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className="w-[140px]"><SelectValue placeholder="Date range" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="month">This Month</SelectItem>
-            <SelectItem value="all-time">All Time</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={hubTypeFilter} onValueChange={setHubTypeFilter}>
-          <SelectTrigger className="w-[140px]"><SelectValue placeholder="Type" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="revenue">Inflow</SelectItem>
-            <SelectItem value="refunds">Refunds</SelectItem>
-            <SelectItem value="purse">Salon balance</SelectItem>
-            <SelectItem value="cash">Cash payments</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex-1" />
-        <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
+        <DateRangePicker
+          from={dateRange.from}
+          to={dateRange.to}
+          onChange={(range) => setDateRange(range)}
+          onClear={() => setDateRange({})}
+          clearLabel="All time"
+          placeholder="All time"
+          presets={TRANSACTION_RANGE_PRESETS}
+          className="h-12 w-[138px] shrink-0 rounded-[12px] bg-white shadow-sm sm:w-auto sm:min-w-[220px]"
+        />
+        <div className="hidden lg:block [&>button]:h-12 [&>button]:rounded-full">
+          <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
+        </div>
       </div>
 
       {/* Transactions */}
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="overflow-visible border-0 bg-transparent shadow-none md:overflow-hidden md:rounded-[14px] md:border md:border-border/60 md:bg-white md:shadow-sm">
+        <CardHeader className="hidden pb-3 md:flex">
           <CardTitle className="text-base">
             All Transactions
             {filteredTransactions.length > 0 && (
@@ -445,13 +541,13 @@ export default function PaymentsPage() {
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {isLoading ? (
             <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="flex items-center gap-3 p-3"><Skeleton className="w-9 h-9 rounded-full" /><div><Skeleton className="h-4 w-36 mb-1" /><Skeleton className="h-3 w-24" /></div><Skeleton className="h-5 w-20 ml-auto" /></div>)}</div>
           ) : filteredTransactions.length === 0 ? (
             <div className="text-center py-10"><CreditCard className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" /><p className="text-muted-foreground">No transactions found</p></div>
           ) : (
-            <div className="space-y-2">{filteredTransactions.map((txn) => renderTransactionRow(txn, true))}</div>
+            <div className="space-y-3 md:space-y-0">{transactionTableHeader}{filteredTransactions.map((txn) => renderTransactionRow(txn, true))}</div>
           )}
         </CardContent>
       </Card>
@@ -483,7 +579,7 @@ export default function PaymentsPage() {
 
       {/* Payouts sub-tabs */}
       <Tabs value={payoutsSubTab} onValueChange={setPayoutsSubTab}>
-        <TabsList>
+        <TabsList className="h-auto w-full justify-start rounded-full bg-muted/70 p-1.5 lg:w-auto">
           <TabsTrigger value="history" className="gap-2"><History className="w-4 h-4" />History</TabsTrigger>
           <TabsTrigger value="accounts" className="gap-2"><Building2 className="w-4 h-4" />Accounts</TabsTrigger>
           <TabsTrigger value="settings" className="gap-2"><Settings2 className="w-4 h-4" />Settings</TabsTrigger>
@@ -604,18 +700,18 @@ export default function PaymentsPage() {
   const renderBranchView = () => (
     <>
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
         {[
           { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
           { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
-          { title: "Customer Balances", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
+          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
         ].map((s) => {
           const Icon = s.icon;
           return (
-            <Card key={s.title}>
-              <CardContent className="p-4 flex items-center justify-between">
-                <div><p className="text-sm text-muted-foreground">{s.title}</p><p className="text-2xl font-semibold mt-1">{s.value}</p></div>
-                <div className={`p-2 rounded-lg ${s.bg}`}><Icon className={`w-5 h-5 ${s.color}`} /></div>
+            <Card key={s.title} className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
+                <div><p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p><p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p></div>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-[10px] ${s.bg}`}><Icon className={`h-5 w-5 ${s.color}`} /></div>
               </CardContent>
             </Card>
           );
@@ -624,76 +720,76 @@ export default function PaymentsPage() {
 
       {/* Pending Refunds */}
       {canCompleteRefunds && pendingRefunds.length > 0 && (
-        <Card className="border-warning bg-warning-bg/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-warning-foreground" />
-              Pending Refund Requests ({pendingRefunds.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {pendingRefunds.map((refund) => (
-              <div key={refund.id} className="flex items-center justify-between p-3 rounded-lg bg-background border">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{refund.customer?.full_name || "Unknown"}</p>
-                    <Badge className={cn("text-xs", refundStatusStyles[refund.status]?.bg, refundStatusStyles[refund.status]?.text)}>{refund.status}</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">{formatCurrency(Number(refund.amount))} · {refund.refund_type.replace("_", " ")}</p>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">Reason: {refund.reason}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-destructive/10"
-                    onClick={() => { setSelectedRefund(refund); setRejectDialogOpen(true); }}><X className="w-4 h-4" /></Button>
-                  <Button size="sm" className="bg-success hover:bg-success/90"
-                    onClick={() => { setSelectedRefund(refund); setApproveDialogOpen(true); }}><Check className="w-4 h-4" /></Button>
-                </div>
+        <Card className="border-warning/40 bg-warning-bg/20">
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning-bg">
+                <AlertCircle className="h-5 w-5 text-warning-foreground" />
               </div>
-            ))}
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {pendingRefunds.length} refund {pendingRefunds.length === 1 ? "request" : "requests"} need review
+                </p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {formatCurrency(pendingRefunds.reduce((total, refund) => total + Number(refund.amount), 0))} pending in total
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full shrink-0 border-warning/50 bg-background sm:w-auto"
+              onClick={() => setRefundRequestsOpen(true)}
+            >
+              Review requests
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
           </CardContent>
         </Card>
       )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="revenue" className="gap-2"><ArrowUpRight className="w-4 h-4" />Inflow</TabsTrigger>
-          <TabsTrigger value="refunds" className="gap-2"><ArrowDownLeft className="w-4 h-4" />Refunds</TabsTrigger>
-          <TabsTrigger value="purse" className="gap-2"><Wallet className="w-4 h-4" />Salon balance</TabsTrigger>
-          <TabsTrigger value="cash" className="gap-2"><Banknote className="w-4 h-4" />Cash</TabsTrigger>
-          <TabsTrigger value="balances" className="gap-2"><Wallet className="w-4 h-4" />Customer balances</TabsTrigger>
+        <TabsList className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5">
+          <TabsTrigger value="all" className="shrink-0 rounded-full px-6">All</TabsTrigger>
+          <TabsTrigger value="revenue" className="shrink-0 rounded-full px-6"><ArrowUpRight className="mr-2 w-4 h-4" />Inflow</TabsTrigger>
+          <TabsTrigger value="refunds" className="shrink-0 rounded-full px-6"><ArrowDownLeft className="mr-2 w-4 h-4" />Refunds</TabsTrigger>
+          <TabsTrigger value="purse" className="shrink-0 rounded-full px-6"><Wallet className="mr-2 w-4 h-4" />Store credit</TabsTrigger>
+          <TabsTrigger value="cash" className="shrink-0 rounded-full px-6"><Banknote className="mr-2 w-4 h-4" />Cash</TabsTrigger>
+          <TabsTrigger value="balances" className="shrink-0 rounded-full px-6"><Wallet className="mr-2 w-4 h-4" />Customer balances</TabsTrigger>
         </TabsList>
         <div className="mt-6">
           {activeTab === "balances" ? (
             <CustomerBalancesPanel canAdjust={canCompleteRefunds} />
           ) : (
           <>
-          <div className="flex flex-wrap items-center gap-4 mb-6">
-            <div className="relative flex-1 max-w-md">
+          <div className="mb-6 flex flex-row items-center gap-3 sm:flex-wrap sm:gap-4">
+            <div className="relative min-w-0 flex-1 sm:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search transactions…" className="pl-9" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <Input placeholder="Search transactions…" className="h-12 rounded-[12px] bg-white pl-10 shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             </div>
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger className="w-[150px]"><SelectValue placeholder="Date range" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-                <SelectItem value="all-time">All Time</SelectItem>
-              </SelectContent>
-            </Select>
-            <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
+            <DateRangePicker
+              from={dateRange.from}
+              to={dateRange.to}
+              onChange={(range) => setDateRange(range)}
+              onClear={() => setDateRange({})}
+              clearLabel="All time"
+              placeholder="All time"
+              presets={TRANSACTION_RANGE_PRESETS}
+              className="h-12 w-[138px] shrink-0 rounded-[12px] bg-white shadow-sm sm:w-auto sm:min-w-[220px]"
+            />
+            <div className="hidden lg:block [&>button]:h-12 [&>button]:rounded-full">
+              <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
+            </div>
           </div>
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Transactions</CardTitle></CardHeader>
-            <CardContent>
+          <Card className="overflow-visible border-0 bg-transparent shadow-none md:overflow-hidden md:rounded-[14px] md:border md:border-border/60 md:bg-white md:shadow-sm">
+            <CardHeader className="hidden md:flex"><CardTitle className="text-lg">Transactions</CardTitle></CardHeader>
+            <CardContent className="p-0">
               {isLoading ? (
                 <div className="space-y-4">{[1,2,3,4].map((i) => <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface"><div className="flex items-center gap-4"><Skeleton className="w-10 h-10 rounded-full" /><div><Skeleton className="h-4 w-32 mb-1" /><Skeleton className="h-3 w-24" /></div></div><Skeleton className="h-6 w-20" /></div>)}</div>
               ) : filteredTransactions.length === 0 ? (
                 <div className="text-center py-12"><CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" /><p className="text-muted-foreground">No transactions found</p></div>
               ) : (
-                <div className="space-y-3">{filteredTransactions.map((txn) => renderTransactionRow(txn, false))}</div>
+                <div className="space-y-3 md:space-y-0">{transactionTableHeader}{filteredTransactions.map((txn) => renderTransactionRow(txn, false))}</div>
               )}
             </CardContent>
           </Card>
@@ -706,16 +802,16 @@ export default function PaymentsPage() {
 
   return (
     <SalonSidebar>
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[1500px] space-y-6 sm:space-y-9">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold">{pageTitle}</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">{pageTitle}</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2 sm:text-base">
               {isOwnerHub ? "Income, refunds, and payouts across all branches." : "Track transactions, manage refunds, and monitor customer balances."}
             </p>
           </div>
-          <Button onClick={() => setRecordCashOpen(true)}>
+          <Button onClick={() => setRecordCashOpen(true)} className="hidden h-12 rounded-full px-7 lg:flex">
             <Banknote className="mr-2 h-4 w-4" />
             Record cash payment
           </Button>
@@ -723,7 +819,7 @@ export default function PaymentsPage() {
 
         {isOwnerHub ? (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
+            <TabsList className="scrollbar-hide max-w-full justify-start overflow-x-auto overscroll-x-contain">
               <TabsTrigger value="all">All Transactions</TabsTrigger>
               <TabsTrigger value="balances">Customer Balances</TabsTrigger>
               {canManagePayouts && (
@@ -744,6 +840,38 @@ export default function PaymentsPage() {
           renderBranchView()
         )}
       </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Transaction actions"
+            className="fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top" className="mb-2 w-52">
+          <DropdownMenuItem onClick={() => setRecordCashOpen(true)}>
+            <Banknote className="mr-2 h-4 w-4" />
+            Record cash payment
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={filteredTransactions.length === 0}
+            onClick={() => handleExport("csv")}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Export as CSV
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={filteredTransactions.length === 0}
+            onClick={() => handleExport("xlsx")}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Export as XLS
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Dialogs */}
       <WithdrawalDialog open={withdrawalOpen} onOpenChange={setWithdrawalOpen} />
@@ -803,7 +931,13 @@ export default function PaymentsPage() {
           ...selectedRefund.transaction,
           customer: selectedRefund.customer,
         } : null}
-        onSuccess={() => { refetchRefunds(); refetchTransactions(); }}
+        onSuccess={() => {
+          if (selectedRefund?.id) {
+            updateRefundStatusLocally(selectedRefund.id, "completed");
+          }
+          void refetchRefunds();
+          void refetchTransactions();
+        }}
       />
 
       <RejectRefundDialog
@@ -811,8 +945,79 @@ export default function PaymentsPage() {
         onOpenChange={setRejectDialogOpen}
         requestId={selectedRefund?.id || null}
         customerName={selectedRefund?.customer?.full_name}
-        onSuccess={() => { refetchRefunds(); refetchTransactions(); }}
+        onSuccess={(requestId) => {
+          updateRefundStatusLocally(requestId, "rejected");
+          void refetchRefunds();
+          void refetchTransactions();
+        }}
       />
+
+      <Dialog open={refundRequestsOpen} onOpenChange={setRefundRequestsOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Refund requests</DialogTitle>
+            <DialogDescription>
+              Review {pendingRefunds.length} pending {pendingRefunds.length === 1 ? "request" : "requests"} without interrupting the transaction list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[min(32rem,65vh)] space-y-3 overflow-y-auto overscroll-contain pr-1">
+            {pendingRefunds.length === 0 ? (
+              <div className="rounded-xl border border-dashed py-10 text-center">
+                <CheckCircle className="mx-auto h-8 w-8 text-success" />
+                <p className="mt-3 font-medium">All caught up</p>
+                <p className="mt-1 text-sm text-muted-foreground">There are no refund requests awaiting review.</p>
+              </div>
+            ) : (
+              pendingRefunds.map((refund) => (
+                <div
+                  key={refund.id}
+                  className="flex flex-col gap-4 rounded-xl border bg-background p-4 sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{refund.customer?.full_name || "Unknown customer"}</p>
+                      <Badge className={cn("text-xs", refundStatusStyles[refund.status]?.bg, refundStatusStyles[refund.status]?.text)}>
+                        {refund.status}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm font-medium">
+                      {formatCurrency(Number(refund.amount))} · {refund.refund_type.replace("_", " ")}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{refund.reason}</p>
+                  </div>
+                  <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setSelectedRefund(refund);
+                        setRefundRequestsOpen(false);
+                        setRejectDialogOpen(true);
+                      }}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-success hover:bg-success/90"
+                      onClick={() => {
+                        setSelectedRefund(refund);
+                        setRefundRequestsOpen(false);
+                        setApproveDialogOpen(true);
+                      }}
+                    >
+                      <Check className="mr-2 h-4 w-4" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </SalonSidebar>
   );
 }

@@ -1,5 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
@@ -7,7 +14,7 @@ import { Textarea } from "@ui/textarea";
 import { Checkbox } from "@ui/checkbox";
 import { ScrollArea } from "@ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
-import { Gift, Loader2, Save, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
+import { Gift, Loader2, Plus, Minus, Scissors, ShoppingBag } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useServices } from "@/hooks/useServices";
 import { useProducts } from "@/hooks/useProducts";
@@ -15,11 +22,9 @@ import { usePackages } from "@/hooks/usePackages";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
-import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { formatCurrency, getCurrencySymbol } from "@shared/currency";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
-import { moveThumbnailToFront } from "@/lib/imageOrder";
 
 interface PreSelectedItem {
   id: string;
@@ -70,13 +75,11 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   const { products, isLoading: productsLoading } = useProducts();
   const { createPackage } = usePackages();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [thumbnailIndex, setThumbnailIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"services" | "products">("services");
   const [formData, setFormData] = useState({
     name: "",
     price: "",
     description: "",
-    images: [] as string[],
     locationIds: [] as string[],
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
@@ -178,10 +181,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       name: "",
       price: "",
       description: "",
-      images: [],
       locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
     });
-    setThumbnailIndex(0);
     setSelectedServices([]);
     setSelectedProducts([]);
     setActiveTab("services");
@@ -200,6 +201,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   };
 
   const toggleProduct = (product: { id: string; name: string; price: number }) => {
+    const inventoryProduct = products.find((item) => item.id === product.id);
+    if (Number(inventoryProduct?.stock_quantity ?? 0) <= 0) return;
     const exists = selectedProducts.find((p) => p.productId === product.id);
     if (exists) {
       setSelectedProducts((prev) => prev.filter((p) => p.productId !== product.id));
@@ -244,7 +247,6 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
         price: parseAmountInput(formData.price),
         originalPrice: originalPrice || undefined,
         description: formData.description || undefined,
-        imageUrls: moveThumbnailToFront(formData.images, thumbnailIndex),
         serviceItems: selectedServices.map((item) => ({
           serviceId: item.serviceId,
           quantity: item.quantity,
@@ -289,24 +291,28 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="flex flex-row items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Gift className="w-5 h-5 text-primary" />
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 bg-white p-5 shadow-2xl sm:max-h-[92vh] sm:max-w-[580px] sm:p-[34px]">
+        <DialogHeader className="mb-7 flex flex-row items-center gap-3.5 pr-10 text-left">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#e3f3eb]">
+            <Gift className="h-5 w-5 text-[#2e7d5b]" />
           </div>
-          <div>
-            <DialogTitle className="text-xl">Create Package</DialogTitle>
-            <p className="text-sm text-muted-foreground">Bundle services and products together at a special price</p>
+          <div className="min-w-0">
+            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px] text-[#141014]">
+              Create package
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 text-[13px] text-[#141014]/60">
+              Bundle services and products together at a special price
+            </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {/* Package Name */}
-          <div className="space-y-2">
-            <Label>
-              Package Name <span className="text-destructive">*</span>
+        <form onSubmit={handleSubmit} className="space-y-[18px]">
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">
+              Package name <span className="text-[#2e1f4e]">*</span>
             </Label>
             <Input
+              className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
               placeholder="e.g. Wedding Day Package"
               value={formData.name}
               onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
@@ -328,10 +334,9 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
             </p>
           )}
 
-          {/* Select Items - Tabbed Interface */}
-          <div className="space-y-2">
-            <Label>
-              Included Items <span className="text-destructive">*</span>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">
+              Included items <span className="text-[#2e1f4e]">*</span>
               {totalItemsSelected > 0 && (
                 <span className="ml-2 text-xs text-muted-foreground">
                   ({totalItemsSelected} selected)
@@ -340,9 +345,9 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
             </Label>
             
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "services" | "products")}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="services" className="flex items-center gap-2">
-                  <Scissors className="w-4 h-4" />
+              <TabsList className="h-auto w-fit max-w-full rounded-full bg-[#f1ece3] p-1">
+                <TabsTrigger value="services" className="h-9 rounded-full px-4 text-[13.5px]">
+                  <Scissors className="h-3.5 w-3.5" />
                   Services
                   {selectedServices.length > 0 && (
                     <span className="ml-1 text-xs bg-primary/20 px-1.5 py-0.5 rounded-full">
@@ -350,8 +355,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="products" className="flex items-center gap-2">
-                  <ShoppingBag className="w-4 h-4" />
+                <TabsTrigger value="products" className="h-9 rounded-full px-4 text-[13.5px]">
+                  <ShoppingBag className="h-3.5 w-3.5" />
                   Products
                   {selectedProducts.length > 0 && (
                     <span className="ml-1 text-xs bg-primary/20 px-1.5 py-0.5 rounded-full">
@@ -361,8 +366,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="services" className="mt-2">
-                <ScrollArea className="h-48 rounded-md border p-2">
+              <TabsContent value="services" className="mt-3">
+                <ScrollArea className="h-[220px] rounded-[14px] border border-[#141014]/[0.06] p-2">
                   {servicesLoading ? (
                     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                       Loading services...
@@ -372,49 +377,52 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                       No services available. Create some first.
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div>
                       {services.map((service) => {
                         const selected = selectedServices.find((s) => s.serviceId === service.id);
                         return (
                           <div
                             key={service.id}
                             className={cn(
-                              "flex items-center justify-between p-2 rounded-lg border transition-colors",
-                              selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50",
+                              "flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors",
+                              selected ? "bg-[#fbf9f6]" : "hover:bg-[#fbf9f6]",
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <Checkbox checked={!!selected} onCheckedChange={() => toggleService(service)} />
-                              <div>
-                                <p className="font-medium text-sm">{service.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(Number(service.price), selectedCurrency)} • {service.duration_minutes} mins
-                                </p>
-                              </div>
+                            <Checkbox checked={!!selected} onCheckedChange={() => toggleService(service)} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{service.name}</p>
+                              <p className="text-xs text-[#141014]/60">
+                                {service.duration_minutes} mins
+                              </p>
                             </div>
-                            {selected && (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => updateServiceQuantity(service.id, -1)}
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </Button>
-                                <span className="w-8 text-center text-sm font-medium">{selected.quantity}</span>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => updateServiceQuantity(service.id, 1)}
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            )}
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <p className="font-serif text-sm">
+                                {formatCurrency(Number(service.price), selectedCurrency)}
+                              </p>
+                              {selected && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md"
+                                    onClick={() => updateServiceQuantity(service.id, -1)}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-6 text-center text-xs font-medium">{selected.quantity}</span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md"
+                                    onClick={() => updateServiceQuantity(service.id, 1)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -423,8 +431,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="products" className="mt-2">
-                <ScrollArea className="h-48 rounded-md border p-2">
+              <TabsContent value="products" className="mt-3">
+                <ScrollArea className="h-[220px] rounded-[14px] border border-[#141014]/[0.06] p-2">
                   {productsLoading ? (
                     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                       Loading products...
@@ -434,50 +442,61 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
                       No products available. Create some first.
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div>
                       {products.map((product) => {
                         const selected = selectedProducts.find((p) => p.productId === product.id);
+                        const isOutOfStock = Number(product.stock_quantity ?? 0) <= 0;
                         return (
                           <div
                             key={product.id}
                             className={cn(
-                              "flex items-center justify-between p-2 rounded-lg border transition-colors",
-                              selected ? "bg-primary/5 border-primary" : "hover:bg-muted/50",
+                              "flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors",
+                              isOutOfStock
+                                ? "opacity-45"
+                                : selected
+                                  ? "bg-[#fbf9f6]"
+                                  : "hover:bg-[#fbf9f6]",
                             )}
                           >
-                            <div className="flex items-center gap-3">
-                              <Checkbox checked={!!selected} onCheckedChange={() => toggleProduct(product)} />
-                              <div>
-                                <p className="font-medium text-sm">{product.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(Number(product.price), selectedCurrency)}
-                                  {product.stock_quantity !== undefined && ` • ${product.stock_quantity} in stock`}
-                                </p>
-                              </div>
+                            <Checkbox
+                              checked={!!selected}
+                              disabled={isOutOfStock}
+                              onCheckedChange={() => toggleProduct(product)}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium">{product.name}</p>
+                              <p className="text-xs text-[#141014]/60">
+                                {isOutOfStock ? "Out of stock" : `${product.stock_quantity} in stock`}
+                              </p>
                             </div>
-                            {selected && (
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => updateProductQuantity(product.id, -1)}
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </Button>
-                                <span className="w-8 text-center text-sm font-medium">{selected.quantity}</span>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => updateProductQuantity(product.id, 1)}
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            )}
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <p className="font-serif text-sm">
+                                {formatCurrency(Number(product.price), selectedCurrency)}
+                              </p>
+                              {selected && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md"
+                                    onClick={() => updateProductQuantity(product.id, -1)}
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-6 text-center text-xs font-medium">{selected.quantity}</span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md"
+                                    onClick={() => updateProductQuantity(product.id, 1)}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -488,25 +507,34 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
             </Tabs>
           </div>
 
-          {/* Pricing Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Original Value</Label>
-              <Input value={formatCurrency(originalPrice, selectedCurrency)} disabled className="bg-muted" />
+          <div className="grid grid-cols-1 gap-3.5 min-[480px]:grid-cols-2">
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">Original value</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#141014]/42">
+                  {currencySymbol}
+                </span>
+                <Input
+                  value={originalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  disabled
+                  className="h-[46px] rounded-lg border-[#141014]/10 bg-[#f1ece3] pl-8 pr-3 text-[14.5px] opacity-100 shadow-none disabled:opacity-100"
+                />
+              </div>
+              <p className="text-xs text-[#141014]/42">Calculated automatically from selected items.</p>
             </div>
-            <div className="space-y-2">
-              <Label>
-                Package Price <span className="text-destructive">*</span>
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">
+                Package price <span className="text-[#2e1f4e]">*</span>
               </Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#141014]/42">
                   {currencySymbol}
                 </span>
                 <Input
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="pl-8"
+                  className="h-[46px] rounded-lg border-[#141014]/10 pl-8 pr-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
                   value={formData.price}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, price: formatAmountInput(e.target.value) }))
@@ -523,47 +551,34 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
             </div>
           )}
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label>Description</Label>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">Description</Label>
             <Textarea
               placeholder="Describe what's included in this package..."
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-              rows={2}
+              rows={3}
+              className="min-h-[96px] resize-y rounded-lg border-[#141014]/10 px-3.5 py-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
             />
           </div>
 
-          {/* Images */}
-          <div className="space-y-2">
-            <Label>Images (Optional)</Label>
-            <ImageUploadZone
-              images={formData.images}
-              onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
-              thumbnailIndex={thumbnailIndex}
-              onThumbnailIndexChange={setThumbnailIndex}
-              maxImages={2}
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse gap-2 pt-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="w-full sm:w-auto"
+              className="h-11 w-full rounded-full border-[#141014]/10 px-5 text-[14.5px] font-medium shadow-none hover:bg-[#f1ece3] min-[480px]:w-auto"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              className="gap-2 w-full sm:w-auto"
+              className="h-11 w-full rounded-full bg-[#141014] px-5 text-[14.5px] font-medium text-white hover:bg-[#2e1f4e] min-[480px]:w-auto"
               disabled={isSubmitting || !isFormValid}
             >
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Create Package
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create package
             </Button>
           </DialogFooter>
         </form>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
@@ -19,7 +19,7 @@ export function RejectRefundDialog({
   onOpenChange: (open: boolean) => void;
   requestId: string | null;
   customerName?: string;
-  onSuccess?: () => void;
+  onSuccess?: (requestId: string) => void;
 }) {
   const [stage, setStage] = useState<Stage>("reason");
   const [reason, setReason] = useState("");
@@ -45,7 +45,7 @@ export function RejectRefundDialog({
       return;
     }
     setStage("success");
-    onSuccess?.();
+    onSuccess?.(requestId);
   };
 
   return (
@@ -59,11 +59,11 @@ export function RejectRefundDialog({
                 : <TriangleAlert className="h-7 w-7 text-destructive" />}
             </div>
             <DialogTitle>{stage === "success" ? "Request rejected" : "Request wasn’t rejected"}</DialogTitle>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <DialogDescription className="mt-2">
               {stage === "success"
                 ? `${customerName || "The requester"} can see the updated refund status.`
                 : errorMessage}
-            </p>
+            </DialogDescription>
             <div className="mt-6 flex gap-2">
               {stage === "error" && (
                 <Button variant="outline" className="flex-1" onClick={() => setStage("reason")}>
@@ -85,11 +85,11 @@ export function RejectRefundDialog({
                 <XCircle className="h-5 w-5 text-destructive" />
               </div>
               <DialogTitle>{stage === "confirm" ? "Confirm rejection" : "Reject refund request"}</DialogTitle>
-              <p className="text-sm text-muted-foreground">
+              <DialogDescription>
                 {stage === "confirm"
                   ? "The reserved refund amount will become available for another request."
                   : "Give the staff member and customer a clear reason for this decision."}
-              </p>
+              </DialogDescription>
             </DialogHeader>
             <div className="py-4">
               {stage === "reason" ? (
