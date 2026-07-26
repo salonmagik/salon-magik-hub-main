@@ -4,17 +4,31 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Backoffice uses a light sidebar — override the shared dark-purple sidebar tokens. */
+/* Dense lapis-blue internal-tool treatment for backoffice. */
 @layer base {
   :root {
-    --sidebar-background: 262 30% 97%;
-    --sidebar-foreground: 290 9% 8%;
-    --sidebar-primary: 262 43% 21%;
+    --sidebar-background: 210 61% 18%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 42 89% 63%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 262 20% 92%;
-    --sidebar-accent-foreground: 262 43% 21%;
-    --sidebar-border: 262 15% 90%;
+    --sidebar-accent: 210 48% 25%;
+    --sidebar-accent-foreground: 42 89% 63%;
+    --sidebar-border: 210 38% 26%;
     --sidebar-ring: 42 89% 63%;
+  }
+}
+
+@layer components {
+  .backoffice-env-bar {
+    @apply flex h-6 items-center justify-center bg-[#141014] px-4 text-center text-[10px] uppercase tracking-[0.12em] text-white/75;
+  }
+
+  .backoffice-page {
+    @apply mx-auto w-full max-w-[1320px] space-y-5 p-4 sm:p-6 lg:p-7;
+  }
+
+  .backoffice-panel {
+    @apply rounded-[10px] border border-black/[0.07] bg-white shadow-[0_2px_8px_rgba(20,16,20,0.04)];
   }
 }
 

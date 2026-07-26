@@ -150,21 +150,23 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
   return (
     <InactivityGuard warningMinutes={22} logoutMinutes={30}>
       <SidebarProvider>
-        <div className="flex min-h-screen w-full bg-background">
-          <Sidebar className="border-r">
-            <SidebarHeader className="border-b px-4 py-4">
+        <div className="flex min-h-screen w-full flex-col bg-[#f6f5f7]">
+          <div className="backoffice-env-bar">Salon Magik Backoffice · Internal use only · Production</div>
+          <div className="flex min-h-0 flex-1">
+          <Sidebar className="top-6 border-r border-white/10">
+            <SidebarHeader className="border-b border-white/10 px-4 py-4">
               <div className="flex items-center gap-2">
-                <div className="rounded-xl bg-primary/10 p-2.5">
-                  <Shield className="h-6 w-6 text-primary" />
+                <div className="rounded-lg bg-white/10 p-2">
+                  <Shield className="h-5 w-5 text-[#a9c9e8]" />
                 </div>
                 <div>
-                  <h1 className="font-semibold text-foreground">BackOffice</h1>
-                  <p className="text-xs text-muted-foreground">Salon Magik Admin</p>
+                  <h1 className="text-sm font-medium text-white">Salon Magik Admin</h1>
+                  <p className="text-[11px] text-[#a9c9e8]">Backoffice</p>
                 </div>
               </div>
             </SidebarHeader>
 
-            <SidebarContent className="px-2 py-4">
+            <SidebarContent className="px-2 py-4 text-white/75">
               <SidebarMenu>
                 {visibleNavItems.map((item) => {
                   const hasChildren = Boolean(item.children?.length);
@@ -221,23 +223,23 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
               </SidebarMenu>
             </SidebarContent>
 
-            <SidebarFooter className="border-t p-4">
+            <SidebarFooter className="border-t border-white/10 p-3">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="w-full justify-start gap-3 px-2 hover:bg-muted"
+                    className="w-full justify-start gap-3 px-2 text-white hover:bg-white/10 hover:text-white"
                   >
                     <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                    <AvatarFallback className="rounded-md bg-[#2f6ba6] text-xs text-white">
                         {initials}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-1 flex-col items-start text-left">
-                      <span className="text-sm font-medium truncate max-w-[120px]">
+                      <span className="max-w-[120px] truncate text-sm font-medium text-white">
                         {profile?.full_name || "Admin"}
                       </span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-[#a9c9e8]">
                         {roleBadge}
                       </span>
                     </div>
@@ -257,7 +259,7 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
             </SidebarFooter>
           </Sidebar>
 
-          <SidebarInset className="flex-1">
+          <SidebarInset className="min-w-0 flex-1 bg-[#f6f5f7]">
             <div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
               <div className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-primary" />
@@ -268,6 +270,7 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
             <BackofficeOnboardingGate />
             <main className="flex-1 overflow-auto">{children}</main>
           </SidebarInset>
+          </div>
         </div>
       </SidebarProvider>
     </InactivityGuard>
