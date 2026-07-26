@@ -2204,12 +2204,14 @@ export type Database = {
           description: string | null
           direction: Database["public"]["Enums"]["journal_direction"]
           id: string
+          location_id: string | null
           occurred_at: string
           parsed_summary: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           rejection_reason: string | null
           status: Database["public"]["Enums"]["journal_status"]
           tenant_id: string
+          transaction_id: string | null
           updated_at: string
         }
         Insert: {
@@ -2225,12 +2227,14 @@ export type Database = {
           description?: string | null
           direction: Database["public"]["Enums"]["journal_direction"]
           id?: string
+          location_id?: string | null
           occurred_at?: string
           parsed_summary?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["journal_status"]
           tenant_id: string
+          transaction_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -2246,20 +2250,36 @@ export type Database = {
           description?: string | null
           direction?: Database["public"]["Enums"]["journal_direction"]
           id?: string
+          location_id?: string | null
           occurred_at?: string
           parsed_summary?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           rejection_reason?: string | null
           status?: Database["public"]["Enums"]["journal_status"]
           tenant_id?: string
+          transaction_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "journal_entries_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "journal_entries_appointment_id_fkey"
             columns: ["appointment_id"]
             isOneToOne: false
             referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
           {
@@ -7280,6 +7300,26 @@ export type Database = {
       }
     }
     Functions: {
+      record_offline_cash_payment: {
+        Args: {
+          p_appointment_id: string
+          p_amount: number
+          p_reference?: string
+          p_notes?: string
+        }
+        Returns: Json
+      }
+      validate_waitlist_invitation: {
+        Args: { p_token: string }
+        Returns: {
+          id: string
+          name: string
+          email: string
+          phone: string | null
+          status: Database["public"]["Enums"]["waitlist_status"]
+          invitation_expires_at: string | null
+        }[]
+      }
       _apply_plan_change_batch_internal: {
         Args: {
           p_actor_user_id: string

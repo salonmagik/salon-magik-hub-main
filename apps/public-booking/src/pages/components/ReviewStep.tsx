@@ -166,6 +166,7 @@ export function ReviewStep({
         subtotal={subtotal}
         selectedLocationId={items[0]?.branchId}
         selectedCountryCode={selectedCountryCode}
+        customerEmail={bookerInfo.email}
         onVoucherApplied={onVoucherApplied}
         appliedVoucher={appliedVoucher}
       />
@@ -237,7 +238,7 @@ export function ReviewStep({
         )}
         {purseAmount > 0 && (
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Store Credit</span>
+            <span className="text-muted-foreground">Salon Balance</span>
             <span>-{formatCurrency(purseAmount, salon.currency)}</span>
           </div>
         )}

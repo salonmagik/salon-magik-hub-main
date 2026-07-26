@@ -4,13 +4,11 @@ import {
   LayoutDashboard,
   Building2,
   Calendar,
-  CalendarDays,
   Scissors,
   Users,
   CreditCard,
   BarChart3,
   MessageSquare,
-  BookOpen,
   UserCog,
   Settings,
   LogOut,
@@ -133,22 +131,89 @@ interface NavItem {
   children?: Omit<NavItem, "children">[];
 }
 
+// These paths live on the mobile bottom nav — hide them from the drawer on mobile/tablet
+const BOTTOM_NAV_PATHS = new Set([
+  "/salon",
+  "/salon/appointments",
+  "/salon/services",
+  "/salon/transactions",
+  "/salon/customers",
+]);
+
 const mainNavItems: NavItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/salon", module: "dashboard" },
-  { label: "Business Overview", icon: Building2, path: "/salon/overview", module: "salons_overview" },
-  { label: "Staff", icon: UserCog, path: "/salon/overview/staff", module: "staff" },
-  { label: "Appointments", icon: Calendar, path: "/salon/appointments", module: "appointments" },
-  { label: "Calendar", icon: CalendarDays, path: "/salon/calendar", module: "calendar" },
-  { label: "Customers", icon: Users, path: "/salon/customers", module: "customers" },
-  { label: "Services and Products", icon: Scissors, path: "/salon/services", module: "services" },
-  { label: "Transactions", icon: CreditCard, path: "/salon/transactions", module: "payments" },
-  { label: "Reports", icon: BarChart3, path: "/salon/reports", module: "reports" },
-  { label: "Messaging", icon: MessageSquare, path: "/salon/messaging", module: "messaging" },
-  ...(import.meta.env.DEV ? [{ label: "Cash Tracker", icon: BookOpen, path: "/salon/cash-tracker", module: "journal" } as NavItem] : []),
-  { label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
-  { label: "All Notifications", icon: Bell, path: "/salon/all-notifications", module: "notifications" },
-  { label: "Audit Log", icon: FileText, path: "/salon/audit-log", module: "audit_log" },
-  { label: "Settings", icon: Settings, path: "/salon/settings", module: "settings" },
+	{
+		label: "Dashboard",
+		icon: LayoutDashboard,
+		path: "/salon",
+		module: "dashboard",
+	},
+	{
+		label: "Business Overview",
+		icon: Building2,
+		path: "/salon/overview",
+		module: "salons_overview",
+	},
+	{
+		label: "Staff",
+		icon: UserCog,
+		path: "/salon/overview/staff",
+		module: "staff",
+	},
+	{
+		label: "Appointments",
+		icon: Calendar,
+		path: "/salon/appointments",
+		module: "appointments",
+	},
+	{
+		label: "Customers",
+		icon: Users,
+		path: "/salon/customers",
+		module: "customers",
+	},
+	{
+		label: "Services and Products",
+		icon: Scissors,
+		path: "/salon/services",
+		module: "services",
+	},
+	{
+		label: "Transactions",
+		icon: CreditCard,
+		path: "/salon/transactions",
+		module: "payments",
+	},
+	{
+		label: "Reports",
+		icon: BarChart3,
+		path: "/salon/reports",
+		module: "reports",
+	},
+	{
+		label: "Messaging",
+		icon: MessageSquare,
+		path: "/salon/messaging",
+		module: "messaging",
+	},
+	{ label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+	{
+		label: "All Notifications",
+		icon: Bell,
+		path: "/salon/all-notifications",
+		module: "notifications",
+	},
+	{
+		label: "Audit Log",
+		icon: FileText,
+		path: "/salon/audit-log",
+		module: "audit_log",
+	},
+	{
+		label: "Settings",
+		icon: Settings,
+		path: "/salon/settings",
+		module: "settings",
+	},
 ];
 
 const utilityNavItems: NavItem[] = [
@@ -584,30 +649,30 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     };
 
     const trigger = (
-      <button
-        type="button"
-        onClick={toggle}
-        className={cn(
-          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-          anyChildActive
-            ? "bg-white/15 text-white"
-            : "text-white/80 hover:bg-white/10 hover:text-white",
-        )}
-      >
-        <Icon className="w-5 h-5 flex-shrink-0" />
-        {(isExpanded || isMobileOpen) && (
-          <>
-            <span className="flex-1 text-left">{item.label}</span>
-            <ChevronDown
-              className={cn(
-                "w-4 h-4 shrink-0 transition-transform duration-200",
-                isOpen ? "rotate-180" : "",
-              )}
-            />
-          </>
-        )}
-      </button>
-    );
+			<button
+				type="button"
+				onClick={toggle}
+				className={cn(
+					"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+					anyChildActive
+						? "bg-sidebar-primary/[0.14] text-sidebar-primary"
+						: "text-white/80 hover:bg-white/10 hover:text-white",
+				)}
+			>
+				<Icon className="w-5 h-5 flex-shrink-0" />
+				{(isExpanded || isMobileOpen) && (
+					<>
+						<span className="flex-1 text-left">{item.label}</span>
+						<ChevronDown
+							className={cn(
+								"w-4 h-4 shrink-0 transition-transform duration-200",
+								isOpen ? "rotate-180" : "",
+							)}
+						/>
+					</>
+				)}
+			</button>
+		);
 
     return (
       <div>
@@ -628,28 +693,29 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               const ChildIcon = child.icon;
               const active = isChildActive(child.path);
               return (
-                <Link
-                  key={child.path}
-                  to={child.path}
-                  onPointerDown={(e) => {
-                    if (e.button !== 0) return;
-                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    navigate(child.path);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className={cn(
-                    "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
-                    active
-                      ? "bg-white/15 text-white"
-                      : "text-white/70 hover:bg-white/10 hover:text-white",
-                  )}
-                >
-                  <ChildIcon className="w-4 h-4 flex-shrink-0" />
-                  <span>{child.label}</span>
-                </Link>
-              );
+								<Link
+									key={child.path}
+									to={child.path}
+									onPointerDown={(e) => {
+										if (e.button !== 0) return;
+										if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+											return;
+										e.preventDefault();
+										e.stopPropagation();
+										navigate(child.path);
+									}}
+									onClick={(e) => e.stopPropagation()}
+									className={cn(
+										"flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
+										active
+											? "bg-sidebar-primary/[0.14] text-sidebar-primary"
+											: "text-white/70 hover:bg-white/10 hover:text-white",
+									)}
+								>
+									<ChildIcon className="w-4 h-4 flex-shrink-0" />
+									<span>{child.label}</span>
+								</Link>
+							);
             })}
           </div>
         )}
@@ -662,44 +728,44 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const Icon = item.icon;
 
     const content = (
-      <Link
-        to={item.path}
-        // Some components used on /salon/settings (e.g. Radix “dismissable layer” patterns)
-        // can call preventDefault() on click events, which blocks react-router navigation.
-        // Navigating on pointer down makes the sidebar links resilient without impacting
-        // modifier-click (new tab) behavior.
-        onPointerDown={(e) => {
-          // Only handle plain left-click / tap
-          if (e.button !== 0) return;
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+			<Link
+				to={item.path}
+				// Some components used on /salon/settings (e.g. Radix “dismissable layer” patterns)
+				// can call preventDefault() on click events, which blocks react-router navigation.
+				// Navigating on pointer down makes the sidebar links resilient without impacting
+				// modifier-click (new tab) behavior.
+				onPointerDown={(e) => {
+					// Only handle plain left-click / tap
+					if (e.button !== 0) return;
+					if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
-          e.preventDefault();
-          e.stopPropagation();
-          navigate(item.path);
-        }}
-        onClick={(e) => {
-          // Keep parent click handlers from interfering with link navigation.
-          e.stopPropagation();
-        }}
-        className={cn(
-          "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
-          active
-            ? "bg-white/15 text-white"
-            : "text-white/80 hover:bg-white/10 hover:text-white"
-        )}
-        aria-label={item.label}
-      >
-        <Icon className="w-5 h-5 flex-shrink-0" />
-        {(isExpanded || isMobileOpen) && (
-          <span className="flex-1 text-left">{item.label}</span>
-        )}
-        {item.badge && (isExpanded || isMobileOpen) && (
-          <Badge variant="secondary" className="bg-white/20 text-white text-xs">
-            {item.badge}
-          </Badge>
-        )}
-      </Link>
-    );
+					e.preventDefault();
+					e.stopPropagation();
+					navigate(item.path);
+				}}
+				onClick={(e) => {
+					// Keep parent click handlers from interfering with link navigation.
+					e.stopPropagation();
+				}}
+				className={cn(
+					"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
+					active
+						? "bg-sidebar-primary/[0.14] text-sidebar-primary"
+						: "text-white/80 hover:bg-white/10 hover:text-white",
+				)}
+				aria-label={item.label}
+			>
+				<Icon className="w-5 h-5 flex-shrink-0" />
+				{(isExpanded || isMobileOpen) && (
+					<span className="flex-1 text-left">{item.label}</span>
+				)}
+				{item.badge && (isExpanded || isMobileOpen) && (
+					<Badge variant="secondary" className="bg-white/20 text-white text-xs">
+						{item.badge}
+					</Badge>
+				)}
+			</Link>
+		);
 
     if (!isExpanded && !isMobileOpen) {
       return (
@@ -716,314 +782,458 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   };
 
   const sidebarContent = (
-    <>
-      {/* Header */}
-      <div className="p-4 flex items-center justify-between">
-        {isExpanded || isMobileOpen ? (
-          <SalonMagikLogo variant="white" size="sm" />
-        ) : (
-          <div className="w-8 h-8 flex items-center justify-center mx-auto">
-            <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
-              <path d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z" stroke="#F4C84E" strokeWidth="3" strokeLinecap="round" />
-              <circle cx="16" cy="16" r="2.1" fill="#ffffff" />
-            </svg>
-          </div>
-        )}
-        {isMobileOpen && (
-          <button
-            onClick={() => setIsMobileOpen(false)}
-            className="p-2 hover:bg-white/10 rounded-lg lg:hidden text-white"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
-      </div>
+		<>
+			{/* Header */}
+			<div className="p-4 flex items-center justify-between">
+				{isExpanded || isMobileOpen ? (
+					<SalonMagikLogo variant="white" size="sm" />
+				) : (
+					<div className="w-8 h-8 flex items-center justify-center mx-auto">
+						<svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+							<path
+								d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
+								stroke="#F4C84E"
+								strokeWidth="3"
+								strokeLinecap="round"
+							/>
+							<circle cx="16" cy="16" r="2.1" fill="#ffffff" />
+						</svg>
+					</div>
+				)}
+				{isMobileOpen && (
+					<button
+						onClick={() => setIsMobileOpen(false)}
+						className="p-2 hover:bg-white/10 rounded-lg lg:hidden text-white"
+					>
+						<X className="w-5 h-5" />
+					</button>
+				)}
+			</div>
 
-      {/* Plan Badge */}
-      <div className="px-4 mb-2">
-        <div
-          className={cn(
-            "bg-white/10 rounded-lg py-1.5 px-3 text-xs font-medium flex items-center gap-2 text-white",
-            !isExpanded && !isMobileOpen && "justify-center"
-          )}
-        >
-          <span>{planDisplay.emoji}</span>
-          {(isExpanded || isMobileOpen) && <span>{planDisplay.label}</span>}
-        </div>
-      </div>
+			{/* Plan Badge */}
+			<div className="px-4 mb-2">
+				<div
+					className={cn(
+						"bg-white/10 rounded-lg py-1.5 px-3 text-xs font-medium flex items-center gap-2 text-white",
+						!isExpanded && !isMobileOpen && "justify-center",
+					)}
+				>
+					<span>{planDisplay.emoji}</span>
+					{(isExpanded || isMobileOpen) && <span>{planDisplay.label}</span>}
+				</div>
+			</div>
 
-      {/* Context Switcher */}
-      {(isExpanded || isMobileOpen) && !isAssignmentPending && availableContexts.length > 1 && (
-        <div className="px-4 mb-2">
-          <label htmlFor="context-switcher" className="mb-1 block text-[11px] font-medium text-white/70">
-            Switch
-          </label>
-          <select
-            id="context-switcher"
-            value={contextValue}
-            onChange={(event) => {
-              void handleContextChange(event.target.value);
-            }}
-            className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
-          >
-            {availableContexts.map((context) => (
-              <option
-                key={`${context.type}-${context.locationId || "owner_hub"}`}
-                value={context.type === "owner_hub" ? "owner_hub" : context.locationId || ""}
-                className="text-ink"
-              >
-                {context.isPaused ? `⏸ ${context.label} (Paused)` : context.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+			{/* Context Switcher */}
+			{(isExpanded || isMobileOpen) &&
+				!isAssignmentPending &&
+				availableContexts.length > 1 && (
+					<div className="px-4 mb-2">
+						<label
+							htmlFor="context-switcher"
+							className="mb-1 block text-[11px] font-medium text-white/70"
+						>
+							Switch
+						</label>
+						<select
+							id="context-switcher"
+							value={contextValue}
+							onChange={(event) => {
+								void handleContextChange(event.target.value);
+							}}
+							className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+						>
+							{availableContexts.map((context) => (
+								<option
+									key={`${context.type}-${context.locationId || "owner_hub"}`}
+									value={
+										context.type === "owner_hub"
+											? "owner_hub"
+											: context.locationId || ""
+									}
+									className="text-ink"
+								>
+									{context.isPaused
+										? `⏸ ${context.label} (Paused)`
+										: context.label}
+								</option>
+							))}
+						</select>
+					</div>
+				)}
 
-      {/* Global Banner (only when expanded) */}
-      {(isExpanded || isMobileOpen) && <GlobalBanner />}
+			{/* Global Banner (only when expanded) */}
+			{(isExpanded || isMobileOpen) && <GlobalBanner />}
 
-      {/* Main Navigation */}
-  <nav className="flex-1 overflow-y-auto scrollbar-hide px-3 space-y-1 relative z-10">
-        {permissionsLoading ? (
-          // Show skeleton during loading to prevent flash
-          <div className="space-y-2">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-10 w-full rounded-lg bg-white/10" />
-            ))}
-          </div>
-        ) : (
-          filteredMainNavItems.map((item) =>
-            item.children ? (
-              <ExpandableNavItemComponent key={item.path} item={item} />
-            ) : (
-              <NavItemComponent key={item.path} item={item} />
-            )
-          )
-        )}
-      </nav>
+			{/* Main Navigation */}
+			<nav className="flex-1 overflow-y-auto scrollbar-hide px-3 space-y-1 relative z-10">
+				{permissionsLoading ? (
+					// Show skeleton during loading to prevent flash
+					<div className="space-y-2">
+						{[1, 2, 3, 4, 5, 6].map((i) => (
+							<Skeleton
+								key={i}
+								className="h-10 w-full rounded-lg bg-white/10"
+							/>
+						))}
+					</div>
+				) : (
+					filteredMainNavItems
+						.filter((item) => !isMobileOpen || !BOTTOM_NAV_PATHS.has(item.path))
+						.map((item) =>
+							item.children ? (
+								<ExpandableNavItemComponent key={item.path} item={item} />
+							) : (
+								<NavItemComponent key={item.path} item={item} />
+							),
+						)
+				)}
+			</nav>
 
-      {/* Footer */}
-      <div className="border-t border-white/10 p-3 space-y-1">
-        {utilityNavItems.map((item) => (
-          <NavItemComponent key={item.path} item={item} />
-        ))}
+			{/* Footer */}
+			<div className="border-t border-white/10 p-3 space-y-1">
+				{utilityNavItems.map((item) => (
+					<NavItemComponent key={item.path} item={item} />
+				))}
 
-        {/* User Info */}
-        <UserProfileSection isExpanded={isExpanded} isMobileOpen={isMobileOpen} onCloseMobile={() => setIsMobileOpen(false)} />
+				{/* User Info */}
+				<UserProfileSection
+					isExpanded={isExpanded}
+					isMobileOpen={isMobileOpen}
+					onCloseMobile={() => setIsMobileOpen(false)}
+				/>
 
-        <button
-          onClick={() => setConfirmSignOutOpen(true)}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-            "text-white/80 hover:text-white hover:bg-white/10"
-          )}
-        >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {(isExpanded || isMobileOpen) && <span>Sign out</span>}
-        </button>
-      </div>
-    </>
-  );
+				<button
+					onClick={() => setConfirmSignOutOpen(true)}
+					className={cn(
+						"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+						"text-white/80 hover:text-white hover:bg-white/10",
+					)}
+				>
+					<LogOut className="w-5 h-5 flex-shrink-0" />
+					{(isExpanded || isMobileOpen) && <span>Sign out</span>}
+				</button>
+			</div>
+		</>
+	);
 
   return (
-    <SidebarContext.Provider
-      value={{
-        isExpanded,
-        isMobileOpen,
-        toggleExpanded: () => setIsExpanded(!isExpanded),
-        toggleMobile: () => setIsMobileOpen(!isMobileOpen),
-        closeMobile: () => setIsMobileOpen(false),
-      }}
-    >
-      <BannerProvider platform="salon">
-        <InactivityGuard>
-          <div className="min-h-screen flex bg-surface">
-          {/* Mobile Overlay */}
-          {isMobileOpen && (
-            <div
-              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-              onClick={() => setIsMobileOpen(false)}
-            />
-          )}
+		<SidebarContext.Provider
+			value={{
+				isExpanded,
+				isMobileOpen,
+				toggleExpanded: () => setIsExpanded(!isExpanded),
+				toggleMobile: () => setIsMobileOpen(!isMobileOpen),
+				closeMobile: () => setIsMobileOpen(false),
+			}}
+		>
+			<BannerProvider platform="salon">
+				<InactivityGuard>
+					<div className="min-h-screen flex bg-surface">
+						{/* Mobile Overlay */}
+						{isMobileOpen && (
+							<div
+								className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+								onClick={() => setIsMobileOpen(false)}
+							/>
+						)}
 
-          {/* Sidebar - Mobile */}
-          <aside
-            className={cn(
-               "fixed inset-y-0 left-0 z-[60] w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
-              isMobileOpen ? "translate-x-0" : "-translate-x-full"
-            )}
-          >
-            {sidebarContent}
-          </aside>
+						{/* Sidebar - Mobile */}
+						<aside
+							className={cn(
+								"fixed inset-y-0 left-0 z-[60] w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
+								isMobileOpen ? "translate-x-0" : "-translate-x-full",
+							)}
+						>
+							{sidebarContent}
+						</aside>
 
-          {/* Sidebar - Desktop */}
-          <aside
-            className={cn(
-               "hidden lg:flex flex-col bg-primary fixed top-0 left-0 z-[60] transition-all duration-300 h-screen overflow-hidden",
-              isExpanded ? "w-64" : "w-[72px]"
-            )}
-          >
-            {sidebarContent}
+						{/* Sidebar - Desktop */}
+						<aside
+							className={cn(
+								"hidden lg:flex flex-col bg-primary fixed top-0 left-0 z-[60] transition-all duration-300 h-screen overflow-hidden",
+								isExpanded ? "w-64" : "w-[72px]",
+							)}
+						>
+							{sidebarContent}
 
-            {/* Collapse Toggle */}
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="absolute -right-3 top-20 w-6 h-6 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
-            >
-              <ChevronLeft
-                className={cn(
-                  "w-4 h-4 transition-transform text-primary",
-                  !isExpanded && "rotate-180"
-                )}
-              />
-            </button>
-          </aside>
+							{/* Collapse Toggle */}
+							<button
+								onClick={() => setIsExpanded(!isExpanded)}
+								className="absolute -right-3 top-20 w-6 h-6 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
+							>
+								<ChevronLeft
+									className={cn(
+										"w-4 h-4 transition-transform text-primary",
+										!isExpanded && "rotate-180",
+									)}
+								/>
+							</button>
+						</aside>
 
-          {/* Main Content */}
-          <main className={cn(
-            "flex-1 flex flex-col min-h-screen overflow-hidden transition-all duration-300",
-            isExpanded ? "lg:ml-64" : "lg:ml-[72px]"
-          )}>
-            {/* Top Bar */}
-            <header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
-              <button
-                onClick={() => setIsMobileOpen(true)}
-                className="p-2 hover:bg-muted rounded-lg lg:hidden"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
+						{/* Main Content */}
+						<main
+							className={cn(
+								"flex-1 flex flex-col min-h-screen overflow-hidden transition-all duration-300",
+								isExpanded ? "lg:ml-64" : "lg:ml-[72px]",
+							)}
+						>
+							{/* Top Bar */}
+							<header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
+								<button
+									onClick={() => setIsMobileOpen(true)}
+									className="p-2 hover:bg-muted rounded-lg lg:hidden"
+								>
+									<Menu className="w-5 h-5" />
+								</button>
 
-              <div className="flex-1" />
+								{/* Tenant display */}
+								<div className="flex-1 flex items-center gap-2.5 min-w-0 ml-1 lg:ml-0">
+									{currentTenant?.logo_url ? (
+										<img
+											src={currentTenant.logo_url}
+											alt={currentTenant.name || ""}
+											className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+										/>
+									) : (
+										<div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
+											<span className="text-sm font-bold text-white leading-none">
+												{currentTenant?.name?.[0]?.toUpperCase() || "?"}
+											</span>
+										</div>
+									)}
+									<span className="font-semibold text-sm text-foreground truncate max-w-[120px] sm:max-w-[180px]">
+										{currentTenant?.name || "Your Salon"}
+									</span>
+									{(() => {
+										if (!currentTenant) return null;
+										if (
+											currentTenant.subscription_status === "trialing" &&
+											currentTenant.trial_ends_at
+										) {
+											const daysLeft = Math.ceil(
+												(new Date(currentTenant.trial_ends_at).getTime() -
+													Date.now()) /
+													86400000,
+											);
+											if (daysLeft > 0) {
+												return (
+													<span className="hidden sm:inline-flex text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium whitespace-nowrap flex-shrink-0">
+														Trial, {daysLeft} days left
+													</span>
+												);
+											}
+										}
+										return null;
+									})()}
+								</div>
 
-              <div className="flex items-center gap-2">
-                {/* Quick Create Button */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="sm:hidden"
-                  onClick={() => setQuickCreateOpen(true)}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="hidden sm:flex items-center gap-2"
-                  onClick={() => setQuickCreateOpen(true)}
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden md:inline">Quick Create</span>
-                  <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-                    <span className="text-xs">⌘</span>N
-                  </kbd>
-                </Button>
+								<div className="flex items-center gap-2">
+									{/* Quick Create Button */}
+									<Button
+										variant="outline"
+										size="icon"
+										className="sm:hidden"
+										onClick={() => setQuickCreateOpen(true)}
+									>
+										<Plus className="w-4 h-4" />
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										className="hidden sm:flex items-center gap-2"
+										onClick={() => setQuickCreateOpen(true)}
+									>
+										<Plus className="w-4 h-4" />
+										<span className="hidden md:inline">Quick Create</span>
+										<kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+											<span className="text-xs">⌘</span>N
+										</kbd>
+									</Button>
 
-                {/* Notifications */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative"
-                  onClick={() => setNotificationsOpen(true)}
-                >
-                  <Bell className="w-5 h-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </header>
+									{/* Notifications */}
+									<Button
+										variant="ghost"
+										size="icon"
+										className="relative"
+										onClick={() => setNotificationsOpen(true)}
+									>
+										<Bell className="w-5 h-5" />
+										{unreadCount > 0 && (
+											<span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+												{unreadCount > 9 ? "9+" : unreadCount}
+											</span>
+										)}
+									</Button>
+								</div>
+							</header>
 
-            {/* Trial Banner */}
-            <TrialBanner />
-            <PlanChangeBanner />
-            <AnnualLockinBanner />
+							{/* Trial Banner */}
+							<TrialBanner />
+							<PlanChangeBanner />
+							<AnnualLockinBanner />
 
-            {/* Page Content */}
-            <div className="flex-1 overflow-auto p-4 lg:p-6">{children}</div>
-          </main>
-        </div>
+							{/* Page Content */}
+							<div className="flex-1 overflow-auto px-4 pt-4 pb-20 lg:px-6 lg:pt-6 lg:pb-6">
+								{children}
+							</div>
 
-        {/* Blocking overlay — renders above everything when a blocking banner is active */}
-        <BlockingBannerOverlay />
+							{/* Mobile Bottom Navigation */}
+							<nav className="fixed bottom-0 inset-x-0 lg:hidden bg-white border-t border-border z-50">
+								<div className="flex items-center justify-around h-16">
+									{[
+										{
+											label: "Dashboard",
+											icon: LayoutDashboard,
+											path: "/salon",
+										},
+										{
+											label: "Appointments",
+											icon: Calendar,
+											path: "/salon/appointments",
+										},
+										{
+											label: "Services",
+											icon: Scissors,
+											path: "/salon/services",
+										},
+										{
+											label: "Transactions",
+											icon: CreditCard,
+											path: "/salon/transactions",
+										},
+										{
+											label: "Customers",
+											icon: Users,
+											path: "/salon/customers",
+										},
+									].map(({ label, icon: Icon, path }) => {
+										const active = isActive(path);
+										return (
+											<button
+												key={path}
+												type="button"
+												onClick={() => navigate(path)}
+												className="flex flex-col items-center gap-0.5 flex-1 py-2 transition-colors"
+											>
+												<div
+													className={cn(
+														"flex flex-col items-center gap-0.5",
+														active
+															? "bg-purple-100 rounded-lg px-3 py-2"
+															: "text-muted-foreground",
+													)}
+												>
+													<Icon
+														className={cn(
+															"w-[22px] h-[22px]",
+															active ? "text-primary" : "text-muted-foreground",
+														)}
+													/>
+													<span
+														className={cn(
+															"text-[10px] font-medium",
+															active ? "text-primary" : "text-muted-foreground",
+														)}
+													>
+														{label}
+													</span>
+												</div>
+											</button>
+										);
+									})}
+								</div>
+							</nav>
+						</main>
+					</div>
 
-        {/* Maintenance banner "Learn more" modal */}
-        <MaintenanceBannerModal />
+					{/* Blocking overlay — renders above everything when a blocking banner is active */}
+					<BlockingBannerOverlay />
 
-        {/* Quick Create Dialog */}
-        <QuickCreateDialog
-          open={quickCreateOpen}
-          onOpenChange={setQuickCreateOpen}
-        />
+					{/* Maintenance banner "Learn more" modal */}
+					<MaintenanceBannerModal />
 
-        {/* Notifications Panel */}
-        <NotificationsPanel
-          open={notificationsOpen}
-          onOpenChange={setNotificationsOpen}
-          notificationsData={notificationsData}
-        />
+					{/* Quick Create Dialog */}
+					<QuickCreateDialog
+						open={quickCreateOpen}
+						onOpenChange={setQuickCreateOpen}
+					/>
 
-        <Dialog open={Boolean(accessRefreshNotice)} onOpenChange={() => {}}>
-          <DialogContent
-            className="sm:max-w-md"
-            onEscapeKeyDown={(event) => event.preventDefault()}
-            onInteractOutside={(event) => event.preventDefault()}
-          >
-            <DialogHeader>
-              <DialogTitle>Access Updated</DialogTitle>
-              <DialogDescription>
-                {accessRefreshNotice?.entity_type === "user_role"
-                  ? "Your role has been updated by an admin."
-                  : "Your location assignments have been updated by an admin."}{" "}
-                Refresh to continue with your updated access.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button onClick={handleRefreshAccess} disabled={refreshingAccess}>
-                {refreshingAccess ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Refreshing...
-                  </>
-                ) : (
-                  "Refresh"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+					{/* Notifications Panel */}
+					<NotificationsPanel
+						open={notificationsOpen}
+						onOpenChange={setNotificationsOpen}
+						notificationsData={notificationsData}
+					/>
 
-        <Dialog open={confirmSignOutOpen} onOpenChange={setConfirmSignOutOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Sign out?</DialogTitle>
-              <DialogDescription>
-                You are about to sign out of your account.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmSignOutOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={async () => {
-                  setConfirmSignOutOpen(false);
-                  await handleLogout();
-                }}
-              >
-                Sign out
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      <NewDeviceReviewModal
-        open={reviewSessionsOpen}
-        onClose={() => setReviewSessionsOpen(false)}
-      />
-      </InactivityGuard>
-    </BannerProvider>
-    </SidebarContext.Provider>
-  );
+					<Dialog open={Boolean(accessRefreshNotice)} onOpenChange={() => {}}>
+						<DialogContent
+							className="sm:max-w-md"
+							onEscapeKeyDown={(event) => event.preventDefault()}
+							onInteractOutside={(event) => event.preventDefault()}
+						>
+							<DialogHeader>
+								<DialogTitle>Access Updated</DialogTitle>
+								<DialogDescription>
+									{accessRefreshNotice?.entity_type === "user_role"
+										? "Your role has been updated by an admin."
+										: "Your location assignments have been updated by an admin."}{" "}
+									Refresh to continue with your updated access.
+								</DialogDescription>
+							</DialogHeader>
+							<DialogFooter>
+								<Button
+									onClick={handleRefreshAccess}
+									disabled={refreshingAccess}
+								>
+									{refreshingAccess ? (
+										<>
+											<Loader2 className="w-4 h-4 mr-2 animate-spin" />
+											Refreshing...
+										</>
+									) : (
+										"Refresh"
+									)}
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+
+					<Dialog
+						open={confirmSignOutOpen}
+						onOpenChange={setConfirmSignOutOpen}
+					>
+						<DialogContent className="sm:max-w-md">
+							<DialogHeader>
+								<DialogTitle>Sign out?</DialogTitle>
+								<DialogDescription>
+									You are about to sign out of your account.
+								</DialogDescription>
+							</DialogHeader>
+							<DialogFooter>
+								<Button
+									variant="outline"
+									onClick={() => setConfirmSignOutOpen(false)}
+								>
+									Cancel
+								</Button>
+								<Button
+									variant="destructive"
+									onClick={async () => {
+										setConfirmSignOutOpen(false);
+										await handleLogout();
+									}}
+								>
+									Sign out
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+					<NewDeviceReviewModal
+						open={reviewSessionsOpen}
+						onClose={() => setReviewSessionsOpen(false)}
+					/>
+				</InactivityGuard>
+			</BannerProvider>
+		</SidebarContext.Provider>
+	);
 }

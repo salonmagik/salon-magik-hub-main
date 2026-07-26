@@ -372,7 +372,7 @@ export function CustomerDetailDialog({
               <TabsTrigger value="notes">Notes</TabsTrigger>
               <TabsTrigger value="messages">Messages</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
-              <TabsTrigger value="purse">Purse</TabsTrigger>
+              <TabsTrigger value="purse">Salon Balance</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="mt-4 space-y-4">
@@ -427,7 +427,7 @@ export function CustomerDetailDialog({
               <div className="grid grid-cols-2 gap-4">
                 <Card>
                   <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground">Purse Balance</p>
+                    <p className="text-sm text-muted-foreground">Salon Balance</p>
                     <p className="text-xl font-semibold">
                       {currency} {Number(purse?.balance || 0).toFixed(2)}
                     </p>
@@ -883,7 +883,7 @@ export function CustomerDetailDialog({
               ) : purseLedgerEntries.length === 0 ? (
                 <div className="text-center py-8">
                   <CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                  <p className="text-muted-foreground">No purse transactions yet</p>
+                  <p className="text-muted-foreground">No salon balance activity yet</p>
                 </div>
               ) : (
                 <div className="space-y-2">

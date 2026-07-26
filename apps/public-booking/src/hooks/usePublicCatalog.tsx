@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import type { Tables } from "@/lib/supabase";
+import type { Tables } from "@supabase-client/supabase/types";
 
 export interface PublicBranch {
   id: string;
@@ -88,7 +88,7 @@ export function usePublicCatalog(
         p_mode: mode,
         p_country_code: isChainCountryScoped ? countryCode || null : null,
         p_location_ids: isChainCountryScoped ? locationIds : null,
-      });
+      } as never);
 
       if (error) {
         console.error("Error fetching public catalog payload:", error);

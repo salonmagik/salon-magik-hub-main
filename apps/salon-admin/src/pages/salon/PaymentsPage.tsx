@@ -23,7 +23,6 @@ import {
   DialogFooter,
 } from "@ui/dialog";
 import { Label } from "@ui/label";
-import { Textarea } from "@ui/textarea";
 import {
   CreditCard,
   ArrowUpRight,
@@ -41,6 +40,7 @@ import {
   Settings2,
   Search,
   MoreVertical,
+  Banknote,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -59,11 +59,13 @@ import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
 import { RequestRefundDialog } from "@/components/dialogs/RequestRefundDialog";
-import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
+import { RejectRefundDialog } from "@/components/dialogs/RejectRefundDialog";
 import { ExportDropdown } from "@/components/ExportDropdown";
 import { WithdrawalDialog } from "@/components/billing/WithdrawalDialog";
+import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
+import { CustomerBalancesPanel } from "@/components/payments/CustomerBalancesPanel";
 
 const methodLabels: Record<string, string> = {
   card: "Card",
@@ -71,7 +73,7 @@ const methodLabels: Record<string, string> = {
   cash: "Cash",
   pos: "POS",
   transfer: "Transfer",
-  purse: "Purse",
+  purse: "Salon Balance",
 };
 
 const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {
@@ -91,8 +93,8 @@ const typeChips: Record<string, { label: string; className: string }> = {
   payment: { label: "Inflow", className: "bg-success/10 text-success" },
   deposit: { label: "Deposit", className: "bg-teal-100 text-teal-700" },
   refund: { label: "Outflow", className: "bg-orange-100 text-orange-700" },
-  purse_topup: { label: "Purse Top-up", className: "bg-blue-100 text-blue-700" },
-  purse_redemption: { label: "Purse Credit", className: "bg-purple-100 text-purple-700" },
+  purse_topup: { label: "Balance top-up", className: "bg-blue-100 text-blue-700" },
+  purse_redemption: { label: "Balance credit", className: "bg-purple-100 text-purple-700" },
 };
 
 const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
@@ -108,21 +110,21 @@ export default function PaymentsPage() {
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "all");
   const [payoutsSubTab, setPayoutsSubTab] = useState("history");
   const [dateFilter, setDateFilter] = useState("all-time");
-  const [hubTypeFilter, setHubTypeFilter] = useState("all");
+  const [hubTypeFilter, setHubTypeFilter] = useState(() => searchParams.get("type") || "all");
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState("");
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
+  const [recordCashOpen, setRecordCashOpen] = useState(false);
   const [assigningBranchId, setAssigningBranchId] = useState<string | null>(null);
   const [assignDestId, setAssignDestId] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
-  const { refunds, pendingRefunds, isLoading: refundsLoading, refetch: refetchRefunds, approveRefund, rejectRefund } = useRefunds();
+  const { refunds, pendingRefunds, refetch: refetchRefunds } = useRefunds();
   const { locations, isLoading: locationsLoading } = useSalonsOverview("today");
 
   const isOwnerHub = activeContextType === "owner_hub";
@@ -131,6 +133,7 @@ export default function PaymentsPage() {
   const canManagePayouts = isOwnerHub && (
     currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor"
   );
+  const canCompleteRefunds = currentRole === "owner" || currentRole === "manager";
 
   const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(
     canManagePayouts ? currentTenant?.id : undefined
@@ -147,6 +150,11 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
+    const type = searchParams.get("type");
+    if (type) {
+      setHubTypeFilter(type);
+      if (!isOwnerHub && type === "cash") setActiveTab("cash");
+    }
     if (!tab) return;
     // Block URL-based access to payouts tab for unauthorised roles
     if (tab === "payouts" && !canManagePayouts) {
@@ -154,26 +162,11 @@ export default function PaymentsPage() {
       return;
     }
     setActiveTab(tab);
-  }, [searchParams, canManagePayouts]);
+  }, [searchParams, canManagePayouts, isOwnerHub]);
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = { USD: "$", GHS: "₵", NGN: "₦", EUR: "€", GBP: "£" };
     return `${symbols[currency] || currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-  };
-
-  const handleApprove = async () => {
-    if (!selectedRefund) return;
-    await approveRefund(selectedRefund.id);
-    setSelectedRefund(null);
-    setApproveDialogOpen(false);
-  };
-
-  const handleReject = async () => {
-    if (!selectedRefund || !rejectionReason.trim()) return;
-    await rejectRefund(selectedRefund.id, rejectionReason);
-    setSelectedRefund(null);
-    setRejectDialogOpen(false);
-    setRejectionReason("");
   };
 
   const getDateRange = () => {
@@ -201,9 +194,11 @@ export default function PaymentsPage() {
       if (hubTypeFilter === "revenue") return matchesSearch && txn.type === "payment";
       if (hubTypeFilter === "refunds") return matchesSearch && txn.type === "refund";
       if (hubTypeFilter === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
+      if (hubTypeFilter === "cash") return matchesSearch && txn.method === "cash";
       return matchesSearch;
     }
 
+    if (activeTab === "cash") return matchesSearch && txn.method === "cash";
     if (activeTab === "all") return matchesSearch;
     if (activeTab === "revenue") return matchesSearch && txn.type === "payment";
     if (activeTab === "refunds") return matchesSearch && txn.type === "refund";
@@ -273,10 +268,20 @@ export default function PaymentsPage() {
   const renderTransactionRow = (txn: typeof filteredTransactions[0], showBranch = false) => {
     const style = statusStyles[txn.status] || statusStyles.pending;
     const isIncoming = txn.type === "payment" || txn.type === "purse_topup" || txn.type === "deposit";
-    const hasBeenRefunded = (txn.type === "payment" || txn.type === "deposit") && refunds.some(
-      (r) => r.transaction_id === txn.id && (r.status === "completed" || r.status === "approved")
+    const transactionRefunds = refunds.filter(
+      (refund) => refund.transaction_id === txn.id && ["pending", "approved", "completed"].includes(refund.status)
     );
-    const canRefund = (txn.type === "payment" || txn.type === "deposit") && txn.customer_id && !hasBeenRefunded && txn.status === "completed";
+    const completedRefundAmount = transactionRefunds
+      .filter((refund) => refund.status === "approved" || refund.status === "completed")
+      .reduce((sum, refund) => sum + Number(refund.amount), 0);
+    const reservedRefundAmount = transactionRefunds.reduce((sum, refund) => sum + Number(refund.amount), 0);
+    const remainingRefundAmount = Math.max(0, Number(txn.amount) - reservedRefundAmount);
+    const refundState = completedRefundAmount >= Number(txn.amount)
+      ? "Refunded"
+      : completedRefundAmount > 0
+        ? "Partially refunded"
+        : null;
+    const canRefund = (txn.type === "payment" || txn.type === "deposit") && txn.customer_id && remainingRefundAmount > 0 && txn.status === "completed";
     const chip = typeChips[txn.type];
 
     return (
@@ -296,16 +301,27 @@ export default function PaymentsPage() {
                   {chip.label}
                 </span>
               )}
+              {txn.payment_group_id && (
+                <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                  Split payment
+                </span>
+              )}
+              {refundState && (
+                <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                  {refundState}
+                </span>
+              )}
+              {!refundState && transactionRefunds.some((refund) => refund.status === "pending") && (
+                <span className="rounded-full bg-warning-bg px-1.5 py-0.5 text-xs font-medium text-warning-foreground">
+                  Refund pending
+                </span>
+              )}
               {showBranch && txn.appointment?.location?.name && (
                 <Badge variant="outline" className="text-xs shrink-0">{txn.appointment.location.name}</Badge>
               )}
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 flex-wrap">
-              {txn.is_split_payment ? (
-                <span>Card + Purse · {formatCurrency(txn.split_card_amount || 0)} + {formatCurrency(txn.split_purse_amount || 0)}</span>
-              ) : (
-                <span>{methodLabels[txn.method] || txn.method}</span>
-              )}
+              <span>{methodLabels[txn.method] || txn.method}</span>
               <span>·</span>
               <span>{format(new Date(txn.created_at), "MMM d, h:mm a")}</span>
             </div>
@@ -330,7 +346,7 @@ export default function PaymentsPage() {
                   className="text-destructive"
                   onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
                 >
-                  Request Refund
+                  {canCompleteRefunds ? "Make refund" : "Request refund"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -348,7 +364,7 @@ export default function PaymentsPage() {
         {[
           { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
           { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
-          { title: "Total Purse Balance", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
+          { title: "Customer Balances", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -363,7 +379,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Pending Refunds */}
-      {pendingRefunds.length > 0 && (
+      {canCompleteRefunds && pendingRefunds.length > 0 && (
         <Card className="border-warning bg-warning-bg/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -411,7 +427,8 @@ export default function PaymentsPage() {
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="revenue">Inflow</SelectItem>
             <SelectItem value="refunds">Refunds</SelectItem>
-            <SelectItem value="purse">Purse</SelectItem>
+            <SelectItem value="purse">Salon balance</SelectItem>
+            <SelectItem value="cash">Cash payments</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex-1" />
@@ -450,7 +467,7 @@ export default function PaymentsPage() {
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-primary/10"><Wallet className="w-6 h-6 text-primary" /></div>
             <div>
-              <p className="text-sm text-muted-foreground">Wallet Balance</p>
+              <p className="text-sm text-muted-foreground">Payout Balance</p>
               {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
                 <p className="text-2xl font-semibold mt-0.5">
                   {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
@@ -591,7 +608,7 @@ export default function PaymentsPage() {
         {[
           { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
           { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
-          { title: "Total Purse Balance", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
+          { title: "Customer Balances", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -606,7 +623,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Pending Refunds */}
-      {pendingRefunds.length > 0 && (
+      {canCompleteRefunds && pendingRefunds.length > 0 && (
         <Card className="border-warning bg-warning-bg/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
@@ -643,9 +660,15 @@ export default function PaymentsPage() {
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="revenue" className="gap-2"><ArrowUpRight className="w-4 h-4" />Inflow</TabsTrigger>
           <TabsTrigger value="refunds" className="gap-2"><ArrowDownLeft className="w-4 h-4" />Refunds</TabsTrigger>
-          <TabsTrigger value="purse" className="gap-2"><Wallet className="w-4 h-4" />Purse</TabsTrigger>
+          <TabsTrigger value="purse" className="gap-2"><Wallet className="w-4 h-4" />Salon balance</TabsTrigger>
+          <TabsTrigger value="cash" className="gap-2"><Banknote className="w-4 h-4" />Cash</TabsTrigger>
+          <TabsTrigger value="balances" className="gap-2"><Wallet className="w-4 h-4" />Customer balances</TabsTrigger>
         </TabsList>
         <div className="mt-6">
+          {activeTab === "balances" ? (
+            <CustomerBalancesPanel canAdjust={canCompleteRefunds} />
+          ) : (
+          <>
           <div className="flex flex-wrap items-center gap-4 mb-6">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -674,6 +697,8 @@ export default function PaymentsPage() {
               )}
             </CardContent>
           </Card>
+          </>
+          )}
         </div>
       </Tabs>
     </>
@@ -690,12 +715,17 @@ export default function PaymentsPage() {
               {isOwnerHub ? "Income, refunds, and payouts across all branches." : "Track transactions, manage refunds, and monitor customer balances."}
             </p>
           </div>
+          <Button onClick={() => setRecordCashOpen(true)}>
+            <Banknote className="mr-2 h-4 w-4" />
+            Record cash payment
+          </Button>
         </div>
 
         {isOwnerHub ? (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all">All Transactions</TabsTrigger>
+              <TabsTrigger value="balances">Customer Balances</TabsTrigger>
               {canManagePayouts && (
                 <TabsTrigger value="payouts" className="gap-2">
                   <Wallet className="w-4 h-4" />Payouts
@@ -703,6 +733,9 @@ export default function PaymentsPage() {
               )}
             </TabsList>
             <TabsContent value="all" className="mt-6">{renderHubAllTransactions()}</TabsContent>
+            <TabsContent value="balances" className="mt-6">
+              <CustomerBalancesPanel canAdjust={canCompleteRefunds} />
+            </TabsContent>
             {canManagePayouts && (
               <TabsContent value="payouts" className="mt-6">{renderHubPayouts()}</TabsContent>
             )}
@@ -714,6 +747,11 @@ export default function PaymentsPage() {
 
       {/* Dialogs */}
       <WithdrawalDialog open={withdrawalOpen} onOpenChange={setWithdrawalOpen} />
+      <RecordPaymentDialog
+        open={recordCashOpen}
+        onOpenChange={setRecordCashOpen}
+        onSuccess={refetchTransactions}
+      />
 
       <Dialog open={!!assigningBranchId} onOpenChange={(o) => { if (!o) { setAssigningBranchId(null); setAssignDestId(""); } }}>
         <DialogContent className="sm:max-w-md">
@@ -752,34 +790,29 @@ export default function PaymentsPage() {
         open={refundDialogOpen}
         onOpenChange={setRefundDialogOpen}
         transaction={selectedTransaction}
+        mode={canCompleteRefunds ? "complete" : "request"}
         onSuccess={() => { refetchRefunds(); refetchTransactions(); }}
       />
 
-      <ConfirmActionDialog
+      <RequestRefundDialog
         open={approveDialogOpen}
         onOpenChange={setApproveDialogOpen}
-        title="Approve Refund"
-        description={`Are you sure you want to approve this refund of ${selectedRefund ? formatCurrency(Number(selectedRefund.amount)) : ""}?`}
-        confirmLabel="Approve"
-        onConfirm={handleApprove}
+        mode="complete"
+        request={selectedRefund}
+        transaction={selectedRefund?.transaction ? {
+          ...selectedRefund.transaction,
+          customer: selectedRefund.customer,
+        } : null}
+        onSuccess={() => { refetchRefunds(); refetchTransactions(); }}
       />
 
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Reject Refund</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Please provide a reason for rejecting this refund request.</p>
-            <div className="space-y-2">
-              <Label>Rejection Reason <span className="text-destructive">*</span></Label>
-              <Textarea placeholder="Enter the reason for rejection…" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} rows={3} />
-            </div>
-          </div>
-          <DialogFooter className="pt-4">
-            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleReject} disabled={!rejectionReason.trim()}>Reject Refund</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RejectRefundDialog
+        open={rejectDialogOpen}
+        onOpenChange={setRejectDialogOpen}
+        requestId={selectedRefund?.id || null}
+        customerName={selectedRefund?.customer?.full_name}
+        onSuccess={() => { refetchRefunds(); refetchTransactions(); }}
+      />
     </SalonSidebar>
   );
 }

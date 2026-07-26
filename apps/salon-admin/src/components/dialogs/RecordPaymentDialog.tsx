@@ -1,204 +1,224 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
+import { Banknote, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
-import { CreditCard, Coins, Loader2 } from "lucide-react";
+import { toast } from "@ui/ui/use-toast";
+import { formatCurrency } from "@shared/currency";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
-import { useCustomers } from "@/hooks/useCustomers";
-import { toast } from "@ui/ui/use-toast";
-import { cn } from "@shared/utils";
+import { useLocationScope } from "@/hooks/useLocationScope";
 
 interface RecordPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   appointmentId?: string;
-  customerId?: string;
-  defaultAmount?: number;
 }
 
-const paymentMethods = [
-  { value: "cash", label: "Cash" },
-  { value: "card", label: "Card" },
-  { value: "mobile_money", label: "Mobile Money" },
-  { value: "pos", label: "POS" },
-  { value: "transfer", label: "Bank Transfer" },
-] as const;
+interface PayableAppointment {
+  id: string;
+  scheduled_start: string;
+  total_amount: number;
+  amount_paid: number;
+  booking_reference: string | null;
+  customer: { full_name: string } | null;
+  services: { service_name: string }[];
+}
 
 export function RecordPaymentDialog({
   open,
   onOpenChange,
   onSuccess,
   appointmentId,
-  customerId: propCustomerId,
-  defaultAmount,
 }: RecordPaymentDialogProps) {
   const { currentTenant } = useAuth();
-  const { customers, isLoading: customersLoading } = useCustomers();
+  const { scopedLocationIds, hasScope } = useLocationScope();
+  const [appointments, setAppointments] = useState<PayableAppointment[]>([]);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(appointmentId || "");
+  const [amount, setAmount] = useState("");
+  const [reference, setReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    customerId: propCustomerId || "",
-    amount: defaultAmount?.toString() || "",
-    method: "cash" as (typeof paymentMethods)[number]["value"],
-    type: "payment",
-    reference: "",
-    notes: "",
-  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (!open || !currentTenant?.id) return;
+    let cancelled = false;
 
-    if (!currentTenant?.id) {
-      toast({ title: "Error", description: "No active tenant", variant: "destructive" });
+    const loadAppointments = async () => {
+      setIsLoading(true);
+      let query = supabase
+        .from("appointments")
+        .select("id, scheduled_start, total_amount, amount_paid, booking_reference, customer:customers(full_name), services:appointment_services(service_name)")
+        .eq("tenant_id", currentTenant.id)
+        .eq("is_unscheduled", false)
+        .not("scheduled_start", "is", null)
+        .neq("status", "cancelled")
+        .order("scheduled_start", { ascending: false })
+        .limit(150);
+
+      if (hasScope) query = query.in("location_id", scopedLocationIds);
+      const { data, error } = await query;
+      if (!cancelled) {
+        if (error) {
+          toast({ title: "Could not load appointments", description: error.message, variant: "destructive" });
+          setAppointments([]);
+        } else {
+          const payable = (data || []).filter(
+            (item) => Number(item.total_amount) > Number(item.amount_paid),
+          ) as unknown as PayableAppointment[];
+          setAppointments(payable);
+        }
+        setIsLoading(false);
+      }
+    };
+
+    void loadAppointments();
+    return () => { cancelled = true; };
+  }, [open, currentTenant?.id, hasScope, scopedLocationIds]);
+
+  useEffect(() => {
+    if (open) setSelectedAppointmentId(appointmentId || "");
+  }, [open, appointmentId]);
+
+  const selectedAppointment = useMemo(
+    () => appointments.find((item) => item.id === selectedAppointmentId),
+    [appointments, selectedAppointmentId],
+  );
+  const balance = selectedAppointment
+    ? Math.max(Number(selectedAppointment.total_amount) - Number(selectedAppointment.amount_paid), 0)
+    : 0;
+
+  useEffect(() => {
+    if (selectedAppointment) setAmount(balance.toFixed(2));
+  }, [selectedAppointmentId, balance, selectedAppointment]);
+
+  const reset = () => {
+    setSelectedAppointmentId(appointmentId || "");
+    setAmount("");
+    setReference("");
+    setNotes("");
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const numericAmount = Number(amount);
+    if (!selectedAppointmentId || !Number.isFinite(numericAmount) || numericAmount <= 0 || numericAmount > balance) {
+      toast({
+        title: "Check the payment",
+        description: !selectedAppointmentId
+          ? "Select the booked appointment this cash payment belongs to."
+          : `Enter an amount between 0.01 and ${formatCurrency(balance, currentTenant?.currency)}.`,
+        variant: "destructive",
+      });
       return;
     }
 
     setIsSubmitting(true);
+    const { error } = await supabase.rpc("record_offline_cash_payment", {
+      p_appointment_id: selectedAppointmentId,
+      p_amount: numericAmount,
+      p_reference: reference.trim() || undefined,
+      p_notes: notes.trim() || undefined,
+    });
+    setIsSubmitting(false);
 
-    try {
-      const { error } = await supabase.from("transactions").insert({
-        tenant_id: currentTenant.id,
-        customer_id: formData.customerId && formData.customerId !== "_none" ? formData.customerId : null,
-        appointment_id: appointmentId || null,
-        amount: parseFloat(formData.amount),
-        method: formData.method,
-        type: formData.type,
-        provider_reference: formData.reference || null,
-        status: "completed",
-      });
-
-      if (error) throw error;
-
-      toast({ title: "Success", description: "Payment recorded successfully" });
-      setFormData({
-        customerId: propCustomerId || "",
-        amount: "",
-        method: "cash",
-        type: "payment",
-        reference: "",
-        notes: "",
-      });
-      onOpenChange(false);
-      onSuccess?.();
-    } catch (err) {
-      console.error("Error recording payment:", err);
-      toast({ title: "Error", description: "Failed to record payment", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
+    if (error) {
+      toast({ title: "Cash payment was not recorded", description: error.message, variant: "destructive" });
+      return;
     }
+
+    toast({ title: "Cash payment recorded", description: "The appointment is now marked as paid offline." });
+    reset();
+    onOpenChange(false);
+    onSuccess?.();
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader className="flex flex-row items-center gap-3">
-          <div className="p-2 rounded-lg bg-success/10">
-            <CreditCard className="w-5 h-5 text-success" />
+    <Dialog open={open} onOpenChange={(next) => {
+      if (!next && !isSubmitting) reset();
+      onOpenChange(next);
+    }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+            <Banknote className="h-5 w-5 text-primary" />
           </div>
-          <div>
-            <DialogTitle className="text-xl">Record Payment</DialogTitle>
-            <p className="text-sm text-muted-foreground">Log a payment transaction</p>
-          </div>
+          <DialogTitle>Record cash payment</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Link an offline cash payment to its booked appointment.
+          </p>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {/* Customer */}
-          {!propCustomerId && (
-            <div className="space-y-2">
-              <Label>Customer</Label>
-              <Select
-                value={formData.customerId}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, customerId: v }))}
-                disabled={customersLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={customersLoading ? "Loading..." : "Select customer (optional)"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">No customer</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Booked appointment <span className="text-destructive">*</span></Label>
+            <Select
+              value={selectedAppointmentId}
+              onValueChange={setSelectedAppointmentId}
+              disabled={isLoading || Boolean(appointmentId)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={isLoading ? "Loading appointments…" : "Select appointment"} />
+              </SelectTrigger>
+              <SelectContent>
+                {appointments.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.customer?.full_name || "Unknown customer"} · {format(new Date(item.scheduled_start), "d MMM, h:mm a")}
+                    {item.booking_reference ? ` · ${item.booking_reference}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!isLoading && appointments.length === 0 && (
+              <p className="text-xs text-muted-foreground">There are no booked appointments with an outstanding balance.</p>
+            )}
+          </div>
+
+          {selectedAppointment && (
+            <div className="rounded-xl border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{selectedAppointment.services[0]?.service_name || "Appointment"}</p>
+              <p className="mt-1 text-muted-foreground">
+                Paid {formatCurrency(Number(selectedAppointment.amount_paid), currentTenant?.currency)} · Balance {formatCurrency(balance, currentTenant?.currency)}
+              </p>
             </div>
           )}
 
-          {/* Amount */}
           <div className="space-y-2">
-            <Label>
-              Amount <span className="text-destructive">*</span>
-            </Label>
-            <div className="relative">
-              {/* <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /> */}
-              <Input
-                type="number"
-                placeholder="0.00"
-                className="pl-9 text-lg font-semibold"
-                value={formData.amount}
-                onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-                required
-                min="0"
-                step="0.01"
-              />
-            </div>
-          </div>
-
-          {/* Payment Method */}
-          <div className="space-y-2">
-            <Label>Payment Method</Label>
-            <RadioGroup
-              value={formData.method}
-              onValueChange={(v) => setFormData((prev) => ({ ...prev, method: v as typeof formData.method }))}
-              className="grid grid-cols-3 gap-2"
-            >
-              {paymentMethods.map((method) => (
-                <label
-                  key={method.value}
-                  className={cn(
-                    "flex items-center justify-center p-2 rounded-lg border cursor-pointer transition-all text-sm",
-                    formData.method === method.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50",
-                  )}
-                >
-                  <RadioGroupItem value={method.value} className="sr-only" />
-                  <span>{method.label}</span>
-                </label>
-              ))}
-            </RadioGroup>
-          </div>
-
-          {/* Reference */}
-          <div className="space-y-2">
-            <Label>Reference (Optional)</Label>
+            <Label htmlFor="cash-amount">Cash amount <span className="text-destructive">*</span></Label>
             <Input
-              placeholder="Transaction ID or receipt number"
-              value={formData.reference}
-              onChange={(e) => setFormData((prev) => ({ ...prev, reference: e.target.value }))}
+              id="cash-amount"
+              type="number"
+              min="0.01"
+              max={balance || undefined}
+              step="0.01"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              disabled={!selectedAppointment}
+              required
             />
           </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-              className="w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-              {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Record Payment
+          <div className="space-y-2">
+            <Label htmlFor="cash-reference">Receipt or reference</Label>
+            <Input id="cash-reference" value={reference} onChange={(event) => setReference(event.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cash-notes">Note</Label>
+            <Textarea id="cash-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting || !selectedAppointment}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Record cash payment
             </Button>
           </DialogFooter>
         </form>

@@ -12,6 +12,7 @@ type AppointmentService = Tables<"appointment_services">;
 export interface CalendarAppointment extends Appointment {
   customer: Customer | null;
   services: AppointmentService[];
+  transactions?: { id: string; provider: string | null; method: string; status: string }[];
 }
 
 export type CalendarView = "day" | "week" | "month";
@@ -75,7 +76,8 @@ export function useCalendarAppointments(options: UseCalendarAppointmentsOptions)
         .select(`
           *,
           customer:customers(*),
-          services:appointment_services(*)
+          services:appointment_services(*),
+          transactions(id, provider, method, status)
         `)
         .eq("tenant_id", currentTenant.id)
         .gte("scheduled_start", start)

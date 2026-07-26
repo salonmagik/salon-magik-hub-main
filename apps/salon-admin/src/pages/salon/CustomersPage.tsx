@@ -30,6 +30,7 @@ import {
   Flag,
   Trash2,
   CheckCircle,
+  Plus,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
@@ -80,7 +81,7 @@ export default function CustomersPage() {
   const [reactivationSubject, setReactivationSubject] = useState("We miss you at {{salon_name}}");
   const [selectedInactiveCustomerIds, setSelectedInactiveCustomerIds] = useState<string[]>([]);
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
-  
+
   // Action dialogs
   const [flagDialogCustomer, setFlagDialogCustomer] = useState<Customer | null>(null);
   const [deleteDialogCustomer, setDeleteDialogCustomer] = useState<Customer | null>(null);
@@ -254,7 +255,7 @@ export default function CustomersPage() {
     return customers.filter((customer) => {
       // Exclude deleted customers
       if (customer.status === "deleted") return false;
-      
+
       const matchesSearch =
         customer.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -346,587 +347,700 @@ export default function CustomersPage() {
   };
 
   return (
-    <SalonSidebar>
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Customers</h1>
-            <p className="text-muted-foreground">Manage customer relationships and celebrate key moments.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
-              <Download className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Import</span>
-              <span className="sm:hidden">Import</span>
-            </Button>
-            <Button onClick={() => setCustomerDialogOpen(true)}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Add Customer</span>
-              <span className="sm:hidden">Add</span>
-            </Button>
-          </div>
-        </div>
+		<SalonSidebar>
+			<div className="space-y-6">
+				{/* Page Header */}
+				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+					<div>
+						<h1 className="text-2xl font-semibold">Customers</h1>
+						<p className="text-muted-foreground">
+							Manage customer relationships and celebrate key moments.
+						</p>
+					</div>
+				</div>
 
-        {/* Status Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {statusCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <Card
-                key={card.label}
-                className="cursor-pointer hover:shadow-md transition-shadow border-2 border-transparent hover:border-primary/20"
-                onClick={card.label === "Inactive" ? () => setInactiveDialogOpen(true) : undefined}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{card.label}</p>
-                    <div className="text-2xl font-semibold mt-1">
-                      {isLoading ? <Skeleton className="h-8 w-8" /> : card.count}
-                    </div>
-                  </div>
-                  <div className={`p-2 rounded-lg ${card.bgColor}`}>
-                    <Icon className={`w-5 h-5 ${card.color}`} />
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+				{/* Status Cards */}
+				<div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+					{statusCards.map((card) => {
+						const Icon = card.icon;
+						return (
+							<Card
+								key={card.label}
+								className="cursor-pointer hover:shadow-md transition-shadow border-2 border-transparent hover:border-primary/20"
+								onClick={
+									card.label === "Inactive"
+										? () => setInactiveDialogOpen(true)
+										: undefined
+								}
+							>
+								<CardContent className="p-4 flex items-center justify-between">
+									<div>
+										<p className="text-sm text-muted-foreground">
+											{card.label}
+										</p>
+										<div className="text-2xl font-semibold mt-1">
+											{isLoading ? (
+												<Skeleton className="h-8 w-8" />
+											) : (
+												card.count
+											)}
+										</div>
+									</div>
+									<div className={`p-2 rounded-lg ${card.bgColor}`}>
+										<Icon className={`w-5 h-5 ${card.color}`} />
+									</div>
+								</CardContent>
+							</Card>
+						);
+					})}
+				</div>
 
-        {/* Search & Filters */}
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, phone, email..."
-              className="pl-9"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {filteredCustomers.length > 0 && (
-              <div className="flex items-center gap-2 rounded-md border px-3 py-2">
-                <Checkbox
-                  checked={allVisibleSelected}
-                  onCheckedChange={(checked) =>
-                    handleSelectAllVisible(Boolean(checked), filteredCustomers.map((customer) => customer.id))
-                  }
-                  aria-label="Select all visible customers"
-                />
-                <span className="text-sm text-muted-foreground">Select all visible</span>
-              </div>
-            )}
-            {statusFilters.map((filter) => (
-              <Button
-                key={filter}
-                variant={activeFilter === filter ? "default" : "outline"}
-                size="sm"
-                onClick={() => setActiveFilter(filter)}
-              >
-                {filter}
-              </Button>
-            ))}
-          </div>
-        </div>
+				{/* Search & Filters */}
+				<div className="flex flex-wrap items-center gap-4">
+					<div className="relative flex-1 max-w-md">
+						<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+						<Input
+							placeholder="Search by name, phone, email..."
+							className="pl-9"
+							value={searchQuery}
+							onChange={(e) => setSearchQuery(e.target.value)}
+						/>
+					</div>
+					<div className="flex items-center gap-2 flex-wrap">
+						{filteredCustomers.length > 0 && (
+							<div className="flex items-center gap-2 rounded-md border px-3 py-2">
+								<Checkbox
+									checked={allVisibleSelected}
+									onCheckedChange={(checked) =>
+										handleSelectAllVisible(
+											Boolean(checked),
+											filteredCustomers.map((customer) => customer.id),
+										)
+									}
+									aria-label="Select all visible customers"
+								/>
+								<span className="text-sm text-muted-foreground">
+									Select all visible
+								</span>
+							</div>
+						)}
+						{statusFilters.map((filter) => (
+							<Button
+								key={filter}
+								variant={activeFilter === filter ? "default" : "outline"}
+								size="sm"
+								onClick={() => setActiveFilter(filter)}
+							>
+								{filter}
+							</Button>
+						))}
+					</div>
+				</div>
 
-        {selectedCustomerIds.length > 0 && (
-          <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-medium">
-                  {selectedCustomerIds.length} customer{selectedCustomerIds.length === 1 ? "" : "s"} selected
-                </p>
-                <p className="text-sm text-muted-foreground">Run actions on the selected customers.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {canMakeVIP && (
-                  <Button variant="outline" onClick={handleBulkMakeVIP}>
-                    <Star className="mr-2 h-4 w-4" />
-                    Make VIP
-                  </Button>
-                )}
-                {canFlag && (
-                  <Button variant="outline" onClick={() => setBulkFlagDialogOpen(true)}>
-                    <Flag className="mr-2 h-4 w-4" />
-                    Flag
-                  </Button>
-                )}
-                {canDelete && (
-                  <Button variant="destructive" onClick={() => setBulkDeleteDialogOpen(true)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </Button>
-                )}
-                <Button variant="ghost" onClick={clearSelection}>
-                  Clear
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+				{selectedCustomerIds.length > 0 && (
+					<Card className="border-primary/20 bg-primary/5">
+						<CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium">
+									{selectedCustomerIds.length} customer
+									{selectedCustomerIds.length === 1 ? "" : "s"} selected
+								</p>
+								<p className="text-sm text-muted-foreground">
+									Run actions on the selected customers.
+								</p>
+							</div>
+							<div className="flex flex-wrap gap-2">
+								{canMakeVIP && (
+									<Button variant="outline" onClick={handleBulkMakeVIP}>
+										<Star className="mr-2 h-4 w-4" />
+										Make VIP
+									</Button>
+								)}
+								{canFlag && (
+									<Button
+										variant="outline"
+										onClick={() => setBulkFlagDialogOpen(true)}
+									>
+										<Flag className="mr-2 h-4 w-4" />
+										Flag
+									</Button>
+								)}
+								{canDelete && (
+									<Button
+										variant="destructive"
+										onClick={() => setBulkDeleteDialogOpen(true)}
+									>
+										<Trash2 className="mr-2 h-4 w-4" />
+										Delete
+									</Button>
+								)}
+								<Button variant="ghost" onClick={clearSelection}>
+									Clear
+								</Button>
+							</div>
+						</CardContent>
+					</Card>
+				)}
 
-        {/* Customers Grid */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <Skeleton className="w-12 h-12 rounded-full" />
-                    <div className="flex-1">
-                      <Skeleton className="h-5 w-32 mb-2" />
-                      <Skeleton className="h-4 w-48" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : filteredCustomers.length === 0 ? (
-          <div className="text-center py-12">
-            <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-muted-foreground">
-              {searchQuery || activeFilter !== "All"
-                ? "No customers match your search."
-                : "No customers yet. Add your first customer."}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredCustomers.map((customer) => (
-              <Card
-                key={customer.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => setDetailCustomer(customer)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className="pt-1"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <Checkbox
-                        checked={selectedCustomerIds.includes(customer.id)}
-                        onCheckedChange={() => toggleCustomerSelection(customer.id)}
-                        aria-label={`Select ${customer.full_name}`}
-                      />
-                    </div>
-                    {/* Avatar */}
-                    <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center text-lg font-semibold flex-shrink-0">
-                      {getInitials(customer.full_name)}
-                    </div>
+				{/* Customers Grid */}
+				{isLoading ? (
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						{[1, 2, 3, 4].map((i) => (
+							<Card key={i}>
+								<CardContent className="p-4">
+									<div className="flex items-start gap-4">
+										<Skeleton className="w-12 h-12 rounded-full" />
+										<div className="flex-1">
+											<Skeleton className="h-5 w-32 mb-2" />
+											<Skeleton className="h-4 w-48" />
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+						))}
+					</div>
+				) : filteredCustomers.length === 0 ? (
+					<div className="text-center py-12">
+						<Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+						<p className="text-muted-foreground">
+							{searchQuery || activeFilter !== "All"
+								? "No customers match your search."
+								: "No customers yet. Add your first customer."}
+						</p>
+					</div>
+				) : (
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						{filteredCustomers.map((customer) => (
+							<Card
+								key={customer.id}
+								className="hover:shadow-md transition-shadow cursor-pointer"
+								onClick={() => setDetailCustomer(customer)}
+							>
+								<CardContent className="p-4">
+									<div className="flex items-start gap-4">
+										<div
+											className="pt-1"
+											onClick={(event) => event.stopPropagation()}
+										>
+											<Checkbox
+												checked={selectedCustomerIds.includes(customer.id)}
+												onCheckedChange={() =>
+													toggleCustomerSelection(customer.id)
+												}
+												aria-label={`Select ${customer.full_name}`}
+											/>
+										</div>
+										{/* Avatar */}
+										<div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center text-lg font-semibold flex-shrink-0">
+											{getInitials(customer.full_name)}
+										</div>
 
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold truncate">{customer.full_name}</h3>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "capitalize text-xs",
-                            customer.status === "active"
-                              ? "bg-success/10 text-success"
-                              : customer.status === "vip"
-                                ? "bg-purple-100 text-purple-700"
-                                : customer.status === "blocked"
-                                  ? "bg-destructive/10 text-destructive"
-                                  : "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {customer.status}
-                        </Badge>
-                      </div>
+										{/* Info */}
+										<div className="flex-1 min-w-0">
+											<div className="flex items-center gap-2">
+												<h3 className="font-semibold truncate">
+													{customer.full_name}
+												</h3>
+												<Badge
+													variant="secondary"
+													className={cn(
+														"capitalize text-xs",
+														customer.status === "active"
+															? "bg-success/10 text-success"
+															: customer.status === "vip"
+																? "bg-purple-100 text-purple-700"
+																: customer.status === "blocked"
+																	? "bg-destructive/10 text-destructive"
+																	: "bg-muted text-muted-foreground",
+													)}
+												>
+													{customer.status}
+												</Badge>
+											</div>
 
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
-                        {customer.email && (
-                          <div className="flex items-center gap-1">
-                            <Mail className="w-3.5 h-3.5" />
-                            <span className="truncate">{customer.email}</span>
-                          </div>
-                        )}
-                        {customer.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="w-3.5 h-3.5" />
-                            <span>{customer.phone}</span>
-                          </div>
-                        )}
-                      </div>
+											<div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+												{customer.email && (
+													<div className="flex items-center gap-1">
+														<Mail className="w-3.5 h-3.5" />
+														<span className="truncate">{customer.email}</span>
+													</div>
+												)}
+												{customer.phone && (
+													<div className="flex items-center gap-1">
+														<Phone className="w-3.5 h-3.5" />
+														<span>{customer.phone}</span>
+													</div>
+												)}
+											</div>
 
-                      <div className="flex items-center gap-4 mt-3 text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {currency} {Number(customer.outstanding_balance).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-muted-foreground">{customer.visit_count} visits</span>
-                        </div>
-                      </div>
+											<div className="flex items-center gap-4 mt-3 text-sm">
+												<div className="flex items-center gap-1.5">
+													<CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+													<span className="text-muted-foreground">
+														{currency}{" "}
+														{Number(customer.outstanding_balance).toFixed(2)}
+													</span>
+												</div>
+												<div className="flex items-center gap-1.5">
+													<Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+													<span className="text-muted-foreground">
+														{customer.visit_count} visits
+													</span>
+												</div>
+											</div>
 
-                      {customer.visitedLocations.length > 0 && (
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {(() => {
-                            const branchSummary = getBranchChipSummary(customer);
-                            if (!branchSummary) return null;
+											{customer.visitedLocations.length > 0 && (
+												<div className="mt-3 flex flex-wrap items-center gap-2">
+													{(() => {
+														const branchSummary =
+															getBranchChipSummary(customer);
+														if (!branchSummary) return null;
 
-                            return (
-                              <>
-                                <Badge variant="outline" className="max-w-full truncate">
-                                  {branchSummary.primaryLabel}
-                                </Badge>
-                                {branchSummary.overflowCount > 0 && (
-                                  <Badge variant="secondary">+{branchSummary.overflowCount}</Badge>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
+														return (
+															<>
+																<Badge
+																	variant="outline"
+																	className="max-w-full truncate"
+																>
+																	{branchSummary.primaryLabel}
+																</Badge>
+																{branchSummary.overflowCount > 0 && (
+																	<Badge variant="secondary">
+																		+{branchSummary.overflowCount}
+																	</Badge>
+																)}
+															</>
+														);
+													})()}
+												</div>
+											)}
+										</div>
 
-                    {/* Dropdown Menu */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="flex-shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenuItem onClick={() => setDetailCustomer(customer)}>
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </DropdownMenuItem>
+										{/* Dropdown Menu */}
+										<DropdownMenu>
+											<DropdownMenuTrigger asChild>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="flex-shrink-0"
+													onClick={(e) => e.stopPropagation()}
+												>
+													<MoreHorizontal className="w-4 h-4" />
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent
+												align="end"
+												onClick={(e) => e.stopPropagation()}
+											>
+												<DropdownMenuItem
+													onClick={() => setDetailCustomer(customer)}
+												>
+													<Eye className="w-4 h-4 mr-2" />
+													View Details
+												</DropdownMenuItem>
 
-                        {canMakeVIP && (
-                          <>
-                            {customer.status === "vip" ? (
-                              <DropdownMenuItem onClick={() => handleRemoveVIP(customer)}>
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Remove VIP
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => handleMakeVIP(customer)}>
-                                <Star className="w-4 h-4 mr-2" />
-                                Make VIP
-                              </DropdownMenuItem>
-                            )}
-                          </>
-                        )}
+												{canMakeVIP && (
+													<>
+														{customer.status === "vip" ? (
+															<DropdownMenuItem
+																onClick={() => handleRemoveVIP(customer)}
+															>
+																<CheckCircle className="w-4 h-4 mr-2" />
+																Remove VIP
+															</DropdownMenuItem>
+														) : (
+															<DropdownMenuItem
+																onClick={() => handleMakeVIP(customer)}
+															>
+																<Star className="w-4 h-4 mr-2" />
+																Make VIP
+															</DropdownMenuItem>
+														)}
+													</>
+												)}
 
-                        {canFlag && (
-                          <>
-                            {customer.status === "blocked" ? (
-                              <DropdownMenuItem onClick={() => handleUnflag(customer)}>
-                                <CheckCircle className="w-4 h-4 mr-2" />
-                                Unflag Customer
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                onClick={() => setFlagDialogCustomer(customer)}
-                                className="text-orange-600"
-                              >
-                                <Flag className="w-4 h-4 mr-2" />
-                                Flag Customer
-                              </DropdownMenuItem>
-                            )}
-                          </>
-                        )}
+												{canFlag && (
+													<>
+														{customer.status === "blocked" ? (
+															<DropdownMenuItem
+																onClick={() => handleUnflag(customer)}
+															>
+																<CheckCircle className="w-4 h-4 mr-2" />
+																Unflag Customer
+															</DropdownMenuItem>
+														) : (
+															<DropdownMenuItem
+																onClick={() => setFlagDialogCustomer(customer)}
+																className="text-orange-600"
+															>
+																<Flag className="w-4 h-4 mr-2" />
+																Flag Customer
+															</DropdownMenuItem>
+														)}
+													</>
+												)}
 
-                        {canDelete && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => setDeleteDialogCustomer(customer)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete Customer
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+												{canDelete && (
+													<>
+														<DropdownMenuSeparator />
+														<DropdownMenuItem
+															onClick={() => setDeleteDialogCustomer(customer)}
+															className="text-destructive focus:text-destructive"
+														>
+															<Trash2 className="w-4 h-4 mr-2" />
+															Delete Customer
+														</DropdownMenuItem>
+													</>
+												)}
+											</DropdownMenuContent>
+										</DropdownMenu>
+									</div>
+								</CardContent>
+							</Card>
+						))}
+					</div>
+				)}
 
-        {/* Pagination */}
-        {!isLoading && filteredCustomers.length > 0 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing {filteredCustomers.length} of {customers.length} customers
-            </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled>
-                Previous
-              </Button>
-              <Button variant="default" size="sm">
-                1
-              </Button>
-              <Button variant="outline" size="sm" disabled>
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
+				{/* Pagination */}
+				{!isLoading && filteredCustomers.length > 0 && (
+					<div className="flex items-center justify-between">
+						<p className="text-sm text-muted-foreground">
+							Showing {filteredCustomers.length} of {customers.length} customers
+						</p>
+						<div className="flex items-center gap-2">
+							<Button variant="outline" size="sm" disabled>
+								Previous
+							</Button>
+							<Button variant="default" size="sm">
+								1
+							</Button>
+							<Button variant="outline" size="sm" disabled>
+								Next
+							</Button>
+						</div>
+					</div>
+				)}
+			</div>
+			{/* Floating action button — mobile & tablet only */}
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<button
+						type="button"
+						aria-label="Create appointment or walk-in"
+						className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
+					>
+						<Plus className="w-6 h-6" />
+					</button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" side="top" className="w-52 mb-2">
+					<DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+						<UserPlus className="w-4 h-4 mr-2" />
+						Import Customers
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => setCustomerDialogOpen(true)}>
+						<Calendar className="w-4 h-4 mr-2" />
+						Add New Customer
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 
-      {/* Add Customer Dialog */}
-      <AddCustomerDialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen} onSuccess={refetch} />
+			{/* Add Customer Dialog */}
+			<AddCustomerDialog
+				open={customerDialogOpen}
+				onOpenChange={setCustomerDialogOpen}
+				onSuccess={refetch}
+			/>
 
-      {/* Customer Detail Dialog */}
-      <CustomerDetailDialog
-        open={!!detailCustomer}
-        onOpenChange={(open) => !open && setDetailCustomer(null)}
-        customer={detailCustomer}
-      />
+			{/* Customer Detail Dialog */}
+			<CustomerDetailDialog
+				open={!!detailCustomer}
+				onOpenChange={(open) => !open && setDetailCustomer(null)}
+				customer={detailCustomer}
+			/>
 
-      {/* Flag Customer Dialog */}
-      <FlagCustomerDialog
-        open={!!flagDialogCustomer}
-        onOpenChange={(open) => !open && setFlagDialogCustomer(null)}
-        customerName={flagDialogCustomer?.full_name || ""}
-        onConfirm={handleFlagCustomer}
-      />
+			{/* Flag Customer Dialog */}
+			<FlagCustomerDialog
+				open={!!flagDialogCustomer}
+				onOpenChange={(open) => !open && setFlagDialogCustomer(null)}
+				customerName={flagDialogCustomer?.full_name || ""}
+				onConfirm={handleFlagCustomer}
+			/>
 
-      <FlagCustomerDialog
-        open={bulkFlagDialogOpen}
-        onOpenChange={setBulkFlagDialogOpen}
-        customerName={`${selectedCustomerIds.length} selected customer${selectedCustomerIds.length === 1 ? "" : "s"}`}
-        onConfirm={handleBulkFlagSelectedCustomers}
-      />
+			<FlagCustomerDialog
+				open={bulkFlagDialogOpen}
+				onOpenChange={setBulkFlagDialogOpen}
+				customerName={`${selectedCustomerIds.length} selected customer${selectedCustomerIds.length === 1 ? "" : "s"}`}
+				onConfirm={handleBulkFlagSelectedCustomers}
+			/>
 
-      {/* Delete Confirmation Dialog */}
-      <ConfirmActionDialog
-        open={!!deleteDialogCustomer}
-        onOpenChange={(open) => !open && setDeleteDialogCustomer(null)}
-        title="Delete Customer"
-        description={`Are you sure you want to delete ${deleteDialogCustomer?.full_name}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={handleDeleteCustomer}
-      />
+			{/* Delete Confirmation Dialog */}
+			<ConfirmActionDialog
+				open={!!deleteDialogCustomer}
+				onOpenChange={(open) => !open && setDeleteDialogCustomer(null)}
+				title="Delete Customer"
+				description={`Are you sure you want to delete ${deleteDialogCustomer?.full_name}? This action cannot be undone.`}
+				confirmLabel="Delete"
+				variant="destructive"
+				onConfirm={handleDeleteCustomer}
+			/>
 
-      <ConfirmActionDialog
-        open={bulkDeleteDialogOpen}
-        onOpenChange={setBulkDeleteDialogOpen}
-        title="Delete Selected Customers"
-        description={`Are you sure you want to delete ${selectedCustomerIds.length} selected customer${selectedCustomerIds.length === 1 ? "" : "s"}? This action cannot be undone.`}
-        confirmLabel="Delete Selected"
-        variant="destructive"
-        onConfirm={handleBulkDeleteCustomers}
-      />
+			<ConfirmActionDialog
+				open={bulkDeleteDialogOpen}
+				onOpenChange={setBulkDeleteDialogOpen}
+				title="Delete Selected Customers"
+				description={`Are you sure you want to delete ${selectedCustomerIds.length} selected customer${selectedCustomerIds.length === 1 ? "" : "s"}? This action cannot be undone.`}
+				confirmLabel="Delete Selected"
+				variant="destructive"
+				onConfirm={handleBulkDeleteCustomers}
+			/>
 
-      {/* Import Dialog */}
-      <ImportDialog
-        open={importDialogOpen}
-        onOpenChange={setImportDialogOpen}
-        title="Import Customers"
-        templateColumns={CUSTOMER_TEMPLATE}
-        templateFileName="customers"
-        onImport={handleImport}
-      />
+			{/* Import Dialog */}
+			<ImportDialog
+				open={importDialogOpen}
+				onOpenChange={setImportDialogOpen}
+				title="Import Customers"
+				templateColumns={CUSTOMER_TEMPLATE}
+				templateFileName="customers"
+				onImport={handleImport}
+			/>
 
-      <Dialog open={inactiveDialogOpen} onOpenChange={setInactiveDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Inactive Customers</DialogTitle>
-            <DialogDescription>
-              Customers with no recorded activity for at least {inactiveDaysThreshold} days.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-3">
-            <Input
-              type="number"
-              min={1}
-              value={inactiveDaysThresholdInput}
-              onChange={(event) => {
-                const nextValue = event.target.value;
-                setInactiveDaysThresholdInput(nextValue);
-                if (nextValue === "") return;
-                const parsed = Number(nextValue);
-                if (Number.isInteger(parsed) && parsed >= 1) {
-                  setInactiveDaysThreshold(parsed);
-                }
-              }}
-              onBlur={() => {
-                const parsed = Number(inactiveDaysThresholdInput);
-                const normalized = Number.isInteger(parsed) && parsed >= 1 ? parsed : inactiveDaysThreshold;
-                setInactiveDaysThreshold(normalized);
-                setInactiveDaysThresholdInput(String(normalized));
-              }}
-              className="w-40"
-            />
-            <Button variant="outline" onClick={() => refetchInactiveCustomers()}>
-              Refresh
-            </Button>
-            <Button
-              onClick={() => setReactivationDialogOpen(true)}
-              disabled={inactiveCustomers.length === 0}
-            >
-              Trigger reactivation
-            </Button>
-          </div>
-          <div className="max-h-[420px] space-y-2 overflow-auto pt-2">
-            {inactiveCustomers.length === 0 && (
-              <p className="text-sm text-muted-foreground">No inactive customers found for this threshold.</p>
-            )}
-            {inactiveCustomers.map((row) => (
-              <Card key={row.customer_id}>
-                <CardContent className="flex items-center justify-between p-3">
-                  <div>
-                    <p className="font-medium">{row.customer_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {row.days_since_last_transaction} days inactive • Last item: {row.last_purchased_item || "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Last transaction: {row.last_transaction_at ? new Date(row.last_transaction_at).toLocaleDateString() : "—"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        navigator.clipboard.writeText(row.customer_phone || "");
-                        toast({ title: "Copied", description: "Phone number copied." });
-                      }}
-                      disabled={!row.customer_phone}
-                    >
-                      Copy phone
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const customer = customers.find((item) => item.id === row.customer_id);
-                        if (customer) setDetailCustomer(customer);
-                      }}
-                    >
-                      View details
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
+			<Dialog open={inactiveDialogOpen} onOpenChange={setInactiveDialogOpen}>
+				<DialogContent className="max-w-4xl">
+					<DialogHeader>
+						<DialogTitle>Inactive Customers</DialogTitle>
+						<DialogDescription>
+							Customers with no recorded activity for at least{" "}
+							{inactiveDaysThreshold} days.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="flex items-center gap-3">
+						<Input
+							type="number"
+							min={1}
+							value={inactiveDaysThresholdInput}
+							onChange={(event) => {
+								const nextValue = event.target.value;
+								setInactiveDaysThresholdInput(nextValue);
+								if (nextValue === "") return;
+								const parsed = Number(nextValue);
+								if (Number.isInteger(parsed) && parsed >= 1) {
+									setInactiveDaysThreshold(parsed);
+								}
+							}}
+							onBlur={() => {
+								const parsed = Number(inactiveDaysThresholdInput);
+								const normalized =
+									Number.isInteger(parsed) && parsed >= 1
+										? parsed
+										: inactiveDaysThreshold;
+								setInactiveDaysThreshold(normalized);
+								setInactiveDaysThresholdInput(String(normalized));
+							}}
+							className="w-40"
+						/>
+						<Button
+							variant="outline"
+							onClick={() => refetchInactiveCustomers()}
+						>
+							Refresh
+						</Button>
+						<Button
+							onClick={() => setReactivationDialogOpen(true)}
+							disabled={inactiveCustomers.length === 0}
+						>
+							Trigger reactivation
+						</Button>
+					</div>
+					<div className="max-h-[420px] space-y-2 overflow-auto pt-2">
+						{inactiveCustomers.length === 0 && (
+							<p className="text-sm text-muted-foreground">
+								No inactive customers found for this threshold.
+							</p>
+						)}
+						{inactiveCustomers.map((row) => (
+							<Card key={row.customer_id}>
+								<CardContent className="flex items-center justify-between p-3">
+									<div>
+										<p className="font-medium">{row.customer_name}</p>
+										<p className="text-xs text-muted-foreground">
+											{row.days_since_last_transaction} days inactive • Last
+											item: {row.last_purchased_item || "—"}
+										</p>
+										<p className="text-xs text-muted-foreground">
+											Last transaction:{" "}
+											{row.last_transaction_at
+												? new Date(row.last_transaction_at).toLocaleDateString()
+												: "—"}
+										</p>
+									</div>
+									<div className="flex items-center gap-2">
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => {
+												navigator.clipboard.writeText(row.customer_phone || "");
+												toast({
+													title: "Copied",
+													description: "Phone number copied.",
+												});
+											}}
+											disabled={!row.customer_phone}
+										>
+											Copy phone
+										</Button>
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => {
+												const customer = customers.find(
+													(item) => item.id === row.customer_id,
+												);
+												if (customer) setDetailCustomer(customer);
+											}}
+										>
+											View details
+										</Button>
+									</div>
+								</CardContent>
+							</Card>
+						))}
+					</div>
+				</DialogContent>
+			</Dialog>
 
-      <Dialog open={reactivationDialogOpen} onOpenChange={setReactivationDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Reactivation Campaign Composer</DialogTitle>
-            <DialogDescription>
-              Select customers, preview the message, and send through your preferred channel.
-            </DialogDescription>
-          </DialogHeader>
+			<Dialog
+				open={reactivationDialogOpen}
+				onOpenChange={setReactivationDialogOpen}
+			>
+				<DialogContent className="max-w-4xl">
+					<DialogHeader>
+						<DialogTitle>Reactivation Campaign Composer</DialogTitle>
+						<DialogDescription>
+							Select customers, preview the message, and send through your
+							preferred channel.
+						</DialogDescription>
+					</DialogHeader>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Channel</p>
-                <Select
-                  value={reactivationChannel}
-                  onValueChange={(value) => setReactivationChannel(value as ReactivationChannel)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="email">Email (free)</SelectItem>
-                    <SelectItem value="sms">SMS (2 credits)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {reactivationChannel === "email" && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">Subject</p>
-                  <Input
-                    value={reactivationSubject}
-                    onChange={(event) => setReactivationSubject(event.target.value)}
-                  />
-                </div>
-              )}
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Message template</p>
-                <Textarea
-                  rows={5}
-                  value={reactivationMessage}
-                  onChange={(event) => setReactivationMessage(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Supported variables: {"{{customer_name}}"}, {"{{salon_name}}"}, {"{{most_purchased_item}}"}
-                </p>
-              </div>
-            </div>
+					<div className="grid gap-4 md:grid-cols-2">
+						<div className="space-y-3">
+							<div className="space-y-2">
+								<p className="text-sm font-medium">Channel</p>
+								<Select
+									value={reactivationChannel}
+									onValueChange={(value) =>
+										setReactivationChannel(value as ReactivationChannel)
+									}
+								>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="email">Email (free)</SelectItem>
+										<SelectItem value="sms">SMS (2 credits)</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							{reactivationChannel === "email" && (
+								<div className="space-y-2">
+									<p className="text-sm font-medium">Subject</p>
+									<Input
+										value={reactivationSubject}
+										onChange={(event) =>
+											setReactivationSubject(event.target.value)
+										}
+									/>
+								</div>
+							)}
+							<div className="space-y-2">
+								<p className="text-sm font-medium">Message template</p>
+								<Textarea
+									rows={5}
+									value={reactivationMessage}
+									onChange={(event) =>
+										setReactivationMessage(event.target.value)
+									}
+								/>
+								<p className="text-xs text-muted-foreground">
+									Supported variables: {"{{customer_name}}"}, {"{{salon_name}}"}
+									, {"{{most_purchased_item}}"}
+								</p>
+							</div>
+						</div>
 
-            <div className="space-y-3">
-              <p className="text-sm font-medium">Recipients</p>
-              <div className="max-h-60 space-y-2 overflow-auto rounded-md border p-3">
-                {inactiveCustomers.map((row) => {
-                  const checked = selectedInactiveCustomerIds.includes(row.customer_id);
-                  return (
-                    <label key={row.customer_id} className="flex items-start gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) => {
-                          setSelectedInactiveCustomerIds((current) => {
-                            if (event.target.checked) return [...current, row.customer_id];
-                            return current.filter((id) => id !== row.customer_id);
-                          });
-                        }}
-                      />
-                      <span>
-                        <span className="font-medium">{row.customer_name}</span>
-                        <span className="block text-muted-foreground">
-                          {row.days_since_last_transaction} days inactive
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+						<div className="space-y-3">
+							<p className="text-sm font-medium">Recipients</p>
+							<div className="max-h-60 space-y-2 overflow-auto rounded-md border p-3">
+								{inactiveCustomers.map((row) => {
+									const checked = selectedInactiveCustomerIds.includes(
+										row.customer_id,
+									);
+									return (
+										<label
+											key={row.customer_id}
+											className="flex items-start gap-3 text-sm"
+										>
+											<input
+												type="checkbox"
+												checked={checked}
+												onChange={(event) => {
+													setSelectedInactiveCustomerIds((current) => {
+														if (event.target.checked)
+															return [...current, row.customer_id];
+														return current.filter(
+															(id) => id !== row.customer_id,
+														);
+													});
+												}}
+											/>
+											<span>
+												<span className="font-medium">{row.customer_name}</span>
+												<span className="block text-muted-foreground">
+													{row.days_since_last_transaction} days inactive
+												</span>
+											</span>
+										</label>
+									);
+								})}
+							</div>
 
-              <div className="rounded-md border p-3">
-                <p className="text-sm font-medium mb-1">Preview</p>
-                <p className="text-xs text-muted-foreground mb-2">
-                  {(reactivationChannel === "email" ? reactivationSubject : "Reactivation message")
-                    .replaceAll("{{customer_name}}", "Jane Doe")
-                    .replaceAll("{{salon_name}}", currentTenant?.name || "Salon Magik")}
-                </p>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {reactivationMessage
-                    .replaceAll("{{customer_name}}", "Jane Doe")
-                    .replaceAll("{{salon_name}}", currentTenant?.name || "Salon Magik")
-                    .replaceAll("{{most_purchased_item}}", "Hair Coloring")}
-                </p>
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  onClick={() => sendReactivationMutation.mutate()}
-                  disabled={sendReactivationMutation.isPending || selectedInactiveCustomerIds.length === 0}
-                >
-                  Send Campaign
-                </Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </SalonSidebar>
-  );
+							<div className="rounded-md border p-3">
+								<p className="text-sm font-medium mb-1">Preview</p>
+								<p className="text-xs text-muted-foreground mb-2">
+									{(reactivationChannel === "email"
+										? reactivationSubject
+										: "Reactivation message"
+									)
+										.replaceAll("{{customer_name}}", "Jane Doe")
+										.replaceAll(
+											"{{salon_name}}",
+											currentTenant?.name || "Salon Magik",
+										)}
+								</p>
+								<p className="text-sm text-muted-foreground whitespace-pre-wrap">
+									{reactivationMessage
+										.replaceAll("{{customer_name}}", "Jane Doe")
+										.replaceAll(
+											"{{salon_name}}",
+											currentTenant?.name || "Salon Magik",
+										)
+										.replaceAll("{{most_purchased_item}}", "Hair Coloring")}
+								</p>
+							</div>
+							<div className="flex justify-end">
+								<Button
+									onClick={() => sendReactivationMutation.mutate()}
+									disabled={
+										sendReactivationMutation.isPending ||
+										selectedInactiveCustomerIds.length === 0
+									}
+								>
+									Send Campaign
+								</Button>
+							</div>
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
+		</SalonSidebar>
+	);
 }

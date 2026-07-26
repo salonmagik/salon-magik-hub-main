@@ -6,7 +6,7 @@ import { Badge } from "@ui/badge";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Tag, X, CheckCircle } from "lucide-react";
 import { formatCurrency } from "@shared/currency";
-import type { Tables } from "@supabase-client";
+import type { Tables } from "@supabase-client/index";
 
 interface VoucherInputProps {
   tenantId: string;
@@ -14,6 +14,7 @@ interface VoucherInputProps {
   subtotal: number;
   selectedLocationId?: string;
   selectedCountryCode?: string | null;
+  customerEmail?: string;
   onVoucherApplied: (voucher: AppliedVoucher | null) => void;
   appliedVoucher: AppliedVoucher | null;
 }
@@ -34,6 +35,7 @@ export function VoucherInput({
   subtotal,
   selectedLocationId,
   selectedCountryCode,
+  customerEmail,
   onVoucherApplied,
   appliedVoucher,
 }: VoucherInputProps) {
@@ -99,19 +101,28 @@ export function VoucherInput({
         .select("*")
         .eq("tenant_id", tenantId)
         .eq("code", code.toUpperCase().trim())
-        .eq("status", "active")
-        .maybeSingle();
+        .eq("status", "active");
 
       if (allowedVoucherIds) {
         voucherQuery = voucherQuery.in("id", allowedVoucherIds);
       }
 
-      const { data: voucher, error: fetchError } = await voucherQuery;
+      const { data: voucher, error: fetchError } = await voucherQuery.maybeSingle();
 
       if (fetchError || !voucher) {
         setError("Invalid or expired voucher code");
         return;
       }
+      const voucherRecord = voucher as typeof voucher & {
+        access_type?: string;
+        target_customer_id?: string | null;
+        claimed_by_customer_id?: string | null;
+        starts_at?: string | null;
+        minimum_spend?: number;
+        voucher_type?: string;
+        discount_type?: string;
+        discount_value?: number;
+      };
 
       // Check expiration
       if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) {
@@ -125,14 +136,45 @@ export function VoucherInput({
         return;
       }
 
-      // Calculate discount - use remaining balance up to subtotal
-      const discountAmount = Math.min(voucher.balance, subtotal);
+      let customerId: string | null = null;
+      if (customerEmail) {
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("email", customerEmail.trim().toLowerCase())
+          .maybeSingle();
+        customerId = customer?.id || null;
+      }
+
+      if (voucherRecord.access_type === "private" && voucherRecord.target_customer_id !== customerId) {
+        setError("This private voucher belongs to another customer");
+        return;
+      }
+      if (voucherRecord.claimed_by_customer_id && voucherRecord.claimed_by_customer_id !== customerId) {
+        setError("This gift voucher has already been claimed");
+        return;
+      }
+      if (voucherRecord.starts_at && new Date(voucherRecord.starts_at) > new Date()) {
+        setError("This voucher is not active yet");
+        return;
+      }
+      if (Number(voucherRecord.minimum_spend || 0) > subtotal) {
+        setError(`A minimum spend of ${formatCurrency(Number(voucherRecord.minimum_spend), currency)} is required`);
+        return;
+      }
+
+      const isPercentagePromotion = voucherRecord.voucher_type === "promotion" && voucherRecord.discount_type === "percentage";
+      const discountValue = Number(voucherRecord.discount_value || voucher.amount);
+      const discountAmount = isPercentagePromotion
+        ? Math.min(subtotal, subtotal * Math.min(discountValue, 100) / 100)
+        : Math.min(voucherRecord.voucher_type === "gift" ? Number(voucher.balance) : discountValue, subtotal);
 
       onVoucherApplied({
         id: voucher.id,
         code: voucher.code,
-        discountType: "fixed", // Gift card vouchers are fixed amount
-        discountValue: voucher.balance,
+        discountType: isPercentagePromotion ? "percentage" : "fixed",
+        discountValue,
         discountAmount: Math.round(discountAmount * 100) / 100,
       });
 

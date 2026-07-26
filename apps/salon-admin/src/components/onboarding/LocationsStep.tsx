@@ -158,7 +158,7 @@ export function LocationsStep({
           <MapPin className="h-3.5 w-3.5" strokeWidth={2} />
           Locations
         </div>
-        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+        <h2 className="text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           Your branches
         </h2>
         <p className="mt-1.5 text-[14px] text-black/45">

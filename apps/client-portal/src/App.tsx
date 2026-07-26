@@ -66,13 +66,14 @@ function App() {
             }
           />
           <Route
-            path="/refunds"
+            path="/balance"
             element={
               <ClientProtectedRoute>
                 <ClientRefundsPage />
               </ClientProtectedRoute>
             }
           />
+          <Route path="/refunds" element={<Navigate to="/balance?tab=refunds" replace />} />
           <Route
             path="/notifications"
             element={

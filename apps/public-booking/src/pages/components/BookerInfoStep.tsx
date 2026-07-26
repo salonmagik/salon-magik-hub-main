@@ -4,8 +4,11 @@ import { Textarea } from "@ui/textarea";
 import { PhoneInput } from "@ui/phone-input";
 import { Button } from "@ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
-import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
-import { getCitiesForCountryRegion, getCountryByCode, getRegionsForCountry } from "@shared";
+import { getCountryByCode, PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import {
+  getCitiesForCountryRegion,
+  getRegionsForCountry,
+} from "@shared/address-geography";
 import {
   Select,
   SelectContent,

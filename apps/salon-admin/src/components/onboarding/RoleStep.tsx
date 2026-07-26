@@ -49,7 +49,7 @@ export function RoleStep({ selectedRole, onRoleSelect }: RoleStepProps) {
           <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
           Your role
         </div>
-        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+        <h2 className="text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           What's your role?
         </h2>
         <p className="mt-1.5 text-[14px] text-black/45">

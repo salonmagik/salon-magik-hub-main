@@ -96,7 +96,7 @@ function ReviewCard({
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-[#2E1F4E]/8">
             <Icon className="h-[15px] w-[15px] text-[#2E1F4E]" strokeWidth={1.8} />
           </div>
-          <h3 className="font-serif text-[15.5px] font-medium text-gray-900">{title}</h3>
+          <h3 className="text-[15.5px] font-medium text-gray-900">{title}</h3>
         </div>
         {onEdit && (
           <button
@@ -148,7 +148,7 @@ export function ReviewStep({
           <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
           Almost there
         </div>
-        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+        <h2 className="text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           Review your setup
         </h2>
         <p className="mt-1.5 text-[14px] text-black/45">

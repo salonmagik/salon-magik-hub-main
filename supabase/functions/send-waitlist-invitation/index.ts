@@ -107,13 +107,14 @@ function buildInvitationEmail(name: string, invitationLink: string): string {
        );
      }
  
-     // Build invitation link
+     // Build invitation link — always target salon-admin, never the caller's origin
      const baseUrl =
-       req.headers.get("origin") ||
        Deno.env.get("SALON_APP_URL") ||
        Deno.env.get("BASE_URL") ||
        "https://app.salonmagik.com";
-     const invitationLink = `${baseUrl.replace(/\/+$/, "")}/signup?invite=${lead.invitation_token}`;
+     const invitationUrl = new URL("/signup", `${baseUrl.replace(/\/+$/, "")}/`);
+     invitationUrl.searchParams.set("invite", lead.invitation_token);
+     const invitationLink = invitationUrl.toString();
  
      const firstName = lead.name.split(" ")[0];
  

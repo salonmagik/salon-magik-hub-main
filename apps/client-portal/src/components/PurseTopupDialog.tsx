@@ -44,6 +44,7 @@ export function PurseTopupDialog({
 
   // Get predefined amounts based on currency
   const predefinedAmounts = PREDEFINED_AMOUNTS[currency as keyof typeof PREDEFINED_AMOUNTS] || PREDEFINED_AMOUNTS.NGN;
+  const minimumAmount = currency === "GHS" ? 20 : currency === "NGN" ? 500 : 10;
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -73,8 +74,8 @@ export function PurseTopupDialog({
       return "Please enter a valid amount";
     }
 
-    if (numValue < 100) {
-      return "Minimum top-up amount is 100";
+    if (numValue < minimumAmount) {
+      return `Minimum top-up amount is ${formatCurrency(minimumAmount, currency)}`;
     }
 
     return null;
@@ -153,10 +154,10 @@ export function PurseTopupDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet className="h-5 w-5" />
-            Top Up Purse
+            Add funds
           </DialogTitle>
           <DialogDescription>
-            Add funds to your purse to pay for bookings
+            Add paid funds to your balance at this salon.
           </DialogDescription>
         </DialogHeader>
 
@@ -197,13 +198,13 @@ export function PurseTopupDialog({
                 value={amount}
                 onChange={(e) => handleCustomAmount(e.target.value)}
                 disabled={isSubmitting}
-                min="100"
+                min={minimumAmount}
                 step="1"
                 className="flex-1"
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Minimum: {formatCurrency(100, currency)}
+              Minimum: {formatCurrency(minimumAmount, currency)}
             </p>
           </div>
 
@@ -237,7 +238,7 @@ export function PurseTopupDialog({
               </>
             ) : (
               <>
-                Top Up {amount ? formatCurrency(Number(amount), currency) : ""}
+                Add {amount ? formatCurrency(Number(amount), currency) : "funds"}
               </>
             )}
           </Button>

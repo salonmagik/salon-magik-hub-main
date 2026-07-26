@@ -82,20 +82,14 @@ export default function SignupPage() {
       if (!invitationToken) return;
 
       try {
-        const { data, error } = await supabase
-          .from("waitlist_leads")
-          .select("id, name, email, phone, invitation_expires_at, status")
-          .eq("invitation_token", invitationToken)
-          .maybeSingle();
+        const { data: invitationRows, error } = await supabase.rpc(
+          "validate_waitlist_invitation",
+          { p_token: invitationToken },
+        );
+        const data = invitationRows?.[0];
 
         if (error || !data) {
           console.error("Invalid invitation token:", error);
-          navigate("/invitation-expired");
-          return;
-        }
-
-        // Check if token is expired
-        if (data.invitation_expires_at && new Date(data.invitation_expires_at) < new Date()) {
           navigate("/invitation-expired");
           return;
         }
@@ -107,6 +101,17 @@ export default function SignupPage() {
             description: "This invitation has already been used. Please log in.",
           });
           navigate("/login");
+          return;
+        }
+
+        // Only invited, unexpired leads can begin signup. This check is kept in
+        // the client for the correct UX; the token is validated server-side.
+        if (
+          data.status !== "invited" ||
+          !data.invitation_expires_at ||
+          new Date(data.invitation_expires_at).getTime() <= Date.now()
+        ) {
+          navigate("/invitation-expired");
           return;
         }
 

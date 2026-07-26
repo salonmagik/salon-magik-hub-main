@@ -129,9 +129,9 @@ const faqs = [
       "Go to the Staff page and click 'Invite Staff'. Enter their email address and select their role (Manager, Supervisor, Receptionist, or Staff). They'll receive an email invitation to join your team.",
   },
   {
-    question: "What are customer purses?",
+    question: "What is Salon Balance?",
     answer:
-      "Customer purses are digital wallets where customers can store credit. This can be topped up by the customer or as store credit from refunds. Customers can use their purse balance to pay for services.",
+      "Salon Balance combines a customer's paid funds and salon-issued store credit for one salon. Customers can add funds, claim eligible gift vouchers, receive refund credit, and use the available balance when booking.",
   },
   {
     question: "How do I view reports?",

@@ -27,10 +27,8 @@ const BranchSettingsPage = lazy(() => import("./pages/salon/BranchSettingsPage")
 const PaymentsPage = lazy(() => import("./pages/salon/PaymentsPage"));
 const ReportsPage = lazy(() => import("./pages/salon/ReportsPage"));
 const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
-const JournalPage = lazy(() => import("./pages/salon/JournalPage"));
 const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
 const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
-const CalendarPage = lazy(() => import("./pages/salon/CalendarPage"));
 const EmailTemplatesPage = lazy(() => import("./pages/salon/EmailTemplatesPage"));
 const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
@@ -239,6 +237,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              <Route path="/salon/calendar" element={<Navigate to="/salon/appointments" replace />} />
               <Route
                 path="/salon/customers"
                 element={
@@ -289,34 +288,13 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              {import.meta.env.DEV && (
-                <Route
-                  path="/salon/cash-tracker"
-                  element={
-                    <ProtectedRoute>
-                      <ModuleProtectedRoute module="journal">
-                        <JournalPage />
-                      </ModuleProtectedRoute>
-                    </ProtectedRoute>
-                  }
-                />
-              )}
+              <Route path="/salon/cash-tracker" element={<Navigate to="/salon/transactions?type=cash" replace />} />
               <Route
                 path="/salon/staff"
                 element={
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="staff">
                       <StaffPage />
-                    </ModuleProtectedRoute>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/salon/calendar"
-                element={
-                  <ProtectedRoute>
-                    <ModuleProtectedRoute module="calendar">
-                      <CalendarPage />
                     </ModuleProtectedRoute>
                   </ProtectedRoute>
                 }

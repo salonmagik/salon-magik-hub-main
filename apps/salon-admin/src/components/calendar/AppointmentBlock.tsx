@@ -45,6 +45,9 @@ export function AppointmentBlock({
     : "—";
   const serviceName = appointment.services[0]?.service_name || "Service";
   const customerName = appointment.customer?.full_name || "Walk-in";
+  const paidOffline = appointment.transactions?.some(
+    (transaction) => transaction.provider === "offline" && transaction.method === "cash" && transaction.status === "completed",
+  );
 
   const blockContent = (
     <div
@@ -66,11 +69,12 @@ export function AppointmentBlock({
       <HoverCardTrigger asChild>{blockContent}</HoverCardTrigger>
       <HoverCardContent className="w-64 p-3" side="right" align="start">
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <p className="font-semibold text-sm">{customerName}</p>
-            <Badge variant="secondary" className="text-xs">
-              {statusLabels[appointment.status]}
-            </Badge>
+            <div className="flex gap-1">
+              {paidOffline && <Badge variant="outline" className="text-xs text-success">Paid offline</Badge>}
+              <Badge variant="secondary" className="text-xs">{statusLabels[appointment.status]}</Badge>
+            </div>
           </div>
           <div className="text-sm text-muted-foreground">
             <p>
@@ -106,6 +110,9 @@ export function MonthAppointmentItem({
     ? format(new Date(appointment.scheduled_start), "h:mm")
     : "";
   const firstName = appointment.customer?.full_name?.split(" ")[0] || "Guest";
+  const paidOffline = appointment.transactions?.some(
+    (transaction) => transaction.provider === "offline" && transaction.method === "cash" && transaction.status === "completed",
+  );
 
   const itemContent = (
     <div
@@ -121,13 +128,14 @@ export function MonthAppointmentItem({
       <HoverCardTrigger asChild>{itemContent}</HoverCardTrigger>
       <HoverCardContent className="w-56 p-3" side="right" align="start">
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <p className="font-semibold text-sm">
               {appointment.customer?.full_name || "Walk-in"}
             </p>
-            <Badge variant="secondary" className="text-xs">
-              {statusLabels[appointment.status]}
-            </Badge>
+            <div className="flex gap-1">
+              {paidOffline && <Badge variant="outline" className="text-xs text-success">Paid offline</Badge>}
+              <Badge variant="secondary" className="text-xs">{statusLabels[appointment.status]}</Badge>
+            </div>
           </div>
           <div className="text-sm text-muted-foreground">
             <p>

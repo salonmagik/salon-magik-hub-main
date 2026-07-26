@@ -232,14 +232,12 @@ export function BookingWizard({
 
         setCustomerId(customer.id);
 
-        const { data: purse } = await supabase
-          .from("customer_purses")
-          .select("balance")
-          .eq("tenant_id", salon.id)
-          .eq("customer_id", customer.id)
-          .maybeSingle();
-
-        setPurseBalance(purse?.balance || 0);
+        const { data: availableBalance, error: balanceError } = await supabase.rpc(
+          "customer_credit_available" as never,
+          { p_tenant_id: salon.id, p_customer_id: customer.id } as never,
+        );
+        if (balanceError) throw balanceError;
+        setPurseBalance(Number(availableBalance || 0));
       } catch (err) {
         console.error("Error fetching purse balance:", err);
         setPurseBalance(0);
@@ -313,10 +311,13 @@ export function BookingWizard({
 
       const nextBranches = source.branches ?? [];
       const nextDuration =
-        item.type === "service" || item.type === "package"
+        (item.type === "service" || item.type === "package") && "duration_minutes" in source
           ? source.duration_minutes ?? item.durationMinutes
           : item.durationMinutes;
-      const nextServiceIds = item.type === "package" ? source.service_ids ?? item.serviceIds : item.serviceIds;
+      const nextServiceIds =
+        item.type === "package" && "service_ids" in source
+          ? source.service_ids ?? item.serviceIds
+          : item.serviceIds;
       const branchName =
         item.branchId && nextBranches.length > 0
           ? nextBranches.find((branch) => branch.id === item.branchId)?.name || item.branchName

@@ -40,7 +40,7 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
           <Crown className="h-3.5 w-3.5" strokeWidth={2} />
           Owner invite
         </div>
-        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+        <h2 className="text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           Invite the salon owner
         </h2>
         <p className="mt-1.5 text-[14px] text-black/45">

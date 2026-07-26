@@ -79,7 +79,7 @@ export function ModuleProtectedRoute({
   }, [activeContextType, currentTenant?.id, hasModuleAccess, isAllowed, isAssignmentPending, isChainAuditLogBlocked, isGuardBootstrapping, isLoading, module, user?.id]);
 
   if (isLoading || isGuardBootstrapping) {
-    return <BrandLoader fullScreen size="lg" />;
+    return <BrandLoader fullScreen />;
   }
 
   if (isAssignmentPending) {

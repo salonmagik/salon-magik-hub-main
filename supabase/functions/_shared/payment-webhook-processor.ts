@@ -368,7 +368,7 @@ export async function processWebhook(
           if (actualServiceAmount) {
             const { data: appointments, error: appointmentsError } = await supabase
               .from("appointments")
-              .select("id, tenant_id, customer_id, total_amount, booking_reference")
+              .select("id, tenant_id, customer_id, total_amount, booking_reference, purse_amount_used")
               .in("id", targetAppointmentIds);
 
             if (appointmentsError) {
@@ -380,7 +380,6 @@ export async function processWebhook(
                 (sum, entry) => sum + Number(entry.total_amount || 0),
                 0,
               );
-              const paymentStatus = isDeposit ? "deposit_paid" : "fully_paid";
               const allocatedAmounts = appointments.map((entry, index) => {
                 if (index === appointments.length - 1) {
                   const previousTotal = appointments
@@ -406,11 +405,14 @@ export async function processWebhook(
               });
 
               for (const [index, entry] of appointments.entries()) {
+                const combinedPaid = allocatedAmounts[index] + Number(entry.purse_amount_used || 0);
                 const { error: appointmentError } = await supabase
                   .from("appointments")
                   .update({
-                    payment_status: paymentStatus,
-                    amount_paid: allocatedAmounts[index],
+                    payment_status: isDeposit
+                      ? "deposit_paid"
+                      : combinedPaid >= Number(entry.total_amount || 0) ? "fully_paid" : "deposit_paid",
+                    amount_paid: combinedPaid,
                     updated_at: new Date().toISOString(),
                   })
                   .eq("id", entry.id);
@@ -440,59 +442,27 @@ export async function processWebhook(
                 ? crypto.randomUUID()
                 : null;
 
-              // Handle split payment purse deduction if metadata is present
+              // The balance portion was reserved when the booking was created.
               if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId && paymentGroupId) {
-                console.log(`Processing split payment purse deduction: ${splitPurseAmount} for customer ${splitCustomerId}`);
+                console.log(`Recording reserved balance portion: ${splitPurseAmount} for customer ${splitCustomerId}`);
                 try {
-                  const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
-                    p_tenant_id: appointments[0].tenant_id,
-                    p_customer_id: splitCustomerId,
-                    p_appointment_id: appointments[0].id,
-                    p_amount: splitPurseAmount,
-                    p_currency: tenant?.currency || "USD",
-                    p_idempotency_key: `split_purse_${reference}_${appointments[0].id}`,
+                  await supabase.from("transactions").insert({
+                    tenant_id: primaryAppointment.tenant_id,
+                    customer_id: splitCustomerId,
+                    appointment_id: primaryAppointment.id,
+                    type: "payment",
+                    amount: splitPurseAmount,
+                    currency: tenant?.currency || "USD",
+                    method: "purse",
+                    provider: "internal",
+                    provider_reference: `split_purse_${reference}`,
+                    status: "completed",
+                    ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
                   });
 
-                  if (debitError) {
-                    console.error("Error debiting customer purse for split payment:", debitError);
-                  } else {
-                    console.log(`Successfully debited ${splitPurseAmount} from customer purse for split payment`);
-
-                    // Update appointment amount_paid to include purse amount
-                    for (const appointment of appointments) {
-                      const currentPaid = allocatedAmounts[appointments.indexOf(appointment)];
-                      const proportionalPurse = appointments.length === 1
-                        ? splitPurseAmount
-                        : Number((splitPurseAmount / appointments.length).toFixed(2));
-
-                      await supabase
-                        .from("appointments")
-                        .update({
-                          amount_paid: currentPaid + proportionalPurse,
-                          updated_at: new Date().toISOString(),
-                        })
-                        .eq("id", appointment.id);
-                    }
-
-                    // Create transaction record for purse portion (grouped with card transaction)
-                    await supabase.from("transactions").insert({
-                      tenant_id: primaryAppointment.tenant_id,
-                      customer_id: splitCustomerId,
-                      appointment_id: primaryAppointment.id,
-                      type: "payment",
-                      amount: splitPurseAmount,
-                      currency: tenant?.currency || "USD",
-                      method: "purse",
-                      provider: "internal",
-                      provider_reference: `split_purse_${reference}`,
-                      status: "completed",
-                      ...(paymentGroupId ? { payment_group_id: paymentGroupId } : {}),
-                    });
-
-                    console.log(`Created purse transaction record for ${splitPurseAmount} with payment_group_id: ${paymentGroupId}`);
-                  }
+                  console.log(`Created balance transaction record for ${splitPurseAmount} with payment_group_id: ${paymentGroupId}`);
                 } catch (purseError) {
-                  console.error("Exception while debiting customer purse:", purseError);
+                  console.error("Exception while recording customer balance:", purseError);
                 }
               }
 
@@ -662,17 +632,17 @@ export async function processWebhook(
                 // Validate salon wallet currency matches tenant currency
                 await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
-                // For split payments, salon receives full amount (card + purse) based on actual service amount
-                const totalAmountForSalon = splitPurseAmount && splitPurseAmount > 0
-                  ? actualServiceAmount + splitPurseAmount
-                  : actualServiceAmount;
+                // Only gateway funds become immediately withdrawable. Paid
+                // customer-balance grants settle when the appointment completes;
+                // salon-issued store credit never increases payout balance.
+                const totalAmountForSalon = actualServiceAmount;
 
                 let finalCreditAmount = totalAmountForSalon;
                 if (tenant.platform_percentage_charge) {
                    finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
                 }
 
-                console.log(`Crediting salon purse: card=${actualServiceAmount}, purse=${splitPurseAmount || 0}, total=${totalAmountForSalon}, net=${finalCreditAmount}`);
+                console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
 
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
