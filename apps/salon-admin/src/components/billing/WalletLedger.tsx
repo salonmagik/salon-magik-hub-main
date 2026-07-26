@@ -24,7 +24,7 @@ interface WalletLedgerProps {
 
 // Human-readable labels for entry types
 const ENTRY_TYPE_LABELS: Record<string, string> = {
-  customer_purse_topup: "Purse Top Up",
+  customer_purse_topup: "Customer Balance Top-up",
   customer_purse_debit_booking: "Booking Payment",
   customer_purse_debit_invoice: "Invoice Payment",
   customer_purse_reversal: "Reversal",

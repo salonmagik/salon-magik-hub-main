@@ -854,10 +854,10 @@ export default function OnboardingPage() {
                         ) : (
                           <>
                             <div className="flex items-baseline justify-between gap-4">
-                              <p className="font-serif text-[15.5px] font-medium text-gray-900">
+                              <p className="text-[15.5px] font-medium text-gray-900">
                                 Estimated monthly total
                               </p>
-                              <p className="font-serif text-[20px] font-medium text-gray-900 whitespace-nowrap">
+                              <p className="text-[20px] font-medium text-gray-900 whitespace-nowrap">
                                 {currency} {Number(chainQuote.total_price).toLocaleString()}
                               </p>
                             </div>

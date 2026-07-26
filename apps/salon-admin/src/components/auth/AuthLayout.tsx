@@ -175,10 +175,7 @@ export function AuthLayout({ children, title, subtitle, variant = "signup" }: Au
               <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-black/40">
                 {slide.card1.label}
               </div>
-              <div
-                className="mt-1 text-[20px] text-black"
-                style={{ fontFamily: "Fraunces, serif", fontWeight: 500 }}
-              >
+              <div className="mt-1 text-[20px] font-semibold text-black">
                 {slide.card1.value}
               </div>
             </div>
@@ -197,10 +194,7 @@ export function AuthLayout({ children, title, subtitle, variant = "signup" }: Au
               <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-black/50">
                 {slide.card2.label}
               </div>
-              <div
-                className="mt-1 text-[18px] text-black"
-                style={{ fontFamily: "Fraunces, serif", fontWeight: 500 }}
-              >
+              <div className="mt-1 text-[18px] font-semibold text-black">
                 {slide.card2.value}
               </div>
             </div>
@@ -219,9 +213,8 @@ export function AuthLayout({ children, title, subtitle, variant = "signup" }: Au
           <div className="mb-8">
             <h1
               style={{
-                fontFamily: "Fraunces, serif",
                 fontSize: 28,
-                fontWeight: 500,
+                fontWeight: 600,
                 letterSpacing: "-0.3px",
                 color: "#141014",
               }}

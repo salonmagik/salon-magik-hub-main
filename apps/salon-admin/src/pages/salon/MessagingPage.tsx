@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
@@ -335,6 +335,7 @@ export default function MessagingPage() {
   const [creditPurchaseSuccessOpen, setCreditPurchaseSuccessOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const [customerSearch, setCustomerSearch] = useState("");
   const [saveReusable, setSaveReusable] = useState<SaveReusableState>({ open: false, name: "" });
   const [sendResult, setSendResult] = useState<{ sent: number; failed: number; creditsUsed: number } | null>(null);
@@ -420,6 +421,16 @@ export default function MessagingPage() {
     setEmailSubject(activeDraft.subject || "");
     setMessage(activeDraft.body || "");
   }, [activeDraft, sendResult]);
+
+  // Pre-select lapsed clients when navigated here from the dashboard reactivation flow
+  useEffect(() => {
+    const state = location.state as { lapsedClientIds?: string[]; templateType?: string } | null;
+    if (!state?.lapsedClientIds?.length) return;
+    setActiveTab("send-broadcast");
+    setAudienceMode("group");
+    setSelectedAudience("no_appointment_60");
+    setSelectedCustomerOverrides(state.lapsedClientIds);
+  }, []);
 
   // Sync external message state changes (template load, draft load, reset) to the DOM editor
   useEffect(() => {

@@ -2,6 +2,20 @@ import { supabase } from "@/lib/supabase";
 
 const DEFAULT_BOOKING_DOMAIN = "salonmagik.com";
 
+interface CustomDomainQuery {
+  eq(column: string, value: string | boolean): CustomDomainQuery;
+  single(): Promise<{
+    data: { slug: string } | null;
+    error: unknown;
+  }>;
+}
+
+const customDomainClient = supabase as unknown as {
+  from(table: "public_booking_tenants"): {
+    select(columns: "slug"): CustomDomainQuery;
+  };
+};
+
 function normalizeBaseDomain(raw?: string): string {
   return (
     raw
@@ -59,7 +73,7 @@ export async function resolveSlugFromCustomDomain(hostname: string): Promise<str
   if (!normalizedHost || normalizedHost === "localhost") return null;
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await customDomainClient
       .from("public_booking_tenants")
       .select("slug")
       .eq("custom_booking_domain", normalizedHost)
@@ -76,4 +90,3 @@ export async function resolveSlugFromCustomDomain(hostname: string): Promise<str
     return null;
   }
 }
-

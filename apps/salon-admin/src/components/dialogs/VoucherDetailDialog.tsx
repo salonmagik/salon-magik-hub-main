@@ -11,6 +11,8 @@ import { Edit, Ban, Trash2, Calendar } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface VoucherDetailDialogProps {
   open: boolean;
@@ -23,7 +25,14 @@ interface VoucherDetailDialogProps {
     status: string;
     expires_at?: string;
     created_at: string;
-    redeemed_by_customer_id?: string;
+    redeemed_by_customer_id?: string | null;
+    claimed_by_customer_id?: string | null;
+    claimed_at?: string | null;
+    voucher_type?: string;
+    access_type?: string;
+    discount_type?: string;
+    discount_value?: number;
+    target_customer_id?: string | null;
   } | null;
   onEdit: () => void;
   onDiscontinue: () => void;
@@ -43,6 +52,27 @@ export function VoucherDetailDialog({
   
   const canManage = isOwner || currentRole === "manager";
   const currency = currentTenant?.currency || "USD";
+  const [history, setHistory] = useState<Array<{
+    id: string;
+    event_type: string;
+    amount: number;
+    discount_amount: number;
+    created_at: string;
+    customer?: { full_name: string } | null;
+    appointment?: { booking_reference: string | null } | null;
+  }>>([]);
+
+  useEffect(() => {
+    if (!open || !voucher?.id) return;
+    void (async () => {
+      const { data } = await supabase
+        .from("voucher_redemptions" as never)
+        .select("id, event_type, amount, discount_amount, created_at, customer:customers(full_name), appointment:appointments(booking_reference)")
+        .eq("voucher_id", voucher.id)
+        .order("created_at", { ascending: false });
+      setHistory((data || []) as typeof history);
+    })();
+  }, [open, voucher?.id]);
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = {
@@ -117,6 +147,18 @@ export function VoucherDetailDialog({
                 {format(new Date(voucher.created_at), "MMM d, yyyy")}
               </p>
             </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Type</p>
+              <p className="font-semibold">
+                {voucher.voucher_type === "promotion"
+                  ? voucher.discount_type === "percentage" ? "Percentage promotion" : "Fixed promotion"
+                  : "Gift voucher"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Audience</p>
+              <p className="font-semibold">{voucher.access_type === "private" ? "Private customer" : "Public / bearer"}</p>
+            </div>
           </div>
 
           {voucher.expires_at && (
@@ -127,6 +169,35 @@ export function VoucherDetailDialog({
               </span>
             </div>
           )}
+
+          <Separator />
+
+          <div>
+            <p className="mb-3 text-sm font-medium">Activity</p>
+            {history.length === 0 ? (
+              <p className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
+                This voucher has not been claimed or redeemed yet.
+              </p>
+            ) : (
+              <div className="max-h-48 space-y-2 overflow-y-auto">
+                {history.map((entry) => (
+                  <div key={entry.id} className="flex items-start justify-between rounded-lg border p-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {entry.event_type === "claim" ? "Claimed" : entry.event_type === "redeem" ? "Redeemed" : "Released"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.customer?.full_name || "Customer"}
+                        {entry.appointment?.booking_reference ? ` · ${entry.appointment.booking_reference}` : ""}
+                        {" · "}{format(new Date(entry.created_at), "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    <p className="text-sm font-medium">{formatCurrency(Number(entry.amount || entry.discount_amount))}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Separator />
 

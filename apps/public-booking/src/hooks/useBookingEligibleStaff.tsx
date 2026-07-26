@@ -40,7 +40,7 @@ export function useBookingEligibleStaff({
         p_tenant_id: tenantId,
         p_location_id: locationId,
         p_service_ids: serviceIds.length > 0 ? serviceIds : null,
-      });
+      } as never);
 
       if (error) throw error;
 

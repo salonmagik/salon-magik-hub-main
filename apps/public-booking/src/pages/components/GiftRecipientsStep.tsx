@@ -11,8 +11,11 @@ import { Textarea } from "@ui/textarea";
 import { Checkbox } from "@ui/checkbox";
 import { Badge } from "@ui/badge";
 import { PhoneInput } from "@ui/phone-input";
-import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
-import { getCitiesForCountryRegion, getCountryByCode, getRegionsForCountry } from "@shared";
+import { getCountryByCode, PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import {
+  getCitiesForCountryRegion,
+  getRegionsForCountry,
+} from "@shared/address-geography";
 import {
   Select,
   SelectContent,

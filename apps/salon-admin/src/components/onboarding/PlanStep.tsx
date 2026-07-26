@@ -68,7 +68,7 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
           <span className="inline-block h-[1.5px] w-4 bg-[#F4C84E]" />
           Subscription
         </div>
-        <h2 className="font-serif text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
+        <h2 className="text-[24px] font-medium leading-snug tracking-[-0.3px] text-gray-900">
           Pick what fits your business.
         </h2>
         <p className="mt-1.5 text-[14px] text-black/45">
@@ -131,14 +131,14 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
                   <div className="flex items-start justify-between gap-4">
                     <p
                       className={cn(
-                        "font-serif text-[22px] font-medium capitalize leading-tight",
+                        "text-[22px] font-medium capitalize leading-tight",
                         isSelected ? "text-[#2E1F4E]" : "text-gray-900",
                       )}
                     >
                       {plan.name}
                     </p>
                     <div className="shrink-0 text-right">
-                      <p className={cn("font-serif text-[26px] font-medium leading-none", isSelected ? "text-[#2E1F4E]" : "text-gray-900")}>
+                      <p className={cn("text-[26px] font-medium leading-none", isSelected ? "text-[#2E1F4E]" : "text-gray-900")}>
                         {formatCurrency(priceInfo.price, currency)}
                       </p>
                       <p className="mt-1 text-[11.5px] text-black/40">

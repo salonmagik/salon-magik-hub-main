@@ -142,7 +142,7 @@ export default function SalonsOverviewPage() {
   // All hooks above — safe to return early now.
   // Prevents branch-scoped overview flashing before the hub context resolves.
   if (canUseOwnerHub && activeContextType !== "owner_hub") {
-    return <BrandLoader fullScreen size="lg" />;
+    return <BrandLoader fullScreen />;
   }
 
   const getBranchesForAction = (key: string) => {

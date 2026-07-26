@@ -61,7 +61,6 @@ const FALLBACK_ROUTE_ORDER: Array<{ module: string; path: string }> = [
   { module: "staff", path: "/salon/overview/staff" },
   { module: "dashboard", path: "/salon" },
   { module: "appointments", path: "/salon/appointments" },
-  { module: "calendar", path: "/salon/calendar" },
   { module: "customers", path: "/salon/customers" },
   { module: "services", path: "/salon/services" },
   { module: "payments", path: "/salon/transactions" },

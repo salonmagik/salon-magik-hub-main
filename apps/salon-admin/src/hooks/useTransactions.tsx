@@ -79,55 +79,16 @@ export function useTransactions(filters?: {
 
       if (fetchError) throw fetchError;
 
-      // Group split payments by payment_group_id
-      const groupedTransactions: TransactionWithDetails[] = [];
-      const processedGroupIds = new Set<string>();
-
-      (data as TransactionWithDetails[] || []).forEach((txn) => {
-        // If this transaction has a payment_group_id and we haven't processed it yet
-        if (txn.payment_group_id && !processedGroupIds.has(txn.payment_group_id)) {
-          processedGroupIds.add(txn.payment_group_id);
-          
-          // Find all transactions in this group
-          const groupTransactions = (data as TransactionWithDetails[] || []).filter(
-            t => t.payment_group_id === txn.payment_group_id
-          );
-
-          // If there are multiple transactions in the group, it's a split payment
-          if (groupTransactions.length > 1) {
-            const cardTxn = groupTransactions.find(t => t.method === 'card');
-            const purseTxn = groupTransactions.find(t => t.method === 'purse');
-
-            if (cardTxn && purseTxn) {
-              // Create a grouped transaction entry
-              const groupedTxn: TransactionWithDetails = {
-                ...cardTxn, // Use card transaction as base
-                amount: Number(cardTxn.amount) + Number(purseTxn.amount), // Total amount
-                is_split_payment: true,
-                split_card_amount: Number(cardTxn.amount),
-                split_purse_amount: Number(purseTxn.amount),
-                split_transactions: groupTransactions,
-              };
-              groupedTransactions.push(groupedTxn);
-              return;
-            }
-          }
-          
-          // If only one transaction in group, add it normally
-          groupedTransactions.push(txn);
-        } else if (!txn.payment_group_id) {
-          // No group ID, add transaction normally
-          groupedTransactions.push(txn);
-        }
-        // Skip if this transaction's group was already processed
-      });
-
-      setTransactions(groupedTransactions);
+      // Keep every payment component as its own ledger row. A card + Salon
+      // Balance payment must remain independently refundable against its
+      // canonical transaction amount.
+      const ledgerTransactions = (data as TransactionWithDetails[] || []);
+      setTransactions(ledgerTransactions);
 
       // Calculate today's revenue (use grouped amounts)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const todayRevenue = groupedTransactions
+      const todayRevenue = ledgerTransactions
         .filter((t) => new Date(t.created_at) >= today && (t.type === "payment" || t.type === "deposit") && t.status === "completed")
         .reduce((sum, t) => sum + Number(t.amount), 0);
 

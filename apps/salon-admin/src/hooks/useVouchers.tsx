@@ -12,6 +12,16 @@ export interface Voucher {
   status: "active" | "redeemed" | "expired" | "cancelled";
   purchased_by_customer_id: string | null;
   redeemed_by_customer_id: string | null;
+  claimed_by_customer_id?: string | null;
+  claimed_at?: string | null;
+  target_customer_id?: string | null;
+  voucher_type?: "gift" | "promotion";
+  access_type?: "public" | "private";
+  discount_type?: "fixed" | "percentage";
+  discount_value?: number;
+  minimum_spend?: number;
+  max_redemptions?: number | null;
+  per_customer_limit?: number;
   expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -145,6 +155,12 @@ export function useVouchers() {
     expiresAt?: string;
     purchasedByCustomerId?: string;
     locationIds?: string[];
+    voucherType?: "gift" | "promotion";
+    accessType?: "public" | "private";
+    discountType?: "fixed" | "percentage";
+    targetCustomerId?: string;
+    minimumSpend?: number;
+    maxRedemptions?: number;
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -162,12 +178,33 @@ export function useVouchers() {
           balance: data.amount,
           expires_at: data.expiresAt || null,
           purchased_by_customer_id: data.purchasedByCustomerId || null,
-        })
+          target_customer_id: data.targetCustomerId || null,
+          voucher_type: data.voucherType || "gift",
+          access_type: data.accessType || "public",
+          discount_type: data.discountType || "fixed",
+          discount_value: data.amount,
+          minimum_spend: data.minimumSpend || 0,
+          max_redemptions: data.maxRedemptions || null,
+        } as never)
         .select()
         .single();
 
       if (error) throw error;
       await assignVoucherToLocations(currentTenant.id, voucher.id, locationScope);
+
+      if (
+        data.accessType === "private" &&
+        data.voucherType === "gift" &&
+        data.discountType === "fixed" &&
+        data.targetCustomerId
+      ) {
+        const { error: claimError } = await supabase.rpc("claim_voucher_to_balance" as never, {
+          p_tenant_id: currentTenant.id,
+          p_customer_id: data.targetCustomerId,
+          p_code: voucher.code,
+        } as never);
+        if (claimError) throw claimError;
+      }
 
       toast({ title: "Success", description: "Voucher created successfully" });
       await fetchVouchers();

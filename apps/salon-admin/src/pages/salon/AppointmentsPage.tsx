@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from "date-fns";
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays, addWeeks, addMonths, subWeeks, subMonths } from "date-fns";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@shared/utils";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -31,9 +32,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
+import { DateRangePicker, type DateRangePreset as PickerDateRangePreset } from "@ui/date-range-picker";
 import { TimePicker } from "@ui/time-picker";
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
@@ -47,6 +48,7 @@ import {
   Pause,
   Check,
   X,
+  XCircle,
   RefreshCw,
   MoreHorizontal,
   RotateCcw,
@@ -55,9 +57,13 @@ import {
   Gift,
   Bell,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  LayoutList,
   Coins,
   FileText,
   ShieldCheck,
+  SlidersHorizontal,
   Loader2,
 } from "lucide-react";
 import { Badge } from "@ui/badge";
@@ -74,13 +80,14 @@ import { AppointmentActionsDialog } from "@/components/dialogs/AppointmentAction
 import { AppointmentDetailsDialog } from "@/components/dialogs/AppointmentDetailsDialog";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
 import { InvoiceManagementDialog } from "@/components/dialogs/InvoiceManagementDialog";
+import { DayView, WeekView, MonthView } from "@/components/calendar";
 import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "@/hooks/useAppointments";
 import { useAppointmentStats } from "@/hooks/useAppointmentStats";
+import { useCalendarAppointments, type CalendarView, type CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency } from "@shared/currency";
 import type { Enums, Tables } from "@supabase-client";
-import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
 
 type AppointmentStatus = Enums<"appointment_status">;
 type PaymentStatus = Enums<"payment_status">;
@@ -105,6 +112,15 @@ const confirmationBadgeStyles: Record<string, { label: string; className: string
   reschedule_declined: { label: "Reschedule Declined", className: "bg-orange-100 text-orange-800" },
   not_required: { label: "Confirmed", className: "bg-slate-100 text-slate-800" },
 };
+
+// Quick-select ranges for the date-range picker (react-day-picker has no built-in presets)
+const RANGE_PRESETS: PickerDateRangePreset[] = [
+  { label: "Today", getRange: () => { const n = new Date(); return { from: n, to: n }; } },
+  { label: "Last 7 days", getRange: () => { const n = new Date(); return { from: subDays(n, 6), to: n }; } },
+  { label: "Last 30 days", getRange: () => { const n = new Date(); return { from: subDays(n, 29), to: n }; } },
+  { label: "This month", getRange: () => { const n = new Date(); return { from: startOfMonth(n), to: endOfMonth(n) }; } },
+  { label: "Last 60 days", getRange: () => { const n = new Date(); return { from: subDays(n, 59), to: n }; } },
+];
 
 const isReschedulableRequest = (appointment: AppointmentWithDetails | CalendarAppointment) => {
   const bookingMetadata = (appointment as typeof appointment & {
@@ -192,6 +208,35 @@ export default function AppointmentsPage() {
   const [giftedFilter, setGiftedFilter] = useState<string>("all");
   const [customerSearch, setCustomerSearch] = useState("");
 
+  // Scheduled tab view mode + calendar navigation
+  const initialView = searchParams.get("view") === "calendar" ? "calendar" : "list";
+  const initialPeriod = searchParams.get("period");
+  const initialDate = searchParams.get("date");
+  const [scheduledView, setScheduledView] = useState<"list" | "calendar">(initialView);
+  const [calendarDate, setCalendarDate] = useState<Date>(
+    initialDate && !Number.isNaN(new Date(`${initialDate}T12:00:00`).getTime())
+      ? new Date(`${initialDate}T12:00:00`)
+      : new Date(),
+  );
+  const [calendarViewMode, setCalendarViewMode] = useState<CalendarView>(
+    initialPeriod === "day" || initialPeriod === "month" ? initialPeriod : "week",
+  );
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+
+  useEffect(() => {
+    if (activeTab !== "scheduled") return;
+    const next = new URLSearchParams(searchParams);
+    next.set("view", scheduledView);
+    if (scheduledView === "calendar") {
+      next.set("period", calendarViewMode);
+      next.set("date", format(calendarDate, "yyyy-MM-dd"));
+    } else {
+      next.delete("period");
+      next.delete("date");
+    }
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [activeTab, scheduledView, calendarViewMode, calendarDate, searchParams, setSearchParams]);
+
   // Handle preset change and sync with date pickers
   const handlePresetChange = useCallback((preset: DateRangePreset) => {
     setDateRangePreset(preset);
@@ -220,6 +265,11 @@ export default function AppointmentsPage() {
         break;
       }
     }
+  }, []);
+
+  const handleRangeChange = useCallback(({ from, to }: { from: Date; to: Date }) => {
+    setStartDate(format(from, "yyyy-MM-dd"));
+    setEndDate(format(to, "yyyy-MM-dd"));
   }, []);
 
 
@@ -304,6 +354,11 @@ export default function AppointmentsPage() {
     sendReminder,
   } = useAppointmentActions();
 
+  const { appointments: calendarAppointments, isLoading: calendarLoading } = useCalendarAppointments({
+    view: calendarViewMode,
+    date: calendarDate,
+  });
+
   // Get currency from tenant
   const currency = currentTenant?.currency || "GHS";
 
@@ -382,7 +437,7 @@ export default function AppointmentsPage() {
   const getConfirmationBadge = useCallback((appointment: AppointmentWithDetails) => {
     const approvalStatus = appointment.approval_status || "not_required";
     if (approvalStatus === "not_required" && appointment.confirmation_status === "auto") {
-      return { label: "Auto-confirmed", className: "bg-slate-100 text-slate-800" };
+      return { label: "Auto-confirmed", className: "bg-success-bg text-success" };
     }
     return confirmationBadgeStyles[approvalStatus] || {
       label: approvalStatus.replace(/_/g, " "),
@@ -854,433 +909,369 @@ export default function AppointmentsPage() {
   };
 
   // Get preset label for dropdown
-  const getPresetLabel = (preset: DateRangePreset) => {
+  const getPresetLabel = useCallback((preset: DateRangePreset) => {
     switch (preset) {
       case "today": return "Today";
       case "this_week": return "This Week";
       case "this_month": return "This Month";
       case "last_60_days": return "Last 60 Days";
     }
-  };
+  }, []);
+
+  const navigatePrev = useCallback(() => {
+    if (scheduledView === "calendar") {
+      switch (calendarViewMode) {
+        case "day": setCalendarDate((d) => subDays(d, 1)); break;
+        case "week": setCalendarDate((d) => subWeeks(d, 1)); break;
+        case "month": setCalendarDate((d) => subMonths(d, 1)); break;
+      }
+    } else {
+      const shift = dateRangePreset === "today" ? 1 : dateRangePreset === "this_week" ? 7 : dateRangePreset === "this_month" ? 30 : 60;
+      setStartDate((s) => format(subDays(new Date(s), shift), "yyyy-MM-dd"));
+      setEndDate((e) => format(subDays(new Date(e), shift), "yyyy-MM-dd"));
+    }
+  }, [scheduledView, calendarViewMode, dateRangePreset]);
+
+  const navigateNext = useCallback(() => {
+    if (scheduledView === "calendar") {
+      switch (calendarViewMode) {
+        case "day": setCalendarDate((d) => addDays(d, 1)); break;
+        case "week": setCalendarDate((d) => addWeeks(d, 1)); break;
+        case "month": setCalendarDate((d) => addMonths(d, 1)); break;
+      }
+    } else {
+      const shift = dateRangePreset === "today" ? 1 : dateRangePreset === "this_week" ? 7 : dateRangePreset === "this_month" ? 30 : 60;
+      setStartDate((s) => format(addDays(new Date(s), shift), "yyyy-MM-dd"));
+      setEndDate((e) => format(addDays(new Date(e), shift), "yyyy-MM-dd"));
+    }
+  }, [scheduledView, calendarViewMode, dateRangePreset]);
+
+  const navigateToday = useCallback(() => {
+    if (scheduledView === "calendar") {
+      setCalendarDate(new Date());
+    } else {
+      handlePresetChange("today");
+    }
+  }, [scheduledView, handlePresetChange]);
+
+  const getNavTitle = useCallback(() => {
+    if (scheduledView === "calendar") {
+      switch (calendarViewMode) {
+        case "day": return format(calendarDate, "EEEE, MMMM d");
+        case "week": {
+          const wStart = startOfWeek(calendarDate, { weekStartsOn: 1 });
+          const wEnd = endOfWeek(calendarDate, { weekStartsOn: 1 });
+          return `${format(wStart, "MMM d")} – ${format(wEnd, "MMM d, yyyy")}`;
+        }
+        case "month": return format(calendarDate, "MMMM yyyy");
+      }
+    }
+    if (startDate && endDate) {
+      return `${format(new Date(startDate), "MMM d")} to ${format(new Date(endDate), "MMM d, yyyy")}`;
+    }
+    return getPresetLabel(dateRangePreset);
+  }, [scheduledView, calendarViewMode, calendarDate, startDate, endDate, dateRangePreset, getPresetLabel]);
 
   return (
     <SalonSidebar>
-      <div className="space-y-6">
+      <div className="space-y-5 pb-6">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-row items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold">Appointments</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-[22px] tracking-tight">Appointments</h1>
+            <p className="text-[13.5px] text-muted-foreground mt-1">
               Manage upcoming bookings and stay on top of today's schedule.
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setWalkInDialogOpen(true)}>
+          {/* Desktop actions (mobile/tablet use the floating + button) */}
+          <div className="hidden lg:flex gap-2 flex-shrink-0">
+            <Button variant="outline" className="rounded-full" onClick={() => setWalkInDialogOpen(true)}>
               <UserPlus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Record Walk-ins</span>
-              <span className="sm:hidden">Walk-ins</span>
+              Record walk-ins
             </Button>
-            <Button onClick={() => setAppointmentDialogOpen(true)}>
+            <Button className="rounded-full bg-foreground text-background hover:bg-foreground/90" onClick={() => setAppointmentDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Book appointments</span>
-              <span className="sm:hidden">Book</span>
+              Book appointment
             </Button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "scheduled" | "unscheduled" | "unconfirmed")}>
-          <TabsList className="grid w-full max-w-md grid-cols-3">
-            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-            <TabsTrigger value="unscheduled">Unscheduled</TabsTrigger>
-            <TabsTrigger value="unconfirmed">Unconfirmed</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {/* Pill Tab Bar */}
+        <div className="flex gap-1 p-1 rounded-full bg-muted w-fit">
+          {(["scheduled", "unscheduled", "unconfirmed"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-sm font-medium transition-all",
+                activeTab === tab
+                  ? "bg-white shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab === "scheduled" ? "Scheduled" : tab === "unscheduled" ? "Unscheduled" : "Unconfirmed"}
+            </button>
+          ))}
+        </div>
 
-        {/* Tab-Specific Stats Cards */}
+        {/* Tab-Specific Stats Grid */}
         {activeTab === "scheduled" ? (
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-            {/* Date Range Dropdown Card */}
-            <Card className="bg-primary/5 border-primary/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Calendar className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <Select value={dateRangePreset} onValueChange={(v) => handlePresetChange(v as DateRangePreset)}>
-                      <SelectTrigger className="h-auto border-0 p-0 text-xs text-muted-foreground font-normal bg-transparent shadow-none focus:ring-0 w-auto">
-                        <SelectValue>{getPresetLabel(dateRangePreset)}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="today">Today</SelectItem>
-                        <SelectItem value="this_week">This Week</SelectItem>
-                        <SelectItem value="this_month">This Month</SelectItem>
-                        <SelectItem value="last_60_days">Last 60 Days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{scheduledStats.rangeCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Amount Due Card */}
-            <Card className="bg-destructive/5 border-destructive/20 min-w-[160px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-destructive/10">
-                    <Coins className="w-5 h-5 text-destructive" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Amount Due</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-16" />
-                    ) : (
-                      <p className="text-xl font-semibold">
-                        {formatCurrency(scheduledStats.amountDue, currency)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Gifted */}
-            <Card className="bg-amber-500/5 border-amber-500/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <Gift className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Gifted</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{scheduledStats.giftedCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Cancelled */}
-            <Card className="bg-destructive/5 border-destructive/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-destructive/10">
-                    <X className="w-5 h-5 text-destructive" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Cancelled</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{scheduledStats.cancelledCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Rescheduled */}
-            <Card className="bg-muted border-border min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-muted-foreground/10">
-                    <RotateCcw className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Rescheduled</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{scheduledStats.rescheduledCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="flex gap-3 overflow-x-auto snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
+                <Calendar className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{getPresetLabel(dateRangePreset)}</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{scheduledStats.rangeCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-7 h-7 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-amber-500/10">
+                <Clock className="w-4 h-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Amount due</p>
+                {statsLoading ? <Skeleton className="h-6 w-16 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{formatCurrency(scheduledStats.amountDue, currency)}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
+                <Gift className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Gifted</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{scheduledStats.giftedCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-destructive/10">
+                <XCircle className="w-4 h-4 text-destructive" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Cancelled</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{scheduledStats.cancelledCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
+                <RotateCcw className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Rescheduled</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{scheduledStats.rescheduledCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-success/10">
+                <Check className="w-4 h-4 text-success" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Confirmed</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
+                )}
+              </div>
+            </div>
           </div>
         ) : activeTab === "unscheduled" ? (
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-            {/* Total Unscheduled */}
-            <Card className="bg-muted border-border min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-muted-foreground/10">
-                    <Clock className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Total</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{unscheduledStats.totalCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Paid */}
-            <Card className="bg-success/5 border-success/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-success/10">
-                    <Check className="w-5 h-5 text-success" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Paid</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{unscheduledStats.paidCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Unpaid */}
-            <Card className="bg-destructive/5 border-destructive/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-destructive/10">
-                    <X className="w-5 h-5 text-destructive" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Unpaid</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{unscheduledStats.unpaidCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Partial */}
-            <Card className="bg-amber-500/5 border-amber-500/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <Clock className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Partial</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{unscheduledStats.partialCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Gifted */}
-            <Card className="bg-purple-500/5 border-purple-500/20 min-w-[140px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-500/10">
-                    <Gift className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Gifted</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-8" />
-                    ) : (
-                      <p className="text-xl font-semibold">{unscheduledStats.giftedCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="flex gap-3 overflow-x-auto snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
+                <Calendar className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{unscheduledStats.totalCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-success/10">
+                <Check className="w-4 h-4 text-success" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Paid</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{unscheduledStats.paidCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-4 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-7 h-7 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-destructive/10">
+                <XCircle className="w-4 h-4 text-destructive" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Unpaid</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{unscheduledStats.unpaidCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-amber-500/10">
+                <Coins className="w-4 h-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Partial</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{unscheduledStats.partialCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
+                <Gift className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Gifted</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{unscheduledStats.giftedCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-muted">
+                <RotateCcw className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Refunded</p>
+                <p className="text-[19px] leading-tight text-muted-foreground">—</p>
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-            <Card className="bg-amber-500/5 border-amber-500/20 min-w-[180px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <ShieldCheck className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Awaiting review</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-16" />
-                    ) : (
-                      <p className="text-xl font-semibold">{scheduledStats.unconfirmedCount}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-2 gap-[14px] sm:max-w-sm">
+            <div className="flex items-center gap-3 px-4 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-7 h-7 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-amber-500/10">
+                <ShieldCheck className="w-4 h-4 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Awaiting review</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{scheduledStats.unconfirmedCount}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
+                <Coins className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Review value</p>
+                {statsLoading ? <Skeleton className="h-6 w-16 mt-0.5" /> : (
+                  <p className="text-[19px] leading-tight">{formatCurrency(scheduledStats.unconfirmedValue, currency)}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
-            <Card className="bg-primary/5 border-primary/20 min-w-[180px] flex-shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Coins className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Review value</p>
-                    {statsLoading ? (
-                      <Skeleton className="h-6 w-16" />
-                    ) : (
-                      <p className="text-xl font-semibold">{formatCurrency(scheduledStats.unconfirmedValue, currency)}</p>
-                    )}
-                  </div>
+        {/* Date nav bar + view toggle (scheduled tab only) */}
+        {activeTab === "scheduled" && (
+          <div className="flex flex-col gap-3">
+            {/* Row 1: date control + list/cal toggle */}
+            <div className="flex items-center justify-between">
+              {scheduledView === "list" ? (
+                /* List view: date-range picker (replaces prev/today/next) */
+                <div className="width-full sm:w-auto">
+                  <DateRangePicker
+                    from={stringToDate(startDate)}
+                    to={stringToDate(endDate)}
+                    onChange={handleRangeChange}
+                    presets={RANGE_PRESETS}
+                    className="w-full sm:w-auto sm:min-w-[220px]"
+                  />
                 </div>
-              </CardContent>
-            </Card>
+              ) : (
+                /* Calendar view: page through periods */
+                <div className="flex items-center ">
+                  <button
+                    onClick={navigatePrev}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={navigateToday}
+                    className="h-8 px-3 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={navigateNext}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  <span className="min-w-0 text-sm font-medium px-2 text-foreground truncate">{getNavTitle()}</span>
+                </div>
+              )}
+              <div className="flex gap-0.5 bg-muted p-0.5 rounded-[12px] flex-shrink-0">
+                <button
+                  onClick={() => setScheduledView("list")}
+                  className={cn(
+                    "w-[38px] h-[38px] flex items-center justify-center rounded-[9px] transition-all",
+                    scheduledView === "list"
+                      ? "bg-primary text-white"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title="List view"
+                >
+                  <LayoutList className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setScheduledView("calendar")}
+                  className={cn(
+                    "w-[38px] h-[38px] flex items-center justify-center rounded-[9px] transition-all",
+                    scheduledView === "calendar"
+                      ? "bg-primary text-white"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title="Calendar view"
+                >
+                  <Calendar className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Row 2: day/week/month segmented control (calendar view only) */}
+            {scheduledView === "calendar" && (
+              <div className="flex gap-0.5 bg-muted p-0.5 rounded-[12px] self-start">
+                {(["day", "week", "month"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setCalendarViewMode(v)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-[9px] text-xs font-medium transition-all capitalize",
+                      calendarViewMode === v
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Date Range Filter */}
-          <div className="flex items-center gap-2">
-            <DatePicker
-              value={stringToDate(startDate)}
-              onChange={(date) => {
-                setStartDate(dateToString(date) || "");
-              }}
-              placeholder="Start date"
-              className="w-auto min-w-[140px]"
-            />
-            <span className="text-muted-foreground">—</span>
-            <DatePicker
-              value={stringToDate(endDate)}
-              onChange={(date) => {
-                setEndDate(dateToString(date) || "");
-              }}
-              placeholder="End date"
-              minDate={stringToDate(startDate)}
-              className="w-auto min-w-[140px]"
-            />
-          </div>
-
-          {/* Combined Status Filter with Submenus */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="w-[180px] justify-between">
-                <span className="truncate">{getFilterLabel()}</span>
-                <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[200px]">
-              {/* Bookings Submenu */}
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Bookings
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("all")}
-                    onCheckedChange={() => toggleBookingStatus("all")}
-                  >
-                    All Bookings
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("scheduled")}
-                    onCheckedChange={() => toggleBookingStatus("scheduled")}
-                  >
-                    Scheduled
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("started")}
-                    onCheckedChange={() => toggleBookingStatus("started")}
-                  >
-                    In Progress
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("paused")}
-                    onCheckedChange={() => toggleBookingStatus("paused")}
-                  >
-                    Paused
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("completed")}
-                    onCheckedChange={() => toggleBookingStatus("completed")}
-                  >
-                    Completed
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("cancelled")}
-                    onCheckedChange={() => toggleBookingStatus("cancelled")}
-                  >
-                    Cancelled
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={bookingStatuses.has("rescheduled")}
-                    onCheckedChange={() => toggleBookingStatus("rescheduled")}
-                  >
-                    Rescheduled
-                  </DropdownMenuCheckboxItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-
-              {/* Payments Submenu */}
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Coins className="w-4 h-4 mr-2" />
-                  Payments
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                  <DropdownMenuCheckboxItem
-                    checked={paymentStatuses.has("all")}
-                    onCheckedChange={() => togglePaymentStatus("all")}
-                  >
-                    All Payments
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuCheckboxItem
-                    checked={paymentStatuses.has("fully_paid")}
-                    onCheckedChange={() => togglePaymentStatus("fully_paid")}
-                  >
-                    Full
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={paymentStatuses.has("deposit_paid")}
-                    onCheckedChange={() => togglePaymentStatus("deposit_paid")}
-                  >
-                    Partial
-                  </DropdownMenuCheckboxItem>
-                  <DropdownMenuCheckboxItem
-                    checked={paymentStatuses.has("unpaid")}
-                    onCheckedChange={() => togglePaymentStatus("unpaid")}
-                  >
-                    None
-                  </DropdownMenuCheckboxItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {activeTab === "unscheduled" && (
-            <Select value={giftedFilter} onValueChange={setGiftedFilter}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Gifted status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="gifted">Gifted</SelectItem>
-                <SelectItem value="not_gifted">Not Gifted</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          <div className="relative w-[220px]">
-            <Bell className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none hidden" aria-hidden />
+        {!(activeTab === "scheduled" && scheduledView === "calendar") && (
+        <div className="flex flex-wrap items-center gap-3 sm:gap-3">
+          {/* Search — full width on mobile, half on desktop */}
+          <div className="relative flex-1 sm:flex-none sm:w-1/2">
             <Input
               placeholder="Search customer or recipient…"
               value={customerSearch}
@@ -1296,59 +1287,170 @@ export default function AppointmentsPage() {
               </button>
             )}
           </div>
-          <div className="flex-1" />
-          <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
 
-        {/* Appointments Table */}
+          {/* Mobile filter toggle (icon only) */}
+          <button
+            className={cn(
+              "sm:hidden h-9 w-9 flex items-center justify-center rounded-md border transition-colors flex-shrink-0",
+              filtersExpanded
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:bg-muted"
+            )}
+            onClick={() => setFiltersExpanded(!filtersExpanded)}
+            aria-label="Filters"
+            aria-pressed={filtersExpanded}
+            title="Filters"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+
+          {/* Status + refresh — pushed to the far right on desktop, collapsible on mobile */}
+          <div className={cn(
+            "items-center gap-2 sm:gap-3 sm:ml-auto",
+            filtersExpanded ? "flex w-full sm:w-auto" : "hidden sm:flex"
+          )}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-[160px] justify-between">
+                  <span className="truncate text-sm">{getFilterLabel()}</span>
+                  <ChevronDown className="h-4 w-4 opacity-50 ml-2 flex-shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[200px]">
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Bookings
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("all")} onCheckedChange={() => toggleBookingStatus("all")}>All Bookings</DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("scheduled")} onCheckedChange={() => toggleBookingStatus("scheduled")}>Scheduled</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("started")} onCheckedChange={() => toggleBookingStatus("started")}>In Progress</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("paused")} onCheckedChange={() => toggleBookingStatus("paused")}>Paused</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("completed")} onCheckedChange={() => toggleBookingStatus("completed")}>Completed</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("cancelled")} onCheckedChange={() => toggleBookingStatus("cancelled")}>Cancelled</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={bookingStatuses.has("rescheduled")} onCheckedChange={() => toggleBookingStatus("rescheduled")}>Rescheduled</DropdownMenuCheckboxItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Coins className="w-4 h-4 mr-2" />
+                    Payments
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuCheckboxItem checked={paymentStatuses.has("all")} onCheckedChange={() => togglePaymentStatus("all")}>All Payments</DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem checked={paymentStatuses.has("fully_paid")} onCheckedChange={() => togglePaymentStatus("fully_paid")}>Full</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={paymentStatuses.has("deposit_paid")} onCheckedChange={() => togglePaymentStatus("deposit_paid")}>Partial</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked={paymentStatuses.has("unpaid")} onCheckedChange={() => togglePaymentStatus("unpaid")}>None</DropdownMenuCheckboxItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {activeTab === "unscheduled" && (
+              <Select value={giftedFilter} onValueChange={setGiftedFilter}>
+                <SelectTrigger className="w-[130px]">
+                  <SelectValue placeholder="Gifted status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="gifted">Gifted</SelectItem>
+                  <SelectItem value="not_gifted">Not Gifted</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </div>
+        )}
+
+        {/* Calendar view (scheduled tab only) */}
+        {activeTab === "scheduled" && scheduledView === "calendar" ? (
+          <div className="space-y-4">
+            {calendarViewMode === "day" && (
+              <DayView
+                date={calendarDate}
+                appointments={calendarAppointments}
+                isLoading={calendarLoading}
+                onAppointmentClick={(apt) => {
+                  setSelectedAppointment(apt as unknown as AppointmentWithDetails);
+                  setDetailsDialogOpen(true);
+                }}
+              />
+            )}
+            {calendarViewMode === "week" && (
+              <WeekView
+                date={calendarDate}
+                appointments={calendarAppointments}
+                isLoading={calendarLoading}
+                onAppointmentClick={(apt) => {
+                  setSelectedAppointment(apt as unknown as AppointmentWithDetails);
+                  setDetailsDialogOpen(true);
+                }}
+              />
+            )}
+            {calendarViewMode === "month" && (
+              <MonthView
+                date={calendarDate}
+                appointments={calendarAppointments}
+                isLoading={calendarLoading}
+                onAppointmentClick={(apt) => {
+                  setSelectedAppointment(apt as unknown as AppointmentWithDetails);
+                  setDetailsDialogOpen(true);
+                }}
+              />
+            )}
+          </div>
+        ) : (
         <Card>
-          <div className="max-h-[60vh] overflow-auto scrollbar-hide" style={{ scrollbarWidth: "thin" }}>
-            <Table className="min-w-[1120px]">
+          <div className="overflow-auto scrollbar-hide">
+            <Table className="min-w-[780px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Appointment</TableHead>
-                  <TableHead>Confirmation</TableHead>
-                  <TableHead>Amount Due</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Time</TableHead>
+                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Customer</TableHead>
+                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Service</TableHead>
+                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
+                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Amount Due</TableHead>
+                  <TableHead />
+                  <TableHead className="text-right" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
+                  Array.from({ length: 4 }).map((_, i) => (
                     <TableRow key={i}>
                       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                       <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-6 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                       <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+                      <TableCell><Skeleton className="h-8 w-8 ml-auto" /></TableCell>
                     </TableRow>
                   ))
                 ) : appointments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12">
-                      <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                      <p className="text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-16">
+                      <Calendar className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+                      <p className="font-medium text-muted-foreground">
                         {activeTab === "unscheduled"
-                          ? "No unscheduled bookings found"
+                          ? "No unscheduled bookings"
                           : activeTab === "unconfirmed"
-                            ? "No unconfirmed bookings found"
+                            ? "No bookings awaiting review"
                             : "No appointments found"}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground/70 mt-1">
                         {activeTab === "unscheduled"
                           ? "Unscheduled bookings will appear here when customers book online"
                           : activeTab === "unconfirmed"
-                            ? "Bookings waiting for approval will appear here."
+                            ? "Bookings waiting for approval will appear here"
                             : "Create a new appointment to get started"}
                       </p>
                     </TableCell>
@@ -1368,6 +1470,9 @@ export default function AppointmentsPage() {
                   }).map((apt) => {
                     const actions = getAvailableActions(apt.status, apt.is_unscheduled);
                     const amountDue = (apt.total_amount || 0) - (apt.amount_paid || 0);
+                    const paidOffline = apt.transactions?.some(
+                      (transaction) => transaction.provider === "offline" && transaction.method === "cash" && transaction.status === "completed",
+                    );
                     const confirmationBadge = getConfirmationBadge(apt);
                     return (
                       <TableRow
@@ -1377,20 +1482,21 @@ export default function AppointmentsPage() {
                       >
                         <TableCell>
                           <div>
-                            <p className="font-medium">
-                              {apt.scheduled_start
-                                ? `${formatTime(apt.scheduled_start)} — ${formatTime(apt.scheduled_end)}`
-                                : "Unscheduled"}
+                            <p className="font-medium text-sm">
+                              {apt.scheduled_start ? formatTime(apt.scheduled_start) : "Unscheduled"}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {apt.scheduled_start ? new Date(apt.scheduled_start).toLocaleDateString() : "—"}
-                            </p>
+                            {apt.scheduled_start && (
+                              <p className="text-xs text-muted-foreground/70">
+                                {apt.scheduled_end ? `to ${formatTime(apt.scheduled_end)}, ` : ""}
+                                {new Date(apt.scheduled_start).toLocaleDateString("en-GB")}
+                              </p>
+                            )}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <div>
-                              <p className="font-medium">{apt.customer?.full_name || "Unknown"}</p>
+                              <p className="font-medium text-sm">{apt.customer?.full_name || "Unknown"}</p>
                               <p className="text-xs text-muted-foreground">
                                 {apt.customer?.phone || "No phone"}
                               </p>
@@ -1425,52 +1531,57 @@ export default function AppointmentsPage() {
                         <TableCell>
                           {apt.services.length > 0 ? (
                             <div>
-                              <p className="font-medium">{apt.services[0].service_name}</p>
+                              <p className="font-medium text-sm">{apt.services[0].service_name}</p>
                               {apt.services.length > 1 && (
-                                <p className="text-xs text-muted-foreground">
-                                  +{apt.services.length - 1} services
-                                </p>
+                                <p className="text-xs text-muted-foreground">+{apt.services.length - 1} more</p>
                               )}
                             </div>
                           ) : (
-                            "—"
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            className={`${statusBadgeStyles[apt.status]?.bg || "bg-muted"} ${statusBadgeStyles[apt.status]?.text || "text-muted-foreground"} capitalize`}
-                          >
-                            {apt.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className={confirmationBadge.className}>
-                            {confirmationBadge.label}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge
+                              className={`text-xs w-fit ${statusBadgeStyles[apt.status]?.bg || "bg-muted"} ${statusBadgeStyles[apt.status]?.text || "text-muted-foreground"} capitalize`}
+                            >
+                              {apt.status}
+                            </Badge>
+                            {confirmationBadge.label !== "Confirmed" && (
+                              <Badge variant="secondary" className={`text-xs w-fit ${confirmationBadge.className}`}>
+                                {confirmationBadge.label}
+                              </Badge>
+                            )}
+                            {paidOffline && (
+                              <Badge variant="outline" className="border-success/50 text-xs text-success">
+                                Paid offline
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {amountDue <= 0 ? (
-                            <Badge variant="outline" className="text-success border-success/50">Paid</Badge>
+                            <Badge variant="outline" className="text-success border-success/50 text-xs">
+                              Paid
+                            </Badge>
                           ) : (
-                            <span className="font-medium text-destructive">
+                            <span className="font-medium text-sm text-destructive">
                               {formatCurrency(amountDue, currency)}
                             </span>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {apt.notes ? (
-                              <span className="text-sm truncate max-w-[100px] block">{apt.notes}</span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleRowClick(apt)}
+                            className={cn(
+                              "text-xs whitespace-nowrap transition-colors",
+                              apt.notes
+                                ? "text-primary font-medium hover:underline"
+                                : "text-muted-foreground/40 cursor-default pointer-events-none"
                             )}
-                            {appointmentInvoices[apt.id] && (
-                              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-700 border-green-500/20">
-                                <FileText className="w-3 h-3 mr-1" />
-                                Invoice
-                              </Badge>
-                            )}
-                          </div>
+                          >
+                            View notes
+                          </button>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                           {(actions.length > 0 || canViewCustomerProfile || activeTab === "unconfirmed") && (
@@ -1645,7 +1756,31 @@ export default function AppointmentsPage() {
             </Table>
           </div>
         </Card>
+        )}
       </div>
+
+      {/* Floating action button — mobile & tablet only */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Create appointment or walk-in"
+            className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <Plus className="w-6 h-6" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top" className="w-52 mb-2">
+          <DropdownMenuItem onClick={() => setWalkInDialogOpen(true)}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Record walk-in
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setAppointmentDialogOpen(true)}>
+            <Calendar className="w-4 h-4 mr-2" />
+            Book appointment
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Schedule Appointment Dialog */}
       <ScheduleAppointmentDialog

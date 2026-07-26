@@ -13,6 +13,7 @@ type AppointmentStatus = Enums<"appointment_status">;
 export interface AppointmentWithDetails extends Appointment {
   customer: Customer | null;
   services: AppointmentService[];
+  transactions?: { id: string; provider: string | null; method: string; status: string }[];
   staff_name?: string;
 }
 
@@ -53,7 +54,8 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
         .select(`
           *,
           customer:customers(*),
-          services:appointment_services(*)
+          services:appointment_services(*),
+          transactions(id, provider, method, status)
         `)
         .eq("tenant_id", currentTenant.id)
         .order("scheduled_start", { ascending: true });

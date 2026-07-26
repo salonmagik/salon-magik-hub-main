@@ -18,8 +18,8 @@ export default function ClientHistoryPage() {
     payment: "Payment",
     deposit: "Deposit",
     refund: "Refund",
-    purse_topup: "Purse Top-up",
-    purse_redemption: "Purse Redemption",
+    purse_topup: "Balance top-up",
+    purse_redemption: "Salon balance used",
   };
 
   const getTypeColor = (type: string) => {

@@ -78,7 +78,11 @@ function SchedulingItem({
         opening_time: branch.opening_time || null,
         closing_time: branch.closing_time || null,
         opening_days: branch.opening_days || [],
-        availability: branch.availability || "open",
+        availability:
+          branch.availability === "closed" ||
+          branch.availability === "temporarily_unavailable"
+            ? branch.availability
+            : "open",
       }));
 
     if (branchBackedLocations.length > 0) {

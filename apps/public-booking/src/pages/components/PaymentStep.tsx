@@ -125,7 +125,7 @@ export function PaymentStep({
                       <Wallet className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium">Pay with Store Credit</p>
+                      <p className="font-medium">Pay with Salon Balance</p>
                       <p className="text-xs text-muted-foreground">
                         Available: {formatCurrency(purseBalance, currency)}
                       </p>
@@ -217,7 +217,7 @@ export function PaymentStep({
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Store Credit</span>
+              <span className="text-muted-foreground">Salon Balance</span>
               <span className="font-medium text-primary">
                 {formatCurrency(purseAmount, currency)}
               </span>
@@ -273,7 +273,7 @@ export function PaymentStep({
       <div className="p-4 rounded-lg bg-muted/50 border space-y-2">
         {paymentMode === "purse" ? (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Paid from Store Credit</span>
+            <span className="text-muted-foreground">Paid from Salon Balance</span>
             <span className="text-2xl font-bold text-primary">
               {formatCurrency(totalBeforePurse, currency)}
             </span>
@@ -281,7 +281,7 @@ export function PaymentStep({
         ) : paymentMode === "split" ? (
           <>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Store Credit</span>
+              <span className="text-muted-foreground">Salon Balance</span>
               <span className="font-medium text-primary">
                 {formatCurrency(purseAmount, currency)}
               </span>

@@ -42,7 +42,7 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { label: "Bookings", icon: Calendar, path: "/bookings" },
   { label: "History", icon: Clock, path: "/history" },
-  { label: "Refunds & Credits", icon: RefreshCcw, path: "/refunds" },
+  { label: "Salon Balance", icon: RefreshCcw, path: "/balance" },
   { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },
   { label: "Profile & Security", icon: User, path: "/profile" },
   { label: "Help & Support", icon: HelpCircle, path: "/help" },

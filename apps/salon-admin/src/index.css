@@ -1,6 +1,8 @@
 @import '@fontsource/questrial';
+@import '@fontsource/fraunces/300.css';
 @import '@fontsource/fraunces/400.css';
 @import '@fontsource/fraunces/500.css';
+@import '@fontsource/fraunces/600.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -19,7 +21,7 @@
     --primary-foreground: 0 0% 100%;
     --background: 0 0% 100%;
     --foreground: 290 9% 8%;
-    --surface: 262 67% 97%;
+    --surface: 36 33% 97%;
     --surface-foreground: 290 9% 8%;
     --card: 0 0% 100%;
     --card-foreground: 290 9% 8%;
