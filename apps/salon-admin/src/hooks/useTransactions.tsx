@@ -19,6 +19,7 @@ export interface TransactionWithDetails extends Transaction {
     total_amount: number;
     location_id: string | null;
     location?: { id: string; name: string } | null;
+    services?: { service_name: string }[] | null;
   } | null;
   // For grouped split payments
   is_split_payment?: boolean;
@@ -58,7 +59,7 @@ export function useTransactions(filters?: {
         .select(`
           *,
           customer:customers(id, full_name),
-          appointment:appointments(id, status, payment_status, amount_paid, total_amount, location_id, location:locations(id, name))
+          appointment:appointments(id, status, payment_status, amount_paid, total_amount, location_id, location:locations(id, name), services:appointment_services(service_name))
         `)
         .eq("tenant_id", currentTenant.id)
         .order("created_at", { ascending: false });

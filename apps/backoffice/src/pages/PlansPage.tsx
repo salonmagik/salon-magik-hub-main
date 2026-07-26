@@ -181,6 +181,16 @@ interface StaffAddonPricingRow {
   effective_from: string;
 }
 
+interface StaffOperationsPricingRow {
+  id: string;
+  country_code: string;
+  currency: string;
+  unit_price_per_location: number;
+  status: "draft" | "active" | "retired";
+  notes: string | null;
+  effective_from: string;
+}
+
 interface ThemeCatalogRow {
   theme_key: string;
   name: string;
@@ -201,6 +211,16 @@ interface ThemeAddonPricingRow {
 }
 
 interface SeatPricingDraft {
+  rowId: string | null;
+  country_code: string;
+  country_name: string;
+  currency: string;
+  unit_price: string;
+  status: "draft" | "active" | "retired";
+  notes: string;
+}
+
+interface StaffOperationsPricingDraft {
   rowId: string | null;
   country_code: string;
   country_name: string;
@@ -392,6 +412,10 @@ export default function PlansPage() {
   const [seatPricingReason, setSeatPricingReason] = useState("");
   const [seatPricingDrafts, setSeatPricingDrafts] = useState<Record<string, SeatPricingDraft>>({});
   const [seatPricingDirty, setSeatPricingDirty] = useState(false);
+  const [staffOperationsPricingReason, setStaffOperationsPricingReason] = useState("");
+  const [staffOperationsPricingDrafts, setStaffOperationsPricingDrafts] =
+    useState<Record<string, StaffOperationsPricingDraft>>({});
+  const [staffOperationsPricingDirty, setStaffOperationsPricingDirty] = useState(false);
   const [themePricingReason, setThemePricingReason] = useState("");
   const [themePricingDrafts, setThemePricingDrafts] = useState<Record<string, ThemePricingDraft>>({});
   const [themePricingDirty, setThemePricingDirty] = useState(false);
@@ -505,6 +529,18 @@ export default function PlansPage() {
     },
   });
 
+  const { data: staffOperationsPricingRows } = useQuery({
+    queryKey: ["backoffice-staff-operations-addon-pricing"],
+    queryFn: async () => {
+      const { data, error } = await (supabase.from as any)("staff_operations_addon_pricing")
+        .select("id,country_code,currency,unit_price_per_location,status,notes,effective_from")
+        .order("country_code", { ascending: true })
+        .order("effective_from", { ascending: false });
+      if (error) throw error;
+      return (data || []) as StaffOperationsPricingRow[];
+    },
+  });
+
   const { data: themeCatalog } = useQuery({
     queryKey: ["backoffice-theme-catalog", "ecommerce"],
     queryFn: async () => {
@@ -568,6 +604,16 @@ export default function PlansPage() {
     });
     return map;
   }, [seatPricingRows]);
+
+  const latestStaffOperationsPricingByCountry = useMemo(() => {
+    const map = new Map<string, StaffOperationsPricingRow>();
+    (staffOperationsPricingRows || []).forEach((row) => {
+      if (!map.has(row.country_code)) {
+        map.set(row.country_code, row);
+      }
+    });
+    return map;
+  }, [staffOperationsPricingRows]);
 
   const latestThemePricingByCountry = useMemo(() => {
     const map = new Map<string, ThemeAddonPricingRow>();
@@ -646,6 +692,30 @@ export default function PlansPage() {
     });
     setSeatPricingDrafts(nextDrafts);
   }, [latestSeatPricingByCountry, pricingMarkets, seatPricingDirty]);
+
+  useEffect(() => {
+    if (staffOperationsPricingDirty || pricingMarkets.length === 0) return;
+    const nextDrafts: Record<string, StaffOperationsPricingDraft> = {};
+    pricingMarkets.forEach((market) => {
+      const row = latestStaffOperationsPricingByCountry.get(market.country_code);
+      nextDrafts[market.country_code] = {
+        rowId: row?.id || null,
+        country_code: market.country_code,
+        country_name: market.country_name,
+        currency: row?.currency || market.currency,
+        unit_price: row?.unit_price_per_location == null
+          ? ""
+          : String(row.unit_price_per_location),
+        status: row?.status || "active",
+        notes: row?.notes || "",
+      };
+    });
+    setStaffOperationsPricingDrafts(nextDrafts);
+  }, [
+    latestStaffOperationsPricingByCountry,
+    pricingMarkets,
+    staffOperationsPricingDirty,
+  ]);
 
   useEffect(() => {
     if (themePricingDirty || pricingMarkets.length === 0) return;
@@ -1013,6 +1083,27 @@ export default function PlansPage() {
     });
     return { isValid: errors.length === 0, errors };
   }, [seatPricingDrafts, seatPricingReason]);
+
+  const staffOperationsPricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!staffOperationsPricingReason.trim()) {
+      errors.push("Staff Operations pricing reason is required.");
+    }
+    const drafts = Object.values(staffOperationsPricingDrafts);
+    if (!drafts.length) {
+      errors.push("No Staff Operations pricing rows available.");
+    }
+    drafts.forEach((draft) => {
+      if (!draft.currency.trim() || draft.currency.trim().length !== 3) {
+        errors.push(`${draft.country_name}: currency must be a 3-letter code.`);
+      }
+      const unitPrice = parseNumericInput(draft.unit_price);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        errors.push(`${draft.country_name}: monthly location price must be 0 or greater.`);
+      }
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [staffOperationsPricingDrafts, staffOperationsPricingReason]);
 
   const themePricingValidation = useMemo(() => {
     const errors: string[] = [];
@@ -1490,6 +1581,64 @@ export default function PlansPage() {
     },
   });
 
+  const saveStaffOperationsPricingMutation = useMutation({
+    mutationFn: async () => {
+      for (const draft of Object.values(staffOperationsPricingDrafts)) {
+        const payload = {
+          country_code: draft.country_code,
+          currency: draft.currency.trim().toUpperCase(),
+          unit_price_per_location: Number(draft.unit_price),
+          status: draft.status,
+          notes: draft.notes.trim() || null,
+        };
+
+        if (draft.rowId) {
+          const { error } = await (supabase.from as any)("staff_operations_addon_pricing")
+            .update(payload)
+            .eq("id", draft.rowId);
+          if (error) throw error;
+        } else {
+          const { error } = await (supabase.from as any)("staff_operations_addon_pricing")
+            .insert({
+              ...payload,
+              created_by: backofficeUser?.user_id || null,
+            });
+          if (error) throw error;
+        }
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "staff_operations_addon_pricing_updated",
+        entity_type: "staff_operations_addon_pricing",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: staffOperationsPricingReason.trim(),
+          billing_model: "monthly_per_location",
+          includes: ["location_checkins", "time_off"],
+          rows: Object.values(staffOperationsPricingDrafts).map((draft) => ({
+            country_code: draft.country_code,
+            currency: draft.currency.trim().toUpperCase(),
+            unit_price_per_location: Number(draft.unit_price),
+            status: draft.status,
+          })),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Staff Operations add-on pricing updated.");
+      setStaffOperationsPricingReason("");
+      setStaffOperationsPricingDirty(false);
+      queryClient.invalidateQueries({
+        queryKey: ["backoffice-staff-operations-addon-pricing"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => {
+      toast.error(errorToMessage(error));
+    },
+  });
+
   const saveThemePricingMutation = useMutation({
     mutationFn: async () => {
       for (const draft of Object.values(themePricingDrafts)) {
@@ -1854,6 +2003,17 @@ export default function PlansPage() {
     }));
   };
 
+  const updateStaffOperationsPricingDraft = (
+    countryCode: string,
+    patch: Partial<StaffOperationsPricingDraft>,
+  ) => {
+    setStaffOperationsPricingDirty(true);
+    setStaffOperationsPricingDrafts((prev) => ({
+      ...prev,
+      [countryCode]: { ...prev[countryCode], ...patch },
+    }));
+  };
+
   const updateThemePricingDraft = (countryCode: string, patch: Partial<ThemePricingDraft>) => {
     setThemePricingDirty(true);
     setThemePricingDrafts((prev) => ({
@@ -1870,6 +2030,10 @@ export default function PlansPage() {
     isSuperAdmin && chainTierValidation.isValid && !saveChainTiersMutation.isPending;
   const canSubmitSeatPricing =
     isSuperAdmin && seatPricingValidation.isValid && !saveSeatPricingMutation.isPending;
+  const canSubmitStaffOperationsPricing =
+    isSuperAdmin
+    && staffOperationsPricingValidation.isValid
+    && !saveStaffOperationsPricingMutation.isPending;
   const canSubmitThemePricing =
     isSuperAdmin && themePricingValidation.isValid && !saveThemePricingMutation.isPending;
 
@@ -2578,6 +2742,152 @@ export default function PlansPage() {
                   <div className="flex justify-end">
                     <Button onClick={() => saveSeatPricingMutation.mutate()} disabled={!canSubmitSeatPricing}>
                       {saveSeatPricingMutation.isPending ? "Saving..." : "Save Seat Pricing"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>Staff Operations Add-on</CardTitle>
+                      <CardDescription>
+                        Price location check-ins and time-off management as one monthly
+                        add-on, billed per active salon location.
+                      </CardDescription>
+                    </div>
+                    <Badge variant="outline">Monthly per location</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {staffOperationsPricingValidation.errors.length > 0 && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                        {staffOperationsPricingValidation.errors.slice(0, 8).map((error) => (
+                          <li key={error}>{error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                    Includes location-based staff check-ins, leave requests, leave
+                    allowances, and manager approval workflows.
+                  </div>
+
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Market</TableHead>
+                          <TableHead>Currency</TableHead>
+                          <TableHead>Monthly / location</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pricingMarkets.map((market) => {
+                          const draft =
+                            staffOperationsPricingDrafts[market.country_code];
+                          return (
+                            <TableRow key={market.country_code}>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="font-medium">{market.country_name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {market.country_code}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="min-w-[120px]">
+                                <Input
+                                  value={draft?.currency || market.currency}
+                                  maxLength={3}
+                                  onChange={(event) =>
+                                    updateStaffOperationsPricingDraft(
+                                      market.country_code,
+                                      { currency: event.target.value.toUpperCase() },
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[180px]">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={draft?.unit_price || ""}
+                                  onChange={(event) =>
+                                    updateStaffOperationsPricingDraft(
+                                      market.country_code,
+                                      { unit_price: event.target.value },
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="min-w-[160px]">
+                                <Select
+                                  value={draft?.status || "active"}
+                                  onValueChange={(value) =>
+                                    updateStaffOperationsPricingDraft(
+                                      market.country_code,
+                                      { status: value as PricingStatus },
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PRICING_STATUS_OPTIONS.map((option) => (
+                                      <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell className="min-w-[240px]">
+                                <Input
+                                  value={draft?.notes || ""}
+                                  placeholder="Optional internal note"
+                                  onChange={(event) =>
+                                    updateStaffOperationsPricingDraft(
+                                      market.country_code,
+                                      { notes: event.target.value },
+                                    )
+                                  }
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div>
+                    <Label>Reason</Label>
+                    <Textarea
+                      value={staffOperationsPricingReason}
+                      onChange={(event) => {
+                        setStaffOperationsPricingDirty(true);
+                        setStaffOperationsPricingReason(event.target.value);
+                      }}
+                      placeholder="Why are you updating Staff Operations pricing?"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={() => saveStaffOperationsPricingMutation.mutate()}
+                      disabled={!canSubmitStaffOperationsPricing}
+                    >
+                      {saveStaffOperationsPricingMutation.isPending
+                        ? "Saving..."
+                        : "Save Staff Operations Pricing"}
                     </Button>
                   </div>
                 </CardContent>

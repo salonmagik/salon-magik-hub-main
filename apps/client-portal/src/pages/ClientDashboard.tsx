@@ -1,253 +1,420 @@
-import { useEffect, useMemo, useState } from "react";
-import { useClientAuth, useClientBookings, useClientPurse, useClientNotifications } from "@/hooks";
-import { ClientSidebar } from "@/components/ClientSidebar";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
-import { Button } from "@ui/button";
-import { Calendar, CreditCard, Bell, Gift } from "lucide-react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Skeleton } from "@ui/skeleton";
-import { format } from "date-fns";
-import { formatCurrency } from "@shared/currency";
+import { differenceInCalendarDays, format } from "date-fns";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@ui/select";
+  ArrowRight,
+  CalendarDays,
+  ChevronRight,
+  Clock3,
+  Store,
+  WalletCards,
+} from "lucide-react";
+import { ClientSidebar } from "@/components/ClientSidebar";
+import {
+  useClientAuth,
+  useClientBalance,
+  useClientBookings,
+  useClientPurse,
+} from "@/hooks";
+import { Badge } from "@ui/badge";
+import { Button } from "@ui/button";
+import { Skeleton } from "@ui/skeleton";
+import { formatCurrency } from "@shared/currency";
+import { cn } from "@shared/utils";
+
+const paymentStatusLabels: Record<string, string> = {
+  unpaid: "Payment pending",
+  deposit_pending: "Deposit pending",
+  deposit_paid: "Deposit paid",
+  partially_paid: "Partially paid",
+  fully_paid: "Paid",
+  paid_offline: "Paid offline",
+};
+
+function bookingStatus(booking: {
+  status: string;
+  payment_status: string;
+}) {
+  if (booking.payment_status && paymentStatusLabels[booking.payment_status]) {
+    return paymentStatusLabels[booking.payment_status];
+  }
+  return booking.status === "scheduled" ? "Confirmed" : booking.status;
+}
 
 export default function ClientDashboard() {
   const { customers, isLoading: authLoading } = useClientAuth();
-  const { bookings, nextAppointment, isLoading: bookingsLoading } = useClientBookings("upcoming");
-  const { purses, purseGroups, hasMultipleCountries, totalBalance, isLoading: purseLoading } = useClientPurse();
-  const { unreadCount, isLoading: notificationsLoading } = useClientNotifications();
-  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
+  const {
+    bookings,
+    nextAppointment,
+    isLoading: upcomingLoading,
+  } = useClientBookings("upcoming");
+  const { bookings: completedBookings, isLoading: historyLoading } =
+    useClientBookings("completed");
+  const { packages, isLoading: packagesLoading } = useClientBalance();
+  const { purses, isLoading: purseLoading } = useClientPurse();
 
-  const isLoading = authLoading || bookingsLoading || purseLoading || notificationsLoading;
-  const activePurseGroup = useMemo(() => {
-    if (!purseGroups.length) return null;
-    return purseGroups.find((group) => group.countryCode === selectedCountryCode) || purseGroups[0];
-  }, [purseGroups, selectedCountryCode]);
-
-  useEffect(() => {
-    if (!purseGroups.length) {
-      setSelectedCountryCode(null);
-      return;
-    }
-    setSelectedCountryCode((prev) => (prev && purseGroups.some((group) => group.countryCode === prev) ? prev : purseGroups[0].countryCode));
-  }, [purseGroups]);
-
-  // Get the first customer's name for greeting (they may have multiple salon accounts)
   const customerName = customers[0]?.full_name?.split(" ")[0] || "there";
+  const activePackages = packages.filter((item) => item.status === "active");
+  const nextService =
+    nextAppointment?.services?.map((service) => service.service_name).join(", ") ||
+    "your appointment";
+  const daysUntilNext =
+    nextAppointment?.scheduled_start
+      ? differenceInCalendarDays(
+          new Date(nextAppointment.scheduled_start),
+          new Date(),
+        )
+      : null;
 
-  // Compute outstanding balance from live appointment data.
-  // customers.outstanding_balance is a cached column that isn't maintained by the
-  // booking/payment flow, so computing directly from appointments is more accurate.
-  const totalOutstanding = useMemo(() => {
-    return bookings.reduce((sum, b) => {
-      if (b.status === "cancelled") return sum;
-      if (["fully_paid", "refunded_full"].includes(b.payment_status)) return sum;
-      return sum + Math.max(Number(b.total_amount || 0) - Number(b.amount_paid || 0), 0);
-    }, 0);
-  }, [bookings]);
+  const storeCreditBySalon = useMemo(
+    () =>
+      customers.map((customer) => ({
+        customer,
+        purse: purses.find((entry) => entry.customer_id === customer.id),
+      })),
+    [customers, purses],
+  );
+
+  const isLoading =
+    authLoading ||
+    upcomingLoading ||
+    packagesLoading ||
+    purseLoading ||
+    historyLoading;
 
   return (
     <ClientSidebar>
-      <div className="space-y-6">
-        <div>
-          <h1>Welcome back, {customerName}</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your bookings, track payments, and stay updated across all your salons
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Next Appointment
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-full" />
-              ) : nextAppointment ? (
-                <>
-                  <p className="text-2xl font-bold">
-                    {format(new Date(nextAppointment.scheduled_start!), "MMM d")}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {format(new Date(nextAppointment.scheduled_start!), "h:mm a")} at{" "}
-                    {nextAppointment.tenant?.name || "Salon"}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground">No upcoming appointments</p>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <CreditCard className="h-4 w-4" />
-                Outstanding Fees
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-24" />
-              ) : (
-                <p className="text-2xl font-bold">
-                  {formatCurrency(totalOutstanding, customers[0]?.tenant?.currency || "USD")}
+      <div className="mx-auto w-full max-w-5xl space-y-10 pb-12">
+        <section className="overflow-hidden rounded-[2rem] bg-gradient-to-r from-[#211337] to-[#382a3f] px-6 py-8 text-white shadow-sm sm:px-10 sm:py-12">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-10 w-3/5 bg-white/15" />
+              <Skeleton className="h-5 w-2/5 bg-white/10" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h1 className="font-serif text-3xl font-semibold tracking-tight sm:text-4xl">
+                  {nextAppointment && daysUntilNext !== null
+                    ? `Hi ${customerName}, your next visit is ${
+                        daysUntilNext === 0
+                          ? "today"
+                          : daysUntilNext === 1
+                            ? "tomorrow"
+                            : `in ${daysUntilNext} days`
+                      }`
+                    : `Hi ${customerName}, ready for your next visit?`}
+                </h1>
+                <p className="mt-3 max-w-3xl text-base text-white/70">
+                  {nextAppointment?.scheduled_start
+                    ? `${nextService} at ${nextAppointment.tenant?.name || "your salon"}, ${format(
+                        new Date(nextAppointment.scheduled_start),
+                        "EEE d MMM, h:mm a",
+                      )}`
+                    : "Your bookings, packages and salon balances are all in one place."}
                 </p>
-              )}
-              {totalOutstanding > 0 ? (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Across {customers.length} salon{customers.length !== 1 ? "s" : ""}
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground mt-1">No outstanding fees</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? <Skeleton className="h-8 w-16" /> : <p className="text-2xl font-bold">{unreadCount}</p>}
-              <p className="text-sm text-muted-foreground mt-1">
-                Unread updates
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Salon Balance</CardTitle>
-            <CardDescription>
-              {hasMultipleCountries
-                ? "View your balance by country and salon"
-                : "Paid funds and store credit at each salon"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
               </div>
-            ) : customers.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No salon accounts found
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {hasMultipleCountries && activePurseGroup && (
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">Country</span>
-                    <Select value={activePurseGroup.countryCode} onValueChange={setSelectedCountryCode}>
-                      <SelectTrigger className="w-[220px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {purseGroups.map((group) => (
-                          <SelectItem key={group.countryCode} value={group.countryCode}>
-                            {group.countryLabel}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {customers
-                  .filter((customer) => {
-                    if (!activePurseGroup) return true;
-                    const purse = purses.find((entry) => entry.customer_id === customer.id);
-                    return purse
-                      ? String(purse.tenant.country || "").toUpperCase() === activePurseGroup.countryCode
-                      : false;
-                  })
-                  .map((customer) => {
-                  const purse = purses.find((p) => p.customer_id === customer.id);
-                  const balance = purse?.balance || 0;
-
-                  return (
-                    <div
-                      key={customer.id}
-                      className="flex items-center justify-between p-3 rounded-lg border"
-                    >
-                      <div>
-                        <p className="font-medium">{customer.tenant.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {customer.visit_count} visit{customer.visit_count !== 1 ? "s" : ""}
-                        </p>
-                      </div>
-                      <p className="font-semibold">
-                        {formatCurrency(balance, customer.tenant.currency)}
-                      </p>
-                    </div>
-                  );
-                })}
-
-                {((hasMultipleCountries ? activePurseGroup?.totalBalance : totalBalance) || 0) > 0 && (
-                  <div className="pt-3 border-t flex justify-between items-center">
-                    <span className="font-medium">
-                      {hasMultipleCountries && activePurseGroup
-                        ? `${activePurseGroup.countryLabel} Total`
-                        : "Total Balance"}
-                    </span>
-                    {((hasMultipleCountries ? activePurseGroup?.totalBalance : totalBalance) !== null) && (
-                      <span className="font-semibold text-lg">
-                        {formatCurrency(
-                          Number(hasMultipleCountries ? activePurseGroup?.totalBalance : totalBalance),
-                          hasMultipleCountries
-                            ? activePurseGroup?.currency || customers[0]?.tenant?.currency || "USD"
-                            : customers[0]?.tenant?.currency || "USD",
-                        )}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {hasMultipleCountries && activePurseGroup?.totalBalance === null && (
-                  <p className="text-xs text-muted-foreground">
-                    Total balance is hidden because this country group contains multiple currencies.
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Button variant="outline" asChild>
-                <Link to="/bookings">View All Bookings</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link to="/history">Transaction History</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link to="/notifications">Check Notifications</Link>
+              <Button
+                asChild
+                className="h-12 shrink-0 rounded-full bg-[#f6c744] px-8 text-base text-[#171115] hover:bg-[#ffd45c]"
+              >
+                <Link to="/bookings">
+                  {nextAppointment ? "View my bookings" : "Find a booking"}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="font-serif text-2xl font-semibold">Upcoming bookings</h2>
+              <Link
+                to="/bookings"
+                className="mt-1 inline-flex items-center gap-1 text-sm hover:text-primary"
+              >
+                View all <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          {upcomingLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-28 rounded-3xl" />
+              <Skeleton className="h-28 rounded-3xl" />
+            </div>
+          ) : bookings.length === 0 ? (
+            <div className="rounded-3xl border bg-white p-8 text-center">
+              <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground" />
+              <p className="mt-3 font-medium">No upcoming bookings</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your next salon visit will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bookings.slice(0, 3).map((booking) => {
+                const date = booking.scheduled_start
+                  ? new Date(booking.scheduled_start)
+                  : null;
+                const status = bookingStatus(booking);
+                return (
+                  <Link
+                    key={booking.id}
+                    to={`/bookings/${booking.id}`}
+                    className="group flex flex-col gap-5 rounded-3xl border bg-white p-5 transition hover:border-primary/30 hover:shadow-sm sm:flex-row sm:items-center"
+                  >
+                    <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#f3edff] text-primary">
+                      <span className="font-serif text-2xl font-semibold">
+                        {date ? format(date, "dd") : "—"}
+                      </span>
+                      <span className="text-xs uppercase">
+                        {date ? format(date, "MMM") : ""}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-lg font-medium">
+                        {booking.services?.map((service) => service.service_name).join(", ") ||
+                          "Salon appointment"}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {booking.tenant?.name || "Salon"}
+                        {date ? ` · ${format(date, "h:mm a")}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <Badge
+                        className={cn(
+                          "rounded-full border-0 px-4 py-1 font-normal capitalize",
+                          status.toLowerCase().includes("pending")
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-emerald-100 text-emerald-800",
+                        )}
+                      >
+                        {status}
+                      </Badge>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground transition group-hover:translate-x-0.5" />
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <h2 className="font-serif text-2xl font-semibold">My packages</h2>
+            <Link to="/balance" className="text-sm text-muted-foreground hover:text-primary">
+              View balances
+            </Link>
+          </div>
+          {packagesLoading ? (
+            <Skeleton className="h-36 rounded-3xl" />
+          ) : activePackages.length === 0 ? (
+            <div className="rounded-3xl border bg-white p-7 text-sm text-muted-foreground">
+              You do not have an active package yet.
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {activePackages.map((entitlement) => {
+                const total = entitlement.items.reduce(
+                  (sum, item) => sum + Number(item.total_quantity || 0),
+                  0,
+                );
+                const remaining = entitlement.items.reduce(
+                  (sum, item) => sum + Number(item.remaining_quantity || 0),
+                  0,
+                );
+                const used = Math.max(total - remaining, 0);
+                const progress = total > 0 ? Math.min((used / total) * 100, 100) : 0;
+                const salon = customers.find(
+                  (customer) => customer.tenant_id === entitlement.tenant_id,
+                )?.tenant;
+
+                return (
+                  <div key={entitlement.id} className="rounded-3xl border bg-white p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-lg font-medium">
+                          {entitlement.package?.name || "Salon package"}
+                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {used} of {total} item{total === 1 ? "" : "s"} used
+                          {salon ? ` · ${salon.name}` : ""}
+                          {entitlement.expires_at
+                            ? ` · expires ${format(new Date(entitlement.expires_at), "d MMM")}`
+                            : ""}
+                        </p>
+                      </div>
+                      <Badge className="rounded-full border-0 bg-[#f3edff] text-primary">
+                        Active
+                      </Badge>
+                    </div>
+                    <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#eee9e1]">
+                      <div
+                        className="h-full rounded-full bg-[#f5c542] transition-all"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="font-serif text-2xl font-semibold">Salons you visit</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Your connected salon accounts
+              </p>
+            </div>
+          </div>
+          {authLoading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Skeleton className="h-64 rounded-3xl" />
+              <Skeleton className="h-64 rounded-3xl" />
+            </div>
+          ) : customers.length === 0 ? (
+            <div className="rounded-3xl border bg-white p-8 text-center text-muted-foreground">
+              No salons are linked to your account yet.
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {customers.map((customer, index) => (
+                <div
+                  key={customer.id}
+                  className="overflow-hidden rounded-3xl border bg-white shadow-sm"
+                >
+                  <div
+                    className={cn(
+                      "flex h-36 items-center justify-center",
+                      index % 3 === 0
+                        ? "bg-[#3c2861]"
+                        : index % 3 === 1
+                          ? "bg-[#f3bf3c]"
+                          : "bg-[#7f70a5]",
+                    )}
+                  >
+                    <Store className="h-10 w-10 text-white/85" />
+                  </div>
+                  <div className="p-6">
+                    <p className="font-serif text-xl font-semibold">
+                      {customer.tenant.name}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {customer.tenant.country || "Salon"} · {customer.visit_count || 0} visit
+                      {customer.visit_count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+          <section>
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <h2 className="font-serif text-2xl font-semibold">Visit history</h2>
+              <Link to="/history" className="text-sm text-muted-foreground hover:text-primary">
+                View all
+              </Link>
+            </div>
+            <div className="overflow-hidden rounded-3xl border bg-white shadow-sm">
+              {historyLoading ? (
+                <div className="space-y-3 p-6">
+                  <Skeleton className="h-14" />
+                  <Skeleton className="h-14" />
+                </div>
+              ) : completedBookings.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  Completed visits will appear here.
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {completedBookings.slice(0, 5).map((booking) => (
+                    <Link
+                      to={`/bookings/${booking.id}`}
+                      key={booking.id}
+                      className="grid gap-2 p-5 transition hover:bg-muted/30 sm:grid-cols-[130px_1fr_1fr_auto] sm:items-center"
+                    >
+                      <span className="text-sm text-muted-foreground">
+                        {booking.scheduled_start
+                          ? format(new Date(booking.scheduled_start), "d MMM yyyy")
+                          : "—"}
+                      </span>
+                      <span className="font-medium">
+                        {booking.services?.[0]?.service_name || "Salon visit"}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {booking.tenant?.name || "Salon"}
+                      </span>
+                      <span className="font-serif font-semibold">
+                        {formatCurrency(
+                          booking.total_amount,
+                          booking.tenant?.currency || "USD",
+                        )}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <h2 className="font-serif text-2xl font-semibold">Store credit</h2>
+              <Link to="/balance" className="text-sm text-muted-foreground hover:text-primary">
+                Manage
+              </Link>
+            </div>
+            <div className="space-y-3 rounded-3xl border bg-white p-5 shadow-sm">
+              {purseLoading ? (
+                <Skeleton className="h-24" />
+              ) : storeCreditBySalon.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No store credit balances yet.
+                </p>
+              ) : (
+                storeCreditBySalon.map(({ customer, purse }) => (
+                  <div
+                    key={customer.id}
+                    className="flex items-center justify-between gap-4 rounded-2xl bg-[#f7f3ed] p-4"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="rounded-xl bg-white p-2.5 text-primary">
+                        <WalletCards className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{customer.tenant.name}</p>
+                        <p className="text-xs text-muted-foreground">Available balance</p>
+                      </div>
+                    </div>
+                    <p className="shrink-0 font-serif text-lg font-semibold">
+                      {formatCurrency(
+                        Number(purse?.balance || 0),
+                        customer.tenant.currency,
+                      )}
+                    </p>
+                  </div>
+                ))
+              )}
+              <Button variant="outline" asChild className="h-11 w-full rounded-full">
+                <Link to="/balance">
+                  View store credit
+                  <Clock3 className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </section>
+        </div>
       </div>
     </ClientSidebar>
   );

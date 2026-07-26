@@ -97,13 +97,13 @@ WITH inserted_plans AS (
       WHEN 'starter' THEN 1
       WHEN 'professional' THEN 3
       WHEN 'premium' THEN 10
-      WHEN 'enterprise' THEN NULL -- Unlimited
+      WHEN 'enterprise' THEN 999 -- Effectively unlimited; column is NOT NULL
     END,
     CASE slug
       WHEN 'starter' THEN 3
       WHEN 'professional' THEN 10
       WHEN 'premium' THEN 50
-      WHEN 'enterprise' THEN NULL -- Unlimited
+      WHEN 'enterprise' THEN 999 -- UI treats 999+ as unlimited
     END,
     CASE slug
       WHEN 'starter' THEN 25
@@ -250,5 +250,5 @@ LEFT JOIN public.plan_pricing pp ON p.id = pp.plan_id
 LEFT JOIN public.plan_limits pl ON p.id = pl.plan_id
 LEFT JOIN public.plan_features pf ON p.id = pf.plan_id
 WHERE p.slug IN ('starter', 'professional', 'premium', 'enterprise')
-GROUP BY p.slug, p.name, p.is_recommended, pp.monthly_price, pp.annual_price, pl.max_locations, pl.max_staff
+GROUP BY p.slug, p.name, p.is_recommended, p.display_order, pp.monthly_price, pp.annual_price, pl.max_locations, pl.max_staff
 ORDER BY p.display_order;

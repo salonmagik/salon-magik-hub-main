@@ -203,16 +203,13 @@ export default function EmailTemplatesPage() {
 
   return (
     <SalonSidebar>
-      <div className="p-6 space-y-6">
+      <div className="min-w-0 space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Email Templates</h1>
-          <div className="p-6 space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Email Templates</h1>
-              <p className="text-muted-foreground">
-                Customize the emails sent to your customers
-              </p>
-            </div>
+          <p className="text-muted-foreground">
+            Customize the emails sent to your customers
+          </p>
+        </div>
 
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">Loading...</div>
@@ -385,8 +382,6 @@ export default function EmailTemplatesPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </div>
-        </div>
       </div>
     </SalonSidebar>
   );

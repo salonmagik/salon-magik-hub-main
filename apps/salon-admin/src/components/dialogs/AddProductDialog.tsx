@@ -1,11 +1,18 @@
 import { useEffect, useState, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { Package, Hash, Loader2, Save } from "lucide-react";
+import { Package, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useProducts } from "@/hooks/useProducts";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
@@ -161,32 +168,35 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader className="flex flex-row items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Package className="w-5 h-5 text-primary" />
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 bg-white p-5 shadow-2xl sm:max-h-[92vh] sm:max-w-[560px] sm:p-[34px]">
+        <DialogHeader className="mb-7 flex flex-row items-center gap-3.5 pr-10 text-left">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#fbf0d4]">
+            <Package className="h-5 w-5 text-[#7a5e12]" />
           </div>
-          <div>
-            <DialogTitle className="text-xl">Add Product</DialogTitle>
-            <p className="text-sm text-muted-foreground">Add a new product to your inventory</p>
+          <div className="min-w-0">
+            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px] text-[#141014]">
+              Add product
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 text-[13px] text-[#141014]/60">
+              Add a new product to your inventory
+            </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {/* Name */}
-          <div className="space-y-2">
-            <Label>
-              Product Name <span className="text-destructive">*</span>
+        <form onSubmit={handleSubmit} className="space-y-[18px]">
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">
+              Product name <span className="text-[#2e1f4e]">*</span>
             </Label>
             <Input
               placeholder="e.g. Shampoo, Hair Oil"
+              className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
               value={formData.name}
               onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
               required
             />
           </div>
 
-          {/* Price & Stock Row */}
           {isChainTier && (
             <LocationScopePicker
               locations={scopedLocations}
@@ -201,19 +211,20 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             </p>
           )}
 
-          {/* Price & Stock Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>
-                Price <span className="text-destructive">*</span>
+          <div className="grid grid-cols-1 gap-3.5 min-[480px]:grid-cols-2">
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">
+                Price <span className="text-[#2e1f4e]">*</span>
               </Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencySymbol}</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#141014]/42">
+                  {currencySymbol}
+                </span>
                 <Input
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="pl-8"
+                  className="h-[46px] rounded-lg border-[#141014]/10 pl-8 pr-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
                   value={formData.price}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, price: formatAmountInput(e.target.value) }))
@@ -222,26 +233,22 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Stock Quantity</Label>
-              <div className="relative">
-                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="number"
-                  className="pl-9"
-                  value={formData.stockQuantity}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, stockQuantity: e.target.value }))}
-                  min="0"
-                />
-              </div>
+            <div className="space-y-[7px]">
+              <Label className="text-[13.5px] font-normal text-[#141014]/60">Stock quantity</Label>
+              <Input
+                type="number"
+                className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
+                value={formData.stockQuantity}
+                onChange={(e) => setFormData((prev) => ({ ...prev, stockQuantity: e.target.value }))}
+                min="0"
+              />
             </div>
           </div>
 
-          {/* Status */}
-          <div className="space-y-2">
-            <Label>Status</Label>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">Status</Label>
             <Select value={formData.status} onValueChange={(v) => setFormData((prev) => ({ ...prev, status: v }))}>
-              <SelectTrigger>
+              <SelectTrigger className="h-[46px] rounded-lg border-[#141014]/10 px-3.5 text-[14.5px] shadow-none focus:ring-[#f2eefa] focus:ring-offset-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -252,20 +259,19 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
             </Select>
           </div>
 
-          {/* Description */}
-          <div className="space-y-2">
-            <Label>Description</Label>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">Description</Label>
             <Textarea
               placeholder="Describe the product..."
+              className="min-h-[96px] resize-y rounded-lg border-[#141014]/10 px-3.5 py-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
               value={formData.description}
               onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
               rows={3}
             />
           </div>
 
-          {/* Images */}
-          <div className="space-y-2">
-            <Label>Images (Optional)</Label>
+          <div className="space-y-[7px]">
+            <Label className="text-[13.5px] font-normal text-[#141014]/60">Images (optional)</Label>
             <ImageUploadZone
               images={formData.images}
               onImagesChange={(images) => setFormData((prev) => ({ ...prev, images }))}
@@ -273,22 +279,27 @@ export function AddProductDialog({ open, onOpenChange, onSuccess }: AddProductDi
               onThumbnailIndexChange={setThumbnailIndex}
               maxImages={2}
               disabled={isSubmitting}
+              dropzoneClassName="min-h-[132px] rounded-[14px] border-[1.5px] border-[#141014]/10 bg-white p-7 hover:border-[#2e1f4e]/40 hover:bg-[#fbf9f6]"
             />
           </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse gap-2 pt-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="w-full sm:w-auto"
+              className="h-11 w-full rounded-full border-[#141014]/10 px-5 text-[14.5px] font-medium shadow-none hover:bg-[#f1ece3] min-[480px]:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || !isFormValid}>
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Add Product
+            <Button
+              type="submit"
+              className="h-11 w-full rounded-full bg-[#141014] px-5 text-[14.5px] font-medium text-white hover:bg-[#2e1f4e] min-[480px]:w-auto"
+              disabled={isSubmitting || !isFormValid}
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Add product
             </Button>
           </DialogFooter>
         </form>

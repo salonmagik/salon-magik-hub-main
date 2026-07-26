@@ -184,13 +184,13 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[2rem] border-0 p-5 shadow-2xl sm:max-w-3xl sm:p-10">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Gift className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <DialogTitle className="text-xl">Create voucher</DialogTitle>
+            <DialogTitle className="font-serif text-2xl">Create voucher</DialogTitle>
             <p className="text-sm text-muted-foreground">
               Issue stored value or create a promotional offer.
             </p>

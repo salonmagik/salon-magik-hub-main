@@ -79,14 +79,14 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
 
   return (
     <Card 
-      className="mb-4 cursor-pointer hover:border-primary/50 transition-colors"
+      className="group mb-3 cursor-pointer overflow-hidden rounded-[18px] border-black/[0.07] bg-white shadow-none transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md"
       onClick={() => navigate(`/bookings/${booking.id}`)}
     >
-      <CardContent className="pt-4">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           {/* Left side - Main info */}
           <div className="space-y-2 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge className={statusColors[booking.status] || "bg-muted"}>
                 {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
               </Badge>
@@ -145,9 +145,9 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
           </div>
 
           {/* Right side - Amount & Arrow */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-3 border-t border-black/[0.06] pt-3 md:justify-end md:border-0 md:pt-0">
             <div className="text-right">
-              <p className="text-lg font-semibold">
+              <p className="font-serif text-xl font-medium">
                 {formatCurrency(booking.total_amount, booking.tenant?.currency || "USD")}
               </p>
               {booking.amount_paid > 0 && booking.amount_paid < booking.total_amount && (
@@ -167,7 +167,7 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
                 Complete Payment
               </Button>
             )}
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
         </div>
       </CardContent>
@@ -236,23 +236,24 @@ export default function ClientBookingsPage() {
 
   return (
     <ClientSidebar>
-      <div className="space-y-6">
+      <div className="space-y-6 pb-10">
         <div>
-          <h1>My Bookings</h1>
-          <p className="text-muted-foreground mt-2">
+          <p className="text-xs uppercase tracking-[0.12em] text-primary/65">Your appointments</p>
+          <h1 className="mt-2 font-serif text-3xl font-medium tracking-[-0.5px]">My bookings</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             View and manage your appointments across all salons
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as BookingFilter)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="upcoming">
+          <TabsList className="scrollbar-hide flex h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1 sm:w-fit">
+            <TabsTrigger value="upcoming" className="h-10 shrink-0 rounded-full px-5">
               Upcoming
             </TabsTrigger>
-            <TabsTrigger value="completed">
+            <TabsTrigger value="completed" className="h-10 shrink-0 rounded-full px-5">
               Completed
             </TabsTrigger>
-            <TabsTrigger value="cancelled">
+            <TabsTrigger value="cancelled" className="h-10 shrink-0 rounded-full px-5">
               Cancelled
             </TabsTrigger>
           </TabsList>

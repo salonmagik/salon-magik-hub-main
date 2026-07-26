@@ -86,7 +86,7 @@ export default function ClientHistoryPage() {
                     {transactions.map((tx) => (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                        className="flex flex-col gap-3 rounded-lg border p-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
@@ -157,7 +157,7 @@ export default function ClientHistoryPage() {
                         className="p-4 rounded-lg border cursor-pointer hover:border-primary/40 transition-colors"
                         onClick={() => navigate(`/bookings/${booking.id}`)}
                       >
-                        <div className="flex items-start justify-between">
+                        <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
                               <Store className="h-4 w-4 text-muted-foreground" />

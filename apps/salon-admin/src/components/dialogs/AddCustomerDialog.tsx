@@ -85,13 +85,13 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[2rem] border-0 p-5 shadow-2xl sm:max-w-2xl sm:p-10">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <User className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <DialogTitle className="text-xl">Add Customer</DialogTitle>
+            <DialogTitle className="font-serif text-2xl">Add Customer</DialogTitle>
             <p className="text-sm text-muted-foreground">
               Create a new customer profile
             </p>

@@ -130,13 +130,17 @@ describe("StaffPage team member modal", () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByText("Staff Operations")).toBeInTheDocument();
+    expect(screen.getByText("Paid add-on")).toBeInTheDocument();
+
     fireEvent.click(screen.getByText("Jane Doe"));
 
-    expect(screen.getByText("Team Member")).toBeInTheDocument();
+    expect(screen.getByText("Team member")).toBeInTheDocument();
+    expect(screen.getByText("View details and edit profile, locations, role, and permissions.")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Profile" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Locations" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Role & Permissions" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("jane@test.com")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Review Changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review changes" })).toBeDisabled();
   });
 });

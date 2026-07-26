@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@ui/select";
-import { UserCog, Mail, User, Loader2, Send } from "lucide-react";
+import { UserPlus, Mail, User, Loader2, Send } from "lucide-react";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -127,22 +128,30 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader className="flex flex-row items-center gap-3">
-          <div className="p-2 rounded-lg bg-rose-100">
-            <UserCog className="w-5 h-5 text-rose-600" />
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[22px] border-0 p-5 shadow-2xl sm:max-w-[520px] sm:p-8 sm:px-[34px]">
+        <DialogHeader className="flex flex-row items-center gap-3.5 pr-8 text-left">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#f7e5e5]">
+            <UserPlus className="h-5 w-5 text-[#a23b3b]" />
           </div>
           <div>
-            <DialogTitle className="text-xl">Invite Staff Member</DialogTitle>
-            <p className="text-sm text-muted-foreground">
+            <DialogTitle className="font-serif text-[19px] font-medium tracking-[-0.3px]">
+              Invite staff member
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 text-[13px] text-muted-foreground">
               Send an invitation to join your team
-            </p>
+            </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-[18px]">
           {seatMessage && (
-            <div className={`rounded-lg border p-3 text-sm ${isSeatBlocked ? "border-amber-300 bg-amber-50 text-amber-900" : "border-border bg-muted/50 text-muted-foreground"}`}>
+            <div
+              className={`rounded-[14px] px-[18px] py-3.5 text-sm ${
+                isSeatBlocked
+                  ? "border border-amber-300 bg-amber-50 text-amber-900"
+                  : "bg-[#f1ece3] text-muted-foreground"
+              }`}
+            >
               <p>{seatMessage}</p>
               {isSeatBlocked && (
                 <Button
@@ -161,16 +170,17 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
           )}
 
           {/* Name Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>
-                First Name <span className="text-destructive">*</span>
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-staff-first-name" className="text-[13.5px] font-normal text-muted-foreground">
+                First name <span className="text-primary">*</span>
               </Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
                 <Input
+                  id="invite-staff-first-name"
                   placeholder="First name"
-                  className="pl-9"
+                  className="h-12 rounded-lg border-black/10 pl-10 text-[14.5px] focus-visible:ring-primary/15"
                   value={formData.firstName}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, firstName: e.target.value }))
@@ -179,15 +189,16 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>
-                Last Name <span className="text-destructive">*</span>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite-staff-last-name" className="text-[13.5px] font-normal text-muted-foreground">
+                Last name <span className="text-primary">*</span>
               </Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
                 <Input
+                  id="invite-staff-last-name"
                   placeholder="Last name"
-                  className="pl-9"
+                  className="h-12 rounded-lg border-black/10 pl-10 text-[14.5px] focus-visible:ring-primary/15"
                   value={formData.lastName}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, lastName: e.target.value }))
@@ -199,16 +210,17 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
           </div>
 
           {/* Email */}
-          <div className="space-y-2">
-            <Label>
-              Email Address <span className="text-destructive">*</span>
+          <div className="space-y-1.5">
+            <Label htmlFor="invite-staff-email" className="text-[13.5px] font-normal text-muted-foreground">
+              Email address <span className="text-primary">*</span>
             </Label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
               <Input
+                id="invite-staff-email"
                 type="email"
                 placeholder="email@example.com"
-                className="pl-9"
+                className="h-12 rounded-lg border-black/10 pl-10 text-[14.5px] focus-visible:ring-primary/15"
                 value={formData.email}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, email: e.target.value }))
@@ -219,15 +231,20 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
           </div>
 
           {/* Role */}
-          <div className="space-y-2">
-            <Label>Role</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="invite-staff-role" className="text-[13.5px] font-normal text-muted-foreground">
+              Role
+            </Label>
             <Select
               value={formData.role}
               onValueChange={(v) =>
                 setFormData((prev) => ({ ...prev, role: v as typeof formData.role }))
               }
             >
-              <SelectTrigger>
+              <SelectTrigger
+                id="invite-staff-role"
+                className="h-12 rounded-lg border-black/10 px-3.5 text-[14.5px] focus:ring-primary/15"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -240,28 +257,32 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
+            <p className="pt-1 text-[12.5px] text-muted-foreground/70">
               {roleOptions.find((r) => r.value === formData.role)?.description}
             </p>
           </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="w-full sm:w-auto"
+              className="h-11 w-full rounded-full border-black/10 px-5 sm:w-auto"
             >
               Cancel
             </Button>
-            <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || isSeatBlocked}>
+            <Button
+              type="submit"
+              className="h-11 w-full gap-2 rounded-full px-5 sm:w-auto"
+              disabled={isSubmitting || isSeatBlocked}
+            >
               {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Send className="w-4 h-4" />
+                <Send className="h-4 w-4" />
               )}
-              Send Invitation
+              Send invitation
             </Button>
           </DialogFooter>
         </form>

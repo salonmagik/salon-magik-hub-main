@@ -10,6 +10,13 @@ import { supabase } from "@/lib/supabase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Label } from "@ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -31,7 +38,7 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
  } from "@ui/dropdown-menu";
- import { Loader2, MoreHorizontal, Search, Eye, Building2, Users } from "lucide-react";
+ import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert } from "lucide-react";
  import { format } from "date-fns";
 import { toast } from "sonner";
 import { EmptyState } from "@ui/empty-state";
@@ -51,12 +58,15 @@ export default function TenantsPage() {
    const { backofficeUser } = useBackofficeAuth();
    const { data: tenants, isLoading } = useTenants();
    const [searchQuery, setSearchQuery] = useState("");
+   const [planFilter, setPlanFilter] = useState("all");
+   const [statusFilter, setStatusFilter] = useState("all");
    const [approveDialogOpen, setApproveDialogOpen] = useState(false);
    const [selectedRequest, setSelectedRequest] = useState<ChainUnlockRequestRow | null>(null);
    const [allowedLocations, setAllowedLocations] = useState(11);
    const [amount, setAmount] = useState("0");
    const [currency, setCurrency] = useState("USD");
    const [reason, setReason] = useState("");
+   const [selectedTenant, setSelectedTenant] = useState<TenantWithStats | null>(null);
 
    const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
      queryKey: ["chain-unlock-requests"],
@@ -93,10 +103,28 @@ export default function TenantsPage() {
      onError: (error: any) => toast.error(error.message || "Failed to approve unlock"),
    });
  
-   const filteredTenants = tenants?.filter((t) =>
-     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     t.owner_email?.toLowerCase().includes(searchQuery.toLowerCase())
-   );
+   const filteredTenants = tenants?.filter((tenant) => {
+     const matchesSearch =
+       tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       tenant.owner_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       tenant.id.toLowerCase().includes(searchQuery.toLowerCase());
+     const matchesPlan = planFilter === "all" || tenant.plan === planFilter;
+     const matchesStatus =
+       statusFilter === "all" || tenant.subscription_status === statusFilter;
+     return matchesSearch && matchesPlan && matchesStatus;
+   });
+   const availablePlans = Array.from(
+     new Set((tenants || []).map((tenant) => tenant.plan).filter(Boolean)),
+   ) as string[];
+   const activeCount = (tenants || []).filter(
+     (tenant) => tenant.subscription_status === "active",
+   ).length;
+   const trialCount = (tenants || []).filter(
+     (tenant) => tenant.subscription_status === "trialing",
+   ).length;
+   const pastDueCount = (tenants || []).filter(
+     (tenant) => tenant.subscription_status === "past_due",
+   ).length;
  
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -119,45 +147,91 @@ export default function TenantsPage() {
  
    return (
      <BackofficeLayout>
-       <div className="p-6 space-y-6">
-         <div>
-           <h1 className="text-2xl font-bold tracking-tight">Customer Tenants</h1>
-           <p className="text-muted-foreground">
-             View and manage all salons on the platform
-           </p>
+       <div className="backoffice-page">
+         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+           <div>
+             <h1 className="text-[22px] font-medium tracking-tight">Salons</h1>
+             <p className="mt-1 text-muted-foreground">
+               {(tenants || []).length.toLocaleString()} total · {activeCount.toLocaleString()} active ·{" "}
+               {trialCount.toLocaleString()} trial · {pastDueCount.toLocaleString()} past due
+             </p>
+           </div>
          </div>
 
-         <Tabs defaultValue="all-tenants">
-           <TabsList>
-             <TabsTrigger value="all-tenants">All Tenants</TabsTrigger>
-             <TabsTrigger value="unlock-requests">Unlock Requests</TabsTrigger>
+         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+           {[
+             { label: "Active salons", value: activeCount, icon: Building2, tone: "text-emerald-700 bg-emerald-50" },
+             { label: "Trial accounts", value: trialCount, icon: Users, tone: "text-violet-700 bg-violet-50" },
+             { label: "Past due accounts", value: pastDueCount, icon: TriangleAlert, tone: "text-red-700 bg-red-50" },
+             { label: "Open unlock requests", value: chainUnlockRequests.length, icon: CircleDollarSign, tone: "text-amber-700 bg-amber-50" },
+           ].map((metric) => (
+             <Card key={metric.label} className="backoffice-panel">
+               <CardContent className="flex items-start justify-between p-5">
+                 <div>
+                   <p className="text-sm uppercase tracking-wide text-muted-foreground">{metric.label}</p>
+                   <p className="mt-2 text-2xl font-medium">{metric.value.toLocaleString()}</p>
+                 </div>
+                 <div className={`rounded-xl p-3 ${metric.tone}`}>
+                   <metric.icon className="h-5 w-5" />
+                 </div>
+               </CardContent>
+             </Card>
+           ))}
+         </div>
+
+         <Tabs defaultValue="all-tenants" className="space-y-4">
+           <TabsList className="h-auto max-w-full justify-start overflow-x-auto rounded-full bg-muted/70 p-1">
+             <TabsTrigger value="all-tenants" className="shrink-0 rounded-full px-5">All salons</TabsTrigger>
+             <TabsTrigger value="unlock-requests" className="shrink-0 rounded-full px-5">
+               Unlock requests
+               {chainUnlockRequests.length > 0 && (
+                 <Badge variant="warning" className="ml-2 rounded-full">{chainUnlockRequests.length}</Badge>
+               )}
+             </TabsTrigger>
            </TabsList>
 
-           <TabsContent value="all-tenants" className="mt-4">
-             <Card>
-               <CardHeader>
-                 <div className="flex items-center justify-between">
-                   <div>
-                     <CardTitle className="flex items-center gap-2">
-                       <Building2 className="h-5 w-5" />
-                       All Tenants
-                     </CardTitle>
-                     <CardDescription>
-                       {filteredTenants?.length || 0} salons
-                     </CardDescription>
-                   </div>
-                   <div className="relative w-64">
+           <TabsContent value="all-tenants" className="space-y-4">
+             <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_190px]">
+                   <div className="relative">
                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                      <Input
-                       placeholder="Search by name or owner..."
+                       placeholder="Search by salon name, owner, or ID"
                        value={searchQuery}
                        onChange={(e) => setSearchQuery(e.target.value)}
-                       className="pl-9"
+                       className="h-11 rounded-xl bg-white pl-9"
                      />
                    </div>
-                 </div>
+                   <Select value={planFilter} onValueChange={setPlanFilter}>
+                     <SelectTrigger className="h-11 rounded-xl bg-white">
+                       <SelectValue placeholder="All plans" />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">All plans</SelectItem>
+                       {availablePlans.map((plan) => (
+                         <SelectItem key={plan} value={plan}>{plan}</SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+                   <Select value={statusFilter} onValueChange={setStatusFilter}>
+                     <SelectTrigger className="h-11 rounded-xl bg-white">
+                       <SelectValue placeholder="All statuses" />
+                     </SelectTrigger>
+                     <SelectContent>
+                       <SelectItem value="all">All statuses</SelectItem>
+                       <SelectItem value="active">Active</SelectItem>
+                       <SelectItem value="trialing">Trial</SelectItem>
+                       <SelectItem value="past_due">Past due</SelectItem>
+                       <SelectItem value="inactive">Inactive</SelectItem>
+                       <SelectItem value="canceled">Canceled</SelectItem>
+                     </SelectContent>
+                   </Select>
+             </div>
+             <Card className="backoffice-panel overflow-hidden">
+               <CardHeader className="border-b">
+                 <CardTitle className="text-lg">Salon accounts</CardTitle>
+                 <CardDescription>{filteredTenants?.length || 0} matching salons</CardDescription>
                </CardHeader>
-               <CardContent>
+               <CardContent className="p-0">
                  {isLoading ? (
                    <div className="flex justify-center py-12">
                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -169,8 +243,8 @@ export default function TenantsPage() {
                      description="Salons will appear here once they sign up or are added to the platform."
                    />
                  ) : (
-                   <div className="rounded-md border">
-                     <Table>
+                   <div className="overflow-x-auto">
+                     <Table className="min-w-[1000px]">
                    <TableHeader>
                      <TableRow>
                        <TableHead>Salon Name</TableHead>
@@ -185,7 +259,7 @@ export default function TenantsPage() {
                    </TableHeader>
                    <TableBody>
                      {filteredTenants?.map((tenant) => (
-                       <TableRow key={tenant.id}>
+                       <TableRow key={tenant.id} className="h-20">
                          <TableCell className="font-medium">
                            <div className="flex items-center gap-2">
                              {tenant.logo_url ? (
@@ -234,7 +308,7 @@ export default function TenantsPage() {
                                </Button>
                              </DropdownMenuTrigger>
                              <DropdownMenuContent align="end">
-                               <DropdownMenuItem disabled>
+                               <DropdownMenuItem onClick={() => setSelectedTenant(tenant)}>
                                  <Eye className="mr-2 h-4 w-4" />
                                  View Details
                                </DropdownMenuItem>
@@ -251,8 +325,8 @@ export default function TenantsPage() {
              </Card>
            </TabsContent>
 
-           <TabsContent value="unlock-requests" className="mt-4">
-             <Card>
+           <TabsContent value="unlock-requests">
+             <Card className="overflow-hidden rounded-2xl border bg-white shadow-sm">
                <CardHeader>
                  <CardTitle>Pending Chain Unlock Requests</CardTitle>
                  <CardDescription>Approve custom unlock for tenants requesting more than 10 stores.</CardDescription>
@@ -265,8 +339,8 @@ export default function TenantsPage() {
                  ) : chainUnlockRequests.length === 0 ? (
                    <p className="text-sm text-muted-foreground">No pending requests.</p>
                  ) : (
-                   <div className="rounded-md border">
-                     <Table>
+                   <div className="overflow-x-auto rounded-xl border">
+                     <Table className="min-w-[760px]">
                        <TableHeader>
                          <TableRow>
                            <TableHead>Tenant</TableHead>
@@ -353,6 +427,94 @@ export default function TenantsPage() {
                disabled={approveUnlockMutation.isPending || !selectedRequest}
              >
                {approveUnlockMutation.isPending ? "Approving..." : "Approve unlock"}
+             </Button>
+           </DialogFooter>
+         </DialogContent>
+       </Dialog>
+
+       <Dialog
+         open={Boolean(selectedTenant)}
+         onOpenChange={(open) => {
+           if (!open) setSelectedTenant(null);
+         }}
+       >
+         <DialogContent className="rounded-3xl sm:max-w-[640px]">
+           <DialogHeader>
+             <DialogTitle className="flex items-center gap-3 text-2xl">
+               <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-muted">
+                 {selectedTenant?.logo_url ? (
+                   <img
+                     src={selectedTenant.logo_url}
+                     alt=""
+                     className="h-full w-full object-cover"
+                   />
+                 ) : (
+                   <Building2 className="h-5 w-5 text-muted-foreground" />
+                 )}
+               </span>
+               <span>{selectedTenant?.name || "Salon details"}</span>
+             </DialogTitle>
+             <DialogDescription>
+               Account, subscription, and operating details for this salon.
+             </DialogDescription>
+           </DialogHeader>
+
+           {selectedTenant && (
+             <div className="space-y-4">
+               <div className="flex flex-wrap items-center gap-2">
+                 {getStatusBadge(selectedTenant.subscription_status)}
+                 <Badge variant="outline">{selectedTenant.plan}</Badge>
+                 <Badge variant="outline">
+                   {selectedTenant.country} · {selectedTenant.currency}
+                 </Badge>
+               </div>
+
+               <div className="grid gap-3 sm:grid-cols-2">
+                 {[
+                   { label: "Owner", value: selectedTenant.owner_email || "Not available" },
+                   { label: "Team members", value: selectedTenant.staff_count.toLocaleString() },
+                   {
+                     label: "Created",
+                     value: format(new Date(selectedTenant.created_at), "MMM d, yyyy 'at' h:mm a"),
+                   },
+                   {
+                     label: "Online booking",
+                     value: selectedTenant.online_booking_enabled ? "Enabled" : "Disabled",
+                   },
+                   {
+                     label: "Payment setup",
+                     value: selectedTenant.payment_setup_status.replaceAll("_", " "),
+                   },
+                   {
+                     label: "Next billing",
+                     value: selectedTenant.next_billing_at
+                       ? format(new Date(selectedTenant.next_billing_at), "MMM d, yyyy")
+                       : "Not scheduled",
+                   },
+                 ].map((item) => (
+                   <div key={item.label} className="rounded-2xl border bg-muted/20 p-4">
+                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                       {item.label}
+                     </p>
+                     <p className="mt-1.5 capitalize">{item.value}</p>
+                   </div>
+                 ))}
+               </div>
+
+               <div className="rounded-2xl border p-4">
+                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                   Tenant ID
+                 </p>
+                 <p className="mt-1.5 break-all font-mono text-xs">
+                   {selectedTenant.id}
+                 </p>
+               </div>
+             </div>
+           )}
+
+           <DialogFooter>
+             <Button variant="outline" onClick={() => setSelectedTenant(null)}>
+               Close
              </Button>
            </DialogFooter>
          </DialogContent>

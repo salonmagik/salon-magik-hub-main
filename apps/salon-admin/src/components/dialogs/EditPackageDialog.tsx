@@ -242,7 +242,7 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl p-5 sm:max-w-2xl sm:p-8">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Gift className="w-5 h-5 text-primary" />
