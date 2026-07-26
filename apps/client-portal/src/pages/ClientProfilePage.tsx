@@ -241,8 +241,8 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
-                  <Button onClick={saveProfile} disabled={isSavingProfile}>
+                    <div className="flex justify-stretch sm:justify-end">
+                  <Button className="w-full sm:w-auto" onClick={saveProfile} disabled={isSavingProfile}>
                     {isSavingProfile ? "Saving..." : "Save profile"}
                   </Button>
                 </div>
@@ -370,7 +370,7 @@ export default function ClientProfilePage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between rounded-xl border p-4">
+                  <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <Label>Email Booking Updates</Label>
                       <p className="text-sm text-muted-foreground">Booking confirmations, changes, reminders, and refund updates.</p>
@@ -378,7 +378,7 @@ export default function ClientProfilePage() {
                     <Switch checked={emailBookingUpdates} onCheckedChange={setEmailBookingUpdates} />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl border p-4">
+                  <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <Label>SMS Booking Updates</Label>
                       <p className="text-sm text-muted-foreground">Time-sensitive reminders and appointment change alerts by SMS.</p>
@@ -386,7 +386,7 @@ export default function ClientProfilePage() {
                     <Switch checked={smsBookingUpdates} onCheckedChange={setSmsBookingUpdates} />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl border p-4">
+                  <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <Label>Marketing Messages</Label>
                       <p className="text-sm text-muted-foreground">Promotions, campaigns, and special offers from Salon Magik and participating salons.</p>
@@ -395,7 +395,7 @@ export default function ClientProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex justify-stretch sm:justify-end">
                   <Button onClick={savePreferences} disabled={isSavingPreferences}>
                     {isSavingPreferences ? "Saving..." : "Save preferences"}
                   </Button>

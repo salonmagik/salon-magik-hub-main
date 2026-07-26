@@ -463,15 +463,16 @@ export default function ClientBookingDetailPage() {
 
   return (
     <ClientSidebar>
-      <div className="space-y-6">
+      <div className="space-y-5 pb-10">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/bookings")}>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="icon" className="rounded-full" onClick={() => navigate("/bookings")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <h1 className="text-2xl font-semibold">Booking Details</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs uppercase tracking-[0.12em] text-primary/65">Appointment</p>
+            <h1 className="font-serif text-3xl font-medium tracking-[-0.5px]">Booking details</h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               {booking.tenant?.name || "Salon"}
             </p>
           </div>
@@ -700,7 +701,7 @@ export default function ClientBookingDetailPage() {
         )}
 
         {/* Date & Time */}
-        <Card>
+        <Card className="rounded-[18px] border-black/[0.07] bg-white shadow-none">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Calendar className="h-4 w-4 text-primary" />
@@ -736,7 +737,7 @@ export default function ClientBookingDetailPage() {
 
         {/* Location */}
         {booking.location && (
-          <Card>
+          <Card className="rounded-[18px] border-black/[0.07] bg-white shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-primary" />
@@ -755,7 +756,7 @@ export default function ClientBookingDetailPage() {
 
         {/* Services */}
         {services.length > 0 && (
-          <Card>
+          <Card className="rounded-[18px] border-black/[0.07] bg-white shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Store className="h-4 w-4 text-primary" />
@@ -784,7 +785,7 @@ export default function ClientBookingDetailPage() {
 
         {/* Products */}
         {products.length > 0 && (
-          <Card>
+          <Card className="rounded-[18px] border-black/[0.07] bg-white shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Package className="h-4 w-4 text-primary" />
@@ -886,7 +887,7 @@ export default function ClientBookingDetailPage() {
 
         {/* Notes */}
         {booking.notes && (
-          <Card>
+          <Card className="rounded-[18px] border-black/[0.07] bg-white shadow-none">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
