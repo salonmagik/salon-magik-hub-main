@@ -92,7 +92,6 @@ export function AppointmentDetailsDialog({
   const { currentTenant, roles } = useAuth();
   const [isGifted, setIsGifted] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isRefunding, setIsRefunding] = useState(false);
   const { products, isLoading: productsLoading } = useAppointmentProducts(appointment?.id);
 
   const currency = currentTenant?.currency || "USD";
@@ -147,11 +146,10 @@ export function AppointmentDetailsDialog({
 
   const totalAmount = Number(appointment.total_amount) || servicesSubtotal + productsSubtotal;
   const amountPaid = Number(appointment.amount_paid) || 0;
+  const paidOffline = appointment.transactions?.some(
+    (transaction) => transaction.provider === "offline" && transaction.method === "cash" && transaction.status === "completed",
+  );
   const balanceDue = appointment.status === "cancelled" ? 0 : Math.max(0, totalAmount - amountPaid);
-  const canRefundCancelledAppointment =
-    appointment.status === "cancelled" &&
-    amountPaid > 0 &&
-    appointment.payment_status !== "refunded_full";
   const confirmationConfig: Record<string, { label: string; className: string }> = {
     pending: { label: "Unconfirmed", className: "bg-amber-100 text-amber-800" },
     approved: { label: "Accepted", className: "bg-emerald-100 text-emerald-800" },
@@ -218,36 +216,6 @@ export function AppointmentDetailsDialog({
   const handleGoToAppointments = () => {
     onOpenChange(false);
     navigate("/salon/appointments");
-  };
-
-  const handleRefundToPurse = async () => {
-    if (!appointment?.id) return;
-
-    setIsRefunding(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("refund-cancelled-appointment", {
-        body: { appointmentId: appointment.id },
-      });
-
-      if (error || data?.error) {
-        throw new Error(data?.error || error?.message || "Failed to refund appointment");
-      }
-
-      toast({
-        title: "Refund completed",
-        description: "The customer's purse has been credited with the paid amount.",
-      });
-      onRefresh?.();
-    } catch (err) {
-      console.error("Error refunding cancelled appointment:", err);
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to process refund",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRefunding(false);
-    }
   };
 
   // Mask phone for staff role
@@ -459,6 +427,11 @@ export function AppointmentDetailsDialog({
               <CreditCard className="w-5 h-5 text-muted-foreground mt-0.5" />
               <div className="flex-1 space-y-2">
                 <p className="font-medium">Payment Summary</p>
+                {paidOffline && (
+                  <Badge variant="outline" className="border-success/50 text-success">
+                    Paid offline
+                  </Badge>
+                )}
                 <div className="text-sm space-y-1">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total</span>
@@ -468,10 +441,12 @@ export function AppointmentDetailsDialog({
                     <span className="text-muted-foreground">Paid</span>
                     <span className="text-success">{formatCurrency(amountPaid)}</span>
                   </div>
-                  {appointment.payment_status === "refunded_full" && (
+                  {["refunded_partial", "refunded_full"].includes(appointment.payment_status) && (
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Refunded to purse</span>
-                      <span className="text-primary">{formatCurrency(amountPaid)}</span>
+                      <span className="text-muted-foreground">Refund status</span>
+                      <span className="text-primary">
+                        {appointment.payment_status === "refunded_full" ? "Fully refunded" : "Partially refunded"}
+                      </span>
                     </div>
                   )}
                   {balanceDue > 0 && (
@@ -487,17 +462,6 @@ export function AppointmentDetailsDialog({
                     </div>
                   )}
                 </div>
-                {canRefundCancelledAppointment && (
-                  <Button
-                    variant="outline"
-                    className="mt-3 w-full"
-                    onClick={handleRefundToPurse}
-                    disabled={isRefunding}
-                  >
-                    {isRefunding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
-                    Refund Paid Amount to Purse
-                  </Button>
-                )}
               </div>
             </div>
 
