@@ -36,7 +36,7 @@ import {
 } from "@ui/dialog";
 import {
   UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
-  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2
+  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2, Plus, CalendarOff
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
@@ -56,6 +56,7 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import { PermissionsTab } from "@/components/staff/PermissionsTab";
+import { TimeOffTab } from "@/components/staff/TimeOffTab";
 import type { Tables } from "@supabase-client";
 
 const roleLabels: Record<StaffMember["role"], string> = {
@@ -115,6 +116,8 @@ export default function StaffPage() {
     permissions: false,
   });
   const [editCanManageSessions, setEditCanManageSessions] = useState(false);
+  const [staffOperationsConfirmOpen, setStaffOperationsConfirmOpen] = useState(false);
+  const [staffOperationsUpdating, setStaffOperationsUpdating] = useState(false);
   const [initialEditSnapshot, setInitialEditSnapshot] = useState<{
     firstName: string;
     lastName: string;
@@ -218,6 +221,110 @@ export default function StaffPage() {
     },
     enabled: Boolean(currentTenant?.id && currentUserIsOwner),
   });
+
+  const { data: staffOperationsPricing } = useQuery({
+    queryKey: [
+      "staff-operations-addon-pricing",
+      currentTenant?.country,
+      currentTenant?.currency,
+    ],
+    queryFn: async () => {
+      if (!currentTenant?.country || !currentTenant?.currency) return null;
+      const { data, error } = await (supabase.from as any)(
+        "staff_operations_addon_pricing",
+      )
+        .select("id,currency,unit_price_per_location")
+        .eq("country_code", currentTenant.country)
+        .eq("currency", currentTenant.currency)
+        .eq("status", "active")
+        .lte("effective_from", new Date().toISOString())
+        .order("effective_from", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data as {
+        id: string;
+        currency: string;
+        unit_price_per_location: number;
+      } | null;
+    },
+    enabled: Boolean(currentTenant?.country && currentTenant?.currency),
+  });
+
+  const { data: staffOperationsEntitlement } = useQuery({
+    queryKey: ["staff-operations-addon-entitlement", currentTenant?.id],
+    queryFn: async () => {
+      if (!currentTenant?.id) return null;
+      const { data, error } = await (supabase.from as any)(
+        "tenant_addon_entitlements",
+      )
+        .select("id,status,started_at")
+        .eq("tenant_id", currentTenant.id)
+        .eq("addon_type", "staff_operations")
+        .eq("status", "active")
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; status: string; started_at: string } | null;
+    },
+    enabled: Boolean(currentTenant?.id),
+  });
+
+  const staffOperationsEnabled = Boolean(staffOperationsEntitlement?.id);
+  const staffOperationsLocationCount = Math.max(tenantLocations.length, 1);
+  const staffOperationsMonthlyTotal =
+    Number(staffOperationsPricing?.unit_price_per_location || 0)
+    * staffOperationsLocationCount;
+  const hasValidStaffOperationsPrice =
+    typeof staffOperationsPricing?.currency === "string"
+    && staffOperationsPricing.currency.trim().length === 3
+    && Number.isFinite(Number(staffOperationsPricing.unit_price_per_location));
+  const staffOperationsPriceLabel = hasValidStaffOperationsPrice
+    ? new Intl.NumberFormat("en", {
+        style: "currency",
+        currency: staffOperationsPricing!.currency,
+        maximumFractionDigits: 2,
+      }).format(staffOperationsMonthlyTotal)
+    : null;
+
+  const handleToggleStaffOperations = async () => {
+    if (!currentTenant?.id) return;
+    setStaffOperationsUpdating(true);
+    try {
+      const functionName = staffOperationsEnabled
+        ? "cancel_staff_operations_addon"
+        : "activate_staff_operations_addon";
+      const { error } = await (supabase.rpc as any)(functionName, {
+        p_tenant_id: currentTenant.id,
+        p_reason: staffOperationsEnabled
+          ? "Disabled by owner from Staff"
+          : "Enabled by owner from Staff",
+      });
+      if (error) throw error;
+      await queryClient.invalidateQueries({
+        queryKey: ["staff-operations-addon-entitlement", currentTenant?.id],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["tenant-runtime-entitlements", currentTenant?.id],
+      });
+      setStaffOperationsConfirmOpen(false);
+      toast({
+        title: staffOperationsEnabled
+          ? "Staff Operations disabled"
+          : "Staff Operations enabled",
+        description: staffOperationsEnabled
+          ? "Check-ins and time-off management are no longer billed."
+          : "Check-ins and time-off management are ready to use.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Could not update add-on",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setStaffOperationsUpdating(false);
+    }
+  };
 
   const handleCancelClick = (id: string) => {
     setSelectedInvitationId(id);
@@ -575,18 +682,18 @@ export default function StaffPage() {
 
   return (
     <SalonSidebar>
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[1320px] space-y-[22px]">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Staff</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-[22px] font-medium leading-tight tracking-[-0.3px]">Staff</h1>
+            <p className="mt-1 text-[13.5px] text-muted-foreground">
               {isOwnerHubStaffView
                 ? "Manage staff across all your salon locations"
                 : "Manage your team members and their permissions"}
             </p>
           </div>
-          <Button onClick={() => setInviteDialogOpen(true)} className="gap-2">
+          <Button onClick={() => setInviteDialogOpen(true)} className="hidden h-11 gap-2 rounded-full px-6 lg:flex">
             <UserPlus className="w-4 h-4" />
             <span className="hidden sm:inline">Invite Staff</span>
             <span className="sm:hidden">Invite</span>
@@ -594,73 +701,134 @@ export default function StaffPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Card className="rounded-[14px] border-black/[0.06] bg-white shadow-none">
+            <CardHeader className="px-5 pb-2 pt-5">
+              <CardTitle className="text-[13px] font-normal text-muted-foreground">
                 Total Staff
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />
-                <span className="text-2xl font-bold">
+                <Users className="h-[18px] w-[18px] text-muted-foreground" />
+                <span className="font-serif text-[26px] font-medium leading-none">
                   {isLoading ? "..." : staff.length}
                 </span>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <Card className="rounded-[14px] border-black/[0.06] bg-white shadow-none">
+            <CardHeader className="px-5 pb-2 pt-5">
+              <CardTitle className="text-[13px] font-normal text-muted-foreground">
                 Owners
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5">
               <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-primary" />
-                <span className="text-2xl font-bold">
+                <Shield className="h-[18px] w-[18px] text-primary" />
+                <span className="font-serif text-[26px] font-medium leading-none">
                   {isLoading ? "..." : staff.filter((s) => s.role === "owner").length}
                 </span>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <Card className="rounded-[14px] border-black/[0.06] bg-white shadow-none">
+            <CardHeader className="px-5 pb-2 pt-5">
+              <CardTitle className="text-[13px] font-normal text-muted-foreground">
                 Pending Invites
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-warning-foreground" />
-                <span className="text-2xl font-bold">
+                <Clock className="h-[18px] w-[18px] text-amber-700" />
+                <span className="font-serif text-[26px] font-medium leading-none">
                   {invitationsLoading ? "..." : pendingInvitations.length}
                 </span>
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Staff
+          <Card className="rounded-[14px] border-black/[0.06] bg-white shadow-none">
+            <CardHeader className="px-5 pb-2 pt-5">
+              <CardTitle className="text-[13px] font-normal text-muted-foreground">
+                Staff role
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <span className="text-2xl font-bold">
-                {isLoading
-                  ? "..."
-                  : staff.filter((s) => !["owner", "manager"].includes(s.role)).length}
-              </span>
+            <CardContent className="px-5 pb-5">
+              <div className="flex items-center gap-2">
+                <User className="h-[18px] w-[18px] text-muted-foreground" />
+                <span className="font-serif text-[26px] font-medium leading-none">
+                  {isLoading
+                    ? "..."
+                    : staff.filter((s) => !["owner", "manager"].includes(s.role)).length}
+                </span>
+              </div>
             </CardContent>
           </Card>
         </div>
 
+        <div
+          className={cn(
+            "flex flex-col gap-4 rounded-[18px] border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
+            staffOperationsEnabled
+              ? "border-emerald-200 bg-emerald-50/70"
+              : "border-primary/25 bg-primary/[0.055]",
+          )}
+        >
+          <div className="flex min-w-0 items-start gap-3">
+            <div
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white",
+                staffOperationsEnabled ? "text-emerald-700" : "text-primary",
+              )}
+            >
+              {staffOperationsEnabled
+                ? <CheckCircle className="h-5 w-5" />
+                : <Lock className="h-5 w-5" />}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-serif text-base font-semibold">
+                  Staff Operations
+                </p>
+                <Badge
+                  className={cn(
+                    staffOperationsEnabled
+                      ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
+                      : "bg-white text-primary hover:bg-white",
+                  )}
+                >
+                  {staffOperationsEnabled ? "Active" : "Paid add-on"}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Location check-ins, time-off requests, leave allowances, and manager approvals.
+                {!staffOperationsEnabled && staffOperationsPriceLabel
+                  ? ` ${staffOperationsPriceLabel}/month for ${staffOperationsLocationCount} location${staffOperationsLocationCount === 1 ? "" : "s"}.`
+                  : ""}
+              </p>
+            </div>
+          </div>
+          {currentUserIsOwner ? (
+            <Button
+              variant={staffOperationsEnabled ? "outline" : "default"}
+              className="shrink-0 rounded-full"
+              disabled={!staffOperationsEnabled && !hasValidStaffOperationsPrice}
+              onClick={() => setStaffOperationsConfirmOpen(true)}
+            >
+              {staffOperationsEnabled ? "Disable add-on" : "Enable add-on"}
+            </Button>
+          ) : !staffOperationsEnabled ? (
+            <p className="shrink-0 text-xs text-muted-foreground">
+              Ask the salon owner to enable it.
+            </p>
+          ) : null}
+        </div>
+
         {/* Tabs for Staff, Invitations, and Permissions */}
         <Tabs defaultValue="team">
-          <TabsList>
-            <TabsTrigger value="team">Team Members</TabsTrigger>
-            <TabsTrigger value="invitations" className="flex items-center gap-2">
+          <TabsList className="scrollbar-hide flex h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1 sm:w-fit">
+            <TabsTrigger value="team" className="h-10 shrink-0 rounded-full px-5 sm:px-6">Team Members</TabsTrigger>
+            <TabsTrigger value="invitations" className="flex h-10 shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
               Pending Invitations
               {pendingInvitations.length > 0 && (
                 <Badge variant="secondary" className="h-5 px-1.5">
@@ -669,23 +837,30 @@ export default function StaffPage() {
               )}
             </TabsTrigger>
             {currentUserIsOwner && (
-              <TabsTrigger value="permissions" className="flex items-center gap-2">
+              <TabsTrigger value="permissions" className="flex h-10 shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
                 <Lock className="w-3 h-3" />
                 Permissions
+              </TabsTrigger>
+            )}
+            {currentUserCanAssign && staffOperationsEnabled && (
+              <TabsTrigger value="time-off" className="flex h-10 shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
+                <CalendarOff className="h-3.5 w-3.5" />
+                Time off
               </TabsTrigger>
             )}
           </TabsList>
 
           {/* Team Members Tab */}
-          <TabsContent value="team">
-            <Card>
-              <CardHeader>
-                <CardTitle>Team Members</CardTitle>
-                <div className="pt-2 flex items-center gap-2">
+          <TabsContent value="team" className="mt-5">
+            <Card className="overflow-hidden rounded-[22px] border-black/[0.06] bg-white shadow-sm">
+              <CardHeader className="px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+                <CardTitle className="text-base font-normal">Team members</CardTitle>
+                <div className="flex items-center gap-2 pt-2">
                   <Button
                     size="sm"
                     variant={staffTab === "all" ? "default" : "outline"}
                     onClick={() => setStaffTab("all")}
+                    className="h-9 rounded-full px-5"
                   >
                     All
                   </Button>
@@ -693,12 +868,13 @@ export default function StaffPage() {
                     size="sm"
                     variant={staffTab === "unassigned" ? "default" : "outline"}
                     onClick={() => setStaffTab("unassigned")}
+                    className="h-9 rounded-full px-5"
                   >
                     Unassigned
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
                 {isLoading ? (
                   <div className="space-y-3">
                     {[1, 2, 3].map((i) => (
@@ -730,7 +906,7 @@ export default function StaffPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
+                  <div className="scrollbar-hide -mx-5 overflow-x-auto px-5 sm:-mx-6 sm:px-6">
                     <Table className="min-w-[900px]">
                       <TableHeader>
                         <TableRow>
@@ -756,9 +932,9 @@ export default function StaffPage() {
                             className="cursor-pointer hover:bg-muted/50"
                             onClick={() => openMemberDialog(member)}
                           >
-                            <TableCell>
+                            <TableCell className="py-3.5">
                               <div className="flex items-center gap-3">
-                                <Avatar className="w-9 h-9">
+                                <Avatar className="h-8 w-8">
                                   <AvatarImage src={member.profile?.avatar_url || undefined} />
                                   <AvatarFallback className="text-xs">
                                     {getInitials(member.profile?.full_name)}
@@ -774,20 +950,20 @@ export default function StaffPage() {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="hidden sm:table-cell">
+                            <TableCell className="hidden py-3.5 sm:table-cell">
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <Mail className="w-3.5 h-3.5 flex-shrink-0" />
                                 <span className="truncate text-sm">{member.email || "—"}</span>
                               </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="py-3.5">
                               <div className="flex items-center gap-2">
                                 <Badge variant={roleVariants[member.role]}>
                                   {roleLabels[member.role]}
                                 </Badge>
                               </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="py-3.5">
                               {pendingInvitation ? (
                                 <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">
                                   Pending
@@ -802,10 +978,10 @@ export default function StaffPage() {
                                 </Badge>
                               )}
                             </TableCell>
-                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                            <TableCell className="hidden py-3.5 text-sm text-muted-foreground lg:table-cell">
                               {member.lastLoginAt ? format(new Date(member.lastLoginAt), "MMM d, yyyy p") : "Never"}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="py-3.5">
                               {member.role === "owner" ? (
                                 <Badge>ALL</Badge>
                               ) : member.isUnassigned ? (
@@ -820,7 +996,7 @@ export default function StaffPage() {
                                 </div>
                               )}
                             </TableCell>
-                            <TableCell onClick={(e) => e.stopPropagation()}>
+                            <TableCell className="py-3.5" onClick={(e) => e.stopPropagation()}>
                               {((currentUserCanAssign && member.role !== "owner") || pendingInvitation) && (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -886,12 +1062,12 @@ export default function StaffPage() {
           </TabsContent>
 
           {/* Pending Invitations Tab */}
-          <TabsContent value="invitations">
-            <Card>
-              <CardHeader>
-                <CardTitle>Pending Invitations</CardTitle>
+          <TabsContent value="invitations" className="mt-5">
+            <Card className="rounded-[22px] border-black/[0.06] bg-white shadow-sm">
+              <CardHeader className="px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+                <CardTitle className="text-base font-normal">Pending invitations</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
                 {invitationsLoading ? (
                   <div className="space-y-3">
                     {[1, 2].map((i) => (
@@ -921,11 +1097,11 @@ export default function StaffPage() {
                       return (
                         <div
                           key={invitation.id}
-                          className={`flex items-center justify-between p-4 rounded-lg border ${
+                          className={`flex flex-col gap-4 rounded-[14px] border p-4 sm:flex-row sm:items-center sm:justify-between ${
                             isExpired ? "bg-destructive/5 border-destructive/20" : "bg-muted/50"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex min-w-0 items-start gap-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                               isExpired ? "bg-destructive/10" : "bg-primary/10"
                             }`}>
@@ -935,11 +1111,11 @@ export default function StaffPage() {
                                 <Mail className="w-5 h-5 text-primary" />
                               )}
                             </div>
-                            <div className="flex-1">
+                            <div className="min-w-0 flex-1">
                               <p className="font-medium">
                                 {invitation.first_name} {invitation.last_name}
                               </p>
-                              <p className="text-sm text-muted-foreground">{invitation.email}</p>
+                              <p className="truncate text-sm text-muted-foreground">{invitation.email}</p>
                               {invitation.phone && (
                                 <p className="text-sm text-muted-foreground">{invitation.phone}</p>
                               )}
@@ -989,7 +1165,7 @@ export default function StaffPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1035,12 +1211,90 @@ export default function StaffPage() {
 
           {/* Permissions Tab - Owner Only */}
           {currentUserIsOwner && (
-            <TabsContent value="permissions">
+            <TabsContent value="permissions" className="mt-5">
               <PermissionsTab />
+            </TabsContent>
+          )}
+          {currentUserCanAssign && staffOperationsEnabled && currentTenant?.id && user?.id && (
+            <TabsContent value="time-off" className="mt-5">
+              <TimeOffTab
+                tenantId={currentTenant.id}
+                actorId={user.id}
+                staff={staff}
+                canManage={currentUserCanAssign}
+              />
             </TabsContent>
           )}
         </Tabs>
       </div>
+
+      <button
+        type="button"
+        aria-label="Invite staff"
+        onClick={() => setInviteDialogOpen(true)}
+        className="fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      <Dialog
+        open={staffOperationsConfirmOpen}
+        onOpenChange={setStaffOperationsConfirmOpen}
+      >
+        <DialogContent className="rounded-[24px] sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-2xl">
+              {staffOperationsEnabled
+                ? "Disable Staff Operations?"
+                : "Enable Staff Operations?"}
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-sm leading-6">
+              {staffOperationsEnabled
+                ? "Time-off tools will be hidden immediately and this add-on will be removed from future recurring bills. Existing leave records are retained."
+                : `This enables check-ins and time-off management for your team. ${
+                    staffOperationsPriceLabel
+                      ? `Your recurring add-on bill will increase by ${staffOperationsPriceLabel} per month at the current ${staffOperationsLocationCount}-location count.`
+                      : "The configured market price will be added to your recurring add-on bill."
+                  }`}
+            </DialogDescription>
+          </DialogHeader>
+          {!staffOperationsEnabled && (
+            <div className="rounded-2xl border bg-muted/35 p-4 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Billing model</span>
+                <span className="font-medium">Monthly per active location</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-4">
+                <span className="text-muted-foreground">Current monthly total</span>
+                <span className="font-serif text-lg font-semibold">
+                  {staffOperationsPriceLabel || "Unavailable"}
+                </span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setStaffOperationsConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={staffOperationsEnabled ? "destructive" : "default"}
+              className="rounded-full"
+              disabled={staffOperationsUpdating}
+              onClick={handleToggleStaffOperations}
+            >
+              {staffOperationsUpdating
+                ? "Updating..."
+                : staffOperationsEnabled
+                  ? "Disable add-on"
+                  : "Confirm and enable"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <InviteStaffDialog
         open={inviteDialogOpen}
@@ -1081,83 +1335,97 @@ export default function StaffPage() {
       />
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Team Member</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-[22px] border-0 p-5 shadow-2xl sm:max-w-[680px] sm:p-8 sm:px-[34px]">
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px]">Team member</DialogTitle>
+            <DialogDescription className="mt-1 text-[13.5px]">
               View details and edit profile, locations, role, and permissions.
             </DialogDescription>
           </DialogHeader>
           <Tabs value={memberDialogTab} onValueChange={(value) => setMemberDialogTab(value as typeof memberDialogTab)}>
-            <TabsList className={cn("grid w-full", isEditingOwner ? "grid-cols-1" : "grid-cols-3")}>
-              <TabsTrigger value="profile">Profile</TabsTrigger>
-              {!isEditingOwner && <TabsTrigger value="locations">Locations</TabsTrigger>}
-              {!isEditingOwner && <TabsTrigger value="permissions">Role & Permissions</TabsTrigger>}
+            <TabsList className={cn("grid h-auto w-full rounded-full bg-[#f1ece3] p-1", isEditingOwner ? "grid-cols-1" : "grid-cols-3")}>
+              <TabsTrigger value="profile" className="h-11 rounded-full text-[13.5px]">Profile</TabsTrigger>
+              {!isEditingOwner && <TabsTrigger value="locations" className="h-11 rounded-full text-[13.5px]">Locations</TabsTrigger>}
+              {!isEditingOwner && <TabsTrigger value="permissions" className="h-11 rounded-full text-[13.5px]">Role & Permissions</TabsTrigger>}
             </TabsList>
 
-            <TabsContent value="profile" className="space-y-4 pt-4">
+            <TabsContent value="profile" className="space-y-[18px] pt-5">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Basic information</div>
+                <h3 className="font-serif text-[15px] font-medium text-muted-foreground">Basic information</h3>
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="h-8 gap-1.5 rounded-full px-3 text-[13.5px] text-muted-foreground"
                   onClick={() => setEditableTabs((prev) => ({ ...prev, profile: !prev.profile }))}
                 >
-                  <Pencil className="w-4 h-4 mr-1" />
+                  <Pencil className="h-3.5 w-3.5" />
                   {editableTabs.profile ? "Stop editing" : "Edit"}
                 </Button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="staff-first-name">First name</Label>
+                  <Label htmlFor="staff-first-name" className="text-[13.5px] font-normal text-muted-foreground">First name</Label>
                   <Input
                     id="staff-first-name"
+                    className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
                     value={editFirstName}
                     disabled={!editableTabs.profile}
                     onChange={(event) => setEditFirstName(event.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="staff-last-name">Last name</Label>
+                  <Label htmlFor="staff-last-name" className="text-[13.5px] font-normal text-muted-foreground">Last name</Label>
                   <Input
                     id="staff-last-name"
+                    className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
                     value={editLastName}
                     disabled={!editableTabs.profile}
                     onChange={(event) => setEditLastName(event.target.value)}
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <Input value={staffToEdit?.email || "—"} disabled />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Joined</Label>
-                  <Input value={staffToEdit?.joinedAt ? format(new Date(staffToEdit.joinedAt), "MMM d, yyyy") : "—"} disabled />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Last login</Label>
+                  <Label htmlFor="staff-email" className="text-[13.5px] font-normal text-muted-foreground">Email</Label>
                   <Input
-                    value={staffToEdit?.lastLoginAt ? format(new Date(staffToEdit.lastLoginAt), "MMM d, yyyy p") : "Never"}
+                    id="staff-email"
+                    className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
+                    value={staffToEdit?.email || "—"}
+                    disabled
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="staff-joined" className="text-[13.5px] font-normal text-muted-foreground">Joined</Label>
+                  <Input
+                    id="staff-joined"
+                    className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
+                    value={staffToEdit?.joinedAt ? format(new Date(staffToEdit.joinedAt), "MMM d, yyyy") : "—"}
                     disabled
                   />
                 </div>
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-last-login" className="text-[13.5px] font-normal text-muted-foreground">Last login</Label>
+                <Input
+                  id="staff-last-login"
+                  className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
+                  value={staffToEdit?.lastLoginAt ? format(new Date(staffToEdit.lastLoginAt), "MMM d, yyyy p") : "Never"}
+                  disabled
+                />
+              </div>
             </TabsContent>
 
-            <TabsContent value="locations" className="space-y-4 pt-4">
+            <TabsContent value="locations" className="space-y-4 pt-5">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Assigned salon locations</div>
+                <h3 className="font-serif text-[15px] font-medium text-muted-foreground">Assigned salon locations</h3>
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="h-8 gap-1.5 rounded-full px-3 text-[13.5px] text-muted-foreground"
                   disabled={!isChainTenant || !currentUserCanAssign || isEditingOwner}
                   onClick={() => setEditableTabs((prev) => ({ ...prev, locations: !prev.locations }))}
                 >
-                  <Pencil className="w-4 h-4 mr-1" />
+                  <Pencil className="h-3.5 w-3.5" />
                   {editableTabs.locations ? "Stop editing" : "Edit"}
                 </Button>
               </div>
@@ -1166,14 +1434,17 @@ export default function StaffPage() {
                   Owners always have access to all branches.
                 </p>
               )}
-              <div className="space-y-2 max-h-56 overflow-y-auto border rounded-md p-3">
+              <div className="scrollbar-hide max-h-64 space-y-1 overflow-y-auto rounded-[14px] border border-black/[0.07] p-2">
                 {!isChainTenant ? (
                   <p className="text-sm text-muted-foreground">Location assignment is available on chain plan only.</p>
                 ) : tenantLocations.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No salons available.</p>
                 ) : (
                   tenantLocations.map((location) => (
-                    <label key={location.id} className="flex items-center gap-2 text-sm">
+                    <label
+                      key={location.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 text-sm hover:bg-[#fbf9f6]"
+                    >
                       <Checkbox
                         checked={selectedLocationIds.includes(location.id)}
                         disabled={!editableTabs.locations || isEditingOwner}
@@ -1186,16 +1457,19 @@ export default function StaffPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="permissions" className="space-y-4 pt-4">
+            <TabsContent value="permissions" className="space-y-4 pt-5">
               <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Role and per-user permissions</div>
+                <h3 className="font-serif text-[15px] font-medium text-muted-foreground">
+                  Role and per-user permissions
+                </h3>
                 <Button
                   variant="ghost"
                   size="sm"
+                  className="h-8 gap-1.5 rounded-full px-3 text-[13.5px] text-muted-foreground"
                   disabled={isEditingOwner}
                   onClick={() => setEditableTabs((prev) => ({ ...prev, permissions: !prev.permissions }))}
                 >
-                  <Pencil className="w-4 h-4 mr-1" />
+                  <Pencil className="h-3.5 w-3.5" />
                   {editableTabs.permissions ? "Stop editing" : "Edit"}
                 </Button>
               </div>
@@ -1205,7 +1479,7 @@ export default function StaffPage() {
                 </p>
               )}
               <div className="space-y-1.5">
-                <Label>Role</Label>
+                <Label htmlFor="staff-role" className="text-[13.5px] font-normal text-muted-foreground">Role</Label>
                 <Select
                   value={editRole}
                   disabled={!editableTabs.permissions || isEditingOwner}
@@ -1221,7 +1495,10 @@ export default function StaffPage() {
                     }
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    id="staff-role"
+                    className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1234,10 +1511,13 @@ export default function StaffPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Per-user access overrides</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto border rounded-md p-3">
+                <Label className="text-[13.5px] font-normal text-muted-foreground">Per-user access overrides</Label>
+                <div className="scrollbar-hide grid max-h-64 grid-cols-1 gap-1 overflow-y-auto rounded-[14px] border border-black/[0.07] p-2 sm:grid-cols-2">
                   {overrideModules.map((moduleKey) => (
-                    <label key={moduleKey} className="flex items-center gap-2 text-sm">
+                    <label
+                      key={moduleKey}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-[#fbf9f6]"
+                    >
                       <Checkbox
                         checked={overrideSelections[moduleKey] === true}
                         disabled={!editableTabs.permissions || isRoleChangedInDraft || isEditingOwner}
@@ -1274,18 +1554,27 @@ export default function StaffPage() {
               )}
             </TabsContent>
           </Tabs>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={savingEdit}>
+          <DialogFooter className="gap-2 pt-1">
+            <Button
+              variant="outline"
+              className="h-11 rounded-full border-black/10 px-5"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={savingEdit}
+            >
               Cancel
             </Button>
-            <Button onClick={() => setConfirmEditDialogOpen(true)} disabled={savingEdit || !isEditDirty}>
+            <Button
+              className="h-11 rounded-full px-5"
+              onClick={() => setConfirmEditDialogOpen(true)}
+              disabled={savingEdit || !isEditDirty}
+            >
               {savingEdit ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Updating...
                 </>
               ) : (
-                "Review Changes"
+                "Review changes"
               )}
             </Button>
           </DialogFooter>
