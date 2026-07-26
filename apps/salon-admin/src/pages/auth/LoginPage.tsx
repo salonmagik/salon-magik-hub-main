@@ -478,10 +478,7 @@ export default function LoginPage() {
 			variant="login"
 		>
 			<AlertDialog open={showGoogleSignupPrompt}>
-				<AlertDialogContent
-					onEscapeKeyDown={(event) => event.preventDefault()}
-					onPointerDownOutside={(event) => event.preventDefault()}
-				>
+				<AlertDialogContent onEscapeKeyDown={(event) => event.preventDefault()}>
 					<AlertDialogHeader>
 						<AlertDialogTitle>
 							Continue to create your account?
