@@ -1138,7 +1138,7 @@ export default function MessagingPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as MessagingTab)}>
-          <TabsList className="h-auto flex-wrap gap-2 rounded-2xl bg-muted/60 p-2">
+          <TabsList className="h-auto w-full gap-2 rounded-2xl bg-muted/60 p-2 sm:w-auto">
             <TabsTrigger value="send-broadcast" className="rounded-xl px-5 py-2.5">
               Send Broadcast
             </TabsTrigger>

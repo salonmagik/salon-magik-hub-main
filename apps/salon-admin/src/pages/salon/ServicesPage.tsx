@@ -19,6 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import {
@@ -136,6 +137,7 @@ export default function ServicesPage() {
   const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
   const [binSelectMode, setBinSelectMode] = useState(false);
   const [selectedBinItemKeys, setSelectedBinItemKeys] = useState<Set<string>>(new Set());
+  const [binDeleteTargets, setBinDeleteTargets] = useState<Array<{ id: string; name: string; type: ItemType }>>([]);
   const [fixDialogOpen, setFixDialogOpen] = useState(false);
   const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
   const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
@@ -162,7 +164,7 @@ export default function ServicesPage() {
   const { createRequest } = useDeletionRequests();
 
   const currency = currentTenant?.currency || "USD";
-  const isLoading = servicesLoading || packagesLoading || productsLoading;
+  const isLoading = servicesLoading || packagesLoading || productsLoading || vouchersLoading;
   
   // Permission checks
   const canEdit = hasPermission("catalog:edit");
@@ -178,7 +180,14 @@ export default function ServicesPage() {
   const makeBinKey = (item: { id: string; type: ItemType | "voucher" }) => `${item.type}:${item.id}`;
 
   const formatCurrency = (amount: number) => {
-    return `${currency} ${Number(amount).toLocaleString(undefined, {
+    const symbols: Record<string, string> = {
+      GHS: "₵",
+      NGN: "₦",
+      USD: "$",
+      EUR: "€",
+      GBP: "£",
+    };
+    return `${symbols[currency] || `${currency} `}${Number(amount).toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -247,7 +256,19 @@ export default function ServicesPage() {
       status: p.status,
       is_flagged: (p as any).is_flagged,
     })),
-  ], [services, packages, products]);
+    ...vouchers.map((voucher) => ({
+      id: voucher.id,
+      type: "voucher" as const,
+      name: voucher.code,
+      description: [
+        voucher.access_type ? `${voucher.access_type} voucher` : "Gift voucher",
+        voucher.expires_at ? `expires ${format(new Date(voucher.expires_at), "MMM d, yyyy")}` : null,
+      ].filter(Boolean).join(" · "),
+      price: Number(voucher.amount),
+      status: voucher.status,
+      is_flagged: false,
+    })),
+  ], [services, packages, products, vouchers]);
 
   const filteredItems = allItems.filter((item) => {
     const matchesSearch =
@@ -833,23 +854,42 @@ export default function ServicesPage() {
   );
   const hasFixMixedCurrencies = fixCurrencies.length > 1;
 
+  const confirmPermanentBinDelete = async () => {
+    if (binDeleteTargets.length === 0) return;
+    setBinProcessingItemId(binDeleteTargets.length === 1 ? binDeleteTargets[0].id : "__bulk_delete__");
+    let deletedCount = 0;
+    for (const item of binDeleteTargets) {
+      const deleted = await permanentlyDeleteItem(item.id, item.type, { silent: true, skipRefetch: true });
+      if (deleted) deletedCount++;
+    }
+    await Promise.all([refetchBinItems(), refetchAll()]);
+    setBinProcessingItemId(null);
+    setBinDeleteTargets([]);
+    setSelectedBinItemKeys(new Set());
+    setBinSelectMode(false);
+    toast({
+      title: "Delete complete",
+      description: deletedCount > 0 ? `${deletedCount} item(s) permanently deleted.` : "No selected items were deleted.",
+    });
+  };
+
   return (
     <SalonSidebar>
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[1500px] space-y-5 sm:space-y-7">
         {/* Page Header */}
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Services and Products</h1>
-            <p className="text-muted-foreground">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Services and Products</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
               Manage your service catalog, packages, products, and vouchers.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="hidden flex-wrap items-center gap-2 lg:flex">
             {(activeTab === "all" || activeTab === "services" || activeTab === "products") && (
               <>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
+                    <Button variant="outline" className="h-12 rounded-full px-6">
                       <Download className="w-4 h-4 mr-2" />
                       Import
                     </Button>
@@ -880,7 +920,7 @@ export default function ServicesPage() {
               <AddItemPopover onSelect={handleAddFromPopover} />
             ) : (
               addButtonLabel && (
-                <Button onClick={handleAddClick}>
+                <Button onClick={handleAddClick} className="h-12 rounded-full px-7">
                   <Plus className="w-4 h-4 mr-2" />
                   {addButtonLabel}
                 </Button>
@@ -891,34 +931,34 @@ export default function ServicesPage() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabValue)}>
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="services" className="flex items-center gap-2">
+          <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1 lg:w-fit">
+            <TabsTrigger value="all" className="h-10 shrink-0 rounded-full px-5 sm:px-6">All</TabsTrigger>
+            <TabsTrigger value="services" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
               <Scissors className="w-4 h-4" />
               Services
             </TabsTrigger>
-            <TabsTrigger value="products" className="flex items-center gap-2">
+            <TabsTrigger value="products" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
               <ShoppingBag className="w-4 h-4" />
               Products
             </TabsTrigger>
-            <TabsTrigger value="packages" className="flex items-center gap-2">
+            <TabsTrigger value="packages" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
               <Package className="w-4 h-4" />
               Packages
             </TabsTrigger>
-            <TabsTrigger value="vouchers" className="flex items-center gap-2">
+            <TabsTrigger value="vouchers" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
               <Gift className="w-4 h-4" />
               Vouchers
             </TabsTrigger>
           </TabsList>
 
-          <div className="mt-6">
+          <div className="mt-5">
             {/* Search */}
-            <div className="flex flex-wrap items-center gap-4 mb-6">
-              <div className="relative flex-1 max-w-md">
+            <div className="mb-5 flex flex-wrap items-center gap-4">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search services, products, packages..."
-                  className="pl-9"
+                  className="h-12 rounded-[12px] bg-white pl-11 text-sm shadow-sm sm:text-base"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -945,7 +985,7 @@ export default function ServicesPage() {
                   {filteredItems.filter((item) => shouldShowItem(item.type, item.id)).length === 0 ? (
                     <EmptyState message="No items yet. Add services, products, or packages to get started." />
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
                       {filteredItems
                         .filter((item) => shouldShowItem(item.type, item.id))
                         .map((item) => (
@@ -977,7 +1017,7 @@ export default function ServicesPage() {
                     ).length === 0 ? (
                     <EmptyState message="No services yet. Add your first service." />
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
                       {services
                         .filter(
                           (s) =>
@@ -1024,7 +1064,7 @@ export default function ServicesPage() {
                     ).length === 0 ? (
                     <EmptyState message="No packages yet. Bundle services together." />
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
                       {packages
                         .filter(
                           (p) =>
@@ -1084,7 +1124,7 @@ export default function ServicesPage() {
                         ).length === 0 ? (
                         <EmptyState message="No products yet. Add items to sell." />
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
                           {products
                             .filter(
                               (p) =>
@@ -1129,7 +1169,7 @@ export default function ServicesPage() {
                 {/* Vouchers Tab */}
                 <TabsContent value="vouchers" className="mt-0">
                   {vouchersLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
                       {[1, 2].map((i) => (
                         <Card key={i}>
                           <CardContent className="p-4">
@@ -1139,72 +1179,61 @@ export default function ServicesPage() {
                         </Card>
                       ))}
                     </div>
-                  ) : vouchers.filter((v) => shouldShowItem("voucher", v.id)).length === 0 ? (
+                  ) : vouchers.filter(
+                    (voucher) =>
+                      voucher.code.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                      shouldShowItem("voucher", voucher.id),
+                  ).length === 0 ? (
                     <EmptyState message="No vouchers yet. Create gift cards for customers." />
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {vouchers.filter((v) => shouldShowItem("voucher", v.id)).map((v) => {
-                        const voucherIssues = getItemIssues("voucher", v.id);
-                        const blocking = voucherIssues.some((issue) => issue.severity === "blocking");
-                        const warning = voucherIssues.some((issue) => issue.severity === "warning");
-                        return (
-                        <Card key={v.id} className="hover:shadow-md transition-shadow">
-                          <CardContent className="p-4">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <p className="text-xs font-medium uppercase tracking-wider text-purple-600">
-                                  GIFT CARD
-                                </p>
-                                <h3 className="font-mono font-semibold mt-1 text-lg">{v.code}</h3>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <Badge
-                                    variant="secondary"
-                                    className={
-                                      v.status === "active"
-                                        ? "bg-success/10 text-success"
-                                        : v.status === "redeemed"
-                                        ? "bg-muted text-muted-foreground"
-                                        : "bg-destructive/10 text-destructive"
-                                    }
-                                  >
-                                    {v.status}
-                                  </Badge>
-                                  {v.expires_at && (
-                                    <span className="text-xs text-muted-foreground">
-                                      Expires {format(new Date(v.expires_at), "MMM d, yyyy")}
-                                    </span>
-                                  )}
-                                  {(blocking || warning) && (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "text-xs",
-                                        blocking
-                                          ? "border-destructive/40 bg-destructive/10 text-destructive"
-                                          : "border-warning/40 bg-warning/10 text-warning",
-                                      )}
-                                    >
-                                      <AlertTriangle className="mr-1 h-3 w-3" />
-                                      {blocking ? "Blocking config issue" : "Config warning"}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-semibold text-lg">{formatCurrency(Number(v.amount))}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  Balance: {formatCurrency(Number(v.balance))}
-                                </p>
-                              </div>
-                            </div>
-                            {voucherIssues.length > 0 && (
-                              <div className="mt-3 space-y-2">
-                                <p className="text-xs text-muted-foreground">{voucherIssues[0].issue_message}</p>
-                              </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      )})}
+                    <div className="space-y-3">
+                      {vouchers
+                        .filter(
+                          (voucher) =>
+                            voucher.code.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                            shouldShowItem("voucher", voucher.id),
+                        )
+                        .map((voucher) => (
+                          <SelectableItemCard
+                            key={voucher.id}
+                            item={{
+                              id: voucher.id,
+                              type: "voucher",
+                              name: voucher.code,
+                              description: [
+                                voucher.access_type ? `${voucher.access_type} voucher` : "Gift voucher",
+                                voucher.expires_at
+                                  ? `expires ${format(new Date(voucher.expires_at), "MMM d, yyyy")}`
+                                  : null,
+                                `balance ${formatCurrency(Number(voucher.balance))}`,
+                              ].filter(Boolean).join(" · "),
+                              price: Number(voucher.amount),
+                              status: voucher.status,
+                            }}
+                            currency={currency}
+                            formatCurrency={formatCurrency}
+                            isSelected={selectedItems.has(voucher.id)}
+                            onSelect={handleSelectItem}
+                            canEdit={canEdit}
+                            onViewDetails={() => setViewDetailItem({
+                              id: voucher.id,
+                              type: "voucher",
+                              name: voucher.code,
+                              description: "",
+                              price: Number(voucher.amount),
+                              status: voucher.status,
+                            })}
+                            onEdit={() => setEditItem({
+                              id: voucher.id,
+                              type: "voucher",
+                              name: voucher.code,
+                              description: "",
+                              price: Number(voucher.amount),
+                              status: voucher.status,
+                            })}
+                            integrityIssues={getItemIssues("voucher", voucher.id)}
+                          />
+                        ))}
                     </div>
                   )}
                 </TabsContent>
@@ -1227,6 +1256,46 @@ export default function ServicesPage() {
         canDelete={canDelete || canRequestDelete}
         canArchive={canArchive}
       />
+
+      {selectedItems.size === 0 && <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="Add a catalog item"
+            className="fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
+          >
+            <Plus className="h-6 w-6" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" side="top" className="mb-2 w-56">
+          <DropdownMenuItem onClick={() => setServiceDialogOpen(true)}>
+            <Scissors className="mr-2 h-4 w-4" />Add service
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setProductDialogOpen(true)}>
+            <ShoppingBag className="mr-2 h-4 w-4" />Add product
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setPackageDialogOpen(true)}>
+            <Package className="mr-2 h-4 w-4" />Create package
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setVoucherDialogOpen(true)}>
+            <Gift className="mr-2 h-4 w-4" />Create voucher
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => {
+            setImportType("services");
+            setImportDialogOpen(true);
+          }}>
+            <Download className="mr-2 h-4 w-4" />Import catalog
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setBinOpen(true)}
+            className="bg-[#f7e5e5] text-[#a23b3b] focus:bg-[#f3dada] focus:text-[#8f3030]"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Bin ({binItems.length})
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>}
 
       {/* Confirmation Dialogs */}
       <ReasonConfirmDialog
@@ -1262,6 +1331,18 @@ export default function ServicesPage() {
         itemCount={selectedItems.size}
         onConfirm={handleDelete}
         isLoading={isProcessing}
+      />
+
+      <DeleteConfirmDialog
+        open={binDeleteTargets.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !isBinBusy) setBinDeleteTargets([]);
+        }}
+        itemName={binDeleteTargets[0]?.name || ""}
+        itemCount={binDeleteTargets.length}
+        onConfirm={confirmPermanentBinDelete}
+        isLoading={isBinBusy}
+        description="This permanently removes the selected item(s). This action cannot be undone."
       />
 
       <RequestDeleteDialog
@@ -1310,14 +1391,16 @@ export default function ServicesPage() {
       />
 
       {selectedItems.size === 0 && (
-        <button
-          type="button"
-          onClick={() => setBinOpen(true)}
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg hover:opacity-95"
-        >
-          <Trash2 className="h-4 w-4" />
-          Bin ({binItems.length})
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => setBinOpen(true)}
+            className="fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg hover:opacity-95 lg:inline-flex"
+          >
+            <Trash2 className="h-4 w-4" />
+            Bin ({binItems.length})
+          </button>
+        </>
       )}
 
       <Dialog
@@ -1330,23 +1413,26 @@ export default function ServicesPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Bin</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 p-5 shadow-2xl sm:max-h-[88vh] sm:max-w-[640px] sm:p-[34px]">
+          <DialogHeader className="space-y-1.5 text-left">
+            <DialogTitle className="font-serif text-[24px] font-medium tracking-[-0.3px] text-[#141014]">
+              Bin
+            </DialogTitle>
+            <DialogDescription className="text-[14px] leading-5 text-[#141014]/60">
               Restore deleted services, products, packages, and vouchers within 7 days.
             </DialogDescription>
-            <div className="text-xs text-muted-foreground">Total: {binItems.length}</div>
+            <div className="pt-1 text-[13px] text-[#141014]/60">Total: {binItems.length}</div>
           </DialogHeader>
 
-          <div className={cn("space-y-4", isBinBusy && "pointer-events-none opacity-60")}>
+          <div className={cn("mt-[18px] space-y-[18px]", isBinBusy && "pointer-events-none opacity-60")}>
           {!binLoading && binItems.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={isBinBusy}
+                  className="h-9 rounded-full border-[#141014]/10 px-4 font-normal"
                   onClick={() => {
                     if (binSelectMode) {
                       setBinSelectMode(false);
@@ -1356,13 +1442,14 @@ export default function ServicesPage() {
                     setBinSelectMode(true);
                   }}
                 >
-                  {binSelectMode ? "Cancel Select" : "Select"}
+                  {binSelectMode ? "Cancel select" : "Select"}
                 </Button>
                 {binSelectMode && (
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={isBinBusy}
+                    className="h-9 rounded-full border-[#141014]/10 px-4 font-normal"
                     onClick={() => {
                       if (selectedBinItemKeys.size === binItems.length) {
                         setSelectedBinItemKeys(new Set());
@@ -1371,18 +1458,21 @@ export default function ServicesPage() {
                       setSelectedBinItemKeys(new Set(binItems.map((item) => makeBinKey(item))));
                     }}
                   >
-                    {selectedBinItemKeys.size === binItems.length ? "Clear All" : "Select All"}
+                    {selectedBinItemKeys.size === binItems.length ? "Clear all" : "Select all"}
                   </Button>
                 )}
               </div>
 
               {binSelectMode && selectedBinItemKeys.size > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{selectedBinItemKeys.size} selected</span>
+                <div className="scrollbar-hide flex w-full items-center gap-2 overflow-x-auto sm:w-auto">
+                  <span className="shrink-0 text-[13px] text-[#141014]/60">
+                    {selectedBinItemKeys.size} selected
+                  </span>
                   <Button
                     variant="outline"
                     size="sm"
                     disabled={!canRestoreBinItems || isBinBusy}
+                    className="h-9 shrink-0 rounded-full border-[#141014]/10 px-4 font-normal"
                     onClick={async () => {
                       const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
                       setBinProcessingItemId("__bulk_restore__");
@@ -1413,25 +1503,15 @@ export default function ServicesPage() {
                     )}
                   </Button>
                   <Button
-                    variant="destructive"
                     size="sm"
                     disabled={!canDeleteBinItems || isBinBusy}
-                    onClick={async () => {
-                      const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
-                      setBinProcessingItemId("__bulk_delete__");
-                      let deletedCount = 0;
-                      for (const item of selectedItems) {
-                        const deleted = await permanentlyDeleteItem(item.id, item.type, { silent: true, skipRefetch: true });
-                        if (deleted) deletedCount++;
-                      }
-                      await Promise.all([refetchBinItems(), refetchAll()]);
-                      setBinProcessingItemId(null);
-                      setSelectedBinItemKeys(new Set());
-                      setBinSelectMode(false);
-                      toast({
-                        title: "Delete complete",
-                        description: deletedCount > 0 ? `${deletedCount} item(s) permanently deleted.` : "No selected items were deleted.",
-                      });
+                    className="h-9 shrink-0 rounded-full bg-[#a23b3b] px-4 font-normal text-white hover:bg-[#8f3030]"
+                    onClick={() => {
+                      setBinDeleteTargets(
+                        binItems
+                          .filter((item) => selectedBinItemKeys.has(makeBinKey(item)))
+                          .map((item) => ({ id: item.id, name: item.name, type: item.type })),
+                      );
                     }}
                   >
                     {binProcessingItemId === "__bulk_delete__" ? (
@@ -1449,17 +1529,17 @@ export default function ServicesPage() {
           )}
 
           {binLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <Skeleton key={idx} className="h-36 rounded-xl" />
+            <div className="space-y-4">
+              {Array.from({ length: 2 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-[340px] rounded-[22px]" />
               ))}
             </div>
           ) : binItems.length === 0 ? (
-            <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+            <div className="rounded-[14px] border border-[#141014]/[0.06] px-5 py-[60px] text-center text-sm text-[#141014]/42">
               Bin is empty.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {binItems.map((item) => {
                 const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
                 const remainingMs = expiresAt.getTime() - Date.now();
@@ -1467,110 +1547,131 @@ export default function ServicesPage() {
                 const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
 
                 return (
-                  <Card key={`${item.type}-${item.id}`}>
-                    <CardContent className="p-4 space-y-3">
+                  <Card
+                    key={`${item.type}-${item.id}`}
+                    className="relative overflow-hidden rounded-[22px] border-[#141014]/[0.06] shadow-none"
+                  >
+                    <CardContent className="p-0">
                       {binSelectMode && (
-                        <div className="flex justify-end">
-                          <Checkbox
-                            checked={selectedBinItemKeys.has(makeBinKey(item))}
-                            onCheckedChange={(checked) => {
-                              setSelectedBinItemKeys((prev) => {
-                                const next = new Set(prev);
-                                const key = makeBinKey(item);
-                                if (checked) next.add(key);
-                                else next.delete(key);
-                                return next;
-                              });
+                        <Checkbox
+                          aria-label={`Select ${item.name}`}
+                          checked={selectedBinItemKeys.has(makeBinKey(item))}
+                          onCheckedChange={(checked) => {
+                            setSelectedBinItemKeys((prev) => {
+                              const next = new Set(prev);
+                              const key = makeBinKey(item);
+                              if (checked) next.add(key);
+                              else next.delete(key);
+                              return next;
+                            });
+                          }}
+                          className="absolute right-3.5 top-3.5 z-10 h-6 w-6 rounded-[7px] border-[#141014]/15 bg-white data-[state=checked]:border-[#2e1f4e] data-[state=checked]:bg-[#2e1f4e]"
+                        />
+                      )}
+                      {item.image_urls && item.image_urls.length > 0 ? (
+                        <img
+                          src={item.image_urls[0]}
+                          alt={item.name}
+                          className="h-[150px] w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-[150px] w-full items-center justify-center bg-[#f2eefa] text-[#2e1f4e]">
+                          {item.type === "service" && <Scissors className="h-10 w-10" />}
+                          {item.type === "product" && <ShoppingBag className="h-10 w-10" />}
+                          {item.type === "package" && <Package className="h-10 w-10" />}
+                          {item.type === "voucher" && <Gift className="h-10 w-10" />}
+                        </div>
+                      )}
+                      <div className="p-[18px] sm:px-5">
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h4 className="truncate text-[17px] font-normal leading-tight text-[#141014]">
+                              {item.name}
+                            </h4>
+                            {item.description ? (
+                              <p className="mt-1 line-clamp-2 text-xs text-[#141014]/50">
+                                {item.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge
+                            variant="secondary"
+                            className="shrink-0 border-0 bg-[#f1ece3] px-3 font-normal capitalize text-[#141014]/60"
+                          >
+                            {item.type}
+                          </Badge>
+                        </div>
+                        <div className="mb-3 text-[13px] text-[#141014]/60">
+                          {canStillRestore
+                            ? `${remainingDays} day(s) left before permanent deletion`
+                            : "Restore window expired"}
+                        </div>
+                        {item.location_names && item.location_names.length > 0 && (
+                          <div className="mb-4 flex flex-wrap gap-1.5">
+                            {item.location_names.map((locationName) => (
+                              <Badge
+                                key={`${item.id}-${locationName}`}
+                                variant="secondary"
+                                className="bg-[#f2eefa] px-3 font-normal text-[#2e1f4e]"
+                              >
+                                {locationName}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 rounded-full border-[#141014]/10 px-4 font-normal"
+                            disabled={
+                              binSelectMode ||
+                              !canRestoreBinItems ||
+                              !canStillRestore ||
+                              binProcessingItemId === item.id ||
+                              binProcessingItemId === "__bulk_restore__" ||
+                              binProcessingItemId === "__bulk_delete__"
+                            }
+                            onClick={async () => {
+                              setBinProcessingItemId(item.id);
+                              await restoreItem(item.id, item.type);
+                              await refetchAll();
+                              setBinProcessingItemId(null);
                             }}
-                          />
+                          >
+                            {binProcessingItemId === item.id ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Working...
+                              </>
+                            ) : (
+                              "Restore"
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-9 rounded-full bg-[#f7e5e5] px-4 font-normal text-[#a23b3b] hover:bg-[#f3dada]"
+                            disabled={
+                              binSelectMode ||
+                              !canDeleteBinItems ||
+                              binProcessingItemId === item.id ||
+                              binProcessingItemId === "__bulk_restore__" ||
+                              binProcessingItemId === "__bulk_delete__"
+                            }
+                            onClick={() => {
+                              setBinDeleteTargets([{ id: item.id, name: item.name, type: item.type }]);
+                            }}
+                          >
+                            {binProcessingItemId === item.id ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Deleting...
+                              </>
+                            ) : (
+                              "Delete now"
+                            )}
+                          </Button>
                         </div>
-                      )}
-                      <img
-                        src={item.image_urls && item.image_urls.length > 0 ? item.image_urls[0] : "/placeholder.svg"}
-                        alt={item.name}
-                        className="h-28 w-full rounded-md object-cover"
-                      />
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h4 className="font-medium leading-tight">{item.name}</h4>
-                          {item.description ? (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              {item.description}
-                            </p>
-                          ) : null}
-                        </div>
-                        <Badge variant="outline" className="uppercase text-[10px]">
-                          {item.type}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {canStillRestore
-                          ? `${remainingDays} day(s) left before permanent deletion`
-                          : "Restore window expired"}
-                      </div>
-                      {item.location_names && item.location_names.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                          {item.location_names.map((locationName) => (
-                            <Badge key={`${item.id}-${locationName}`} variant="secondary" className="text-[10px]">
-                              {locationName}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                        disabled={
-                          binSelectMode ||
-                          !canRestoreBinItems ||
-                          !canStillRestore ||
-                          binProcessingItemId === item.id ||
-                          binProcessingItemId === "__bulk_restore__" ||
-                          binProcessingItemId === "__bulk_delete__"
-                        }
-                        onClick={async () => {
-                          setBinProcessingItemId(item.id);
-                          await restoreItem(item.id, item.type);
-                          await refetchAll();
-                          setBinProcessingItemId(null);
-                        }}
-                        >
-                          {binProcessingItemId === item.id ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Working...
-                            </>
-                          ) : (
-                            "Restore"
-                          )}
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                        disabled={
-                          binSelectMode ||
-                          !canDeleteBinItems ||
-                          binProcessingItemId === item.id ||
-                          binProcessingItemId === "__bulk_restore__" ||
-                          binProcessingItemId === "__bulk_delete__"
-                        }
-                        onClick={async () => {
-                          setBinProcessingItemId(item.id);
-                          await permanentlyDeleteItem(item.id, item.type);
-                          await refetchAll();
-                          setBinProcessingItemId(null);
-                        }}
-                        >
-                          {binProcessingItemId === item.id ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Deleting...
-                            </>
-                          ) : (
-                            "Delete now"
-                          )}
-                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -1681,6 +1782,12 @@ export default function ServicesPage() {
         pkg={editItem?.type === "package" ? packages.find(p => p.id === editItem.id) || null : null}
         onSuccess={refetchPackages}
       />
+      <EditVoucherDialog
+        open={!!editItem && editItem.type === "voucher"}
+        onOpenChange={(open) => !open && setEditItem(null)}
+        voucher={editItem?.type === "voucher" ? vouchers.find((voucher) => voucher.id === editItem.id) || null : null}
+        onSuccess={refetchVouchers}
+      />
 
       <ServiceDetailDialog
         open={!!viewDetailItem && viewDetailItem.type === "service"}
@@ -1773,10 +1880,31 @@ function SelectableItemCard({
   onEdit,
   integrityIssues = [],
 }: SelectableItemCardProps) {
-  const typeLabels: Record<string, { label: string; color: string }> = {
-    service: { label: "SERVICE", color: "text-primary" },
-    package: { label: "PACKAGE", color: "text-primary/80" },
-    product: { label: "PRODUCT", color: "text-primary/60" },
+  const typeLabels: Record<string, { label: string; color: string; iconBg: string; iconColor: string }> = {
+    service: {
+      label: "SERVICE",
+      color: "text-muted-foreground",
+      iconBg: "bg-[#f1eafa]",
+      iconColor: "text-primary",
+    },
+    package: {
+      label: "PACKAGE",
+      color: "text-muted-foreground",
+      iconBg: "bg-[#e1f3ec]",
+      iconColor: "text-[#268766]",
+    },
+    product: {
+      label: "PRODUCT",
+      color: "text-muted-foreground",
+      iconBg: "bg-[#fff2ce]",
+      iconColor: "text-[#8a6510]",
+    },
+    voucher: {
+      label: "VOUCHER",
+      color: "text-muted-foreground",
+      iconBg: "bg-[#edeaf1]",
+      iconColor: "text-primary",
+    },
   };
 
   const typeInfo = typeLabels[item.type] || typeLabels.service;
@@ -1786,17 +1914,17 @@ function SelectableItemCard({
 
   return (
     <Card className={cn(
-      "hover:shadow-md transition-all",
-      isSelected && "ring-2 ring-primary"
+      "rounded-[20px] border-border/60 bg-white shadow-sm transition-shadow hover:border-primary/20 hover:shadow-md",
+      isSelected && "border-foreground ring-1 ring-foreground"
     )}>
-      <CardContent className="p-4">
-        <div className="flex items-start gap-4">
+      <CardContent className="p-3.5 sm:px-5 sm:py-4">
+        <div className="grid grid-cols-[auto_44px_minmax(0,1fr)_auto] items-start gap-2.5 sm:flex sm:items-center sm:gap-4">
           {/* Checkbox */}
           {onSelect && (
             <Checkbox
               checked={isSelected}
               onCheckedChange={() => onSelect(item.id, item.type)}
-              className="mt-1"
+              className="mt-1 sm:mt-0"
             />
           )}
 
@@ -1805,18 +1933,22 @@ function SelectableItemCard({
             <img
               src={item.images[0]}
               alt={item.name}
-              className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+              className="h-11 w-11 flex-shrink-0 rounded-[11px] object-cover sm:h-14 sm:w-14 sm:rounded-[12px]"
             />
           ) : (
-            <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-              {item.type === "service" && <Scissors className="w-6 h-6 text-muted-foreground" />}
-              {item.type === "package" && <Package className="w-6 h-6 text-muted-foreground" />}
-              {item.type === "product" && <ShoppingBag className="w-6 h-6 text-muted-foreground" />}
+            <div className={cn(
+              "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[11px] sm:h-14 sm:w-14 sm:rounded-[12px]",
+              typeInfo.iconBg,
+            )}>
+              {item.type === "service" && <Scissors className={cn("h-5 w-5", typeInfo.iconColor)} />}
+              {item.type === "package" && <Package className={cn("h-5 w-5", typeInfo.iconColor)} />}
+              {item.type === "product" && <ShoppingBag className={cn("h-5 w-5", typeInfo.iconColor)} />}
+              {item.type === "voucher" && <Gift className={cn("h-5 w-5", typeInfo.iconColor)} />}
             </div>
           )}
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <p className={`text-xs font-medium uppercase tracking-wider ${typeInfo.color}`}>
                 {typeInfo.label}
               </p>
@@ -1843,8 +1975,8 @@ function SelectableItemCard({
                 </Tooltip>
               )}
             </div>
-            <h3 className="font-semibold mt-1 truncate">{item.name}</h3>
-            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+            <h3 className="truncate text-sm font-medium sm:text-base">{item.name}</h3>
+            <p className="line-clamp-1 text-xs text-muted-foreground sm:text-sm">
               {item.description || "No description"}
             </p>
             {firstIssue && firstIssue.branch_location_names.length > 0 && (
@@ -1857,24 +1989,53 @@ function SelectableItemCard({
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-2 mt-3">
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               {item.duration && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="secondary" className="border-0 bg-[#eee9e1] text-xs font-normal text-muted-foreground">
                   <Clock className="w-3 h-3 mr-1" />
                   {item.duration} mins
                 </Badge>
               )}
               {item.stock !== undefined && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="secondary" className="border-0 bg-[#e1f3ec] text-xs font-normal text-[#268766]">
                   {item.stock} in stock
                 </Badge>
+              )}
+              {item.originalPrice && item.originalPrice > item.price && (
+                <Badge variant="secondary" className="border-0 bg-[#eee9e1] text-xs font-normal text-muted-foreground">
+                  {Math.round((1 - item.price / item.originalPrice) * 100)}% savings
+                </Badge>
+              )}
+              {item.type === "voucher" && item.status && (
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "border-0 text-xs font-normal capitalize",
+                    item.status === "active"
+                      ? "bg-[#e1f3ec] text-[#268766]"
+                      : item.status === "redeemed"
+                        ? "bg-[#eee9e1] text-muted-foreground"
+                        : "bg-destructive/10 text-destructive",
+                  )}
+                >
+                  {item.status}
+                </Badge>
+              )}
+            </div>
+
+            <div className="mt-2 sm:hidden">
+              <p className="font-serif text-base font-semibold">{formatCurrency(item.price)}</p>
+              {item.originalPrice && (
+                <p className="text-xs text-muted-foreground line-through">
+                  {formatCurrency(item.originalPrice)}
+                </p>
               )}
             </div>
           </div>
 
-          <div className="flex items-start gap-2">
-            <div className="text-right flex-shrink-0">
-              <p className="font-semibold text-lg">{formatCurrency(item.price)}</p>
+          <div className="flex items-start gap-1">
+            <div className="hidden flex-shrink-0 text-right sm:block">
+              <p className="font-serif text-lg font-semibold">{formatCurrency(item.price)}</p>
               {item.originalPrice && (
                 <p className="text-sm text-muted-foreground line-through">
                   {formatCurrency(item.originalPrice)}
@@ -1885,7 +2046,7 @@ function SelectableItemCard({
             {/* Three-dot menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button variant="outline" size="icon" className="h-9 w-9 rounded-full sm:h-10 sm:w-10">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>

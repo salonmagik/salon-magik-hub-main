@@ -1,4 +1,6 @@
 @import '@fontsource/questrial';
+@import '@fontsource/fraunces/400.css';
+@import '@fontsource/fraunces/500.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -77,6 +79,29 @@
     --sidebar-accent-foreground: 42 89% 63%;
     --sidebar-border: 262 20% 18%;
     --sidebar-ring: 42 89% 63%;
+  }
+}
+
+@layer components {
+  .client-content h1,
+  .client-content h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+  }
+
+  .client-content .bg-card {
+    border-color: rgba(20, 16, 20, 0.07);
+    border-radius: 18px;
+    box-shadow: none;
+  }
+
+  .client-content [role='tablist'] {
+    @apply scrollbar-hide h-auto max-w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1;
+  }
+
+  .client-content [role='tab'] {
+    @apply h-10 shrink-0 rounded-full px-5;
   }
 }
 

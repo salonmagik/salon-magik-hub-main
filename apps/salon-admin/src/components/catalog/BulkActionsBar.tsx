@@ -36,15 +36,15 @@ export function BulkActionsBar({
   const showDiscontinue = itemType === "voucher";
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-      <div className="bg-foreground text-background rounded-full px-4 py-2 shadow-lg flex items-center gap-3">
-        <span className="text-sm font-medium">
+    <div className="fixed bottom-20 left-3 right-3 z-50 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2">
+      <div className="scrollbar-hide flex max-w-full items-center gap-2 overflow-x-auto rounded-2xl bg-foreground px-3 py-2 text-background shadow-xl sm:gap-3 sm:rounded-full sm:px-4">
+        <span className="shrink-0 whitespace-nowrap text-sm font-medium">
           {selectedCount} item{selectedCount !== 1 ? "s" : ""} selected
         </span>
 
-        <div className="w-px h-6 bg-background/20" />
+        <div className="h-6 w-px shrink-0 bg-background/20" />
 
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {showCreatePackage && onCreatePackage && (
             <Button
               variant="ghost"
@@ -106,12 +106,12 @@ export function BulkActionsBar({
           )}
         </div>
 
-        <div className="w-px h-6 bg-background/20" />
+        <div className="h-6 w-px shrink-0 bg-background/20" />
 
         <Button
           variant="ghost"
           size="sm"
-          className="text-background/70 hover:text-background hover:bg-background/10"
+          className="shrink-0 text-background/70 hover:bg-background/10 hover:text-background"
           onClick={onClear}
         >
           Clear

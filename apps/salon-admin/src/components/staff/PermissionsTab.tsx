@@ -182,12 +182,12 @@ export function PermissionsTab() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Roles & Permissions</CardTitle>
-          <CardDescription>Configure what each role can access</CardDescription>
+      <Card className="rounded-[22px] border-black/[0.06] bg-white shadow-sm">
+        <CardHeader className="px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+          <CardTitle className="text-base font-normal">Roles & Permissions</CardTitle>
+          <CardDescription className="text-[13px]">Configure what each role can access</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
           <div className="space-y-4">
             {[1, 2, 3, 4, 5].map((i) => (
               <Skeleton key={i} className="h-12 w-full" />
@@ -199,30 +199,37 @@ export function PermissionsTab() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
+    <Card className="rounded-[22px] border-black/[0.06] bg-white shadow-sm">
+      <CardHeader className="px-5 pb-4 pt-5 sm:px-6 sm:pt-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Roles & Permissions</CardTitle>
-            <CardDescription>Configure what each role can access in the system</CardDescription>
+            <CardTitle className="text-base font-normal">Roles & Permissions</CardTitle>
+            <CardDescription className="mt-1 text-[13px]">
+              Configure what each role can access in the system
+            </CardDescription>
           </div>
           {hasChanges && (
-            <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            <Button onClick={handleSave} disabled={isSaving} className="h-10 gap-2 rounded-full px-5">
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save Changes
             </Button>
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
+      <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
+        <div className="scrollbar-hide overflow-x-auto rounded-[14px] border border-black/[0.06]">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-[#fbf9f6]">
               <tr>
-                <th className="text-left p-3 font-medium min-w-[200px]">Module</th>
+                <th className="min-w-[200px] p-3 text-left text-xs font-normal uppercase tracking-[0.04em] text-muted-foreground">
+                  Module
+                </th>
                 {ROLES.map((role) => (
-                  <th key={role} className="text-center p-3 font-medium min-w-[100px]">
-                    <Badge variant={role === "owner" ? "default" : "secondary"}>
+                  <th key={role} className="min-w-[110px] p-3 text-center font-medium">
+                    <Badge
+                      variant={role === "owner" ? "default" : "secondary"}
+                      className="rounded-full px-3 py-1 font-normal"
+                    >
                       {ROLE_LABELS[role]}
                     </Badge>
                   </th>
@@ -230,16 +237,16 @@ export function PermissionsTab() {
               </tr>
             </thead>
             <tbody>
-              {MODULES.map((module, idx) => (
-                <tr key={module.key} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"}>
-                  <td className="p-3">
+              {MODULES.map((module) => (
+                <tr key={module.key} className="border-t border-black/[0.06] bg-white hover:bg-[#fbf9f6]">
+                  <td className="p-3.5">
                     <div>
                       <span className="font-medium">{module.label}</span>
                       <p className="text-xs text-muted-foreground">{module.description}</p>
                     </div>
                   </td>
                   {ROLES.map((role) => (
-                    <td key={role} className="text-center p-3">
+                    <td key={role} className="p-3.5 text-center">
                       <Checkbox
                         checked={getPermission(role, module.key)}
                         onCheckedChange={() => togglePermission(role, module.key)}
@@ -254,7 +261,7 @@ export function PermissionsTab() {
           </table>
         </div>
 
-        <div className="mt-4 p-3 rounded-lg bg-muted/50 flex items-start gap-2">
+        <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-[#f2eefa] p-3.5">
           <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
           <p className="text-xs text-muted-foreground">
             <strong>Owner</strong> permissions cannot be modified as they always have full access.

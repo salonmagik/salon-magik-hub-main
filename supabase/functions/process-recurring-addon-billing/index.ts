@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
             salonName: tenant.name,
             salonLogoUrl: tenant.logo_url,
             title: "Your Salon Magik monthly add-ons were billed",
-            lineItems: [{ label: "Seats & branches add-ons (this billing cycle)", amount: addonTotal }],
+            lineItems: [{ label: "Salon Magik add-ons (this billing cycle)", amount: addonTotal }],
             total: addonTotal,
             currency,
             reference: chargeResult.reference,

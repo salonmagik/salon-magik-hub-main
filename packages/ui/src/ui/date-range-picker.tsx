@@ -21,8 +21,10 @@ export interface DateRangePickerProps {
   from?: Date;
   to?: Date;
   onChange: (range: { from: Date; to: Date }) => void;
+  onClear?: () => void;
   presets?: DateRangePreset[];
   placeholder?: string;
+  clearLabel?: string;
   className?: string;
   align?: "start" | "center" | "end";
 }
@@ -36,8 +38,10 @@ export function DateRangePicker({
   from,
   to,
   onChange,
+  onClear,
   presets = [],
   placeholder = "Pick a date range",
+  clearLabel = "Clear dates",
   className,
   align = "start",
 }: DateRangePickerProps): JSX.Element {
@@ -84,6 +88,12 @@ export function DateRangePicker({
     setOpen(false);
   };
 
+  const clearRange = () => {
+    setDraft(undefined);
+    onClear?.();
+    setOpen(false);
+  };
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
@@ -101,8 +111,17 @@ export function DateRangePicker({
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align={align}>
         <div className="flex flex-col sm:flex-row">
-          {presets.length > 0 && (
+          {(presets.length > 0 || onClear) && (
             <div className="flex gap-1 overflow-x-auto border-b p-2 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r">
+              {onClear && (
+                <button
+                  type="button"
+                  onClick={clearRange}
+                  className="whitespace-nowrap rounded-md px-3 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                >
+                  {clearLabel}
+                </button>
+              )}
               {presets.map((preset) => (
                 <button
                   key={preset.label}

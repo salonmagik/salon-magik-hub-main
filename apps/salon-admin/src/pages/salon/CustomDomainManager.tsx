@@ -118,8 +118,8 @@ export function CustomDomainManager() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex items-center justify-between p-4 border rounded-lg bg-success/10">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-4 rounded-lg border bg-success/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
                 <Globe className="w-8 h-8 text-success" />
                 <div>
                   <p className="font-semibold text-lg">{currentTenant.custom_booking_domain}</p>
@@ -149,7 +149,7 @@ export function CustomDomainManager() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Find a Domain</Label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     placeholder="e.g. mysalon.com"
                     value={searchDomain}
@@ -167,7 +167,7 @@ export function CustomDomainManager() {
 
               {availabilityResult && (
                 <div className="mt-4 p-4 border rounded-lg bg-muted/50">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       {availabilityResult.available ? (
                         <CheckCircle2 className="w-5 h-5 text-success" />
@@ -182,7 +182,7 @@ export function CustomDomainManager() {
                       </div>
                     </div>
                     {availabilityResult.available && availabilityResult.price && (
-                      <div className="text-right flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-4 sm:justify-end sm:text-right">
                         <div>
                           <p className="font-medium text-lg">
                             {availabilityResult.currency === "USD" ? "$" : ""}
@@ -211,14 +211,14 @@ export function CustomDomainManager() {
           <CardContent>
             <div className="space-y-4">
               {domainOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
+                <div key={order.id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <p className="font-medium">{order.domain_name}</p>
                     <p className="text-sm text-muted-foreground">
                       Ordered on {new Date(order.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-3">
                     <Badge variant={order.status === 'completed' ? 'default' : order.status === 'failed' ? 'destructive' : order.status.includes('pending') ? 'outline' : 'secondary'}>
                       {order.status.replace('_', ' ')}
                     </Badge>

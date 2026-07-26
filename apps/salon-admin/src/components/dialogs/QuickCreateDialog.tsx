@@ -162,7 +162,7 @@ export function QuickCreateDialog({ open, onOpenChange }: QuickCreateDialogProps
             </kbd>
             <span>+</span>
             <kbd className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted border border-border text-[11px] font-mono font-medium mx-0.5">
-              N
+              /
             </kbd>
             <span>from anywhere to reopen this menu.</span>
           </div>

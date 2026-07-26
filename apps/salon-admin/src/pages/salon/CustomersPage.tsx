@@ -348,37 +348,47 @@ export default function CustomersPage() {
 
   return (
 		<SalonSidebar>
-			<div className="space-y-6">
+			<div className="mx-auto w-full max-w-[1500px] space-y-7">
 				{/* Page Header */}
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 					<div>
-						<h1 className="text-2xl font-semibold">Customers</h1>
-						<p className="text-muted-foreground">
+						<h1 className="text-3xl font-medium tracking-tight">Customers</h1>
+						<p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
 							Manage customer relationships and celebrate key moments.
 						</p>
+					</div>
+					<div className="hidden items-center gap-2 lg:flex">
+						<Button variant="outline" className="h-12 rounded-full px-6" onClick={() => setImportDialogOpen(true)}>
+							<Download className="mr-2 h-4 w-4" />
+							Import
+						</Button>
+						<Button className="h-12 rounded-full px-7" onClick={() => setCustomerDialogOpen(true)}>
+							<UserPlus className="mr-2 h-4 w-4" />
+							Add customer
+						</Button>
 					</div>
 				</div>
 
 				{/* Status Cards */}
-				<div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+				<div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0 xl:grid-cols-4">
 					{statusCards.map((card) => {
 						const Icon = card.icon;
 						return (
 							<Card
 								key={card.label}
-								className="cursor-pointer hover:shadow-md transition-shadow border-2 border-transparent hover:border-primary/20"
+								className="cursor-pointer rounded-[14px] border-border/60 bg-white shadow-sm transition-shadow hover:shadow-md"
 								onClick={
 									card.label === "Inactive"
 										? () => setInactiveDialogOpen(true)
 										: undefined
 								}
 							>
-								<CardContent className="p-4 flex items-center justify-between">
+								<CardContent className="flex items-center justify-between px-5 py-4">
 									<div>
 										<p className="text-sm text-muted-foreground">
 											{card.label}
 										</p>
-										<div className="text-2xl font-semibold mt-1">
+										<div className="mt-1 font-serif text-2xl font-semibold">
 											{isLoading ? (
 												<Skeleton className="h-8 w-8" />
 											) : (
@@ -386,8 +396,8 @@ export default function CustomersPage() {
 											)}
 										</div>
 									</div>
-									<div className={`p-2 rounded-lg ${card.bgColor}`}>
-										<Icon className={`w-5 h-5 ${card.color}`} />
+									<div className={`flex h-10 w-10 items-center justify-center rounded-[10px] ${card.bgColor}`}>
+										<Icon className={`h-5 w-5 ${card.color}`} />
 									</div>
 								</CardContent>
 							</Card>
@@ -396,19 +406,37 @@ export default function CustomersPage() {
 				</div>
 
 				{/* Search & Filters */}
-				<div className="flex flex-wrap items-center gap-4">
-					<div className="relative flex-1 max-w-md">
-						<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-						<Input
-							placeholder="Search by name, phone, email..."
-							className="pl-9"
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-						/>
+				<div className="space-y-4">
+					<div className="scrollbar-hide flex h-auto min-w-0 max-w-full items-center gap-1 overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1 sm:w-fit">
+						{statusFilters.map((filter) => (
+							<Button
+								key={filter}
+								variant="ghost"
+								size="sm"
+								className={cn(
+									"h-10 shrink-0 rounded-full border-0 px-5 text-sm shadow-none",
+									activeFilter === filter
+										? "bg-white text-foreground hover:bg-white"
+										: "text-muted-foreground hover:bg-white/60",
+								)}
+								onClick={() => setActiveFilter(filter)}
+							>
+								{filter}
+							</Button>
+						))}
 					</div>
-					<div className="flex items-center gap-2 flex-wrap">
+					<div className="flex min-w-0 items-center gap-3">
+						<div className="relative min-w-0 flex-1">
+							<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								placeholder="Search by name, phone, email..."
+								className="h-12 rounded-[12px] bg-white pl-11 text-sm shadow-sm sm:text-base"
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+							/>
+						</div>
 						{filteredCustomers.length > 0 && (
-							<div className="flex items-center gap-2 rounded-md border px-3 py-2">
+							<label className="flex shrink-0 items-center gap-2 px-1 text-sm text-muted-foreground sm:gap-3 sm:px-2">
 								<Checkbox
 									checked={allVisibleSelected}
 									onCheckedChange={(checked) =>
@@ -417,23 +445,11 @@ export default function CustomersPage() {
 											filteredCustomers.map((customer) => customer.id),
 										)
 									}
-									aria-label="Select all visible customers"
+									aria-label="Select all customers"
 								/>
-								<span className="text-sm text-muted-foreground">
-									Select all visible
-								</span>
-							</div>
+								<span className="whitespace-nowrap">Select all</span>
+							</label>
 						)}
-						{statusFilters.map((filter) => (
-							<Button
-								key={filter}
-								variant={activeFilter === filter ? "default" : "outline"}
-								size="sm"
-								onClick={() => setActiveFilter(filter)}
-							>
-								{filter}
-							</Button>
-						))}
 					</div>
 				</div>
 
@@ -484,7 +500,7 @@ export default function CustomersPage() {
 
 				{/* Customers Grid */}
 				{isLoading ? (
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div className="space-y-3">
 						{[1, 2, 3, 4].map((i) => (
 							<Card key={i}>
 								<CardContent className="p-4">
@@ -509,15 +525,15 @@ export default function CustomersPage() {
 						</p>
 					</div>
 				) : (
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div className="space-y-3">
 						{filteredCustomers.map((customer) => (
 							<Card
 								key={customer.id}
-								className="hover:shadow-md transition-shadow cursor-pointer"
+								className="cursor-pointer rounded-[14px] border-border/60 bg-white shadow-sm transition-shadow hover:border-primary/20 hover:shadow-md"
 								onClick={() => setDetailCustomer(customer)}
 							>
-								<CardContent className="p-4">
-									<div className="flex items-start gap-4">
+								<CardContent className="p-4 sm:px-5 sm:py-4">
+									<div className="flex items-start gap-3 sm:items-center sm:gap-4">
 										<div
 											className="pt-1"
 											onClick={(event) => event.stopPropagation()}
@@ -531,14 +547,14 @@ export default function CustomersPage() {
 											/>
 										</div>
 										{/* Avatar */}
-										<div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center text-lg font-semibold flex-shrink-0">
+										<div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#f1eafa] font-serif text-lg font-semibold text-primary">
 											{getInitials(customer.full_name)}
 										</div>
 
 										{/* Info */}
 										<div className="flex-1 min-w-0">
-											<div className="flex items-center gap-2">
-												<h3 className="font-semibold truncate">
+											<div className="flex flex-wrap items-center gap-2">
+												<h3 className="truncate text-base font-medium">
 													{customer.full_name}
 												</h3>
 												<Badge
@@ -558,7 +574,7 @@ export default function CustomersPage() {
 												</Badge>
 											</div>
 
-											<div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-muted-foreground">
+											<div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
 												{customer.email && (
 													<div className="flex items-center gap-1">
 														<Mail className="w-3.5 h-3.5" />
@@ -573,7 +589,7 @@ export default function CustomersPage() {
 												)}
 											</div>
 
-											<div className="flex items-center gap-4 mt-3 text-sm">
+											<div className="mt-1.5 flex flex-wrap items-center gap-4 text-sm">
 												<div className="flex items-center gap-1.5">
 													<CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
 													<span className="text-muted-foreground">
@@ -726,7 +742,7 @@ export default function CustomersPage() {
 				<DropdownMenuTrigger asChild>
 					<button
 						type="button"
-						aria-label="Create appointment or walk-in"
+						aria-label="Add or import customers"
 						className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
 					>
 						<Plus className="w-6 h-6" />

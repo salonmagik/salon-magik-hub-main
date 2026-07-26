@@ -149,12 +149,12 @@ export default function ClientRefundsPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4 p-5">
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
                         <div><p className="text-xs text-muted-foreground">Paid funds</p><p className="mt-1 text-sm font-semibold">{formatCurrency(paid, customer.tenant.currency)}</p></div>
                         <div><p className="text-xs text-muted-foreground">Store credit</p><p className="mt-1 text-sm font-semibold">{formatCurrency(storeCredit, customer.tenant.currency)}</p></div>
                         <div><p className="text-xs text-muted-foreground">Reserved</p><p className="mt-1 text-sm font-semibold">{formatCurrency(reserved, customer.tenant.currency)}</p></div>
                       </div>
-                      <div className="flex items-center justify-between border-t pt-4">
+                      <div className="flex flex-col gap-3 border-t pt-4 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
                         <p className="text-xs text-muted-foreground">Total balance {formatCurrency(total, customer.tenant.currency)}</p>
                         <Button size="sm" variant="outline" onClick={() => setTopupCustomerId(customer.id)}>
                           <Plus className="mr-1.5 h-3.5 w-3.5" />Add funds
@@ -173,8 +173,8 @@ export default function ClientRefundsPage() {
                   {grants.filter((grant) => grant.remaining_amount > 0).map((grant) => {
                     const customer = customers.find((entry) => entry.id === grant.customer_id);
                     return (
-                      <div key={grant.id} className="flex items-center justify-between rounded-xl border p-3">
-                        <div className="flex items-center gap-3">
+                      <div key={grant.id} className="flex flex-col gap-3 rounded-xl border p-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
                           <div className="rounded-lg bg-primary/10 p-2"><Gift className="h-4 w-4 text-primary" /></div>
                           <div>
                             <p className="text-sm font-medium">{sourceLabels[grant.source_type] || grant.source_type}</p>
@@ -218,9 +218,9 @@ export default function ClientRefundsPage() {
                           </div>
                           <div className="mt-4 space-y-2">
                             {entitlement.items.map((item) => (
-                              <div key={item.id} className="flex items-center justify-between rounded-lg bg-surface p-3 text-sm">
-                                <span>{item.service?.name || item.product?.name || "Package item"}</span>
-                                <span className="font-medium">
+                          <div key={item.id} className="flex flex-col gap-1 rounded-lg bg-surface p-3 text-sm min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+                                <span className="min-w-0">{item.service?.name || item.product?.name || "Package item"}</span>
+                                <span className="shrink-0 font-medium">
                                   {item.remaining_quantity - item.reserved_quantity} available
                                   {item.reserved_quantity > 0 ? ` · ${item.reserved_quantity} reserved` : ""}
                                 </span>
@@ -244,8 +244,8 @@ export default function ClientRefundsPage() {
                   const customer = customers.find((item) => item.id === entry.customer_id);
                   const isCredit = entry.amount > 0;
                   return (
-                    <div key={entry.id} className="flex items-center justify-between rounded-xl border p-3">
-                      <div className="flex items-center gap-3">
+                    <div key={entry.id} className="flex flex-col gap-3 rounded-xl border p-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
                         <div className={cn("rounded-lg p-2", isCredit ? "bg-success/10" : "bg-muted")}>
                           {isCredit ? <ArrowUpRight className="h-4 w-4 text-success" /> : <ArrowDownLeft className="h-4 w-4 text-muted-foreground" />}
                         </div>
@@ -270,8 +270,8 @@ export default function ClientRefundsPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {refunds.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">No refunds yet.</p> : refunds.map((refund) => (
-                  <div key={refund.id} className="flex items-start justify-between rounded-xl border p-4">
-                    <div>
+                  <div key={refund.id} className="flex flex-col gap-3 rounded-xl border p-4 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{refund.tenant?.name || "Salon"}</p>
                         <Badge variant="outline">{refund.status}</Badge>
@@ -279,7 +279,7 @@ export default function ClientRefundsPage() {
                       <p className="mt-1 text-sm text-muted-foreground">{refund.reason}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{format(new Date(refund.created_at), "MMM d, yyyy")}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="shrink-0 min-[420px]:text-right">
                       <p className="font-semibold">{formatCurrency(Number(refund.amount), refund.tenant?.currency)}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{refund.refund_type === "store_credit" ? "Salon balance" : "Cash / transfer"}</p>
                     </div>

@@ -1,15 +1,13 @@
 import { useState } from "react";
+import { endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns";
 import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Skeleton } from "@ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@ui/select";
+  DateRangePicker,
+  type DateRangePreset,
+} from "@ui/date-range-picker";
 import {
   Table,
   TableBody,
@@ -31,6 +29,9 @@ import {
   BarChart3,
   Coins,
   Upload,
+  CreditCard,
+  Banknote,
+  Smartphone,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
 import { useAuth } from "@/hooks/useAuth";
@@ -45,9 +46,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  PieChart as RechartsPie,
-  Pie,
-  Cell,
 } from "recharts";
 import { Button } from "@ui/button";
 import {
@@ -56,15 +54,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
-
-const CHART_COLORS = [
-  "#6366f1",
-  "#22c55e",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#06b6d4",
-];
 
 const METHOD_LABELS: Record<string, string> = {
   cash: "Cash",
@@ -75,8 +64,6 @@ const METHOD_LABELS: Record<string, string> = {
   purse: "Client Wallet",
   other: "Other",
 };
-
-const RANK_EMOJI = ["🥇", "🥈", "🥉"];
 
 interface StatChipProps {
   label: string;
@@ -94,31 +81,35 @@ function StatChip({ label, value, sub, changePercent, prevLabel, icon: Icon, col
   const hasChange = changePercent != null;
 
   return (
-    <Card className="border-0 shadow-sm">
-      <CardContent className="p-5">
+    <Card className="rounded-[14px] border-[#141014]/[0.06] bg-white shadow-none">
+      <CardContent className="p-4 sm:px-[18px]">
         {loading ? (
           <div className="space-y-2">
             <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-8 w-28" />
+            <Skeleton className="h-6 w-24" />
             <Skeleton className="h-3 w-16" />
           </div>
         ) : (
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-              <p className="text-2xl font-bold leading-none mb-2">{value}</p>
-              {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+          <>
+            <div className="mb-2.5 flex items-start justify-between gap-2">
+              <p className="min-w-0 text-[11px] font-normal uppercase tracking-[0.04em] text-[#141014]/60">
+                {label}
+              </p>
+              <div className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg ${color}`}>
+                <Icon className="h-[15px] w-[15px]" />
+              </div>
+            </div>
+            <div className="min-w-0">
+              <p className="font-serif text-[22px] font-medium leading-none text-[#141014]">{value}</p>
+              {sub && <p className="mt-1 text-xs text-[#141014]/42">{sub}</p>}
               {hasChange && (
-                <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${isPositive ? "text-green-600" : "text-red-500"}`}>
-                  {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                <div className={`mt-1 flex items-center gap-1 text-[11px] ${isPositive ? "text-[#2e7d5b]" : "text-[#a23b3b]"}`}>
+                  {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                   <span>{isPositive ? "+" : ""}{changePercent}% vs {prevLabel}</span>
                 </div>
               )}
             </div>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
-              <Icon className="w-5 h-5" />
-            </div>
-          </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -126,9 +117,19 @@ function StatChip({ label, value, sub, changePercent, prevLabel, icon: Icon, col
 }
 
 export default function ReportsPage() {
-  const [period, setPeriod] = useState<"today" | "week" | "month">("month");
+  const now = new Date();
+  const [period, setPeriod] = useState<"today" | "week" | "month" | "custom">("month");
+  const [reportRange, setReportRange] = useState({
+    start: startOfMonth(now),
+    end: endOfMonth(now),
+  });
   const { currentTenant } = useAuth();
-  const { stats, isLoading } = useReports(period);
+  const { stats, isLoading } = useReports(period, reportRange);
+  const reportPresets: DateRangePreset[] = [
+    { label: "Today", getRange: () => ({ from: new Date(), to: new Date() }) },
+    { label: "This week", getRange: () => ({ from: startOfWeek(new Date()), to: endOfWeek(new Date()) }) },
+    { label: "This month", getRange: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
+  ];
 
   const currency = currentTenant?.currency || "USD";
   const currencySymbols: Record<string, string> = {
@@ -170,30 +171,30 @@ export default function ReportsPage() {
 
   return (
     <SalonSidebar>
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[1500px] space-y-[22px]">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Reports</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-[22px] font-medium tracking-[-0.3px]">Reports</h1>
+            <p className="mt-1 text-[13.5px] text-muted-foreground">
               How your business is doing compared to {stats.prevPeriodLabel.toLowerCase()}.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="week">This Week</SelectItem>
-                <SelectItem value="month">This Month</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <DateRangePicker
+              from={reportRange.start}
+              to={reportRange.end}
+              presets={reportPresets}
+              onChange={({ from, to }) => {
+                setReportRange({ start: from, end: to });
+                setPeriod("custom");
+              }}
+              className="h-11 min-w-0 flex-1 rounded-full px-4 text-[13.5px] sm:min-w-[220px] sm:flex-none"
+            />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Upload className="w-4 h-4" />
+                <Button variant="outline" className="h-11 shrink-0 gap-2 rounded-full px-4 text-[13.5px]">
+                  <Upload className="h-4 w-4" />
                   Export
                 </Button>
               </DropdownMenuTrigger>
@@ -206,14 +207,14 @@ export default function ReportsPage() {
         </div>
 
         {/* Stat Chips */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <StatChip
             label="Inflow"
             value={fmt(stats.totalRevenue)}
             changePercent={stats.revenueChangePercent}
             prevLabel={stats.prevPeriodLabel}
             icon={Coins}
-            color="bg-green-100 text-green-700"
+            color="bg-[#e3f3eb] text-[#2e7d5b]"
             loading={isLoading}
           />
           <StatChip
@@ -221,7 +222,7 @@ export default function ReportsPage() {
             value={stats.completedAppointments.toString()}
             sub="appointments done"
             icon={Calendar}
-            color="bg-blue-100 text-blue-700"
+            color="bg-[#f2eefa] text-[#2e1f4e]"
             loading={isLoading}
           />
           <StatChip
@@ -229,7 +230,7 @@ export default function ReportsPage() {
             value={stats.cancelledAppointments.toString()}
             sub={stats.cancellationRate > 0 ? `${stats.cancellationRate}% of total` : "none this period"}
             icon={XCircle}
-            color={stats.cancellationRate > 20 ? "bg-red-100 text-red-600" : "bg-orange-100 text-orange-700"}
+            color="bg-[#f7e5e5] text-[#a23b3b]"
             loading={isLoading}
           />
           <StatChip
@@ -237,7 +238,7 @@ export default function ReportsPage() {
             value={stats.newCustomers.toString()}
             sub="joined this period"
             icon={Users}
-            color="bg-purple-100 text-purple-700"
+            color="bg-[#2e1f4e]/[0.08] text-[#2e1f4e]"
             loading={isLoading}
           />
           <StatChip
@@ -245,64 +246,64 @@ export default function ReportsPage() {
             value={stats.returningCustomers.toString()}
             sub={stats.retentionPercent != null ? `${stats.retentionPercent}% retention` : "clients came back"}
             icon={Repeat2}
-            color="bg-teal-100 text-teal-700"
+            color="bg-[#2e7d5b]/10 text-[#2e7d5b]"
             loading={isLoading}
           />
           <StatChip
-            label="Avg. Booking"
+            label="Average income"
             value={fmt(stats.avgTransactionValue)}
             sub="per transaction"
             icon={BarChart3}
-            color="bg-amber-100 text-amber-700"
+            color="bg-[#fbf0d4] text-[#7a5e12]"
             loading={isLoading}
           />
         </div>
 
         {/* Revenue Chart */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-2">
+        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+          <CardHeader className="px-5 pb-2 pt-5 sm:px-[26px] sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold">Inflow Over Time</CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <CardTitle className="text-base font-normal">Inflow over time</CardTitle>
+                <p className="mt-0.5 text-[13px] text-muted-foreground">
                   {stats.periodLabel} (bars) vs {stats.prevPeriodLabel} (line)
                 </p>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 pb-5 sm:px-[26px] sm:pb-6">
             {isLoading ? (
-              <Skeleton className="h-[260px] w-full" />
+              <Skeleton className="h-[240px] w-full" />
             ) : stats.dailyRevenue.length === 0 ? (
-              <div className="h-[260px] flex flex-col items-center justify-center text-muted-foreground gap-2">
+              <div className="flex h-[240px] flex-col items-center justify-center gap-2 text-muted-foreground">
                 <BarChart3 className="w-8 h-8 opacity-40" />
                 <p className="text-sm">No inflow data for this period yet.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <ComposedChart data={stats.dailyRevenue} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" axisLine={false} tickLine={false} />
+                  <CartesianGrid stroke="rgba(20,16,20,0.06)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="rgba(20,16,20,0.42)" axisLine={false} tickLine={false} />
                   <YAxis
-                    tick={{ fontSize: 11 }}
-                    stroke="hsl(var(--muted-foreground))"
+                    tick={{ fontSize: 10 }}
+                    stroke="rgba(20,16,20,0.42)"
                     tickFormatter={(v) => `${sym}${(v / 1000).toFixed(0)}k`}
                     axisLine={false}
                     tickLine={false}
-                    width={52}
+                    width={45}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
+                      backgroundColor: "#fff",
+                      border: "1px solid rgba(20,16,20,0.09)",
+                      borderRadius: "14px",
                       fontSize: 12,
                     }}
                     formatter={(value: number, name: string) => [fmt(value), name]}
                   />
                   <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="revenue" name={stats.periodLabel} fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                  <Line dataKey="prevRevenue" name={stats.prevPeriodLabel} stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="4 3" />
+                  <Bar dataKey="revenue" name={stats.periodLabel} fill="#2e1f4e" radius={[4, 4, 0, 0]} maxBarSize={22} />
+                  <Line dataKey="prevRevenue" name={stats.prevPeriodLabel} stroke="#8b7bae" strokeWidth={2} dot={false} strokeDasharray="5 4" />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -310,14 +311,14 @@ export default function ReportsPage() {
         </Card>
 
         {/* Top Services + Payment Methods */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* Top Services */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold">Top Services</CardTitle>
-              <p className="text-xs text-muted-foreground">Most booked services this period</p>
+          <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+            <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
+              <CardTitle className="text-base font-normal">Top services</CardTitle>
+              <p className="text-[13px] text-muted-foreground">Most booked services this period</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-3 pb-5 sm:px-6">
               {isLoading ? (
                 <div className="space-y-3">
                   {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
@@ -327,13 +328,14 @@ export default function ReportsPage() {
                   No services booked yet this period.
                 </div>
               ) : (
-                <Table>
+                <div className="scrollbar-hide overflow-x-auto">
+                <Table className="min-w-[460px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-8">#</TableHead>
-                      <TableHead>Service</TableHead>
-                      <TableHead className="text-right">Bookings</TableHead>
-                      <TableHead className="text-right">Inflow</TableHead>
+                      <TableHead className="w-8 text-[11px] font-normal uppercase text-[#141014]/42">#</TableHead>
+                      <TableHead className="text-[11px] font-normal uppercase text-[#141014]/42">Service</TableHead>
+                      <TableHead className="text-right text-[11px] font-normal uppercase text-[#141014]/42">Bookings</TableHead>
+                      <TableHead className="text-right text-[11px] font-normal uppercase text-[#141014]/42">Inflow</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -347,17 +349,18 @@ export default function ReportsPage() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
 
           {/* Payment Methods */}
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold">How Clients Pay</CardTitle>
-              <p className="text-xs text-muted-foreground">Breakdown of payment methods used</p>
+          <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+            <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
+              <CardTitle className="text-base font-normal">How clients pay</CardTitle>
+              <p className="text-[13px] text-muted-foreground">Breakdown of payment methods used</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5 sm:px-6">
               {isLoading ? (
                 <Skeleton className="h-[200px] w-full" />
               ) : stats.paymentMethodBreakdown.length === 0 ? (
@@ -365,57 +368,38 @@ export default function ReportsPage() {
                   No payment data available yet.
                 </div>
               ) : (
-                <div className="flex items-center gap-6">
-                  <div className="flex-shrink-0">
-                    <RechartsPie width={140} height={140}>
-                      <Pie
-                        data={stats.paymentMethodBreakdown}
-                        dataKey="amount"
-                        nameKey="method"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={62}
-                        innerRadius={36}
-                        strokeWidth={0}
-                      >
-                        {stats.paymentMethodBreakdown.map((_, i) => (
-                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                          fontSize: 12,
-                        }}
-                        formatter={(v: number) => fmt(v)}
-                      />
-                    </RechartsPie>
-                  </div>
-                  <div className="flex-1 space-y-2.5">
-                    {stats.paymentMethodBreakdown.map((item, i) => {
+                <div className="space-y-3.5">
+                    {stats.paymentMethodBreakdown.map((item) => {
                       const total = stats.paymentMethodBreakdown.reduce((s, x) => s + x.amount, 0);
                       const pct = total > 0 ? Math.round((item.amount / total) * 100) : 0;
+                      const MethodIcon =
+                        item.method === "cash"
+                          ? Banknote
+                          : item.method === "mobile_money"
+                            ? Smartphone
+                            : CreditCard;
                       return (
-                        <div key={item.method}>
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                              <span className="text-sm">{METHOD_LABELS[item.method] || item.method.replace(/_/g, " ")}</span>
-                            </div>
-                            <span className="text-sm font-medium">{pct}%</span>
+                        <div key={item.method} className="flex items-center gap-3">
+                          <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-[#f2eefa] text-[#2e1f4e]">
+                            <MethodIcon className="h-[15px] w-[15px]" />
                           </div>
-                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex items-center justify-between gap-3">
+                              <span className="truncate text-[12.5px]">
+                                {METHOD_LABELS[item.method] || item.method.replace(/_/g, " ")}
+                              </span>
+                              <span className="text-[12.5px] font-medium">{pct}%</span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-[#f1ece3]">
                             <div
-                              className="h-full rounded-full transition-all"
-                              style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                                className="h-full rounded-full bg-[#2e1f4e] transition-all"
+                                style={{ width: `${pct}%` }}
                             />
+                            </div>
                           </div>
                         </div>
                       );
                     })}
-                  </div>
                 </div>
               )}
             </CardContent>
@@ -423,15 +407,15 @@ export default function ReportsPage() {
         </div>
 
         {/* Staff Performance */}
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-2">
+        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+          <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
             <div className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-muted-foreground" />
-              <CardTitle className="text-base font-semibold">Staff Performance</CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base font-normal">Staff performance</CardTitle>
             </div>
-            <p className="text-xs text-muted-foreground">Ranked by revenue generated this period</p>
+            <p className="text-[13px] text-muted-foreground">Ranked by revenue generated this period</p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-5 pb-5 sm:px-6">
             {isLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
@@ -442,48 +426,49 @@ export default function ReportsPage() {
                 <p>No staff data yet. Assign staff to completed appointments to see rankings.</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">Rank</TableHead>
-                    <TableHead>Staff Member</TableHead>
-                    <TableHead className="text-right">Appointments</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.staffPerformance.map((staff, i) => (
-                    <TableRow key={staff.userId} className={i === 0 ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
-                      <TableCell className="text-lg text-center">
-                        {RANK_EMOJI[i] ?? <span className="text-sm text-muted-foreground font-mono">{i + 1}</span>}
-                      </TableCell>
-                      <TableCell>
-                        <p className="font-medium text-sm">{staff.name}</p>
-                        {i === 0 && <p className="text-xs text-amber-600 font-medium">Top performer</p>}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">{staff.appointmentsCompleted}</TableCell>
-                      <TableCell className="text-right text-sm font-semibold">{fmt(staff.revenue)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div>
+                {stats.staffPerformance.map((staff, i) => (
+                  <div
+                    key={staff.userId}
+                    className="flex items-center gap-3.5 border-b border-[#141014]/[0.06] py-3 last:border-b-0"
+                  >
+                    <div
+                      className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12.5px] ${
+                        i === 0 ? "bg-[#f4c84e] text-[#1f1536]" : "bg-[#f1ece3] text-[#141014]/60"
+                      }`}
+                    >
+                      {i + 1}
+                    </div>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#b8a9d9] font-serif text-[13px] text-[#1f1536]">
+                      {staff.name.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{staff.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {staff.appointmentsCompleted} appointment{staff.appointmentsCompleted === 1 ? "" : "s"} completed
+                      </p>
+                    </div>
+                    <p className="shrink-0 font-serif text-[15px]">{fmt(staff.revenue)}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
 
         {/* Quick Insights */}
         {(hasInsights || !isLoading) && (
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-2">
+          <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+            <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
               <div className="flex items-center gap-2">
-                <Star className="w-4 h-4 text-amber-500" />
-                <CardTitle className="text-base font-semibold">Quick Insights</CardTitle>
+                <Star className="h-4 w-4 fill-[#f4c84e] text-[#f4c84e]" />
+                <CardTitle className="text-base font-normal">Quick insights</CardTitle>
               </div>
-              <p className="text-xs text-muted-foreground">Patterns worth knowing about</p>
+              <p className="text-[13px] text-muted-foreground">Patterns worth knowing about</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-5 pb-5 sm:px-6">
               {isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="space-y-3">
                   {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
                 </div>
               ) : !hasInsights ? (
@@ -493,33 +478,49 @@ export default function ReportsPage() {
                   <p className="text-xs mt-1">Need at least 10 completed appointments.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
                   {stats.busiestDay && (
-                    <div className="rounded-xl bg-blue-50 dark:bg-blue-950/30 p-4 text-center">
-                      <Calendar className="w-5 h-5 mx-auto mb-1 text-blue-600" />
-                      <p className="text-lg font-bold text-blue-700">{stats.busiestDay}</p>
-                      <p className="text-xs text-blue-600/80">Busiest Day</p>
+                    <div className="flex items-start gap-3 border-b border-[#141014]/[0.06] py-3.5 last:border-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#fbf0d4] text-[#7a5e12]">
+                        <Calendar className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-[13.5px] font-medium">{stats.busiestDay} is your busiest day</p>
+                        <p className="text-[12.5px] text-muted-foreground">Plan staffing and availability around this demand.</p>
+                      </div>
                     </div>
                   )}
                   {stats.peakHour && (
-                    <div className="rounded-xl bg-purple-50 dark:bg-purple-950/30 p-4 text-center">
-                      <Clock className="w-5 h-5 mx-auto mb-1 text-purple-600" />
-                      <p className="text-lg font-bold text-purple-700">{stats.peakHour}</p>
-                      <p className="text-xs text-purple-600/80">Peak Hour</p>
+                    <div className="flex items-start gap-3 border-b border-[#141014]/[0.06] py-3.5 last:border-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#fbf0d4] text-[#7a5e12]">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-[13.5px] font-medium">{stats.peakHour} is your peak hour</p>
+                        <p className="text-[12.5px] text-muted-foreground">Protect this time for your most requested services.</p>
+                      </div>
                     </div>
                   )}
                   {stats.topService && (
-                    <div className="rounded-xl bg-green-50 dark:bg-green-950/30 p-4 text-center">
-                      <Star className="w-5 h-5 mx-auto mb-1 text-green-600" />
-                      <p className="text-sm font-bold text-green-700 truncate">{stats.topService}</p>
-                      <p className="text-xs text-green-600/80">Most Booked</p>
+                    <div className="flex items-start gap-3 border-b border-[#141014]/[0.06] py-3.5 last:border-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#fbf0d4] text-[#7a5e12]">
+                        <Star className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-[13.5px] font-medium">{stats.topService} is your most-booked service</p>
+                        <p className="text-[12.5px] text-muted-foreground">Feature it prominently in your booking experience.</p>
+                      </div>
                     </div>
                   )}
                   {stats.retentionRate != null && (
-                    <div className="rounded-xl bg-teal-50 dark:bg-teal-950/30 p-4 text-center">
-                      <Repeat2 className="w-5 h-5 mx-auto mb-1 text-teal-600" />
-                      <p className="text-lg font-bold text-teal-700">{stats.retentionRate}%</p>
-                      <p className="text-xs text-teal-600/80">Clients Returned</p>
+                    <div className="flex items-start gap-3 border-b border-[#141014]/[0.06] py-3.5 last:border-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-[#fbf0d4] text-[#7a5e12]">
+                        <Repeat2 className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-[13.5px] font-medium">{stats.retentionRate}% of clients returned</p>
+                        <p className="text-[12.5px] text-muted-foreground">Track this trend as your booking history grows.</p>
+                      </div>
                     </div>
                   )}
                 </div>

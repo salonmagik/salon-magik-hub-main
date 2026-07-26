@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode, useMemo } from "react";
+import { useState, useEffect, createContext, useContext, ReactNode, useMemo, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -129,6 +129,89 @@ interface NavItem {
   badge?: string | number;
   module?: string;
   children?: Omit<NavItem, "children">[];
+}
+
+const SIDEBAR_DRAG_THRESHOLD = 8;
+
+function IntentionalSidebarLink({
+  to,
+  navigateTo,
+  className,
+  ariaLabel,
+  children,
+}: {
+  to: string;
+  navigateTo: (path: string) => void;
+  className: string;
+  ariaLabel?: string;
+  children: ReactNode;
+}) {
+  const pointerGesture = useRef({
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    moved: false,
+  });
+
+  return (
+    <Link
+      to={to}
+      onPointerDown={(event) => {
+        pointerGesture.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          moved: false,
+        };
+      }}
+      onPointerMove={(event) => {
+        const gesture = pointerGesture.current;
+        if (gesture.pointerId !== event.pointerId || gesture.moved) return;
+        if (
+          Math.hypot(
+            event.clientX - gesture.startX,
+            event.clientY - gesture.startY,
+          ) >= SIDEBAR_DRAG_THRESHOLD
+        ) {
+          gesture.moved = true;
+        }
+      }}
+      onPointerCancel={() => {
+        pointerGesture.current.moved = true;
+      }}
+      onClick={(event) => {
+        const wasDragged = pointerGesture.current.moved;
+        pointerGesture.current.pointerId = -1;
+        pointerGesture.current.moved = false;
+
+        if (wasDragged) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        if (
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        ) {
+          return;
+        }
+
+        // Navigate explicitly on click so dismissable-layer components cannot
+        // swallow the link, while still allowing touch scrolling to cancel it.
+        event.preventDefault();
+        event.stopPropagation();
+        navigateTo(to);
+      }}
+      className={className}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </Link>
+  );
 }
 
 // These paths live on the mobile bottom nav — hide them from the drawer on mobile/tablet
@@ -464,7 +547,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Keyboard shortcut for Quick Create
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
         e.preventDefault();
         setQuickCreateOpen(true);
       }
@@ -693,18 +776,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               const ChildIcon = child.icon;
               const active = isChildActive(child.path);
               return (
-								<Link
+								<IntentionalSidebarLink
 									key={child.path}
 									to={child.path}
-									onPointerDown={(e) => {
-										if (e.button !== 0) return;
-										if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
-											return;
-										e.preventDefault();
-										e.stopPropagation();
-										navigate(child.path);
-									}}
-									onClick={(e) => e.stopPropagation()}
+									navigateTo={(path) => navigate(path)}
 									className={cn(
 										"flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
 										active
@@ -714,7 +789,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 								>
 									<ChildIcon className="w-4 h-4 flex-shrink-0" />
 									<span>{child.label}</span>
-								</Link>
+								</IntentionalSidebarLink>
 							);
             })}
           </div>
@@ -728,25 +803,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const Icon = item.icon;
 
     const content = (
-			<Link
+			<IntentionalSidebarLink
 				to={item.path}
-				// Some components used on /salon/settings (e.g. Radix “dismissable layer” patterns)
-				// can call preventDefault() on click events, which blocks react-router navigation.
-				// Navigating on pointer down makes the sidebar links resilient without impacting
-				// modifier-click (new tab) behavior.
-				onPointerDown={(e) => {
-					// Only handle plain left-click / tap
-					if (e.button !== 0) return;
-					if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-
-					e.preventDefault();
-					e.stopPropagation();
-					navigate(item.path);
-				}}
-				onClick={(e) => {
-					// Keep parent click handlers from interfering with link navigation.
-					e.stopPropagation();
-				}}
+				navigateTo={(path) => navigate(path)}
 				className={cn(
 					"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 no-underline",
 					active
@@ -764,7 +823,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						{item.badge}
 					</Badge>
 				)}
-			</Link>
+			</IntentionalSidebarLink>
 		);
 
     if (!isExpanded && !isMobileOpen) {
@@ -865,7 +924,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 			{(isExpanded || isMobileOpen) && <GlobalBanner />}
 
 			{/* Main Navigation */}
-			<nav className="flex-1 overflow-y-auto scrollbar-hide px-3 space-y-1 relative z-10">
+			<nav className="flex-1 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide px-3 space-y-1 relative z-10">
 				{permissionsLoading ? (
 					// Show skeleton during loading to prevent flash
 					<div className="space-y-2">
@@ -940,7 +999,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						{/* Sidebar - Mobile */}
 						<aside
 							className={cn(
-								"fixed inset-y-0 left-0 z-[60] w-64 bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
+								"fixed inset-y-0 left-0 z-[60] w-[min(18rem,calc(100vw-1.5rem))] bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
 								isMobileOpen ? "translate-x-0" : "-translate-x-full",
 							)}
 						>
@@ -973,7 +1032,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						{/* Main Content */}
 						<main
 							className={cn(
-								"flex-1 flex flex-col min-h-screen overflow-hidden transition-all duration-300",
+								"flex-1 min-w-0 flex flex-col min-h-screen overflow-hidden transition-all duration-300",
 								isExpanded ? "lg:ml-64" : "lg:ml-[72px]",
 							)}
 						>
@@ -1073,36 +1132,38 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<AnnualLockinBanner />
 
 							{/* Page Content */}
-							<div className="flex-1 overflow-auto px-4 pt-4 pb-20 lg:px-6 lg:pt-6 lg:pb-6">
-								{children}
+							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
+								<div className="w-full min-w-0 max-w-full [&>*]:min-w-0">
+									{children}
+								</div>
 							</div>
 
 							{/* Mobile Bottom Navigation */}
-							<nav className="fixed bottom-0 inset-x-0 lg:hidden bg-white border-t border-border z-50">
+							<nav className="fixed bottom-0 inset-x-0 lg:hidden bg-white border-t border-border z-50 pb-[env(safe-area-inset-bottom)]">
 								<div className="flex items-center justify-around h-16">
 									{[
 										{
-											label: "Dashboard",
+											label: "",
 											icon: LayoutDashboard,
 											path: "/salon",
 										},
 										{
-											label: "Appointments",
+											label: "",
 											icon: Calendar,
 											path: "/salon/appointments",
 										},
 										{
-											label: "Services",
+											label: "",
 											icon: Scissors,
 											path: "/salon/services",
 										},
 										{
-											label: "Transactions",
+											label: "",
 											icon: CreditCard,
 											path: "/salon/transactions",
 										},
 										{
-											label: "Customers",
+											label: "",
 											icon: Users,
 											path: "/salon/customers",
 										},
@@ -1119,20 +1180,20 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 													className={cn(
 														"flex flex-col items-center gap-0.5",
 														active
-															? "bg-purple-100 rounded-lg px-3 py-2"
+															? "bg-primary rounded-lg px-3 py-2"
 															: "text-muted-foreground",
 													)}
 												>
 													<Icon
 														className={cn(
 															"w-[22px] h-[22px]",
-															active ? "text-primary" : "text-muted-foreground",
+															active ? "text-white" : "text-muted-foreground",
 														)}
 													/>
 													<span
 														className={cn(
 															"text-[10px] font-medium",
-															active ? "text-primary" : "text-muted-foreground",
+															active ? "text-white" : "text-muted-foreground",
 														)}
 													>
 														{label}
