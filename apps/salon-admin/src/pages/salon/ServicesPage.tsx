@@ -1706,6 +1706,14 @@ export default function ServicesPage() {
         onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
         onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
       />
+      <VoucherDetailDialog
+        open={!!viewDetailItem && viewDetailItem.type === "voucher"}
+        onOpenChange={(open) => !open && setViewDetailItem(null)}
+        voucher={viewDetailItem?.type === "voucher" ? vouchers.find((voucher) => voucher.id === viewDetailItem.id) || null : null}
+        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
+        onDiscontinue={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
+        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
+      />
     </SalonSidebar>
   );
 }

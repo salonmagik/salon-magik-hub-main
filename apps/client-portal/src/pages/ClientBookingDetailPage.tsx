@@ -834,7 +834,7 @@ export default function ClientBookingDetailPage() {
             
             {booking.purse_amount_used > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Store Credit Used</span>
+                <span className="text-muted-foreground">Salon Balance Used</span>
                 <span className="text-green-600">-{formatCurrency(booking.purse_amount_used, currency)}</span>
               </div>
             )}

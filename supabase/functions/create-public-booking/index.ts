@@ -170,7 +170,8 @@ serve(async (req) => {
       tenantId,
       customer,
       items,
-      voucherDiscount = 0,
+      voucherCode,
+      voucherDiscount: requestedVoucherDiscount = 0,
       purseAmount = 0,
       depositAmount = 0,
       giftsBelongToSamePerson = true,
@@ -215,6 +216,83 @@ serve(async (req) => {
         JSON.stringify({ error: "Salon not found or booking not enabled" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
+    }
+
+    // Never trust catalog names, prices, availability, or package contents sent
+    // by the browser. Voucher totals and payment amounts are derived from this
+    // server-authoritative snapshot.
+    for (const item of items) {
+      if (!item.locationId || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+        return new Response(
+          JSON.stringify({ error: "A valid branch and quantity are required for every item." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const catalogTable = item.type === "service"
+        ? "services"
+        : item.type === "package"
+          ? "packages"
+          : "products";
+      const locationTable = item.type === "service"
+        ? "service_locations"
+        : item.type === "package"
+          ? "package_locations"
+          : "product_locations";
+      const locationItemColumn = item.type === "service"
+        ? "service_id"
+        : item.type === "package"
+          ? "package_id"
+          : "product_id";
+
+      const { data: catalogItem } = await supabase
+        .from(catalogTable)
+        .select("*")
+        .eq("id", item.itemId)
+        .eq("tenant_id", tenantId)
+        .eq("status", "active")
+        .maybeSingle();
+      const { data: locationItem } = await supabase
+        .from(locationTable)
+        .select("price_override, is_enabled")
+        .eq("tenant_id", tenantId)
+        .eq(locationItemColumn, item.itemId)
+        .eq("location_id", item.locationId)
+        .eq("is_enabled", true)
+        .maybeSingle();
+
+      if (!catalogItem || !locationItem) {
+        return new Response(
+          JSON.stringify({ error: `${item.name || "An item"} is no longer available at the selected branch.` }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const authoritativePrice = Number(locationItem.price_override ?? catalogItem.price);
+      if (!Number.isFinite(authoritativePrice) || Math.abs(Number(item.price) - authoritativePrice) > 0.01) {
+        return new Response(
+          JSON.stringify({ error: `The price for ${catalogItem.name} changed. Review your booking and try again.` }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      item.name = catalogItem.name;
+      item.price = authoritativePrice;
+      if (item.type === "service") {
+        item.durationMinutes = Number(catalogItem.duration_minutes || item.durationMinutes || 60);
+      } else if (item.type === "product" && Number(catalogItem.stock_quantity) < item.quantity) {
+        return new Response(
+          JSON.stringify({ error: `There is not enough stock for ${catalogItem.name}.` }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } else if (item.type === "package") {
+        const { data: packageItems } = await supabase
+          .from("package_items")
+          .select("service_id")
+          .eq("package_id", item.itemId);
+        item.serviceIds = (packageItems || []).map((entry) => entry.service_id);
+        item.durationMinutes = Number(catalogItem.duration_minutes || item.durationMinutes || 60);
+      }
     }
 
     const customerFullName = `${customer.firstName} ${customer.lastName}`;
@@ -287,11 +365,126 @@ serve(async (req) => {
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const salonAdminBaseUrl = Deno.env.get("SALON_ADMIN_BASE_URL") || "https://app.salonmagik.com/salon";
     const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    let voucherDiscount = 0;
+    let voucherBalanceAmount = 0;
+    let appliedVoucherId: string | null = null;
+
+    if (voucherCode) {
+      const { data: voucher, error: voucherError } = await supabase
+        .from("vouchers")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("code", voucherCode.trim().toUpperCase())
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (voucherError || !voucher) {
+        return new Response(JSON.stringify({ error: "Voucher is invalid" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const now = new Date();
+      if (
+        !["active", "redeemed"].includes(voucher.status) ||
+        Number(voucher.balance) <= 0 ||
+        (voucher.starts_at && new Date(voucher.starts_at) > now) ||
+        (voucher.expires_at && new Date(voucher.expires_at) <= now) ||
+        Number(voucher.minimum_spend || 0) > totalAmount
+      ) {
+        return new Response(JSON.stringify({ error: "Voucher is not eligible for this booking" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (
+        voucher.access_type === "private" &&
+        (voucher.target_customer_id || voucher.claimed_by_customer_id) !== customerId
+      ) {
+        return new Response(JSON.stringify({ error: "This private voucher belongs to another customer" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (voucher.claimed_by_customer_id && voucher.claimed_by_customer_id !== customerId) {
+        return new Response(JSON.stringify({ error: "This voucher has already been claimed" }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const requestedLocations = [...new Set(items.map((item) => item.locationId).filter(Boolean))];
+      const { data: enabledLocations } = await supabase
+        .from("voucher_locations")
+        .select("location_id")
+        .eq("voucher_id", voucher.id)
+        .eq("is_enabled", true)
+        .in("location_id", requestedLocations);
+      if ((enabledLocations || []).length !== requestedLocations.length) {
+        return new Response(JSON.stringify({ error: "Voucher is not valid at the selected branch" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      appliedVoucherId = voucher.id;
+      if (voucher.voucher_type === "gift") {
+        const { error: claimError } = await supabase.rpc("claim_voucher_to_balance", {
+          p_tenant_id: tenantId,
+          p_customer_id: customerId,
+          p_code: voucher.code,
+        });
+        if (claimError) {
+          return new Response(JSON.stringify({ error: claimError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        voucherBalanceAmount = Math.min(Number(voucher.balance), totalAmount);
+        voucherDiscount = voucherBalanceAmount;
+      } else {
+        const { count: totalRedemptions } = await supabase
+          .from("voucher_redemptions")
+          .select("*", { count: "exact", head: true })
+          .eq("voucher_id", voucher.id)
+          .eq("event_type", "redeem");
+        const { count: customerRedemptions } = await supabase
+          .from("voucher_redemptions")
+          .select("*", { count: "exact", head: true })
+          .eq("voucher_id", voucher.id)
+          .eq("customer_id", customerId)
+          .eq("event_type", "redeem");
+        if (
+          (voucher.max_redemptions && Number(totalRedemptions || 0) >= voucher.max_redemptions) ||
+          Number(customerRedemptions || 0) >= Number(voucher.per_customer_limit || 1)
+        ) {
+          return new Response(JSON.stringify({ error: "Voucher redemption limit has been reached" }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        voucherDiscount = voucher.discount_type === "percentage"
+          ? Math.min(totalAmount, totalAmount * Math.min(Number(voucher.discount_value), 100) / 100)
+          : Math.min(totalAmount, Number(voucher.discount_value));
+      }
+
+      if (Math.abs(Number(requestedVoucherDiscount || 0) - voucherDiscount) > 0.01) {
+        return new Response(JSON.stringify({ error: "Voucher total changed. Review your booking and try again." }), {
+          status: 409,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+    const promotionalDiscount = voucherBalanceAmount === 0 ? voucherDiscount : 0;
+    const chargeableTotal = Math.max(0, totalAmount - promotionalDiscount);
     const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const createdAppointmentIds: string[] = [];
     const approvalRequired = tenant.auto_confirm_bookings === false;
+    let allocatedPromotionDiscount = 0;
 
-    for (const item of items) {
+    for (const [itemIndex, item] of items.entries()) {
       if (!item.locationId) {
         return new Response(
           JSON.stringify({ error: `Please select a branch for ${item.name}.` }),
@@ -400,6 +593,13 @@ serve(async (req) => {
       const bookingMetadata = {
         source: "public_booking",
         booking_reference: reference,
+        voucher: appliedVoucherId
+          ? {
+            voucher_id: appliedVoucherId,
+            discount_amount: voucherDiscount,
+            stored_value_amount: voucherBalanceAmount,
+          }
+          : null,
         line_item: {
           id: item.id,
           type: item.type,
@@ -420,7 +620,14 @@ serve(async (req) => {
         delivery_address: deliveryAddress,
       };
 
-      const lineTotal = item.price * item.quantity;
+      const rawLineTotal = item.price * item.quantity;
+      const linePromotionDiscount = promotionalDiscount <= 0
+        ? 0
+        : itemIndex === items.length - 1
+          ? promotionalDiscount - allocatedPromotionDiscount
+          : Number(((rawLineTotal / totalAmount) * promotionalDiscount).toFixed(2));
+      allocatedPromotionDiscount += linePromotionDiscount;
+      const lineTotal = Math.max(0, Number((rawLineTotal - linePromotionDiscount).toFixed(2)));
       const { data: appointment, error: appointmentError } = await supabase
         .from("appointments")
         .insert({
@@ -485,6 +692,60 @@ serve(async (req) => {
 
     }
 
+    const selectedBalanceAmount = Number(
+      splitPurseAmount && splitPurseAmount > 0
+        ? splitPurseAmount
+        : processPursePayment && paymentAmount
+          ? paymentAmount
+          : purseAmount || 0,
+    );
+    const totalBalanceReservation = Math.min(
+      Math.max(0, voucherBalanceAmount + selectedBalanceAmount),
+      chargeableTotal,
+    );
+
+    if (!approvalRequired && totalBalanceReservation > 0 && createdAppointmentIds[0]) {
+      const { error: reservationError } = await supabase.rpc("reserve_customer_balance", {
+        p_tenant_id: tenantId,
+        p_customer_id: customerId,
+        p_appointment_id: createdAppointmentIds[0],
+        p_amount: totalBalanceReservation,
+      });
+      if (reservationError) {
+        throw new Error(`Failed to reserve salon balance: ${reservationError.message}`);
+      }
+
+      const perAppointmentBalance = totalBalanceReservation / createdAppointmentIds.length;
+      for (const appointmentId of createdAppointmentIds) {
+        const { data: appointment } = await supabase
+          .from("appointments")
+          .select("amount_paid, total_amount")
+          .eq("id", appointmentId)
+          .single();
+        const nextPaid = Number(appointment?.amount_paid || 0) + perAppointmentBalance;
+        await supabase
+          .from("appointments")
+          .update({
+            amount_paid: nextPaid,
+            purse_amount_used: perAppointmentBalance,
+            payment_status: nextPaid >= Number(appointment?.total_amount || 0) ? "fully_paid" : "deposit_paid",
+          })
+          .eq("id", appointmentId);
+      }
+    }
+
+    if (appliedVoucherId && voucherDiscount > 0 && voucherBalanceAmount === 0) {
+      await supabase.from("voucher_redemptions").insert({
+        tenant_id: tenantId,
+        voucher_id: appliedVoucherId,
+        customer_id: customerId,
+        appointment_id: createdAppointmentIds[0] || null,
+        event_type: "redeem",
+        amount: voucherBalanceAmount,
+        discount_amount: voucherDiscount,
+      });
+    }
+
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     const bookingSummaryHtml = renderBookingSummary(items, tenant.currency || "USD");
@@ -540,7 +801,10 @@ serve(async (req) => {
           paragraph(`<strong>Booking reference:</strong> ${reference}`) +
           paymentLine +
           `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
-          paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}`),
+          (promotionalDiscount > 0
+            ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
+            : "") +
+          paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
       });
     }
 
@@ -558,7 +822,10 @@ serve(async (req) => {
             heading(approvalRequired ? "Booking approval required" : "New booking received") +
             paragraph(`<strong>Customer:</strong> ${customerFullName}`) +
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
-            paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${totalAmount.toFixed(2)}`) +
+            (promotionalDiscount > 0
+              ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
+              : "") +
+            paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`) +
             `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
             reviewActionsHtml,
         });
@@ -884,29 +1151,13 @@ serve(async (req) => {
         const primaryAppointmentId = createdAppointmentIds[0];
         const idempotencyKey = `purse_only_${primaryAppointmentId}_${Date.now()}`;
 
-        // Debit customer purse
-        const { error: debitError } = await supabase.rpc("debit_customer_purse_for_booking", {
-          p_tenant_id: tenantId,
-          p_customer_id: pursePaymentCustomerId,
-          p_appointment_id: primaryAppointmentId,
-          p_amount: paymentAmount,
-          p_currency: tenant.currency,
-          p_idempotency_key: idempotencyKey,
-        });
-
-        if (debitError) {
-          console.error("Error debiting customer purse:", debitError);
-          throw new Error(`Failed to debit purse balance: ${debitError.message}`);
-        }
-
-        console.log(`Successfully debited ${paymentAmount} from customer purse`);
-
         // Update appointments to fully_paid status
         const { error: updateError } = await supabase
           .from("appointments")
           .update({
             payment_status: "fully_paid",
-            amount_paid: paymentAmount / createdAppointmentIds.length, // Split evenly if multiple appointments
+            amount_paid: totalBalanceReservation / createdAppointmentIds.length,
+            purse_amount_used: totalBalanceReservation / createdAppointmentIds.length,
             updated_at: new Date().toISOString(),
           })
           .in("id", createdAppointmentIds);
@@ -921,7 +1172,7 @@ serve(async (req) => {
           customer_id: pursePaymentCustomerId,
           appointment_id: primaryAppointmentId,
           type: "payment",
-          amount: paymentAmount,
+          amount: totalBalanceReservation,
           currency: tenant.currency,
           method: "purse",
           provider: "internal",
@@ -931,24 +1182,6 @@ serve(async (req) => {
 
         if (transactionError) {
           console.error("Error creating transaction record:", transactionError);
-        }
-
-        // Credit salon purse (same as webhook does)
-        const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-          p_tenant_id: tenantId,
-          p_entry_type: "salon_purse_credit_booking",
-          p_reference_type: "appointment",
-          p_reference_id: primaryAppointmentId,
-          p_amount: paymentAmount,
-          p_currency: tenant.currency,
-          p_idempotency_key: `salon_${idempotencyKey}`,
-          p_gateway_reference: idempotencyKey,
-        });
-
-        if (creditError) {
-          console.error("Error crediting salon purse:", creditError);
-        } else {
-          console.log(`Salon purse credited: ${paymentAmount} ${tenant.currency}`);
         }
 
         // Send appointment notification (same as webhook does)

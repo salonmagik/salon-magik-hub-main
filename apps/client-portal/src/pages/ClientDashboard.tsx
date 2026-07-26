@@ -133,11 +133,11 @@ export default function ClientDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Store Credits</CardTitle>
+            <CardTitle>Salon Balance</CardTitle>
             <CardDescription>
               {hasMultipleCountries
-                ? "View your purse balance by country and salon"
-                : "Your purse balance at each salon"}
+                ? "View your balance by country and salon"
+                : "Paid funds and store credit at each salon"}
             </CardDescription>
           </CardHeader>
           <CardContent>

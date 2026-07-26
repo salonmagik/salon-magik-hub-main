@@ -41,15 +41,12 @@ export function CustomerPurseToggle({
         return;
       }
 
-      // Get purse balance
-      const { data: purse } = await supabase
-        .from("customer_purses")
-        .select("balance")
-        .eq("tenant_id", tenantId)
-        .eq("customer_id", customer.id)
-        .maybeSingle();
-
-      setPurseBalance(purse?.balance || 0);
+      const { data: availableBalance, error: balanceError } = await supabase.rpc(
+        "customer_credit_available" as never,
+        { p_tenant_id: tenantId, p_customer_id: customer.id } as never,
+      );
+      if (balanceError) throw balanceError;
+      setPurseBalance(Number(availableBalance || 0));
     } catch (err) {
       console.error("Error checking purse:", err);
       setPurseBalance(0);
@@ -106,7 +103,7 @@ export function CustomerPurseToggle({
             <Wallet className="h-5 w-5 text-muted-foreground" />
           </div>
           <div>
-            <Label className="text-sm font-medium text-muted-foreground">Store Credit</Label>
+            <Label className="text-sm font-medium text-muted-foreground">Salon Balance</Label>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
               No store credit available
@@ -131,7 +128,7 @@ export function CustomerPurseToggle({
             <Wallet className="h-5 w-5 text-primary" />
           </div>
           <div className="space-y-0.5">
-            <Label className="text-sm font-medium">Use Store Credit</Label>
+            <Label className="text-sm font-medium">Use Salon Balance</Label>
             <p className="text-xs text-muted-foreground">
               Balance: {formatCurrency(purseBalance || 0, currency)}
             </p>

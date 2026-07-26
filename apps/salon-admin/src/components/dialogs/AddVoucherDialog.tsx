@@ -17,6 +17,8 @@ import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 import { getCurrencySymbol } from "@shared/currency";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
+import { useCustomers } from "@/hooks/useCustomers";
 
 interface AddVoucherDialogProps {
   open: boolean;
@@ -49,6 +51,7 @@ function generateVoucherCode(): string {
 export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDialogProps) {
   const { currentTenant, activeLocationId } = useAuth();
   const { createVoucher } = useVouchers();
+  const { customers, isLoading: customersLoading } = useCustomers();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const fallbackCurrency = currentTenant?.currency || "USD";
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,6 +60,12 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
     amount: "",
     expiresAt: "",
     locationIds: [] as string[],
+    voucherType: "gift" as "gift" | "promotion",
+    accessType: "public" as "public" | "private",
+    discountType: "fixed" as "fixed" | "percentage",
+    targetCustomerId: "",
+    minimumSpend: "",
+    maxRedemptions: "",
   });
   const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
   const normalizeCountry = (value: string | null | undefined) =>
@@ -117,6 +126,12 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
       amount: "",
       expiresAt: "",
       locationIds: scopedDefaultLocationId ? [scopedDefaultLocationId] : [],
+      voucherType: "gift",
+      accessType: "public",
+      discountType: "fixed",
+      targetCustomerId: "",
+      minimumSpend: "",
+      maxRedemptions: "",
     });
   };
 
@@ -130,8 +145,12 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
       formData.code.trim() !== "" &&
       formData.amount !== "" &&
       parseAmountInput(formData.amount) > 0 &&
+      !(formData.voucherType === "promotion" &&
+        formData.discountType === "percentage" &&
+        parseAmountInput(formData.amount) > 100) &&
       selectedLocationIds.length > 0 &&
-      !hasMixedCurrencies
+      !hasMixedCurrencies &&
+      (formData.accessType !== "private" || Boolean(formData.targetCustomerId))
     );
   }, [formData, hasMixedCurrencies, selectedLocationIds.length]);
 
@@ -145,6 +164,12 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
         amount: parseAmountInput(formData.amount),
         expiresAt: formData.expiresAt || undefined,
         locationIds: selectedLocationIds,
+        voucherType: formData.voucherType,
+        accessType: formData.accessType,
+        discountType: formData.voucherType === "gift" ? "fixed" : formData.discountType,
+        targetCustomerId: formData.targetCustomerId || undefined,
+        minimumSpend: parseAmountInput(formData.minimumSpend || "0"),
+        maxRedemptions: Number(formData.maxRedemptions) || undefined,
       });
 
       if (result) {
@@ -159,20 +184,106 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Gift className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <DialogTitle className="text-xl">Create Gift Card</DialogTitle>
+            <DialogTitle className="text-xl">Create voucher</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Issue a new gift card or voucher
+              Issue stored value or create a promotional offer.
             </p>
           </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Voucher type</Label>
+              <Select
+                value={formData.voucherType}
+                onValueChange={(value: "gift" | "promotion") => setFormData((prev) => ({
+                  ...prev,
+                  voucherType: value,
+                  discountType: value === "gift" ? "fixed" : prev.discountType,
+                }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gift">Gift voucher</SelectItem>
+                  <SelectItem value="promotion">Promotion</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {formData.voucherType === "gift"
+                  ? "Stored monetary value with a remaining balance."
+                  : "A checkout discount with usage rules."}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Audience</Label>
+              <Select
+                value={formData.accessType}
+                onValueChange={(value: "public" | "private") => setFormData((prev) => ({
+                  ...prev,
+                  accessType: value,
+                  targetCustomerId: value === "public" ? "" : prev.targetCustomerId,
+                }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="public">Public / bearer</SelectItem>
+                  <SelectItem value="private">Private customer</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {formData.accessType === "private"
+                  ? "Only the selected customer can use it."
+                  : "The first eligible customer can claim a gift voucher."}
+              </p>
+            </div>
+          </div>
+
+          {formData.accessType === "private" && (
+            <div className="space-y-2">
+              <Label>Customer <span className="text-destructive">*</span></Label>
+              <Select
+                value={formData.targetCustomerId}
+                onValueChange={(targetCustomerId) => setFormData((prev) => ({ ...prev, targetCustomerId }))}
+                disabled={customersLoading}
+              >
+                <SelectTrigger><SelectValue placeholder={customersLoading ? "Loading customers…" : "Select customer"} /></SelectTrigger>
+                <SelectContent>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>{customer.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formData.voucherType === "gift" && (
+                <p className="text-xs text-muted-foreground">
+                  This value is added to the customer’s salon balance immediately.
+                </p>
+              )}
+            </div>
+          )}
+
+          {formData.voucherType === "promotion" && (
+            <div className="space-y-2">
+              <Label>Discount style</Label>
+              <Select
+                value={formData.discountType}
+                onValueChange={(value: "fixed" | "percentage") => setFormData((prev) => ({ ...prev, discountType: value }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">Fixed amount off</SelectItem>
+                  <SelectItem value="percentage">Percentage off</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Voucher Code */}
           <div className="space-y-2">
             <Label>
@@ -214,11 +325,11 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
 
           <div className="space-y-2">
             <Label>
-              Amount <span className="text-destructive">*</span>
+              {formData.discountType === "percentage" && formData.voucherType === "promotion" ? "Percentage off" : "Value"} <span className="text-destructive">*</span>
             </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                {currencySymbol}
+                {formData.discountType === "percentage" && formData.voucherType === "promotion" ? "%" : currencySymbol}
               </span>
               <Input
                 type="text"
@@ -232,7 +343,36 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
                 required
               />
             </div>
+            {formData.voucherType === "promotion" &&
+              formData.discountType === "percentage" &&
+              parseAmountInput(formData.amount || "0") > 100 && (
+                <p className="text-xs text-destructive">Percentage discounts cannot exceed 100%.</p>
+              )}
           </div>
+
+          {formData.voucherType === "promotion" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Minimum spend</Label>
+                <Input
+                  inputMode="decimal"
+                  value={formData.minimumSpend}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, minimumSpend: formatAmountInput(event.target.value) }))}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Total redemption limit</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={formData.maxRedemptions}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, maxRedemptions: event.target.value }))}
+                  placeholder="Unlimited"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Expiry Date */}
           <div className="space-y-2">
@@ -262,7 +402,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
             </Button>
             <Button type="submit" className="gap-2 w-full sm:w-auto" disabled={isSubmitting || !isFormValid}>
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Create Voucher
+              Create voucher
             </Button>
           </DialogFooter>
         </form>

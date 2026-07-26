@@ -22,7 +22,7 @@ const faqs = [
   {
     question: "Why do I see store credits or refunds here?",
     answer:
-      "Salon Magik keeps your refund requests and store credits visible across every salon account linked to your customer identity, so you can see what is still available.",
+      "Salon Magik keeps your paid balance, store credit, voucher activity, packages, and salon-issued refunds visible for every salon linked to your account.",
   },
   {
     question: "Why am I being asked to set a password after OTP verification?",

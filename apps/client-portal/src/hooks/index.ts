@@ -4,6 +4,8 @@ export { useClientBookings, useClientBookingActions } from "./useClientBookings"
 export type { ClientAppointmentWithDetails } from "./useClientBookings";
 export { useClientPurse } from "./useClientPurse";
 export type { PurseWithTenant, PurseCountryGroup } from "./useClientPurse";
+export { useClientBalance } from "./useClientBalance";
+export type { ClientBalanceGrant, ClientBalanceEntry, ClientPackageEntitlement } from "./useClientBalance";
 export { useClientNotifications } from "./useClientNotifications";
 export type { ClientNotification } from "./useClientNotifications";
 export { useClientRefunds } from "./useClientRefunds";
