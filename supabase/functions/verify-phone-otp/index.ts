@@ -35,7 +35,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(supabaseUrl, serviceKey);
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const otpHash = await hashOtp(otp);
     const now = new Date().toISOString();
@@ -66,33 +69,43 @@ serve(async (req) => {
       .update({ used: true })
       .eq("id", token.id);
 
-    // supabase-js v2 removed the createSession/signInAsUser SDK wrapper;
-    // call the GoTrue admin endpoint directly.
-    const sessionRes = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users/${token.user_id}/session`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify({}),
-      },
+    // Mint a session for the user. supabase-js v2 dropped the admin
+    // "create session" helper and GoTrue exposes no REST endpoint to mint a
+    // session by user id, so use the supported passwordless pattern: generate a
+    // magiclink token for the user (admin), then verify that token to obtain a
+    // real access/refresh token pair.
+    const { data: userData, error: getUserErr } = await admin.auth.admin.getUserById(
+      token.user_id as string,
     );
-
-    if (!sessionRes.ok) {
-      const errBody = await sessionRes.json().catch(() => ({})) as Record<string, unknown>;
-      console.error("[verify-phone-otp] session creation error:", errBody);
+    const email = userData?.user?.email;
+    if (getUserErr || !email) {
+      console.error("[verify-phone-otp] could not resolve user email:", getUserErr);
       return json({ error: "Failed to create session. Please try again." }, 500);
     }
 
-    const sessionJson = await sessionRes.json() as Record<string, unknown>;
-    const access_token = sessionJson.access_token as string | undefined;
-    const refresh_token = sessionJson.refresh_token as string | undefined;
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    const hashedToken = linkData?.properties?.hashed_token;
+    if (linkErr || !hashedToken) {
+      console.error("[verify-phone-otp] generateLink error:", linkErr);
+      return json({ error: "Failed to create session. Please try again." }, 500);
+    }
 
-    if (!access_token || !refresh_token) {
-      console.error("[verify-phone-otp] session missing tokens:", sessionJson);
+    // Verify the magiclink token on a non-admin client to get a session back.
+    const authClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: sessionData, error: verifyErr } = await authClient.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: hashedToken,
+    });
+    const access_token = sessionData?.session?.access_token;
+    const refresh_token = sessionData?.session?.refresh_token;
+
+    if (verifyErr || !access_token || !refresh_token) {
+      console.error("[verify-phone-otp] verifyOtp error:", verifyErr);
       return json({ error: "Failed to create session. Please try again." }, 500);
     }
 
