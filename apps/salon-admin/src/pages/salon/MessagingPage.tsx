@@ -1073,7 +1073,7 @@ export default function MessagingPage() {
             <Button variant="outline" onClick={() => setHowItWorksOpen(true)}>
               How it works
             </Button>
-            <Button onClick={() => setCreditPurchaseDialogOpen(true)} className="gap-2">
+            <Button onClick={() => setCreditPurchaseDialogOpen(true)} className="hidden lg:inline-flex gap-2">
               <Plus className="h-4 w-4" />
               Buy SMS Credits
             </Button>
@@ -2153,6 +2153,16 @@ export default function MessagingPage() {
           }}
           templateType={editingSmsTemplate}
         />
+
+        {/* Mobile buy-credits FAB */}
+        <button
+          type="button"
+          aria-label="Buy SMS credits"
+          onClick={() => setCreditPurchaseDialogOpen(true)}
+          className="lg:hidden fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
 
         <CreditPurchaseDialog
           open={creditPurchaseDialogOpen}

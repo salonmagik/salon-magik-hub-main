@@ -121,11 +121,11 @@ export default function ServicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
-  
+
   // Multi-select state - supports mixed selection in "All" tab
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectedTypes, setSelectedTypes] = useState<Set<ItemType>>(new Set());
-  
+
   // Dialog states
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -142,11 +142,11 @@ export default function ServicesPage() {
   const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
   const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
   const [isApplyingFix, setIsApplyingFix] = useState(false);
-  
+
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
-  
+
   // Pending deletion with undo
   const undoRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const undoToastRef = useRef<Map<string, { dismiss: () => void; update: (props: any) => void }>>(new Map());
@@ -165,7 +165,7 @@ export default function ServicesPage() {
 
   const currency = currentTenant?.currency || "USD";
   const isLoading = servicesLoading || packagesLoading || productsLoading || vouchersLoading;
-  
+
   // Permission checks
   const canEdit = hasPermission("catalog:edit");
   const canDelete = hasPermission("catalog:delete");
@@ -294,7 +294,7 @@ export default function ServicesPage() {
   const handleSelectItem = (id: string, type: ItemType) => {
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
-      
+
       if (newSet.has(id)) {
         newSet.delete(id);
         // Recalculate selected types
@@ -341,9 +341,9 @@ export default function ServicesPage() {
   };
 
   // Determine bulk action availability
-  const canCreatePackage = 
+  const canCreatePackage =
     (selectedTypes.has("service") || selectedTypes.has("product")) &&
-    !selectedTypes.has("package") && 
+    !selectedTypes.has("package") &&
     !selectedTypes.has("voucher");
 
   const showCreatePackage = activeTab === "all" || activeTab === "services" || activeTab === "products";
@@ -446,17 +446,17 @@ export default function ServicesPage() {
   // Handle Delete (Owner only - soft delete with 5-sec undo)
   const handleDelete = () => {
     if (!user?.id) return;
-    
+
     const itemsToDelete = Array.from(selectedItemsInfo);
-    
+
     // Close dialog and clear selection
     setDeleteDialogOpen(false);
     clearSelection();
-    
+
     // Start countdown for batch
     let countdown = 5;
     const batchId = Date.now().toString();
-    
+
     const undoToast = toast({
         title: `Deleting ${itemsToDelete.length} item(s)...`,
         description: `Click Undo to cancel (${countdown}s)`,
@@ -473,7 +473,7 @@ export default function ServicesPage() {
         ),
       });
     undoToastRef.current.set(batchId, { dismiss: undoToast.dismiss, update: undoToast.update });
-    
+
     const interval = setInterval(() => {
       countdown--;
       if (countdown <= 0) {
@@ -489,7 +489,7 @@ export default function ServicesPage() {
         });
       }
     }, 1000);
-    
+
     undoRef.current.set(batchId, interval);
   };
 
@@ -512,7 +512,7 @@ export default function ServicesPage() {
           deleted_by_id: user?.id,
           deletion_reason: "Direct deletion by owner",
         };
-        
+
         switch (item.type) {
           case "service":
             await supabase.from("services").update(updateData).eq("id", item.id);
@@ -528,10 +528,10 @@ export default function ServicesPage() {
             break;
         }
       }
-      
-      toast({ 
-        title: "Sent to Bin", 
-        description: `${items.length} item(s) moved to bin. Can be restored within 7 days.` 
+
+      toast({
+        title: "Sent to Bin",
+        description: `${items.length} item(s) moved to bin. Can be restored within 7 days.`
       });
       await Promise.all([refetchAll(), refetchBinItems()]);
     } catch (err) {
@@ -989,10 +989,10 @@ export default function ServicesPage() {
                       {filteredItems
                         .filter((item) => shouldShowItem(item.type, item.id))
                         .map((item) => (
-                        <SelectableItemCard 
-                          key={item.id} 
-                          item={item} 
-                          currency={currency} 
+                        <SelectableItemCard
+                          key={item.id}
+                          item={item}
+                          currency={currency}
                           formatCurrency={formatCurrency}
                           isSelected={selectedItems.has(item.id)}
                           onSelect={handleSelectItem}
@@ -1267,29 +1267,48 @@ export default function ServicesPage() {
             <Plus className="h-6 w-6" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="top" className="mb-2 w-56">
-          <DropdownMenuItem onClick={() => setServiceDialogOpen(true)}>
+        <DropdownMenuContent
+          align="end"
+          side="top"
+          className="mb-2 w-56 gap-1 duration-200 data-[side=top]:slide-in-from-bottom-4"
+        >
+          <DropdownMenuItem
+            onClick={() => setServiceDialogOpen(true)}
+            className="my-0.5 rounded-lg bg-[#FBF9F6] focus:bg-[#F1ECE3]"
+          >
             <Scissors className="mr-2 h-4 w-4" />Add service
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setProductDialogOpen(true)}>
+          <DropdownMenuItem
+            onClick={() => setProductDialogOpen(true)}
+            className="my-0.5 rounded-lg bg-[#F2EEFA] focus:bg-[#E9E1F6]"
+          >
             <ShoppingBag className="mr-2 h-4 w-4" />Add product
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setPackageDialogOpen(true)}>
+          <DropdownMenuItem
+            onClick={() => setPackageDialogOpen(true)}
+            className="my-0.5 rounded-lg bg-[#FBF9F6] focus:bg-[#F1ECE3]"
+          >
             <Package className="mr-2 h-4 w-4" />Create package
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setVoucherDialogOpen(true)}>
+          <DropdownMenuItem
+            onClick={() => setVoucherDialogOpen(true)}
+            className="my-0.5 rounded-lg bg-[#F2EEFA] focus:bg-[#E9E1F6]"
+          >
             <Gift className="mr-2 h-4 w-4" />Create voucher
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => {
-            setImportType("services");
-            setImportDialogOpen(true);
-          }}>
+          <DropdownMenuItem
+            onClick={() => {
+              setImportType("services");
+              setImportDialogOpen(true);
+            }}
+            className="my-0.5 rounded-lg bg-[#FBF9F6] focus:bg-[#F1ECE3]"
+          >
             <Download className="mr-2 h-4 w-4" />Import catalog
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => setBinOpen(true)}
-            className="bg-[#f7e5e5] text-[#a23b3b] focus:bg-[#f3dada] focus:text-[#8f3030]"
+            className="my-0.5 rounded-lg bg-[#f7e5e5] text-[#a23b3b] focus:bg-[#f3dada] focus:text-[#8f3030]"
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Bin ({binItems.length})
@@ -1844,7 +1863,7 @@ function StatusChip({ status, isFlagged }: { status?: string; isFlagged?: boolea
       </Badge>
     );
   }
-  
+
   if (status === "archived") {
     return (
       <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">
@@ -1853,7 +1872,7 @@ function StatusChip({ status, isFlagged }: { status?: string; isFlagged?: boolea
       </Badge>
     );
   }
-  
+
   return null;
 }
 
