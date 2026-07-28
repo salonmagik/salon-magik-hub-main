@@ -43,6 +43,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@ui/textarea";
 import { useCustomers } from "@/hooks/useCustomers";
 import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
+import { useCustomerSegments, segmentTags, CUSTOMER_TAG_META } from "@/hooks/useCustomerSegments";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
@@ -101,6 +102,7 @@ export default function CustomersPage() {
     deleteCustomer,
     bulkDeleteCustomers,
   } = useCustomers();
+  const { segments } = useCustomerSegments();
   const { hasPermission } = usePermissions();
 
   const currency = currentTenant?.currency || "USD";
@@ -574,6 +576,18 @@ export default function CustomersPage() {
 												</Badge>
 											</div>
 
+											{/* Auto-derived segment tags */}
+											{segmentTags(segments[customer.id]).filter((tag) => tag !== "vip").length > 0 && (
+												<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+													{segmentTags(segments[customer.id])
+														.filter((tag) => tag !== "vip")
+														.map((tag) => (
+															<Badge key={tag} variant="secondary" className={cn("text-xs", CUSTOMER_TAG_META[tag].className)}>
+																{CUSTOMER_TAG_META[tag].label}
+															</Badge>
+														))}
+												</div>
+											)}
 											<div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
 												{customer.email && (
 													<div className="flex items-center gap-1">
