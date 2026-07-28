@@ -1270,47 +1270,29 @@ export default function ServicesPage() {
         <DropdownMenuContent
           align="end"
           side="top"
-          className="mb-2 w-56 gap-1 duration-200 data-[side=top]:slide-in-from-bottom-4"
+          className="mb-2 w-56 duration-200 data-[side=top]:slide-in-from-bottom-4"
         >
-          <DropdownMenuItem
-            onClick={() => setServiceDialogOpen(true)}
-            className="my-0.5 rounded-lg bg-[#FBF9F6] focus:bg-[#F1ECE3]"
-          >
-            <Scissors className="mr-2 h-4 w-4" />Add service
+          <DropdownMenuItem onClick={() => setServiceDialogOpen(true)}>
+            <Scissors className="mr-2 h-4 w-4 text-primary" />Add service
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setProductDialogOpen(true)}
-            className="my-0.5 rounded-lg bg-[#F2EEFA] focus:bg-[#E9E1F6]"
-          >
-            <ShoppingBag className="mr-2 h-4 w-4" />Add product
+          <DropdownMenuItem onClick={() => setProductDialogOpen(true)}>
+            <ShoppingBag className="mr-2 h-4 w-4 text-primary" />Add product
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setPackageDialogOpen(true)}
-            className="my-0.5 rounded-lg bg-[#FBF9F6] focus:bg-[#F1ECE3]"
-          >
-            <Package className="mr-2 h-4 w-4" />Create package
+          <DropdownMenuItem onClick={() => setPackageDialogOpen(true)}>
+            <Package className="mr-2 h-4 w-4 text-primary" />Create package
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setVoucherDialogOpen(true)}
-            className="my-0.5 rounded-lg bg-[#F2EEFA] focus:bg-[#E9E1F6]"
-          >
-            <Gift className="mr-2 h-4 w-4" />Create voucher
+          <DropdownMenuItem onClick={() => setVoucherDialogOpen(true)}>
+            <Gift className="mr-2 h-4 w-4 text-primary" />Create voucher
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setImportType("services");
-              setImportDialogOpen(true);
-            }}
-            className="my-0.5 rounded-lg bg-[#FBF9F6] focus:bg-[#F1ECE3]"
-          >
-            <Download className="mr-2 h-4 w-4" />Import catalog
+          <DropdownMenuItem onClick={() => {
+            setImportType("services");
+            setImportDialogOpen(true);
+          }}>
+            <Download className="mr-2 h-4 w-4 text-primary" />Import catalog
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => setBinOpen(true)}
-            className="my-0.5 rounded-lg bg-[#f7e5e5] text-[#a23b3b] focus:bg-[#f3dada] focus:text-[#8f3030]"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
+          <DropdownMenuItem onClick={() => setBinOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4 text-[#a23b3b]" />
             Bin ({binItems.length})
           </DropdownMenuItem>
         </DropdownMenuContent>
