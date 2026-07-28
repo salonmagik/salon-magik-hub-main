@@ -52,25 +52,43 @@ export function validatePhoneByCountry(countryCode: string, localDigits: string)
   // Strip the trunk prefix (leading 0) — E.164 national numbers don't carry it,
   // but local-format inputs do. Normalising here lets both forms pass validation.
   const nationalDigits = digits.startsWith("0") ? digits.slice(1) : digits;
-  const strictLengths: Record<string, number> = {
-    NG: 10,
-    GH: 9,
-  };
-  const expectedLength = strictLengths[normalizedCountryCode] ?? null;
 
-  if (expectedLength === null) {
+  // Ghana: 9 national digits with a valid mobile prefix (leading 0 stripped, so
+  // 020… -> 20…, 054… -> 54…).
+  if (normalizedCountryCode === "GH") {
+    const GH_MOBILE_PREFIXES = [
+      "20", "23", "24", "25", "26", "27", "28", "29",
+      "50", "54", "55", "56", "57", "59",
+    ];
+    if (nationalDigits.length !== 9) {
+      return { isValid: false, expectedLength: 9, error: "Ghana mobile numbers are 9 digits, e.g. 24 123 4567" };
+    }
+    const ok = GH_MOBILE_PREFIXES.some((p) => nationalDigits.startsWith(p));
     return {
-      isValid: nationalDigits.length >= 6,
-      expectedLength: null,
-      error: nationalDigits.length >= 6 ? undefined : "Enter a valid phone number",
+      isValid: ok,
+      expectedLength: 9,
+      error: ok ? undefined : "Enter a valid Ghana mobile number (starts with 020, 023, 024, 025, 026, 027, 028, 029, or 050–059)",
     };
   }
 
-  const isValid = nationalDigits.length === expectedLength;
+  // Nigeria: 10 national digits with a valid mobile prefix (70/71/80/81/90/91).
+  if (normalizedCountryCode === "NG") {
+    if (nationalDigits.length !== 10) {
+      return { isValid: false, expectedLength: 10, error: "Nigeria mobile numbers are 10 digits, e.g. 803 123 4567" };
+    }
+    const ok = /^[789][01]/.test(nationalDigits);
+    return {
+      isValid: ok,
+      expectedLength: 10,
+      error: ok ? undefined : "Enter a valid Nigeria mobile number (starts with 070, 071, 080, 081, 090, or 091)",
+    };
+  }
+
+  // Other countries: minimum length only.
   return {
-    isValid,
-    expectedLength,
-    error: isValid ? undefined : `Phone number must be ${expectedLength + 1} digits`,
+    isValid: nationalDigits.length >= 6,
+    expectedLength: null,
+    error: nationalDigits.length >= 6 ? undefined : "Enter a valid phone number",
   };
 }
 

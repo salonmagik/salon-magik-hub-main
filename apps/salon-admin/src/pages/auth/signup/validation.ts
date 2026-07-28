@@ -1,4 +1,6 @@
 import { isValidEmail, isValidPassword } from "@shared/form-utils";
+import { getCountryByDialCode, parseE164 } from "@shared/countries";
+import { validatePhoneByCountry } from "@shared/validation";
 
 export type SignupFormData = {
   firstName: string;
@@ -33,7 +35,20 @@ export function validateSignup(
     errors.email = "Please enter a valid email";
   }
 
-  if (!formData.phone.trim()) errors.phone = "Phone number is required";
+  if (!formData.phone.trim()) {
+    errors.phone = "Phone number is required";
+  } else {
+    const parsed = parseE164(formData.phone);
+    if (!parsed) {
+      errors.phone = "Enter a valid phone number";
+    } else {
+      const countryCode = getCountryByDialCode(parsed.dialCode)?.code ?? "";
+      const phoneCheck = validatePhoneByCountry(countryCode, parsed.nationalNumber);
+      if (!phoneCheck.isValid) {
+        errors.phone = phoneCheck.error || "Enter a valid phone number";
+      }
+    }
+  }
 
   if (!formData.password) {
     errors.password = "Password is required";

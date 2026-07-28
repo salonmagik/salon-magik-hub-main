@@ -84,26 +84,29 @@ serve(async (req) => {
       );
     }
 
-    // Check if email already exists
-    const { data: existing } = await supabaseClient
-      .from("waitlist_leads")
-      .select("id, position, status")
-      .eq("email", email.toLowerCase().trim())
-      .maybeSingle();
-
-    if (existing) {
-      // If already on waitlist, return their position
-      if (existing.status === "pending" || existing.status === "invited") {
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            position: existing.position,
-            message: "You're already on the waitlist!"
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      // If converted or rejected, allow re-registration
+    // Reject reuse of an email/phone that already belongs to an active salon
+    // account, or that already has a pending/invited access request.
+    const { data: conflict, error: conflictError } = await supabaseClient.rpc(
+      "check_identity_availability",
+      { p_email: email, p_phone: phone ?? null },
+    );
+    if (conflictError) {
+      console.error("Identity availability check failed:", conflictError);
+    } else if (conflict === "tenant_email") {
+      return new Response(
+        JSON.stringify({ error: "A salon already exists with this email. Try signing in instead." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else if (conflict === "tenant_phone") {
+      return new Response(
+        JSON.stringify({ error: "A salon already exists with this phone number. Try signing in instead." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else if (conflict === "waitlist_pending" || conflict === "waitlist_invited") {
+      return new Response(
+        JSON.stringify({ error: "You've already requested exclusive access. Hang tight — we'll reach out with your invitation soon." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Insert new waitlist lead
