@@ -5,6 +5,7 @@ import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
 import { useWaitlistMode } from "@/hooks/useFeatureFlags";
 import { MarketingLayout } from "@/components/MarketingLayout";
 import { PlanCard } from "@/components/PlanCard";
+import { useWaitlist } from "@/components/WaitlistProvider";
 import { cn } from "@shared/utils";
 
 const SUPPORTED_CURRENCIES = [
@@ -27,6 +28,7 @@ export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [currency, setCurrency] = useState("USD");
   const { isWaitlistMode } = useWaitlistMode();
+  const { openWaitlist } = useWaitlist();
 
   const { data: plans, isLoading: plansLoading } = usePlans();
   const { data: features } = usePlanFeatures();
@@ -168,6 +170,7 @@ export default function PricingPage() {
 									limit={getPlanLimit(plan.id)}
 									isAnnual={isAnnual}
 									isWaitlistMode={isWaitlistMode}
+									onWaitlistClick={openWaitlist}
 									symbol={symbol}
 									salonAppUrl={salonAppUrl}
 								/>

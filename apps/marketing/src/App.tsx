@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Suspense, lazy, useEffect } from "react";
 import { BrandLoader } from "@ui/brand-loader";
+import { WaitlistProvider } from "@/components/WaitlistProvider";
 
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const PricingPage = lazy(() => import("@/pages/PricingPage"));
@@ -21,18 +22,20 @@ function App() {
     <BrowserRouter>
       <ScrollToTop />
       <Suspense fallback={<BrandLoader fullScreen />}>
-        <div className="page-reveal">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/support" element={<SupportPage />} />
-            <Route path="/terms" element={<TermsPage />} />
-            <Route path="/privacy" element={<PrivacyPage />} />
-            <Route path="/faq" element={<FAQPage />} />
-            <Route path="/whos-it-for" element={<WhosItForPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
+        <WaitlistProvider>
+          <div className="page-reveal">
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/support" element={<SupportPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/faq" element={<FAQPage />} />
+              <Route path="/whos-it-for" element={<WhosItForPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </WaitlistProvider>
       </Suspense>
     </BrowserRouter>
   );
