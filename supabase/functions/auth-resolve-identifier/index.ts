@@ -142,20 +142,30 @@ serve(async (req) => {
       console.warn("Multiple linked auth users found for identifier", normalized.value, linkedUserIds);
     }
 
+    const firstCustomer = matchedCustomers[0];
+    // Provision the client auth account with BOTH the email and phone from the
+    // customer record (when present) so the customer can later log in with
+    // either identifier. Falls back to the identifier they logged in with.
+    const provisionEmail =
+      (firstCustomer.email || "").trim().toLowerCase() ||
+      (normalized.type === "email" ? normalized.value : null);
+    const provisionPhone =
+      (firstCustomer.phone || "").trim() ||
+      (normalized.type === "phone" ? normalized.value : null);
+
     let authUser =
       (linkedUserIds[0] ? await findAuthUserById(admin, linkedUserIds[0]) : null) ??
       (await findAuthUserByIdentifier(admin, normalized.value, normalized.type));
 
     if (!authUser) {
-      const firstCustomer = matchedCustomers[0];
       const firstName = buildFullName(firstCustomer.full_name).split(" ")[0];
       const remainingNames = buildFullName(firstCustomer.full_name).split(" ").slice(1).join(" ");
       const metadata = {
         first_name: firstName,
         last_name: remainingNames || null,
         full_name: buildFullName(firstCustomer.full_name),
-        phone: firstCustomer.phone || null,
-        email: firstCustomer.email || null,
+        phone: provisionPhone,
+        email: provisionEmail,
         client_account: true,
         password_initialized: false,
       };
@@ -165,11 +175,8 @@ serve(async (req) => {
         email_confirm: false,
         phone_confirm: false,
       };
-      if (normalized.type === "email") {
-        createPayload.email = normalized.value;
-      } else {
-        createPayload.phone = normalized.value;
-      }
+      if (provisionEmail) createPayload.email = provisionEmail;
+      if (provisionPhone) createPayload.phone = provisionPhone;
 
       const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser(createPayload);
       if (createUserError) {
@@ -182,6 +189,17 @@ serve(async (req) => {
         phone: createdUser.user.phone,
         user_metadata: createdUser.user.user_metadata ?? {},
       };
+    } else if (provisionEmail && !authUser.email) {
+      // Existing client account created via phone has no email — backfill it so
+      // email OTP login can find the account.
+      const { error: backfillErr } = await admin.auth.admin.updateUserById(authUser.id, {
+        email: provisionEmail,
+      });
+      if (backfillErr) {
+        console.warn("auth-resolve-identifier: email backfill failed", backfillErr.message);
+      } else {
+        authUser.email = provisionEmail;
+      }
     }
 
     const matchedCustomerIds = matchedCustomers.map((customer) => customer.id);

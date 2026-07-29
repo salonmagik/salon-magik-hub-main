@@ -31,7 +31,7 @@ serve(async (req) => {
     });
 
   try {
-    const { phone } = await req.json();
+    const { phone, strict } = await req.json();
     if (!phone || typeof phone !== "string" || !/^\+[1-9]\d{7,14}$/.test(phone)) {
       return json({ error: "Valid E.164 phone number required" }, 400);
     }
@@ -48,8 +48,13 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!profile?.user_id) {
-      // No profile found — silent success to avoid phone enumeration, but log for debugging.
       console.warn(`[send-phone-otp] no profile found for phone prefix +${phone.slice(1, 4)}`);
+      // strict callers (e.g. client portal, which has already resolved the
+      // account) get an honest error; other callers (salon-admin login) get a
+      // silent success to avoid phone-number enumeration.
+      if (strict) {
+        return json({ error: "No account found for this phone number." }, 404);
+      }
       return json({ success: true });
     }
 

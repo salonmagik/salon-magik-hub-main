@@ -12,6 +12,7 @@ import { useToast } from "@ui/ui/use-toast";
 import { ArrowLeft, Lock, Mail, Phone, ShieldCheck } from "lucide-react";
 import { Button } from "@ui/button";
 import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 
 type LoginStep = "identifier" | "otp" | "password";
 type IdentifierTab = "email" | "phone";
@@ -179,7 +180,10 @@ export default function ClientLoginPage() {
 
       if (emailOtpError || data?.error) {
         console.error("Email OTP send failed:", { emailOtpError, dataError: data?.error });
-        setError("We're having trouble sending your verification email. Please try again.");
+        setError(
+          (data?.error as string | undefined) ||
+            (await getFunctionErrorMessage(emailOtpError, "We couldn't send your verification email. Please try again.")),
+        );
         return false;
       }
 
@@ -188,14 +192,17 @@ export default function ClientLoginPage() {
       );
     } else {
       const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-phone-otp", {
-        body: { phone: targetIdentifier },
+        body: { phone: targetIdentifier, strict: true },
       });
 
       if (phoneOtpError || phoneOtpData?.error) {
         if (phoneOtpData?.error === "cooldown") {
           setError("Please wait 60 seconds before requesting another code.");
         } else {
-          setError("We're having trouble sending your verification code. Please try again.");
+          setError(
+            (phoneOtpData?.error as string | undefined) ||
+              (await getFunctionErrorMessage(phoneOtpError, "We couldn't send your verification code. Please try again.")),
+          );
         }
         return false;
       }
