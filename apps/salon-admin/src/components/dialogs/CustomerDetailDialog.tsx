@@ -344,7 +344,7 @@ export function CustomerDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[24px] border-0 p-5 shadow-2xl sm:max-w-5xl sm:p-8">
+      <DialogContent className="max-h-[92vh] overflow-x-hidden overflow-y-auto rounded-[24px] border-0 p-5 shadow-2xl sm:max-w-xl sm:p-8">
         <DialogHeader>
           <DialogDescription className="sr-only">
             Customer profile, engagement summary, appointments, notes, and transaction history.
@@ -384,9 +384,9 @@ export function CustomerDetailDialog({
                     size="default"
                     onClick={() => setSendMessageDialogOpen(true)}
                     disabled={!canSendMessage}
-                    className="h-11 flex-shrink-0 rounded-full px-6"
+                    className="h-8 flex-shrink-0 rounded-full px-4 py-2 text-sm font-medium"
                   >
-                    <MessageSquare className="w-4 h-4 mr-2" />
+                    <MessageSquare className="w-3 h-3 mr-2" />
                     Send Message
                   </Button>
                 </TooltipTrigger>
@@ -398,7 +398,7 @@ export function CustomerDetailDialog({
           </div>
         </DialogHeader>
 
-          <Tabs defaultValue="overview" className="mt-4">
+          <Tabs defaultValue="overview" className="mt-4 min-w-0">
             <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1">
               <TabsTrigger value="overview" className="h-10 shrink-0 rounded-full px-6">Overview</TabsTrigger>
               <TabsTrigger value="appointments" className="h-10 shrink-0 rounded-full px-6">Appointments</TabsTrigger>
