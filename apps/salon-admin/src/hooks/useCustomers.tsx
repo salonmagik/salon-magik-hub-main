@@ -121,6 +121,11 @@ export function useCustomers() {
     email?: string;
     notes?: string;
     birthday?: string;
+    gender?: string;
+    country?: string;
+    address?: string;
+    city?: string;
+    isVip?: boolean;
   }) => {
     if (!currentTenant?.id) {
       toast({ title: "Error", description: "No active tenant", variant: "destructive" });
@@ -171,7 +176,12 @@ export function useCustomers() {
           email: normalizedEmail || null,
           notes: data.notes || null,
           birthday: data.birthday || null,
-        })
+          gender: data.gender || null,
+          country: data.country || null,
+          address: data.address || null,
+          city: data.city || null,
+          is_starred: data.isVip || false,
+        } as never)
         .select()
         .single();
 
