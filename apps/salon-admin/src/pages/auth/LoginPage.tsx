@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Mail, Lock, Phone, ShieldCheck } from "lucide-react";
 import { useToast } from "@ui/use-toast";
 import { supabase } from "@/lib/supabase";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthInput } from "@/components/auth/AuthInput";
@@ -253,7 +254,7 @@ export default function LoginPage() {
       });
 
       if (error || data?.error) {
-        const msg: string = data?.message || data?.error || error?.message || "Unable to send code.";
+        const msg: string = data?.error || data?.message || (await getFunctionErrorMessage(error, "Unable to send code."));
         const isRateLimit = data?.error === "hourly_limit" || data?.error === "cooldown";
         toast({
           title: isRateLimit ? "OTP unavailable" : "Failed to send code",
@@ -299,7 +300,7 @@ export default function LoginPage() {
       if (error || data?.error) {
         toast({
           title: "Verification failed",
-          description: data?.error || error?.message || "Incorrect or expired code.",
+          description: data?.error || (await getFunctionErrorMessage(error, "Incorrect or expired code.")),
           variant: "destructive",
         });
         return;
@@ -346,7 +347,7 @@ export default function LoginPage() {
         body: { mode: "resend", email, origin: window.location.origin },
       });
       if (error || data?.error) {
-        let message = data?.error || error?.message || "Failed to resend verification email";
+        let message = data?.error || (await getFunctionErrorMessage(error, "Failed to resend verification email"));
         if (error && typeof error === "object" && "context" in error && (error as any).context) {
           try { const p = await (error as any).context.json(); message = p?.error || message; } catch { /* no-op */ }
         }
@@ -457,7 +458,7 @@ export default function LoginPage() {
     try {
       const { data, error } = await supabase.functions.invoke("send-phone-otp", { body: { phone } });
       if (error || data?.error) {
-        const msg: string = data?.message || data?.error || error?.message || "Unable to send code.";
+        const msg: string = data?.error || data?.message || (await getFunctionErrorMessage(error, "Unable to send code."));
         toast({ title: "Failed to resend", description: msg, variant: "destructive" });
         return;
       }

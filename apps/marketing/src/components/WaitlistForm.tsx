@@ -30,6 +30,7 @@ import {
 	parseE164,
 } from "@shared/countries";
 import { validatePhoneByCountry } from "@shared/validation";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 import { PhoneInput } from "@ui/phone-input";
 import { useMarketingMarketCountries } from "@/hooks";
 
@@ -134,18 +135,9 @@ export function WaitlistForm({
 			});
 
 			if (fnError) {
-				const errorBody = fnError.context?.body;
-				if (typeof errorBody === "string") {
-					try {
-						const parsed = JSON.parse(errorBody);
-						if (parsed.error) {
-							throw new Error(parsed.error);
-						}
-					} catch {
-						// Not JSON, use original error
-					}
-				}
-				throw fnError;
+				// Surface the function's real message, never the generic
+				// "Edge Function returned a non-2xx status code".
+				throw new Error(await getFunctionErrorMessage(fnError));
 			}
 
 			// Check if response indicates already on waitlist
