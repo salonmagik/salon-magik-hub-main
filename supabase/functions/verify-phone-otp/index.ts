@@ -77,10 +77,27 @@ serve(async (req) => {
     const { data: userData, error: getUserErr } = await admin.auth.admin.getUserById(
       token.user_id as string,
     );
-    const email = userData?.user?.email;
-    if (getUserErr || !email) {
-      console.error("[verify-phone-otp] could not resolve user email:", getUserErr);
+    if (getUserErr || !userData?.user) {
+      console.error("[verify-phone-otp] could not resolve user:", getUserErr);
       return json({ error: "Failed to create session. Please try again." }, 500);
+    }
+
+    let email = userData.user.email;
+    if (!email) {
+      // Phone-only account (no email on file) — generateLink's magiclink type
+      // is email-keyed, so assign an internal, non-deliverable placeholder
+      // email so a session can still be minted. Never shown to the user and
+      // does not affect their real contact info (phone remains the identity
+      // they actually log in with).
+      email = `${token.user_id}@phone.internal.salonmagik.com`;
+      const { error: setEmailErr } = await admin.auth.admin.updateUserById(token.user_id as string, {
+        email,
+        email_confirm: true,
+      });
+      if (setEmailErr) {
+        console.error("[verify-phone-otp] failed to assign placeholder email:", setEmailErr);
+        return json({ error: "Failed to create session. Please try again." }, 500);
+      }
     }
 
     const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({

@@ -153,28 +153,16 @@ serve(async (req) => {
       (firstCustomer.phone || "").trim() ||
       (normalized.type === "phone" ? normalized.value : null);
 
+    // Deliberately DOES NOT fall back to matching profiles.phone: a salon
+    // admin's contact number and a customer's login phone are different
+    // identity domains and must never be merged, even when the digits match
+    // (e.g. an admin adds a customer using their own phone). Only
+    // auth.users.phone (an actual phone-login identity) is treated as a
+    // reusable match here — see send-phone-otp for how a resulting shared
+    // phone digit-string across the two domains is disambiguated at login.
     let authUser =
       (linkedUserIds[0] ? await findAuthUserById(admin, linkedUserIds[0]) : null) ??
       (await findAuthUserByIdentifier(admin, normalized.value, normalized.type));
-
-    // findAuthUserByIdentifier only matches auth.users.phone, which is unset
-    // for accounts that never used phone-based login (e.g. a salon admin who
-    // signs in by email but has a contact phone on their profile). Without
-    // this fallback, adding a customer with that same phone number silently
-    // creates a SECOND, distinct account sharing the phone — two profiles
-    // rows end up with an identical phone, which breaks phone-OTP lookup
-    // (ambiguous match). Check profiles.phone too, and reuse that account.
-    if (!authUser && normalized.type === "phone") {
-      const { data: phoneProfile } = await admin
-        .from("profiles")
-        .select("user_id")
-        .eq("phone", normalized.value)
-        .limit(1)
-        .maybeSingle();
-      if (phoneProfile?.user_id) {
-        authUser = await findAuthUserById(admin, phoneProfile.user_id);
-      }
-    }
 
     if (!authUser) {
       const firstName = buildFullName(firstCustomer.full_name).split(" ")[0];

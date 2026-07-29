@@ -40,24 +40,44 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Look up user by phone stored in profiles table. Use limit(1) instead of
-    // maybeSingle(): if more than one profile somehow shares this phone (data
-    // predates the dedup fix in auth-resolve-identifier), maybeSingle() throws
-    // an "multiple rows returned" error that was previously left unchecked —
-    // silently treated as "no profile found" and misreported as such.
+    // Look up user by phone stored in profiles table. A salon admin's contact
+    // number and a customer's client-portal login phone are different
+    // identity domains, kept deliberately separate — but both live in the
+    // same profiles.phone column, so the SAME digits can legitimately match
+    // two different accounts (e.g. an admin adds a customer using their own
+    // number). .maybeSingle() would throw on that (previously left
+    // unchecked, silently misreported as "no profile found"). Fetch all
+    // matches and, when ambiguous, exclude active salon-admin accounts so
+    // phone-OTP login always resolves to the client identity.
     const { data: profileRows, error: profileLookupError } = await admin
       .from("profiles")
       .select("user_id")
-      .eq("phone", phone)
-      .order("updated_at", { ascending: false })
-      .limit(1);
+      .eq("phone", phone);
 
     if (profileLookupError) {
       console.error("[send-phone-otp] profile lookup error:", profileLookupError);
       return json({ error: "Something went wrong. Please try again." }, 500);
     }
 
-    const profile = profileRows?.[0] ?? null;
+    let profile: { user_id: string } | null = profileRows?.[0] ?? null;
+    if (profileRows && profileRows.length > 1) {
+      const candidateIds = profileRows.map((r) => r.user_id);
+      const { data: adminRoles } = await admin
+        .from("user_roles")
+        .select("user_id")
+        .in("user_id", candidateIds)
+        .eq("is_active", true);
+      const adminIds = new Set((adminRoles || []).map((r) => r.user_id));
+      if (strict) {
+        // Client portal: resolve to the client identity only, never an admin
+        // account — if every match is an admin, there is no client account
+        // at this phone.
+        profile = profileRows.find((r) => !adminIds.has(r.user_id)) ?? null;
+      } else {
+        // Salon-admin login: resolve to the admin identity when ambiguous.
+        profile = profileRows.find((r) => adminIds.has(r.user_id)) ?? profileRows[0];
+      }
+    }
 
     if (!profile?.user_id) {
       console.warn(`[send-phone-otp] no profile found for phone prefix +${phone.slice(1, 4)}`);
