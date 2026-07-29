@@ -40,6 +40,7 @@ import {
   Scissors,
   Package,
   RotateCcw,
+  Star,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -354,7 +355,12 @@ export function CustomerDetailDialog({
                 {getInitials(customer.full_name)}
               </div>
               <div>
-                <DialogTitle className="text-2xl font-medium">{customer.full_name}</DialogTitle>
+                <DialogTitle className="text-2xl font-medium flex items-center gap-2">
+                  {customer.full_name}
+                  {(customer as { is_starred?: boolean }).is_starred && (
+                    <Star className="h-5 w-5 flex-shrink-0 fill-amber-400 text-amber-400" aria-label="VIP" />
+                  )}
+                </DialogTitle>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge
                     variant="secondary"

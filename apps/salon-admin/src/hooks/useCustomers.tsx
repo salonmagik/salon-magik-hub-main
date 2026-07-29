@@ -216,6 +216,51 @@ export function useCustomers() {
     }
   };
 
+  // VIP is a categorization (star), independent of status.
+  const setCustomerVip = async (id: string, isVip: boolean) => {
+    if (!currentTenant?.id) {
+      toast({ title: "Error", description: "No active tenant", variant: "destructive" });
+      return false;
+    }
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .update({ is_starred: isVip } as never)
+        .eq("id", id)
+        .eq("tenant_id", currentTenant.id);
+      if (error) throw error;
+      toast({ title: isVip ? "Marked as VIP" : "VIP removed" });
+      await fetchCustomers();
+      return true;
+    } catch (err) {
+      console.error("Error updating VIP:", err);
+      toast({ title: "Error", description: "Failed to update VIP", variant: "destructive" });
+      return false;
+    }
+  };
+
+  const bulkSetCustomerVip = async (ids: string[], isVip: boolean) => {
+    if (!currentTenant?.id || ids.length === 0) {
+      toast({ title: "Error", description: "No customers selected", variant: "destructive" });
+      return false;
+    }
+    try {
+      const { error } = await supabase
+        .from("customers")
+        .update({ is_starred: isVip } as never)
+        .in("id", ids)
+        .eq("tenant_id", currentTenant.id);
+      if (error) throw error;
+      toast({ title: isVip ? `${ids.length} marked as VIP` : `VIP removed from ${ids.length}` });
+      await fetchCustomers();
+      return true;
+    } catch (err) {
+      console.error("Error bulk updating VIP:", err);
+      toast({ title: "Error", description: "Failed to update selected customers", variant: "destructive" });
+      return false;
+    }
+  };
+
   const bulkUpdateCustomerStatus = async (ids: string[], status: string) => {
     if (!currentTenant?.id || ids.length === 0) {
       toast({ title: "Error", description: "No customers selected", variant: "destructive" });
@@ -382,6 +427,8 @@ export function useCustomers() {
     refetch: fetchCustomers,
     createCustomer,
     updateCustomerStatus,
+    setCustomerVip,
+    bulkSetCustomerVip,
     bulkUpdateCustomerStatus,
     flagCustomer,
     bulkFlagCustomers,

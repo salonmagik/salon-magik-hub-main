@@ -97,6 +97,8 @@ export default function CustomersPage() {
     refetch,
     updateCustomerStatus,
     bulkUpdateCustomerStatus,
+    setCustomerVip,
+    bulkSetCustomerVip,
     flagCustomer,
     bulkFlagCustomers,
     deleteCustomer,
@@ -209,7 +211,7 @@ export default function CustomersPage() {
   const stats = useMemo(() => {
     const activeCustomers = customers.filter((customer) => customer.status !== "deleted");
     const total = activeCustomers.length;
-    const vip = activeCustomers.filter((c) => c.status === "vip").length;
+    const vip = activeCustomers.filter((c) => (c as { is_starred?: boolean }).is_starred).length;
     const thisMonth = activeCustomers.filter((c) => {
       const created = new Date(c.created_at);
       const now = new Date();
@@ -263,7 +265,12 @@ export default function CustomersPage() {
         (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.phone || "").includes(searchQuery);
 
-      const matchesFilter = activeFilter === "All" || customer.status.toLowerCase() === activeFilter.toLowerCase();
+      const matchesFilter =
+        activeFilter === "All"
+          ? true
+          : activeFilter === "VIP"
+            ? Boolean((customer as { is_starred?: boolean }).is_starred)
+            : customer.status.toLowerCase() === activeFilter.toLowerCase();
 
       return matchesSearch && matchesFilter;
     });
@@ -274,11 +281,11 @@ export default function CustomersPage() {
     filteredCustomers.every((customer) => selectedCustomerIds.includes(customer.id));
 
   const handleMakeVIP = async (customer: Customer) => {
-    await updateCustomerStatus(customer.id, "vip");
+    await setCustomerVip(customer.id, true);
   };
 
   const handleRemoveVIP = async (customer: Customer) => {
-    await updateCustomerStatus(customer.id, "active");
+    await setCustomerVip(customer.id, false);
   };
 
   const handleFlagCustomer = async (reason: string) => {
@@ -318,7 +325,7 @@ export default function CustomersPage() {
   };
 
   const handleBulkMakeVIP = async () => {
-    const success = await bulkUpdateCustomerStatus(selectedCustomerIds, "vip");
+    const success = await bulkSetCustomerVip(selectedCustomerIds, true);
     if (success) clearSelection();
   };
 
@@ -559,15 +566,16 @@ export default function CustomersPage() {
 												<h3 className="truncate text-base font-medium">
 													{customer.full_name}
 												</h3>
+															{(customer as { is_starred?: boolean }).is_starred && (
+																<Star className="h-4 w-4 flex-shrink-0 fill-amber-400 text-amber-400" aria-label="VIP" />
+															)}
 												<Badge
 													variant="secondary"
 													className={cn(
 														"capitalize text-xs",
 														customer.status === "active"
 															? "bg-success/10 text-success"
-															: customer.status === "vip"
-																? "bg-purple-100 text-purple-700"
-																: customer.status === "blocked"
+															: customer.status === "blocked"
 																	? "bg-destructive/10 text-destructive"
 																	: "bg-muted text-muted-foreground",
 													)}
@@ -671,7 +679,7 @@ export default function CustomersPage() {
 
 												{canMakeVIP && (
 													<>
-														{customer.status === "vip" ? (
+														{(customer as { is_starred?: boolean }).is_starred ? (
 															<DropdownMenuItem
 																onClick={() => handleRemoveVIP(customer)}
 															>
