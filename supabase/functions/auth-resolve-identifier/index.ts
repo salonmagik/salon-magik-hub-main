@@ -157,6 +157,25 @@ serve(async (req) => {
       (linkedUserIds[0] ? await findAuthUserById(admin, linkedUserIds[0]) : null) ??
       (await findAuthUserByIdentifier(admin, normalized.value, normalized.type));
 
+    // findAuthUserByIdentifier only matches auth.users.phone, which is unset
+    // for accounts that never used phone-based login (e.g. a salon admin who
+    // signs in by email but has a contact phone on their profile). Without
+    // this fallback, adding a customer with that same phone number silently
+    // creates a SECOND, distinct account sharing the phone — two profiles
+    // rows end up with an identical phone, which breaks phone-OTP lookup
+    // (ambiguous match). Check profiles.phone too, and reuse that account.
+    if (!authUser && normalized.type === "phone") {
+      const { data: phoneProfile } = await admin
+        .from("profiles")
+        .select("user_id")
+        .eq("phone", normalized.value)
+        .limit(1)
+        .maybeSingle();
+      if (phoneProfile?.user_id) {
+        authUser = await findAuthUserById(admin, phoneProfile.user_id);
+      }
+    }
+
     if (!authUser) {
       const firstName = buildFullName(firstCustomer.full_name).split(" ")[0];
       const remainingNames = buildFullName(firstCustomer.full_name).split(" ").slice(1).join(" ");

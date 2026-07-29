@@ -40,12 +40,24 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Look up user by phone stored in profiles table
-    const { data: profile } = await admin
+    // Look up user by phone stored in profiles table. Use limit(1) instead of
+    // maybeSingle(): if more than one profile somehow shares this phone (data
+    // predates the dedup fix in auth-resolve-identifier), maybeSingle() throws
+    // an "multiple rows returned" error that was previously left unchecked —
+    // silently treated as "no profile found" and misreported as such.
+    const { data: profileRows, error: profileLookupError } = await admin
       .from("profiles")
       .select("user_id")
       .eq("phone", phone)
-      .maybeSingle();
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (profileLookupError) {
+      console.error("[send-phone-otp] profile lookup error:", profileLookupError);
+      return json({ error: "Something went wrong. Please try again." }, 500);
+    }
+
+    const profile = profileRows?.[0] ?? null;
 
     if (!profile?.user_id) {
       console.warn(`[send-phone-otp] no profile found for phone prefix +${phone.slice(1, 4)}`);
