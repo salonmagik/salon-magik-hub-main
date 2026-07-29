@@ -63,7 +63,17 @@ interface InactiveCustomerRow {
   last_transaction_at: string | null;
 }
 
-const statusFilters = ["All", "Active", "VIP", "Inactive", "Blocked"];
+const statusFilters = [
+  "All",
+  "Active",
+  "VIP",
+  "Big spender",
+  "Regular",
+  "Loves packages",
+  "Lapsed",
+  "Inactive",
+  "Blocked",
+];
 
 export default function CustomersPage() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -265,16 +275,25 @@ export default function CustomersPage() {
         (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.phone || "").includes(searchQuery);
 
+      const seg = segments[customer.id];
       const matchesFilter =
         activeFilter === "All"
           ? true
           : activeFilter === "VIP"
             ? Boolean((customer as { is_starred?: boolean }).is_starred)
-            : customer.status.toLowerCase() === activeFilter.toLowerCase();
+            : activeFilter === "Big spender"
+              ? Boolean(seg?.is_big_spender)
+              : activeFilter === "Regular"
+                ? Boolean(seg?.is_regular)
+                : activeFilter === "Loves packages"
+                  ? Boolean(seg?.loves_packages)
+                  : activeFilter === "Lapsed"
+                    ? Boolean(seg?.is_lapsed)
+                    : customer.status.toLowerCase() === activeFilter.toLowerCase();
 
       return matchesSearch && matchesFilter;
     });
-  }, [customers, searchQuery, activeFilter]);
+  }, [customers, searchQuery, activeFilter, segments]);
 
   const allVisibleSelected =
     filteredCustomers.length > 0 &&
