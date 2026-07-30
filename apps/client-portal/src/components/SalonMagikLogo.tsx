@@ -5,6 +5,10 @@ interface SalonMagikLogoProps {
   size?: "xs" | "sm" | "md" | "lg";
   showText?: boolean;
   variant?: "default" | "white";
+  /** Drop the icon's background box entirely — for headers where the page
+   * background already matches (or the mark should just float on it). Text
+   * color still follows `variant`. */
+  transparentIcon?: boolean;
 }
 
 const sizes = {
@@ -19,6 +23,7 @@ export function SalonMagikLogo({
   size = "md",
   showText = true,
   variant = "default",
+  transparentIcon = false,
 }: SalonMagikLogoProps) {
   const { box, rx, text } = sizes[size];
   const isWhite = variant === "white";
@@ -37,7 +42,7 @@ export function SalonMagikLogo({
           width="32"
           height="32"
           rx={rx}
-          fill={isWhite ? "rgba(255,255,255,0.2)" : "#2E1F4E"}
+          fill={transparentIcon ? "transparent" : isWhite ? "rgba(255,255,255,0.2)" : "#2E1F4E"}
         />
         <path
           d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"

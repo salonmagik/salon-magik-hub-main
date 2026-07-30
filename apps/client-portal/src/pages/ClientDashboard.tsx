@@ -129,15 +129,13 @@ export default function ClientDashboard() {
 
         <section>
           <div className="mb-4 flex items-end justify-between gap-4">
-            <div>
-              <h2 className="font-serif text-2xl font-semibold">Upcoming bookings</h2>
-              <Link
-                to="/bookings"
-                className="mt-1 inline-flex items-center gap-1 text-sm hover:text-primary"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
+            <h2 className="font-serif text-2xl font-semibold">Upcoming bookings</h2>
+            <Link
+              to="/bookings"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+            >
+              View all <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
 
           {upcomingLoading ? (
@@ -207,8 +205,11 @@ export default function ClientDashboard() {
         <section>
           <div className="mb-4 flex items-end justify-between gap-4">
             <h2 className="font-serif text-2xl font-semibold">My packages</h2>
-            <Link to="/balance" className="text-sm text-muted-foreground hover:text-primary">
-              View balances
+            <Link
+              to="/balance"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+            >
+              View balances <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
           {packagesLoading ? (
@@ -322,8 +323,11 @@ export default function ClientDashboard() {
           <section>
             <div className="mb-4 flex items-end justify-between gap-4">
               <h2 className="font-serif text-2xl font-semibold">Visit history</h2>
-              <Link to="/history" className="text-sm text-muted-foreground hover:text-primary">
-                View all
+              <Link
+                to="/history"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+              >
+                View all <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
             <div className="overflow-hidden rounded-3xl border bg-white shadow-sm">
@@ -371,8 +375,11 @@ export default function ClientDashboard() {
           <section>
             <div className="mb-4 flex items-end justify-between gap-4">
               <h2 className="font-serif text-2xl font-semibold">Store credit</h2>
-              <Link to="/balance" className="text-sm text-muted-foreground hover:text-primary">
-                Manage
+              <Link
+                to="/balance"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
+              >
+                Manage <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
             <div className="space-y-3 rounded-3xl border bg-white p-5 shadow-sm">
