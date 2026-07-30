@@ -34,11 +34,26 @@ serve(async (req) => {
       });
     }
 
-    const { fullName, phone, preferences } = await req.json();
+    const { fullName, phone, preferences, gender, dobMonth, dobDay, detailsConfirmed } = await req.json();
     const updates: Record<string, unknown> = {};
+    const customerOnlyUpdates: Record<string, unknown> = {};
+
     if (typeof fullName === "string" && fullName.trim()) {
       updates.full_name = fullName.trim();
     }
+
+    const DOB_YEAR = 2000;
+    if (typeof gender === "string" && ["female", "male", "prefer-not"].includes(gender)) {
+      customerOnlyUpdates.gender = gender;
+    }
+    if (typeof dobMonth === "string" && typeof dobDay === "string" && dobMonth && dobDay) {
+      const month = Number(dobMonth);
+      const day = Number(dobDay);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        customerOnlyUpdates.birthday = `${DOB_YEAR}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+    }
+
     if (typeof phone === "string") {
       const trimmed = phone.trim();
       const { data: existingProfile } = await admin
@@ -63,23 +78,16 @@ serve(async (req) => {
       }
     }
 
+    if (detailsConfirmed === true) {
+      updates.details_confirmed_at = new Date().toISOString();
+    }
+
     if (Object.keys(updates).length > 0) {
       const { error: profileError } = await admin
         .from("profiles")
         .update(updates)
         .eq("user_id", authData.user.id);
       if (profileError) throw profileError;
-
-      const customerUpdates: Record<string, unknown> = {};
-      if ("full_name" in updates) customerUpdates.full_name = updates.full_name;
-      if ("phone" in updates) customerUpdates.phone = updates.phone;
-      if (Object.keys(customerUpdates).length > 0) {
-        const { error: customerError } = await admin
-          .from("customers")
-          .update(customerUpdates)
-          .eq("user_id", authData.user.id);
-        if (customerError) throw customerError;
-      }
 
       const nextMetadata = {
         ...(authData.user.user_metadata ?? {}),
@@ -90,6 +98,20 @@ serve(async (req) => {
         user_metadata: nextMetadata,
       });
       if (metadataError) throw metadataError;
+    }
+
+    const customerUpdates: Record<string, unknown> = { ...customerOnlyUpdates };
+    if ("full_name" in updates) customerUpdates.full_name = updates.full_name;
+    if ("phone" in updates) customerUpdates.phone = updates.phone;
+    if (Object.keys(customerUpdates).length > 0) {
+      // Client-owned fields propagate across every salon this customer is
+      // linked to — same as phone/email — since they describe the person,
+      // not the salon relationship.
+      const { error: customerError } = await admin
+        .from("customers")
+        .update(customerUpdates)
+        .eq("user_id", authData.user.id);
+      if (customerError) throw customerError;
     }
 
     if (preferences && typeof preferences === "object") {

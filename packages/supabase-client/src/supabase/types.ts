@@ -4494,6 +4494,7 @@ export type Database = {
           avatar_url: string | null
           client_password_initialized: boolean
           created_at: string
+          details_confirmed_at: string | null
           full_name: string
           id: string
           phone: string | null
@@ -4505,6 +4506,7 @@ export type Database = {
           avatar_url?: string | null
           client_password_initialized?: boolean
           created_at?: string
+          details_confirmed_at?: string | null
           full_name: string
           id?: string
           phone?: string | null
@@ -4516,6 +4518,7 @@ export type Database = {
           avatar_url?: string | null
           client_password_initialized?: boolean
           created_at?: string
+          details_confirmed_at?: string | null
           full_name?: string
           id?: string
           phone?: string | null

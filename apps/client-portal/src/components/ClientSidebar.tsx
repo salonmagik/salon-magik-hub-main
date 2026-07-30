@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
+import { ConfirmDetailsModal } from "@/components/ConfirmDetailsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -282,6 +283,8 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <ConfirmDetailsModal />
       </div>
     </ClientInactivityGuard>
   );
