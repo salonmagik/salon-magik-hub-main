@@ -43,6 +43,40 @@ function buildWaitlistConfirmationEmail(firstName: string): string {
   return wrapEmailTemplate(content);
 }
 
+function buildAdminNotificationEmail(lead: {
+  name: string;
+  email: string;
+  phone: string | null;
+  country: string;
+  planInterest: string | null;
+  teamSize: string | null;
+  notes: string | null;
+  position: number;
+}): string {
+  const rows = [
+    ["Name", lead.name],
+    ["Email", lead.email],
+    ["Phone", lead.phone || "—"],
+    ["Country", lead.country],
+    ["Plan interest", lead.planInterest || "—"],
+    ["Team size", lead.teamSize || "—"],
+    ["Waitlist position", `#${lead.position}`],
+  ]
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding: 6px 12px 6px 0; color: ${EMAIL_STYLES.textLight}; font-size: 14px; white-space: nowrap;">${label}</td><td style="padding: 6px 0; color: ${EMAIL_STYLES.textColor}; font-size: 14px; font-weight: 600;">${value}</td></tr>`,
+    )
+    .join("");
+
+  const content = `
+    ${heading("New exclusive access request")}
+    ${paragraph("Someone just requested early access. Review it in the backoffice waitlist queue.")}
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">${rows}</table>
+    ${lead.notes ? createInfoBox(`<strong>Notes:</strong> ${lead.notes}`) : ""}
+  `;
+  return wrapEmailTemplate(content);
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -161,6 +195,36 @@ serve(async (req) => {
       } catch (emailError) {
         // Log email error but don't fail the request
         console.error("Failed to send confirmation email:", emailError);
+      }
+
+      // Notify the platform admin so new requests get reviewed — separate
+      // try/catch so a failure here never affects the requester-facing
+      // response or blocks their own confirmation email above.
+      const adminEmail = Deno.env.get("ADMIN_EMAIL") || Deno.env.get("SUPER_ADMIN_EMAIL");
+      if (adminEmail) {
+        try {
+          const resend = new Resend(resendApiKey);
+          await resend.emails.send({
+            from: buildFromAddress({ mode: "product", fromEmail }),
+            to: [adminEmail],
+            subject: `New exclusive access request — ${first_name.trim()} ${last_name.trim()}`,
+            html: buildAdminNotificationEmail({
+              name: `${first_name.trim()} ${last_name.trim()}`,
+              email: email.toLowerCase().trim(),
+              phone: phone?.trim() || null,
+              country: normalizedCountry,
+              planInterest: plan_interest || null,
+              teamSize: team_size || null,
+              notes: notes?.trim() || null,
+              position: newLead.position,
+            }),
+          });
+          console.log(`Admin notified of new waitlist lead: ${email}`);
+        } catch (adminEmailError) {
+          console.error("Failed to send admin notification email:", adminEmailError);
+        }
+      } else {
+        console.warn("Admin notification not sent: ADMIN_EMAIL/SUPER_ADMIN_EMAIL not configured");
       }
     } else {
       console.warn("Email not sent: RESEND_API_KEY or RESEND_FROM_EMAIL not configured");
