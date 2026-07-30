@@ -64,6 +64,15 @@ serve(async (req) => {
   }
 
   try {
+    const expectedSecret = Deno.env.get("BIRTHDAY_SECRET");
+    const providedSecret = req.headers.get("x-birthday-secret");
+    if (!expectedSecret || providedSecret !== expectedSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";

@@ -24,6 +24,15 @@ function buildFullName(name: string | null | undefined) {
   return (name || "").trim() || "Salon Magik Client";
 }
 
+// verify-phone-otp assigns this placeholder email to phone-only accounts so
+// it can use the magiclink session-minting primitive. It's never a real,
+// deliverable address — a later-discovered real email must still be able to
+// overwrite it, so it can't be treated the same as "has a real email".
+const PLACEHOLDER_EMAIL_DOMAIN = "@phone.internal.salonmagik.com";
+function isPlaceholderEmail(email: string | null | undefined) {
+  return !!email && email.endsWith(PLACEHOLDER_EMAIL_DOMAIN);
+}
+
 type AdminClient = ReturnType<typeof createClient>;
 type AuthUserSummary = {
   id: string;
@@ -74,8 +83,17 @@ async function findAuthUserByIdentifier(
 }
 
 async function findAuthUserById(admin: AdminClient, userId: string): Promise<AuthUserSummary | null> {
-  const users = await listAllAuthUsers(admin);
-  return users.find((user) => user.id === userId) ?? null;
+  // Targeted lookup — this is the hot path (every repeat login already has a
+  // linked user_id), so it must not fall back to scanning the whole user
+  // table like findAuthUserByIdentifier does.
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data?.user) return null;
+  return {
+    id: data.user.id,
+    email: data.user.email ?? null,
+    phone: data.user.phone ?? null,
+    user_metadata: (data.user.user_metadata as Record<string, unknown> | null) ?? {},
+  };
 }
 
 serve(async (req) => {
@@ -196,8 +214,9 @@ serve(async (req) => {
         phone: createdUser.user.phone,
         user_metadata: createdUser.user.user_metadata ?? {},
       };
-    } else if (provisionEmail && !authUser.email) {
-      // Existing client account created via phone has no email — backfill it so
+    } else if (provisionEmail && (!authUser.email || isPlaceholderEmail(authUser.email))) {
+      // Existing client account created via phone has no real email (or only
+      // the internal placeholder verify-phone-otp assigned it) — backfill so
       // email OTP login can find the account.
       const { error: backfillErr } = await admin.auth.admin.updateUserById(authUser.id, {
         email: provisionEmail,
