@@ -126,6 +126,12 @@ serve(async (req) => {
     );
     if (conflictError) {
       console.error("Identity availability check failed:", conflictError);
+      // This is a safety gate, not a nice-to-have — fail closed rather than
+      // silently letting the request through when we can't verify it.
+      return new Response(
+        JSON.stringify({ error: "Something went wrong. Please try again." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     } else if (conflict === "tenant_email") {
       return new Response(
         JSON.stringify({ error: "A salon already exists with this email. Try signing in instead." }),
