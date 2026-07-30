@@ -609,7 +609,7 @@ export default function LoginPage() {
 						</Link>
 					</div>
 
-					<AuthButton type="submit" isLoading={isLoading}>
+					<AuthButton type="submit" isLoading={isLoading} disabled={!email.trim() || !password}>
 						Sign in
 					</AuthButton>
 
@@ -644,7 +644,7 @@ export default function LoginPage() {
 						disabled={isLoading}
 					/>
 
-					<AuthButton type="submit" isLoading={isLoading}>
+					<AuthButton type="submit" isLoading={isLoading} disabled={!/^\+[1-9]\d{7,14}$/.test(phone)}>
 						Send verification code
 					</AuthButton>
 				</form>
@@ -686,7 +686,7 @@ export default function LoginPage() {
 						)}
 					</div>
 
-					<AuthButton type="submit" isLoading={isLoading}>
+					<AuthButton type="submit" isLoading={isLoading} disabled={otp.length !== 6}>
 						Verify & Sign in
 					</AuthButton>
 

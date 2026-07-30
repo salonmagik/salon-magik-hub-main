@@ -126,7 +126,11 @@ export default function ClientCompleteAccountPage() {
             rules={passwordValidation.rules}
           />
 
-          <AuthButton type="submit" isLoading={isLoading}>
+          <AuthButton
+            type="submit"
+            isLoading={isLoading}
+            disabled={!passwordValidation.isValid || !confirmPassword}
+          >
             Finish setup
           </AuthButton>
         </form>

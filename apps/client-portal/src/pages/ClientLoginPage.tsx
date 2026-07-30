@@ -452,7 +452,15 @@ export default function ClientLoginPage() {
               </div>
             )}
 
-            <AuthButton type="submit" isLoading={isLoading}>
+            <AuthButton
+              type="submit"
+              isLoading={isLoading}
+              disabled={
+                activeTab === "email"
+                  ? !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue.trim())
+                  : phoneValue.replace(/\D/g, "").length < 7
+              }
+            >
               Continue
             </AuthButton>
           </form>
@@ -489,7 +497,7 @@ export default function ClientLoginPage() {
               </button>
             </div>
 
-            <AuthButton type="submit" isLoading={isLoading}>
+            <AuthButton type="submit" isLoading={isLoading} disabled={!password}>
               Sign in
             </AuthButton>
           </form>
@@ -518,7 +526,11 @@ export default function ClientLoginPage() {
               {error && <p className="text-center text-sm text-destructive">{error}</p>}
             </div>
 
-            <AuthButton type="submit" isLoading={isLoading}>
+            <AuthButton
+              type="submit"
+              isLoading={isLoading}
+              disabled={otp.length !== (resolution?.identifierType === "phone" ? 6 : 8)}
+            >
               Verify Code
             </AuthButton>
 
