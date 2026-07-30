@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, Calendar, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+import { AlertTriangle, Calendar, Gift, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import type { Json } from "@/lib/supabase";
 
 type LegalStatus = "planned" | "legal_approved" | "active" | "paused";
@@ -173,6 +173,9 @@ export default function BackofficeSettingsPage() {
   const [otpLimitEnabled, setOtpLimitEnabled] = useState(true);
   const [otpMaxPerHour, setOtpMaxPerHour] = useState(3);
   const [otpCooldownSeconds, setOtpCooldownSeconds] = useState(60);
+  const [promoBonusEnabled, setPromoBonusEnabled] = useState(true);
+  const [promoBonusWindowDays, setPromoBonusWindowDays] = useState(7);
+  const [promoBonusDays, setPromoBonusDays] = useState(7);
   const [overrideTenantId, setOverrideTenantId] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
   const [overrideStartsAt, setOverrideStartsAt] = useState("");
@@ -296,6 +299,55 @@ export default function BackofficeSettingsPage() {
       toast.success("OTP rate limit settings saved.");
     },
     onError: (error: Error) => toast.error(error.message || "Failed to update OTP rate limit settings"),
+  });
+
+  const { data: promoBonusConfig } = useQuery({
+    queryKey: ["platform-settings", "promo_trial_bonus"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "promo_trial_bonus")
+        .maybeSingle();
+      if (error) throw error;
+      const v = (data?.value ?? {}) as Record<string, unknown>;
+      return {
+        enabled: typeof v.enabled === "boolean" ? v.enabled : true,
+        windowDays: typeof v.window_days === "number" ? v.window_days : 7,
+        bonusDays: typeof v.bonus_days === "number" ? v.bonus_days : 7,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (promoBonusConfig) {
+      setPromoBonusEnabled(promoBonusConfig.enabled);
+      setPromoBonusWindowDays(promoBonusConfig.windowDays);
+      setPromoBonusDays(promoBonusConfig.bonusDays);
+    }
+  }, [promoBonusConfig]);
+
+  const updatePromoBonusMutation = useMutation({
+    mutationFn: async ({ enabled, windowDays, bonusDays }: { enabled: boolean; windowDays: number; bonusDays: number }) => {
+      const { error } = await supabase
+        .from("platform_settings")
+        .upsert(
+          {
+            key: "promo_trial_bonus",
+            value: { enabled, window_days: windowDays, bonus_days: bonusDays } as Json,
+            description: "Extra trial days granted when a promo code is applied within N days of signup. Set enabled=false to turn the incentive off entirely (the nudge UI stops mentioning it and no bonus is granted) without a code change.",
+            updated_by_id: backofficeUser?.user_id,
+          },
+          { onConflict: "key" }
+        );
+      if (error) throw error;
+      await writeAuditLog("promo_trial_bonus_updated", backofficeUser?.user_id, { enabled, window_days: windowDays, bonus_days: bonusDays });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform-settings", "promo_trial_bonus"] });
+      toast.success("Promo trial-bonus settings saved.");
+    },
+    onError: (error: Error) => toast.error(error.message || "Failed to update promo trial-bonus settings"),
   });
 
   const { data: marketCurrencies = [], isLoading: currenciesLoading } = useQuery({
@@ -1114,6 +1166,84 @@ export default function BackofficeSettingsPage() {
                   disabled={!isSuperAdmin || updateOtpRateLimitMutation.isPending}
                 >
                   Save OTP Settings
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-lg p-2 ${!promoBonusEnabled ? "bg-muted" : "bg-amber-100 text-amber-600"}`}>
+                    <Gift className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle>Promo Code Trial Bonus</CardTitle>
+                    <CardDescription>
+                      Extra trial days when a new salon applies a promo code within N days of signing up. Read live by the
+                      salon-admin app's upgrade nudges (banner + reminder modals) — turning this off here removes the offer
+                      from that UI immediately, no code change needed.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {!promoBonusEnabled && (
+                  <Alert className="border-amber-300 bg-amber-50 text-amber-800">
+                    <Gift className="h-4 w-4" />
+                    <AlertTitle>Promo trial bonus is off</AlertTitle>
+                    <AlertDescription>
+                      Applying a promo code no longer extends a tenant's trial, and the upgrade nudges won't mention the
+                      offer. Use this to pause the incentive for a quarter without touching code.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="font-medium">Enable trial bonus</p>
+                    <p className="text-sm text-muted-foreground">Turn the whole incentive on or off</p>
+                  </div>
+                  <Switch
+                    checked={promoBonusEnabled}
+                    onCheckedChange={setPromoBonusEnabled}
+                    disabled={!isSuperAdmin}
+                  />
+                </div>
+
+                <div className={`grid gap-4 md:grid-cols-2 transition-opacity ${!promoBonusEnabled ? "opacity-40 pointer-events-none" : ""}`}>
+                  <div className="space-y-2">
+                    <Label>Eligibility window (days since signup)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={promoBonusWindowDays}
+                      onChange={(e) => setPromoBonusWindowDays(Math.max(1, Number(e.target.value || 1)))}
+                      className="w-36"
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Default: 7</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Bonus trial days granted</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={promoBonusDays}
+                      onChange={(e) => setPromoBonusDays(Math.max(1, Number(e.target.value || 1)))}
+                      className="w-36"
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Default: 7</p>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => updatePromoBonusMutation.mutate({ enabled: promoBonusEnabled, windowDays: promoBonusWindowDays, bonusDays: promoBonusDays })}
+                  disabled={!isSuperAdmin || updatePromoBonusMutation.isPending}
+                >
+                  Save Promo Bonus Settings
                 </Button>
               </CardContent>
             </Card>

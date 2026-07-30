@@ -46,6 +46,8 @@ import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerM
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/billing/TrialBanner";
+import { TrialReminderModals } from "@/components/billing/TrialReminderModals";
+import { PromoTrialBonusBanner } from "@/components/billing/PromoTrialBonusBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
@@ -1125,12 +1127,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
 							{/* Trial Banner */}
 							<TrialBanner />
+							<TrialReminderModals />
 							<PlanChangeBanner />
 							<AnnualLockinBanner />
 
 							{/* Page Content */}
 							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
 								<div className="w-full min-w-0 max-w-full [&>*]:min-w-0">
+									<PromoTrialBonusBanner />
 									{children}
 								</div>
 							</div>
