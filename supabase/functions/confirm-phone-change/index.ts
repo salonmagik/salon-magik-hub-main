@@ -102,7 +102,7 @@ serve(async (req) => {
 
     const { error: profileError } = await admin
       .from("profiles")
-      .update({ phone })
+      .update({ phone, phone_verified_at: new Date().toISOString() })
       .eq("user_id", callerId);
     if (profileError) {
       console.error("[confirm-phone-change] profile update error:", profileError);

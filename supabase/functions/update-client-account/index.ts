@@ -51,6 +51,19 @@ serve(async (req) => {
     }
 
     if (Object.keys(updates).length > 0) {
+      if ("phone" in updates) {
+        const { data: existingProfile } = await admin
+          .from("profiles")
+          .select("phone")
+          .eq("user_id", authData.user.id)
+          .maybeSingle();
+        if (existingProfile?.phone !== updates.phone) {
+          // Changing the number invalidates any prior verification — the
+          // new number hasn't been proven yet.
+          updates.phone_verified_at = null;
+        }
+      }
+
       const { error: profileError } = await admin
         .from("profiles")
         .update(updates)

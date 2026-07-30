@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       additional_location_pricing: {
@@ -513,6 +538,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "invoices"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "appointments_customer_id_fkey"
@@ -1555,6 +1587,431 @@ export type Database = {
           },
         ]
       }
+      customer_credit_grants: {
+        Row: {
+          created_at: string
+          created_by_id: string | null
+          currency: string
+          customer_id: string
+          expires_at: string | null
+          id: string
+          is_cashable: boolean
+          metadata: Json
+          original_amount: number
+          remaining_amount: number
+          reserved_amount: number
+          source_id: string | null
+          source_type: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_id?: string | null
+          currency: string
+          customer_id: string
+          expires_at?: string | null
+          id?: string
+          is_cashable?: boolean
+          metadata?: Json
+          original_amount: number
+          remaining_amount: number
+          reserved_amount?: number
+          source_id?: string | null
+          source_type: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_id?: string | null
+          currency?: string
+          customer_id?: string
+          expires_at?: string | null
+          id?: string
+          is_cashable?: boolean
+          metadata?: Json
+          original_amount?: number
+          remaining_amount?: number
+          reserved_amount?: number
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_credit_grants_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_credit_grants_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_grants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_grants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_credit_ledger: {
+        Row: {
+          amount: number
+          balance_after: number
+          created_at: string
+          created_by_id: string | null
+          customer_id: string
+          description: string | null
+          entry_type: string
+          grant_id: string | null
+          id: string
+          metadata: Json
+          reference_id: string | null
+          reference_type: string | null
+          reservation_id: string | null
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          created_at?: string
+          created_by_id?: string | null
+          customer_id: string
+          description?: string | null
+          entry_type: string
+          grant_id?: string | null
+          id?: string
+          metadata?: Json
+          reference_id?: string | null
+          reference_type?: string | null
+          reservation_id?: string | null
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          created_at?: string
+          created_by_id?: string | null
+          customer_id?: string
+          description?: string | null
+          entry_type?: string
+          grant_id?: string | null
+          id?: string
+          metadata?: Json
+          reference_id?: string | null
+          reference_type?: string | null
+          reservation_id?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_credit_ledger_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_credit_ledger_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_ledger_grant_id_fkey"
+            columns: ["grant_id"]
+            isOneToOne: false
+            referencedRelation: "customer_credit_grants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_ledger_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "customer_credit_reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_ledger_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_ledger_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_credit_reservation_allocations: {
+        Row: {
+          amount: number
+          grant_id: string
+          id: string
+          reservation_id: string
+        }
+        Insert: {
+          amount: number
+          grant_id: string
+          id?: string
+          reservation_id: string
+        }
+        Update: {
+          amount?: number
+          grant_id?: string
+          id?: string
+          reservation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_credit_reservation_allocations_grant_id_fkey"
+            columns: ["grant_id"]
+            isOneToOne: false
+            referencedRelation: "customer_credit_grants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_reservation_allocations_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "customer_credit_reservations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_credit_reservations: {
+        Row: {
+          amount: number
+          appointment_id: string
+          consumed_at: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          released_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          appointment_id: string
+          consumed_at?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          released_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string
+          consumed_at?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          released_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_credit_reservations_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: true
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_reservations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_credit_reservations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_reservations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_credit_reservations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_package_entitlement_items: {
+        Row: {
+          entitlement_id: string
+          id: string
+          product_id: string | null
+          remaining_quantity: number
+          reserved_quantity: number
+          service_id: string | null
+          total_quantity: number
+        }
+        Insert: {
+          entitlement_id: string
+          id?: string
+          product_id?: string | null
+          remaining_quantity: number
+          reserved_quantity?: number
+          service_id?: string | null
+          total_quantity: number
+        }
+        Update: {
+          entitlement_id?: string
+          id?: string
+          product_id?: string | null
+          remaining_quantity?: number
+          reserved_quantity?: number
+          service_id?: string | null
+          total_quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_package_entitlement_items_entitlement_id_fkey"
+            columns: ["entitlement_id"]
+            isOneToOne: false
+            referencedRelation: "customer_package_entitlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlement_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlement_items_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_package_entitlements: {
+        Row: {
+          created_at: string
+          created_by_id: string | null
+          customer_id: string
+          expires_at: string | null
+          id: string
+          package_id: string
+          purchased_transaction_id: string | null
+          starts_at: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_id?: string | null
+          customer_id: string
+          expires_at?: string | null
+          id?: string
+          package_id: string
+          purchased_transaction_id?: string | null
+          starts_at?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_id?: string | null
+          customer_id?: string
+          expires_at?: string | null
+          id?: string
+          package_id?: string
+          purchased_transaction_id?: string | null
+          starts_at?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_package_entitlements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlements_package_id_fkey"
+            columns: ["package_id"]
+            isOneToOne: false
+            referencedRelation: "packages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlements_purchased_transaction_id_fkey"
+            columns: ["purchased_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_purses: {
         Row: {
           balance: number
@@ -1584,6 +2041,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "customer_purses_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
           {
             foreignKeyName: "customer_purses_customer_id_fkey"
             columns: ["customer_id"]
@@ -1618,11 +2082,8 @@ export type Database = {
           status: string
           template_json: Json
           tenant_id: string
-          termii_device_id: string | null
-          termii_template_id: string | null
           updated_at: string
           voucher_config_json: Json | null
-          whatsapp_provider: string | null
         }
         Insert: {
           channel: string
@@ -1634,11 +2095,8 @@ export type Database = {
           status?: string
           template_json?: Json
           tenant_id: string
-          termii_device_id?: string | null
-          termii_template_id?: string | null
           updated_at?: string
           voucher_config_json?: Json | null
-          whatsapp_provider?: string | null
         }
         Update: {
           channel?: string
@@ -1650,11 +2108,8 @@ export type Database = {
           status?: string
           template_json?: Json
           tenant_id?: string
-          termii_device_id?: string | null
-          termii_template_id?: string | null
           updated_at?: string
           voucher_config_json?: Json | null
-          whatsapp_provider?: string | null
         }
         Relationships: [
           {
@@ -1716,6 +2171,13 @@ export type Database = {
             foreignKeyName: "customer_reactivation_recipients_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "customer_reactivation_recipients_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
@@ -1723,11 +2185,18 @@ export type Database = {
       }
       customers: {
         Row: {
+          address: string | null
+          birthday: string | null
+          city: string | null
+          country: string | null
           created_at: string
           email: string | null
           flag_reason: string | null
           full_name: string
+          gender: string | null
           id: string
+          is_starred: boolean
+          last_birthday_email_sent_at: string | null
           last_visit_at: string | null
           notes: string | null
           outstanding_balance: number
@@ -1739,11 +2208,18 @@ export type Database = {
           visit_count: number
         }
         Insert: {
+          address?: string | null
+          birthday?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           email?: string | null
           flag_reason?: string | null
           full_name: string
+          gender?: string | null
           id?: string
+          is_starred?: boolean
+          last_birthday_email_sent_at?: string | null
           last_visit_at?: string | null
           notes?: string | null
           outstanding_balance?: number
@@ -1755,11 +2231,18 @@ export type Database = {
           visit_count?: number
         }
         Update: {
+          address?: string | null
+          birthday?: string | null
+          city?: string | null
+          country?: string | null
           created_at?: string
           email?: string | null
           flag_reason?: string | null
           full_name?: string
+          gender?: string | null
           id?: string
+          is_starred?: boolean
+          last_birthday_email_sent_at?: string | null
           last_visit_at?: string | null
           notes?: string | null
           outstanding_balance?: number
@@ -1975,58 +2458,6 @@ export type Database = {
           },
         ]
       }
-      impersonation_sessions: {
-        Row: {
-          backoffice_user_id: string
-          created_at: string
-          ended_at: string | null
-          id: string
-          reason: string
-          started_at: string
-          tenant_id: string
-        }
-        Insert: {
-          backoffice_user_id: string
-          created_at?: string
-          ended_at?: string | null
-          id?: string
-          reason: string
-          started_at?: string
-          tenant_id: string
-        }
-        Update: {
-          backoffice_user_id?: string
-          created_at?: string
-          ended_at?: string | null
-          id?: string
-          reason?: string
-          started_at?: string
-          tenant_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "impersonation_sessions_backoffice_user_id_fkey"
-            columns: ["backoffice_user_id"]
-            isOneToOne: false
-            referencedRelation: "backoffice_users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "impersonation_sessions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "public_booking_tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "impersonation_sessions_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       invoice_line_items: {
         Row: {
           created_at: string
@@ -2164,6 +2595,13 @@ export type Database = {
             foreignKeyName: "invoices_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
           },
@@ -2262,13 +2700,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "journal_entries_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "journal_entries_appointment_id_fkey"
             columns: ["appointment_id"]
             isOneToOne: false
@@ -2276,17 +2707,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "journal_entries_transaction_id_fkey"
-            columns: ["transaction_id"]
+            foreignKeyName: "journal_entries_customer_id_fkey"
+            columns: ["customer_id"]
             isOneToOne: false
-            referencedRelation: "transactions"
-            referencedColumns: ["id"]
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "journal_entries_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
           {
@@ -2301,6 +2739,13 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entries_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -2363,9 +2808,12 @@ export type Database = {
           created_at: string
           id: string
           is_default: boolean
+          is_paused: boolean
           name: string
           opening_days: string[]
           opening_time: string
+          paused_at: string | null
+          paused_reason: string | null
           phone: string | null
           tenant_id: string
           timezone: string
@@ -2380,9 +2828,12 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean
+          is_paused?: boolean
           name: string
           opening_days?: string[]
           opening_time?: string
+          paused_at?: string | null
+          paused_reason?: string | null
           phone?: string | null
           tenant_id: string
           timezone?: string
@@ -2397,9 +2848,12 @@ export type Database = {
           created_at?: string
           id?: string
           is_default?: boolean
+          is_paused?: boolean
           name?: string
           opening_days?: string[]
           opening_time?: string
+          paused_at?: string | null
+          paused_reason?: string | null
           phone?: string | null
           tenant_id?: string
           timezone?: string
@@ -2526,6 +2980,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "manual_messages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
           {
             foreignKeyName: "manual_messages_customer_id_fkey"
             columns: ["customer_id"]
@@ -2694,8 +3155,6 @@ export type Database = {
           subject: string | null
           template_type: string | null
           tenant_id: string
-          termii_device_id: string | null
-          termii_message_id: string | null
         }
         Insert: {
           channel: string
@@ -2712,8 +3171,6 @@ export type Database = {
           subject?: string | null
           template_type?: string | null
           tenant_id: string
-          termii_device_id?: string | null
-          termii_message_id?: string | null
         }
         Update: {
           channel?: string
@@ -2730,10 +3187,15 @@ export type Database = {
           subject?: string | null
           template_type?: string | null
           tenant_id?: string
-          termii_device_id?: string | null
-          termii_message_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "message_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
           {
             foreignKeyName: "message_logs_customer_id_fkey"
             columns: ["customer_id"]
@@ -2812,6 +3274,7 @@ export type Database = {
         Row: {
           created_at: string
           email_appointment_reminders: boolean
+          email_birthday_messages: boolean
           email_cancellations: boolean
           email_daily_digest: boolean
           email_new_bookings: boolean
@@ -2826,6 +3289,7 @@ export type Database = {
         Insert: {
           created_at?: string
           email_appointment_reminders?: boolean
+          email_birthday_messages?: boolean
           email_cancellations?: boolean
           email_daily_digest?: boolean
           email_new_bookings?: boolean
@@ -2840,6 +3304,7 @@ export type Database = {
         Update: {
           created_at?: string
           email_appointment_reminders?: boolean
+          email_birthday_messages?: boolean
           email_cancellations?: boolean
           email_daily_digest?: boolean
           email_new_bookings?: boolean
@@ -2928,6 +3393,88 @@ export type Database = {
           },
           {
             foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      package_entitlement_reservations: {
+        Row: {
+          appointment_id: string
+          consumed_at: string | null
+          created_at: string
+          customer_id: string
+          entitlement_item_id: string
+          id: string
+          quantity: number
+          released_at: string | null
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          appointment_id: string
+          consumed_at?: string | null
+          created_at?: string
+          customer_id: string
+          entitlement_item_id: string
+          id?: string
+          quantity?: number
+          released_at?: string | null
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          appointment_id?: string
+          consumed_at?: string | null
+          created_at?: string
+          customer_id?: string
+          entitlement_item_id?: string
+          id?: string
+          quantity?: number
+          released_at?: string | null
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "package_entitlement_reservations_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlement_reservations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "package_entitlement_reservations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlement_reservations_entitlement_item_id_fkey"
+            columns: ["entitlement_item_id"]
+            isOneToOne: false
+            referencedRelation: "customer_package_entitlement_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlement_reservations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlement_reservations_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -3238,6 +3785,7 @@ export type Database = {
       }
       phone_otp_tokens: {
         Row: {
+          attempts: number
           created_at: string
           expires_at: string
           id: string
@@ -3247,6 +3795,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          attempts?: number
           created_at?: string
           expires_at: string
           id?: string
@@ -3256,6 +3805,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          attempts?: number
           created_at?: string
           expires_at?: string
           id?: string
@@ -3908,6 +4458,7 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
+          phone_verified_at: string | null
           updated_at: string
           user_id: string
         }
@@ -3918,6 +4469,7 @@ export type Database = {
           full_name: string
           id?: string
           phone?: string | null
+          phone_verified_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -3928,6 +4480,7 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          phone_verified_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -3941,6 +4494,7 @@ export type Database = {
           created_at: string
           customer_id: string
           id: string
+          processed_transaction_id: string | null
           reason: string
           refund_type: Database["public"]["Enums"]["refund_type"]
           rejection_reason: string | null
@@ -3957,6 +4511,7 @@ export type Database = {
           created_at?: string
           customer_id: string
           id?: string
+          processed_transaction_id?: string | null
           reason: string
           refund_type: Database["public"]["Enums"]["refund_type"]
           rejection_reason?: string | null
@@ -3973,6 +4528,7 @@ export type Database = {
           created_at?: string
           customer_id?: string
           id?: string
+          processed_transaction_id?: string | null
           reason?: string
           refund_type?: Database["public"]["Enums"]["refund_type"]
           rejection_reason?: string | null
@@ -3987,7 +4543,21 @@ export type Database = {
             foreignKeyName: "refund_requests_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "refund_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_processed_transaction_id_fkey"
+            columns: ["processed_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
           {
@@ -4317,6 +4887,7 @@ export type Database = {
       sales_promo_campaigns: {
         Row: {
           billing_targets: string[]
+          code_expiry_hours: number
           created_at: string
           created_by: string | null
           discount_type: string
@@ -4335,6 +4906,7 @@ export type Database = {
         }
         Insert: {
           billing_targets?: string[]
+          code_expiry_hours?: number
           created_at?: string
           created_by?: string | null
           discount_type: string
@@ -4353,6 +4925,7 @@ export type Database = {
         }
         Update: {
           billing_targets?: string[]
+          code_expiry_hours?: number
           created_at?: string
           created_by?: string | null
           discount_type?: string
@@ -5422,6 +5995,45 @@ export type Database = {
           },
         ]
       }
+      staff_operations_addon_pricing: {
+        Row: {
+          country_code: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          effective_from: string
+          id: string
+          notes: string | null
+          status: string
+          unit_price_per_location: number
+          updated_at: string
+        }
+        Insert: {
+          country_code: string
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          effective_from?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          unit_price_per_location?: number
+          updated_at?: string
+        }
+        Update: {
+          country_code?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          effective_from?: string
+          id?: string
+          notes?: string | null
+          status?: string
+          unit_price_per_location?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       staff_service_categories: {
         Row: {
           category_id: string
@@ -5640,6 +6252,108 @@ export type Database = {
           },
           {
             foreignKeyName: "staff_sessions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_time_off: {
+        Row: {
+          cancelled_at: string | null
+          cancelled_by: string | null
+          created_at: string
+          created_by: string
+          days_used: number | null
+          ends_on: string
+          id: string
+          leave_type: string
+          note: string | null
+          starts_on: string
+          status: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by: string
+          days_used?: number | null
+          ends_on: string
+          id?: string
+          leave_type: string
+          note?: string | null
+          starts_on: string
+          status?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          created_at?: string
+          created_by?: string
+          days_used?: number | null
+          ends_on?: string
+          id?: string
+          leave_type?: string
+          note?: string | null
+          starts_on?: string
+          status?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_time_off_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_time_off_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_time_off_policies: {
+        Row: {
+          allowance_days: number
+          leave_type: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allowance_days?: number
+          leave_type: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allowance_days?: number
+          leave_type?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_time_off_policies_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_time_off_policies_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -6343,24 +7057,16 @@ export type Database = {
           slug: string | null
           sms_provider: string
           sms_sender_name: string | null
-          sms_sender_name_approved_at: string | null
-          sms_sender_name_company: string | null
-          sms_sender_name_requested_at: string | null
-          sms_sender_name_status: string
-          sms_sender_name_use_case: string | null
           storefront_mode: string
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: Database["public"]["Enums"]["subscription_status"]
-          termii_device_id: string | null
-          termii_sender_id: string | null
-          termii_sender_id_approved_at: string | null
-          termii_sender_id_company: string | null
-          termii_sender_id_requested_at: string | null
-          termii_sender_id_status: string | null
-          termii_sender_id_use_case: string | null
           timezone: string
+          trial_bonus_granted_at: string | null
           trial_ends_at: string | null
+          trial_reminder_24h_sent_at: string | null
+          trial_reminder_3d_sent_at: string | null
+          trial_reminder_7d_sent_at: string | null
           updated_at: string
         }
         Insert: {
@@ -6415,24 +7121,16 @@ export type Database = {
           slug?: string | null
           sms_provider?: string
           sms_sender_name?: string | null
-          sms_sender_name_approved_at?: string | null
-          sms_sender_name_company?: string | null
-          sms_sender_name_requested_at?: string | null
-          sms_sender_name_status?: string
-          sms_sender_name_use_case?: string | null
           storefront_mode?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
-          termii_device_id?: string | null
-          termii_sender_id?: string | null
-          termii_sender_id_approved_at?: string | null
-          termii_sender_id_company?: string | null
-          termii_sender_id_requested_at?: string | null
-          termii_sender_id_status?: string | null
-          termii_sender_id_use_case?: string | null
           timezone?: string
+          trial_bonus_granted_at?: string | null
           trial_ends_at?: string | null
+          trial_reminder_24h_sent_at?: string | null
+          trial_reminder_3d_sent_at?: string | null
+          trial_reminder_7d_sent_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -6487,24 +7185,16 @@ export type Database = {
           slug?: string | null
           sms_provider?: string
           sms_sender_name?: string | null
-          sms_sender_name_approved_at?: string | null
-          sms_sender_name_company?: string | null
-          sms_sender_name_requested_at?: string | null
-          sms_sender_name_status?: string
-          sms_sender_name_use_case?: string | null
           storefront_mode?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
-          termii_device_id?: string | null
-          termii_sender_id?: string | null
-          termii_sender_id_approved_at?: string | null
-          termii_sender_id_company?: string | null
-          termii_sender_id_requested_at?: string | null
-          termii_sender_id_status?: string | null
-          termii_sender_id_use_case?: string | null
           timezone?: string
+          trial_bonus_granted_at?: string | null
           trial_ends_at?: string | null
+          trial_reminder_24h_sent_at?: string | null
+          trial_reminder_3d_sent_at?: string | null
+          trial_reminder_7d_sent_at?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -6602,10 +7292,12 @@ export type Database = {
           customer_id: string | null
           id: string
           method: Database["public"]["Enums"]["payment_method"]
+          original_transaction_id: string | null
           payment_group_id: string | null
           paystack_reference: string | null
           provider: string | null
           provider_reference: string | null
+          refund_request_id: string | null
           status: string
           tenant_id: string
           type: string
@@ -6619,10 +7311,12 @@ export type Database = {
           customer_id?: string | null
           id?: string
           method: Database["public"]["Enums"]["payment_method"]
+          original_transaction_id?: string | null
           payment_group_id?: string | null
           paystack_reference?: string | null
           provider?: string | null
           provider_reference?: string | null
+          refund_request_id?: string | null
           status?: string
           tenant_id: string
           type: string
@@ -6636,10 +7330,12 @@ export type Database = {
           customer_id?: string | null
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
+          original_transaction_id?: string | null
           payment_group_id?: string | null
           paystack_reference?: string | null
           provider?: string | null
           provider_reference?: string | null
+          refund_request_id?: string | null
           status?: string
           tenant_id?: string
           type?: string
@@ -6656,7 +7352,28 @@ export type Database = {
             foreignKeyName: "transactions_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_original_transaction_id_fkey"
+            columns: ["original_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_refund_request_id_fkey"
+            columns: ["refund_request_id"]
+            isOneToOne: false
+            referencedRelation: "refund_requests"
             referencedColumns: ["id"]
           },
           {
@@ -6821,83 +7538,213 @@ export type Database = {
           },
         ]
       }
-      vouchers: {
+      voucher_redemptions: {
         Row: {
           amount: number
+          appointment_id: string | null
+          created_at: string
+          customer_id: string
+          discount_amount: number
+          event_type: string
+          id: string
+          tenant_id: string
+          voucher_id: string
+        }
+        Insert: {
+          amount?: number
+          appointment_id?: string | null
+          created_at?: string
+          customer_id: string
+          discount_amount?: number
+          event_type: string
+          id?: string
+          tenant_id: string
+          voucher_id: string
+        }
+        Update: {
+          amount?: number
+          appointment_id?: string | null
+          created_at?: string
+          customer_id?: string
+          discount_amount?: number
+          event_type?: string
+          id?: string
+          tenant_id?: string
+          voucher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_redemptions_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_redemptions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "voucher_redemptions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_redemptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_redemptions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_redemptions_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vouchers: {
+        Row: {
+          access_type: string
+          amount: number
           balance: number
+          claimed_at: string | null
+          claimed_by_customer_id: string | null
           code: string
           created_at: string
           deleted_at: string | null
           deleted_by_id: string | null
           deletion_reason: string | null
           discontinue_reason: string | null
+          discount_type: string
+          discount_value: number
           expires_at: string | null
           id: string
           is_flagged: boolean | null
           issued_for_campaign_id: string | null
+          max_redemptions: number | null
+          minimum_spend: number
+          per_customer_limit: number
           purchased_by_customer_id: string | null
           redeemed_by_customer_id: string | null
           scope_ids: string[]
           scope_type: string
+          starts_at: string | null
           status: string
           target_customer_id: string | null
           tenant_id: string
           updated_at: string
           voucher_kind: string
+          voucher_type: string
         }
         Insert: {
+          access_type?: string
           amount: number
           balance: number
+          claimed_at?: string | null
+          claimed_by_customer_id?: string | null
           code: string
           created_at?: string
           deleted_at?: string | null
           deleted_by_id?: string | null
           deletion_reason?: string | null
           discontinue_reason?: string | null
+          discount_type?: string
+          discount_value: number
           expires_at?: string | null
           id?: string
           is_flagged?: boolean | null
           issued_for_campaign_id?: string | null
+          max_redemptions?: number | null
+          minimum_spend?: number
+          per_customer_limit?: number
           purchased_by_customer_id?: string | null
           redeemed_by_customer_id?: string | null
           scope_ids?: string[]
           scope_type?: string
+          starts_at?: string | null
           status?: string
           target_customer_id?: string | null
           tenant_id: string
           updated_at?: string
           voucher_kind?: string
+          voucher_type?: string
         }
         Update: {
+          access_type?: string
           amount?: number
           balance?: number
+          claimed_at?: string | null
+          claimed_by_customer_id?: string | null
           code?: string
           created_at?: string
           deleted_at?: string | null
           deleted_by_id?: string | null
           deletion_reason?: string | null
           discontinue_reason?: string | null
+          discount_type?: string
+          discount_value?: number
           expires_at?: string | null
           id?: string
           is_flagged?: boolean | null
           issued_for_campaign_id?: string | null
+          max_redemptions?: number | null
+          minimum_spend?: number
+          per_customer_limit?: number
           purchased_by_customer_id?: string | null
           redeemed_by_customer_id?: string | null
           scope_ids?: string[]
           scope_type?: string
+          starts_at?: string | null
           status?: string
           target_customer_id?: string | null
           tenant_id?: string
           updated_at?: string
           voucher_kind?: string
+          voucher_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vouchers_claimed_by_customer_id_fkey"
+            columns: ["claimed_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "vouchers_claimed_by_customer_id_fkey"
+            columns: ["claimed_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vouchers_issued_for_campaign_id_fkey"
             columns: ["issued_for_campaign_id"]
             isOneToOne: false
             referencedRelation: "customer_reactivation_campaigns"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vouchers_purchased_by_customer_id_fkey"
+            columns: ["purchased_by_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "vouchers_purchased_by_customer_id_fkey"
@@ -6910,8 +7757,22 @@ export type Database = {
             foreignKeyName: "vouchers_redeemed_by_customer_id_fkey"
             columns: ["redeemed_by_customer_id"]
             isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "vouchers_redeemed_by_customer_id_fkey"
+            columns: ["redeemed_by_customer_id"]
+            isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vouchers_target_customer_id_fkey"
+            columns: ["target_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
           },
           {
             foreignKeyName: "vouchers_target_customer_id_fkey"
@@ -7145,6 +8006,35 @@ export type Database = {
       }
     }
     Views: {
+      customer_segments: {
+        Row: {
+          customer_id: string | null
+          is_big_spender: boolean | null
+          is_lapsed: boolean | null
+          is_regular: boolean | null
+          is_vip: boolean | null
+          loves_packages: boolean | null
+          packages_last_quarter: number | null
+          tenant_id: string | null
+          total_paid: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       public_booking_tenants: {
         Row: {
           about_text: string | null
@@ -7217,7 +8107,7 @@ export type Database = {
           slot_capacity_default?: number | null
           slug?: string | null
           storefront_mode?: string | null
-          theme_key?: never
+          theme_key?: string | null
           timezone?: string | null
         }
         Update: {
@@ -7254,7 +8144,7 @@ export type Database = {
           slot_capacity_default?: number | null
           slug?: string | null
           storefront_mode?: string | null
-          theme_key?: never
+          theme_key?: string | null
           timezone?: string | null
         }
         Relationships: []
@@ -7300,26 +8190,6 @@ export type Database = {
       }
     }
     Functions: {
-      record_offline_cash_payment: {
-        Args: {
-          p_appointment_id: string
-          p_amount: number
-          p_reference?: string
-          p_notes?: string
-        }
-        Returns: Json
-      }
-      validate_waitlist_invitation: {
-        Args: { p_token: string }
-        Returns: {
-          id: string
-          name: string
-          email: string
-          phone: string | null
-          status: Database["public"]["Enums"]["waitlist_status"]
-          invitation_expires_at: string | null
-        }[]
-      }
       _apply_plan_change_batch_internal: {
         Args: {
           p_actor_user_id: string
@@ -7328,6 +8198,42 @@ export type Database = {
           p_rollout_mode?: string
         }
         Returns: Json
+      }
+      activate_staff_operations_addon: {
+        Args: { p_reason?: string; p_tenant_id: string }
+        Returns: {
+          addon_key: string | null
+          addon_type: string
+          billing_interval: string
+          created_at: string
+          created_by: string | null
+          ends_at: string | null
+          id: string
+          pricing_id: string | null
+          quantity: number
+          reason: string | null
+          source: string
+          started_at: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_addon_entitlements"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      adjust_customer_balance: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_customer_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: string
       }
       apply_plan_configuration: {
         Args: {
@@ -7339,6 +8245,7 @@ export type Database = {
         }
         Returns: Json
       }
+      apply_promo_trial_bonus: { Args: { p_tenant_id: string }; Returns: Json }
       approve_chain_custom_unlock: {
         Args: {
           p_allowed_locations: number
@@ -7601,6 +8508,36 @@ export type Database = {
           updated_at: string
         }[]
       }
+      backoffice_set_user_active: {
+        Args: { p_backoffice_user_id: string; p_is_active: boolean }
+        Returns: {
+          created_at: string
+          email: string | null
+          email_domain: string
+          first_name: string | null
+          id: string
+          is_active: boolean | null
+          is_sales_agent: boolean
+          last_login_at: string | null
+          last_name: string | null
+          password_changed_at: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["backoffice_role"]
+          temp_password_required: boolean | null
+          totp_enabled: boolean
+          totp_required: boolean | null
+          totp_secret: string | null
+          totp_verified_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "backoffice_users"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       backoffice_update_plan_with_features: {
         Args: {
           p_description: string
@@ -7717,9 +8654,39 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      cancel_staff_operations_addon: {
+        Args: { p_reason?: string; p_tenant_id: string }
+        Returns: boolean
+      }
+      check_identity_availability: {
+        Args: { p_email: string; p_phone: string }
+        Returns: string
+      }
+      check_phone_available: {
+        Args: { p_exclude_user_id: string; p_phone: string }
+        Returns: boolean
+      }
       claim_sales_promo_code: {
         Args: { p_code: string; p_surface?: string; p_tenant_id: string }
         Returns: Json
+      }
+      claim_voucher_for_current_user: {
+        Args: { p_code: string }
+        Returns: Json
+      }
+      claim_voucher_to_balance: {
+        Args: { p_code: string; p_customer_id: string; p_tenant_id: string }
+        Returns: string
+      }
+      complete_transaction_refund: {
+        Args: {
+          p_amount: number
+          p_reason: string
+          p_refund_type: Database["public"]["Enums"]["refund_type"]
+          p_request_id?: string
+          p_transaction_id: string
+        }
+        Returns: string
       }
       compute_chain_price: {
         Args: {
@@ -7762,6 +8729,10 @@ export type Database = {
           p_resource_id: string
         }
         Returns: undefined
+      }
+      consume_customer_balance_reservation: {
+        Args: { p_appointment_id: string }
+        Returns: boolean
       }
       consume_tenant_sales_promo_use: {
         Args: {
@@ -7836,6 +8807,22 @@ export type Database = {
         }
         Returns: string
       }
+      credit_customer_balance: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_customer_id: string
+          p_description?: string
+          p_expires_at?: string
+          p_idempotency_key?: string
+          p_is_cashable?: boolean
+          p_metadata?: Json
+          p_source_id?: string
+          p_source_type: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
       credit_customer_purse: {
         Args: {
           p_amount: number
@@ -7859,6 +8846,10 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      customer_credit_available: {
+        Args: { p_customer_id: string; p_tenant_id: string }
+        Returns: number
       }
       debit_customer_purse_for_booking: {
         Args: {
@@ -7919,6 +8910,10 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      extend_trialing_tenants_trial: {
+        Args: { p_days: number }
+        Returns: undefined
       }
       finalize_sales_conversion_from_webhook: {
         Args: {
@@ -8061,9 +9056,20 @@ export type Database = {
       }
       is_backoffice_user: { Args: { _user_id: string }; Returns: boolean }
       is_bookable_tenant: { Args: { _tenant_id: string }; Returns: boolean }
+      is_tenant_operational: { Args: { p_tenant_id: string }; Returns: boolean }
       is_tenant_owner: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
+      }
+      issue_customer_package: {
+        Args: {
+          p_customer_id: string
+          p_expires_at?: string
+          p_package_id: string
+          p_tenant_id: string
+          p_transaction_id?: string
+        }
+        Returns: string
       }
       list_accessible_routes: {
         Args: {
@@ -8101,6 +9107,7 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: {
+          avatar_url: string
           full_name: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
@@ -8145,6 +9152,19 @@ export type Database = {
         }
         Returns: string
       }
+      lookup_customer_identity: {
+        Args: { p_email: string; p_phone: string; p_tenant_id: string }
+        Returns: {
+          address: string
+          birthday: string
+          city: string
+          country: string
+          exists_in_tenant: boolean
+          found_elsewhere: boolean
+          full_name: string
+          gender: string
+        }[]
+      }
       mark_plan_change_notification_seen: {
         Args: { p_action?: string; p_notification_id: string }
         Returns: boolean
@@ -8152,6 +9172,14 @@ export type Database = {
       normalize_country_code: { Args: { value: string }; Returns: string }
       normalize_customer_email: { Args: { value: string }; Returns: string }
       normalize_customer_phone: { Args: { value: string }; Returns: string }
+      pause_locations: {
+        Args: {
+          p_location_ids: string[]
+          p_reason?: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       permanently_delete_catalog_bin_item: {
         Args: { p_item_id: string; p_item_type: string; p_tenant_id: string }
         Returns: boolean
@@ -8175,7 +9203,58 @@ export type Database = {
         }
         Returns: Json
       }
+      record_offline_cash_payment: {
+        Args: {
+          p_amount: number
+          p_appointment_id: string
+          p_notes?: string
+          p_reference?: string
+        }
+        Returns: Json
+      }
+      refund_customer_balance_reservation: {
+        Args: {
+          p_amount: number
+          p_appointment_id: string
+          p_restore_to_balance: boolean
+        }
+        Returns: boolean
+      }
+      reject_transaction_refund: {
+        Args: { p_reason: string; p_request_id: string }
+        Returns: boolean
+      }
+      release_customer_balance_reservation: {
+        Args: { p_appointment_id: string }
+        Returns: boolean
+      }
+      request_transaction_refund: {
+        Args: {
+          p_amount: number
+          p_reason: string
+          p_refund_type: Database["public"]["Enums"]["refund_type"]
+          p_transaction_id: string
+        }
+        Returns: string
+      }
+      reserve_customer_balance: {
+        Args: {
+          p_amount: number
+          p_appointment_id: string
+          p_customer_id: string
+          p_tenant_id: string
+        }
+        Returns: string
+      }
+      reserve_customer_package_credit: {
+        Args: { p_appointment_id: string; p_service_id: string }
+        Returns: string
+      }
       resolve_user_contexts: { Args: { p_tenant_id: string }; Returns: Json }
+      revive_location: {
+        Args: { p_location_id: string; p_tenant_id: string }
+        Returns: Json
+      }
       seed_default_role_permissions: {
         Args: { p_permissions: Json; p_tenant_id: string }
         Returns: number
@@ -8241,6 +9320,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      sync_customer_purse_balance: {
+        Args: { p_currency: string; p_customer_id: string; p_tenant_id: string }
+        Returns: number
+      }
       update_staff_role: {
         Args: {
           p_new_role: Database["public"]["Enums"]["app_role"]
@@ -8288,6 +9371,17 @@ export type Database = {
       validate_sales_promo_code_for_email: {
         Args: { p_code: string }
         Returns: Json
+      }
+      validate_waitlist_invitation: {
+        Args: { p_token: string }
+        Returns: {
+          email: string
+          id: string
+          invitation_expires_at: string
+          name: string
+          phone: string
+          status: Database["public"]["Enums"]["waitlist_status"]
+        }[]
       }
     }
     Enums: {
@@ -8482,6 +9576,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["owner", "manager", "supervisor", "receptionist", "staff"],

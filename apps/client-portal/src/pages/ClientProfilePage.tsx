@@ -15,6 +15,7 @@ import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { ValidationChecklist } from "@ui/validation-checklist";
 import { validatePasswordStrength } from "@shared/validation";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 
 export default function ClientProfilePage() {
   const { user, customers, profile, preferences, signOut, refreshAccount } = useClientAuth();
@@ -48,7 +49,7 @@ export default function ClientProfilePage() {
   const passwordState = useMemo(() => validatePasswordStrength(newPassword), [newPassword]);
   const hasPassword = profile?.client_password_initialized === true || user?.user_metadata?.password_initialized === true;
   const emailVerified = Boolean(user?.email_confirmed_at);
-  const phoneVerified = Boolean(user?.phone_confirmed_at);
+  const phoneVerified = Boolean(profile?.phone_verified_at);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -110,9 +111,15 @@ export default function ClientProfilePage() {
     }
     setIsPhoneVerifying(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: phoneNumber });
-      if (error) {
-        toast({ title: "Could not send code", description: error.message, variant: "destructive" });
+      const { data, error } = await supabase.functions.invoke("request-phone-change-otp", {
+        body: { phone: phoneNumber },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Could not send code",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
         return;
       }
       setPhoneOtpSent(true);
@@ -127,9 +134,15 @@ export default function ClientProfilePage() {
     if (!phoneOtpCode || !phoneNumber) return;
     setIsSubmittingOtp(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ phone: phoneNumber, token: phoneOtpCode, type: "sms" });
-      if (error) {
-        toast({ title: "Verification failed", description: error.message, variant: "destructive" });
+      const { data, error } = await supabase.functions.invoke("confirm-phone-change", {
+        body: { phone: phoneNumber, otp: phoneOtpCode },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Verification failed",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
         return;
       }
       setPhoneOtpSent(false);

@@ -8,6 +8,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MAX_ATTEMPTS = 5;
+
 async function hashOtp(otp: string): Promise<string> {
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(otp));
@@ -46,7 +48,7 @@ serve(async (req) => {
     // Find most recent valid token for this phone
     const { data: token } = await admin
       .from("phone_otp_tokens")
-      .select("id, user_id, otp_hash, expires_at, used")
+      .select("id, user_id, otp_hash, attempts, expires_at, used")
       .eq("phone", phone)
       .eq("used", false)
       .gt("expires_at", now)
@@ -58,9 +60,24 @@ serve(async (req) => {
       return json({ error: "Code expired or not found. Request a new one." }, 400);
     }
 
-    // Constant-time hash comparison (both are hex strings of same length)
+    if (token.attempts >= MAX_ATTEMPTS) {
+      await admin.from("phone_otp_tokens").update({ used: true }).eq("id", token.id);
+      return json({ error: "Too many incorrect attempts. Request a new code." }, 429);
+    }
+
     if (token.otp_hash !== otpHash) {
-      return json({ error: "Incorrect code. Please try again." }, 400);
+      const attempts = token.attempts + 1;
+      await admin.from("phone_otp_tokens").update({ attempts }).eq("id", token.id);
+      const remaining = MAX_ATTEMPTS - attempts;
+      return json(
+        {
+          error:
+            remaining > 0
+              ? `Incorrect code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+              : "Too many incorrect attempts. Request a new code.",
+        },
+        400,
+      );
     }
 
     // Mark token as used immediately to prevent replay
@@ -68,6 +85,15 @@ serve(async (req) => {
       .from("phone_otp_tokens")
       .update({ used: true })
       .eq("id", token.id);
+
+    // A successful OTP-based login is itself proof of phone ownership —
+    // mark it verified so the profile screen never asks for a separate
+    // verification step for a number the user just logged in with.
+    await admin
+      .from("profiles")
+      .update({ phone_verified_at: new Date().toISOString() })
+      .eq("user_id", token.user_id as string)
+      .eq("phone", phone);
 
     // Mint a session for the user. supabase-js v2 dropped the admin
     // "create session" helper and GoTrue exposes no REST endpoint to mint a
