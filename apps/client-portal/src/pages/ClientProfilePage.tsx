@@ -42,9 +42,23 @@ export default function ClientProfilePage() {
   const [phoneOtpCode, setPhoneOtpCode] = useState("");
   const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
 
+  // Same pattern as phone: email is never edited directly. Also, a
+  // phone-only account gets an internal, non-deliverable placeholder email
+  // assigned under the hood (see verify-phone-otp) purely so Supabase's
+  // session-minting primitive has an email to key off — that's never a real
+  // address the user owns, so treat it as "no email set" everywhere here.
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState("");
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+
+  const PLACEHOLDER_EMAIL_DOMAIN = "@phone.internal.salonmagik.com";
+  const hasPlaceholderEmail = user?.email?.endsWith(PLACEHOLDER_EMAIL_DOMAIN) ?? false;
   const primaryCustomer = customers[0];
-  const userName = fullName || primaryCustomer?.full_name || user?.email?.split("@")[0] || "User";
-  const userEmail = user?.email || primaryCustomer?.email || "";
+  const realEmail = hasPlaceholderEmail ? "" : (user?.email || primaryCustomer?.email || "");
+  const userName = fullName || primaryCustomer?.full_name || (realEmail ? realEmail.split("@")[0] : "") || "User";
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -54,7 +68,7 @@ export default function ClientProfilePage() {
 
   const passwordState = useMemo(() => validatePasswordStrength(newPassword), [newPassword]);
   const hasPassword = profile?.client_password_initialized === true || user?.user_metadata?.password_initialized === true;
-  const emailVerified = Boolean(user?.email_confirmed_at);
+  const emailVerified = !hasPlaceholderEmail && Boolean(user?.email_confirmed_at);
   const phoneVerified = Boolean(profile?.phone_verified_at);
 
   const handleLogout = async () => {
@@ -172,6 +186,69 @@ export default function ClientProfilePage() {
     }
   };
 
+  const startEditEmail = () => {
+    setEmailInput(realEmail);
+    setEditingEmail(true);
+  };
+
+  const cancelEditEmail = () => {
+    setEditingEmail(false);
+    setEmailInput("");
+    setEmailOtpSent(false);
+    setEmailOtpCode("");
+  };
+
+  const handleRequestEmailOtp = async () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast({ title: "Invalid email", description: "Enter a valid email address.", variant: "destructive" });
+      return;
+    }
+    setIsSavingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("request-email-change-otp", {
+        body: { email: trimmed },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Could not send code",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        return;
+      }
+      setEmailOtpSent(true);
+      toast({ title: "Code sent", description: `Enter the code we sent to ${trimmed}.` });
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleConfirmEmailOtp = async () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (emailOtpCode.length !== 6 || !trimmed) return;
+    setIsVerifyingEmailOtp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("confirm-email-change", {
+        body: { email: trimmed, otp: emailOtpCode },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Verification failed",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        setEmailOtpCode("");
+        return;
+      }
+      await refreshAccount();
+      cancelEditEmail();
+      toast({ title: "Email updated" });
+    } finally {
+      setIsVerifyingEmailOtp(false);
+    }
+  };
+
   const changePassword = async () => {
     if (!passwordState.isValid) {
       toast({ title: "Password requirements not met", variant: "destructive" });
@@ -256,7 +333,8 @@ export default function ClientProfilePage() {
                       <Mail className="h-4 w-4" />
                       Email
                     </Label>
-                    <Input id="email" value={userEmail} disabled className="bg-muted" />
+                    <Input id="email" value={realEmail || "Not set"} disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground">Manage under Security → Email.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -291,9 +369,74 @@ export default function ClientProfilePage() {
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Password</p>
                       <p className="mt-2 font-medium">{hasPassword ? "Configured" : "Required"}</p>
                     </div>
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Email verification</p>
-                      <p className="mt-2 font-medium">{emailVerified ? "Verified" : "Pending"}</p>
+                    <div className="rounded-xl border p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Email</p>
+                        {!editingEmail && (
+                          <button
+                            type="button"
+                            onClick={startEditEmail}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title={realEmail ? "Change email" : "Add email"}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {editingEmail && emailOtpSent ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to {emailInput}.</p>
+                          <InputOTP maxLength={6} value={emailOtpCode} onChange={setEmailOtpCode} disabled={isVerifyingEmailOtp}>
+                            <InputOTPGroup>
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <InputOTPSlot key={i} index={i} />
+                              ))}
+                            </InputOTPGroup>
+                          </InputOTP>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditEmail} disabled={isVerifyingEmailOtp}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleConfirmEmailOtp} disabled={isVerifyingEmailOtp || emailOtpCode.length !== 6}>
+                              {isVerifyingEmailOtp ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Verify
+                            </Button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setEmailOtpSent(false); setEmailOtpCode(""); }}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            disabled={isVerifyingEmailOtp}
+                          >
+                            Use a different email
+                          </button>
+                        </div>
+                      ) : editingEmail ? (
+                        <div className="space-y-2">
+                          <Input
+                            type="email"
+                            value={emailInput}
+                            onChange={(e) => setEmailInput(e.target.value)}
+                            placeholder="you@example.com"
+                            disabled={isSavingEmail}
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditEmail} disabled={isSavingEmail}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleRequestEmailOtp} disabled={isSavingEmail}>
+                              {isSavingEmail ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Send code
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm truncate">{realEmail || "Not set"}</p>
+                          <p className="text-xs text-muted-foreground">{emailVerified ? "Verified" : "Not verified"}</p>
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-xl border p-4 space-y-2 md:col-span-1">
                       <div className="flex items-center justify-between">

@@ -2321,6 +2321,42 @@ export type Database = {
           },
         ]
       }
+      email_otp_tokens: {
+        Row: {
+          attempts: number
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          ip_address: string | null
+          otp_hash: string
+          used: boolean
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          ip_address?: string | null
+          otp_hash: string
+          used?: boolean
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          otp_hash?: string
+          used?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_templates: {
         Row: {
           body_html: string
@@ -8659,6 +8695,10 @@ export type Database = {
       }
       cancel_staff_operations_addon: {
         Args: { p_reason?: string; p_tenant_id: string }
+        Returns: boolean
+      }
+      check_email_available: {
+        Args: { p_email: string; p_exclude_user_id: string }
         Returns: boolean
       }
       check_identity_availability: {
