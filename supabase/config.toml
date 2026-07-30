@@ -1,5 +1,8 @@
 project_id = "yqahjtsizbqwxdbjzsli"
 
+[functions.send-trial-expiry-reminders]
+verify_jwt = false
+
 [functions.send-staff-invitation]
 verify_jwt = false
 
