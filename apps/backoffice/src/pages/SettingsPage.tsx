@@ -173,6 +173,7 @@ export default function BackofficeSettingsPage() {
   const [otpLimitEnabled, setOtpLimitEnabled] = useState(true);
   const [otpMaxPerHour, setOtpMaxPerHour] = useState(3);
   const [otpCooldownSeconds, setOtpCooldownSeconds] = useState(60);
+  const [otpMaxPerHourPerIp, setOtpMaxPerHourPerIp] = useState(10);
   const [promoBonusEnabled, setPromoBonusEnabled] = useState(true);
   const [promoBonusWindowDays, setPromoBonusWindowDays] = useState(7);
   const [promoBonusDays, setPromoBonusDays] = useState(7);
@@ -266,6 +267,7 @@ export default function BackofficeSettingsPage() {
         enabled: typeof v.enabled === "boolean" ? v.enabled : true,
         maxPerHour: typeof v.max_per_hour === "number" ? v.max_per_hour : 3,
         cooldownSeconds: typeof v.cooldown_seconds === "number" ? v.cooldown_seconds : 60,
+        maxPerHourPerIp: typeof v.max_per_hour_per_ip === "number" ? v.max_per_hour_per_ip : 10,
       };
     },
   });
@@ -275,24 +277,25 @@ export default function BackofficeSettingsPage() {
       setOtpLimitEnabled(otpRateLimitConfig.enabled);
       setOtpMaxPerHour(otpRateLimitConfig.maxPerHour);
       setOtpCooldownSeconds(otpRateLimitConfig.cooldownSeconds);
+      setOtpMaxPerHourPerIp(otpRateLimitConfig.maxPerHourPerIp);
     }
   }, [otpRateLimitConfig]);
 
   const updateOtpRateLimitMutation = useMutation({
-    mutationFn: async ({ enabled, maxPerHour, cooldownSeconds }: { enabled: boolean; maxPerHour: number; cooldownSeconds: number }) => {
+    mutationFn: async ({ enabled, maxPerHour, cooldownSeconds, maxPerHourPerIp }: { enabled: boolean; maxPerHour: number; cooldownSeconds: number; maxPerHourPerIp: number }) => {
       const { error } = await supabase
         .from("platform_settings")
         .upsert(
           {
             key: "otp_rate_limit",
-            value: { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds } as Json,
+            value: { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds, max_per_hour_per_ip: maxPerHourPerIp } as Json,
             description: "OTP rate limiting. Set enabled=false to bypass limits for testing.",
             updated_by_id: backofficeUser?.user_id,
           },
           { onConflict: "key" }
         );
       if (error) throw error;
-      await writeAuditLog("otp_rate_limit_updated", backofficeUser?.user_id, { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds });
+      await writeAuditLog("otp_rate_limit_updated", backofficeUser?.user_id, { enabled, max_per_hour: maxPerHour, cooldown_seconds: cooldownSeconds, max_per_hour_per_ip: maxPerHourPerIp });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["platform-settings", "otp_rate_limit"] });
@@ -1106,7 +1109,7 @@ export default function BackofficeSettingsPage() {
                   <div>
                     <CardTitle>OTP Rate Limiting</CardTitle>
                     <CardDescription>
-                      Controls how many OTP requests a single identifier can make. Disable during testing to remove all limits.
+                      Controls how many OTP requests a single identifier — or a single sender IP, across all phone numbers — can make. Disable during testing to remove all limits.
                     </CardDescription>
                   </div>
                 </div>
@@ -1159,10 +1162,23 @@ export default function BackofficeSettingsPage() {
                     />
                     <p className="text-xs text-muted-foreground">Default: 60</p>
                   </div>
+                  <div className="space-y-2">
+                    <Label>Max requests per hour, per sender IP</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={otpMaxPerHourPerIp}
+                      onChange={(e) => setOtpMaxPerHourPerIp(Math.max(1, Number(e.target.value || 1)))}
+                      className="w-36"
+                      disabled={!isSuperAdmin}
+                    />
+                    <p className="text-xs text-muted-foreground">Caps one IP rotating through many phone numbers. Default: 10</p>
+                  </div>
                 </div>
 
                 <Button
-                  onClick={() => updateOtpRateLimitMutation.mutate({ enabled: otpLimitEnabled, maxPerHour: otpMaxPerHour, cooldownSeconds: otpCooldownSeconds })}
+                  onClick={() => updateOtpRateLimitMutation.mutate({ enabled: otpLimitEnabled, maxPerHour: otpMaxPerHour, cooldownSeconds: otpCooldownSeconds, maxPerHourPerIp: otpMaxPerHourPerIp })}
                   disabled={!isSuperAdmin || updateOtpRateLimitMutation.isPending}
                 >
                   Save OTP Settings

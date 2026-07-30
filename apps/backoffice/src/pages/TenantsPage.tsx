@@ -483,7 +483,7 @@ export default function TenantsPage() {
                    },
                    {
                      label: "Payment setup",
-                     value: selectedTenant.payment_setup_status.replaceAll("_", " "),
+                     value: selectedTenant.payment_setup_status.replace(/_/g, " "),
                    },
                    {
                      label: "Next billing",

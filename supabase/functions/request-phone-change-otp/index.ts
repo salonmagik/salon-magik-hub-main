@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { getClientIp, checkIpOtpRateLimit } from "../_shared/otp-ip-throttle.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,6 +70,13 @@ serve(async (req) => {
     const rlEnabled = typeof rlValue.enabled === "boolean" ? rlValue.enabled : true;
     const rlMaxPerHour = typeof rlValue.max_per_hour === "number" ? rlValue.max_per_hour : 3;
     const rlCooldownSeconds = typeof rlValue.cooldown_seconds === "number" ? rlValue.cooldown_seconds : 60;
+    const rlMaxPerHourPerIp = typeof rlValue.max_per_hour_per_ip === "number" ? rlValue.max_per_hour_per_ip : 10;
+
+    const clientIp = getClientIp(req);
+    const { allowed: ipAllowed } = await checkIpOtpRateLimit(admin, clientIp, rlEnabled, rlMaxPerHourPerIp);
+    if (!ipAllowed) {
+      return json({ error: "hourly_limit", message: "Too many requests. Please try again later." }, 429);
+    }
 
     if (rlEnabled) {
       const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -111,6 +119,7 @@ serve(async (req) => {
       otp_hash: otpHash,
       user_id: callerId,
       expires_at: expiresAt,
+      ip_address: clientIp,
     });
     if (insertError) {
       console.error("[request-phone-change-otp] insert error:", insertError);

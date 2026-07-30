@@ -191,8 +191,8 @@ export default function ClientLoginPage() {
         data?.verificationType === "magiclink" ? "magiclink" : "email",
       );
     } else {
-      const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-phone-otp", {
-        body: { phone: targetIdentifier, strict: true },
+      const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-client-phone-otp", {
+        body: { phone: targetIdentifier },
       });
 
       if (phoneOtpError || phoneOtpData?.error) {
