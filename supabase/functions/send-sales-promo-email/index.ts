@@ -6,6 +6,7 @@ import {
   paragraph,
   createButton,
 } from "../_shared/email-template.ts";
+import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -47,8 +48,10 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
-    // Always point sign-up/login URLs to the salon app, not the backoffice origin.
-    const salonAppUrl = Deno.env.get("SALON_APP_URL") || "https://app.salonmagik.com";
+    // Always point sign-up/login URLs to the salon app, not the backoffice
+    // origin — but target salon-admin's local dev port when called from a
+    // local backoffice dev server, so this is testable end-to-end locally.
+    const salonAppUrl = getSalonAppUrl(req);
 
     const admin = createClient(supabaseUrl, supabaseServiceKey);
     const caller = createClient(supabaseUrl, supabaseAnonKey, {

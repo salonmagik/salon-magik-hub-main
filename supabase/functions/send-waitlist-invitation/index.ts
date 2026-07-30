@@ -8,6 +8,7 @@ import {
   smallText,
   buildFromAddress,
 } from "../_shared/email-template.ts";
+import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
  
  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
  
@@ -107,25 +108,8 @@ function buildInvitationEmail(name: string, invitationLink: string): string {
        );
      }
  
-     // Build invitation link, targeting salon-admin. When this function is
-     // called from a local backoffice dev server, target local salon-admin
-     // too — otherwise an approval done in dev always produces a prod link,
-     // making the accept-invitation flow untestable end-to-end on localhost.
-     const callerOrigin = req.headers.get("origin") || req.headers.get("referer");
-     const isLocalCaller = (() => {
-       try {
-         const host = callerOrigin ? new URL(callerOrigin).hostname : "";
-         return host === "localhost" || host === "127.0.0.1";
-       } catch {
-         return false;
-       }
-     })();
-
-     const baseUrl = isLocalCaller
-       ? "http://localhost:8080"
-       : Deno.env.get("SALON_APP_URL") ||
-         Deno.env.get("BASE_URL") ||
-         "https://app.salonmagik.com";
+     // Build invitation link, targeting salon-admin regardless of caller.
+     const baseUrl = getSalonAppUrl(req);
      const invitationUrl = new URL("/signup", `${baseUrl.replace(/\/+$/, "")}/`);
      invitationUrl.searchParams.set("invite", lead.invitation_token);
      const invitationLink = invitationUrl.toString();
