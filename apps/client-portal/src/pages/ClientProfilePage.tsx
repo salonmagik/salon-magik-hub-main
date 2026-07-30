@@ -9,8 +9,9 @@ import { Label } from "@ui/label";
 import { Switch } from "@ui/switch";
 import { Separator } from "@ui/separator";
 import { Avatar, AvatarFallback } from "@ui/avatar";
-import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck } from "lucide-react";
+import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck, Pencil, X, Check, Loader2 } from "lucide-react";
 import { PhoneInput } from "@ui/phone-input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { ValidationChecklist } from "@ui/validation-checklist";
@@ -25,16 +26,21 @@ export default function ClientProfilePage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [fullName, setFullName] = useState(profile?.full_name || customers[0]?.full_name || "");
-  const [phone, setPhone] = useState(profile?.phone || customers[0]?.phone || "");
   const [emailBookingUpdates, setEmailBookingUpdates] = useState(preferences?.email_booking_updates ?? true);
   const [smsBookingUpdates, setSmsBookingUpdates] = useState(preferences?.sms_booking_updates ?? false);
   const [marketingOptIn, setMarketingOptIn] = useState(preferences?.marketing_opt_in ?? false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isPhoneVerifying, setIsPhoneVerifying] = useState(false);
+
+  // Phone number is never edited directly — changing it (or re-verifying the
+  // current one) always goes through request-phone-change-otp /
+  // confirm-phone-change so it's proven before it's saved.
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [phoneOtpCode, setPhoneOtpCode] = useState("");
-  const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
 
   const primaryCustomer = customers[0];
   const userName = fullName || primaryCustomer?.full_name || user?.email?.split("@")[0] || "User";
@@ -67,7 +73,7 @@ export default function ClientProfilePage() {
     setIsSavingProfile(true);
     try {
       const { data, error } = await supabase.functions.invoke("update-client-account", {
-        body: { fullName, phone },
+        body: { fullName },
       });
       if (error || data?.error) {
         toast({ title: "Failed to update profile", description: data?.error || error?.message, variant: "destructive" });
@@ -103,16 +109,28 @@ export default function ClientProfilePage() {
     }
   };
 
-  const handleSendPhoneOtp = async () => {
-    const phoneNumber = profile?.phone || customers[0]?.phone || "";
-    if (!phoneNumber) {
-      toast({ title: "No phone number saved", description: "Add a phone number in your profile first.", variant: "destructive" });
+  const startEditPhone = () => {
+    setPhoneInput(profile?.phone || customers[0]?.phone || "");
+    setEditingPhone(true);
+  };
+
+  const cancelEditPhone = () => {
+    setEditingPhone(false);
+    setPhoneInput("");
+    setPhoneOtpSent(false);
+    setPhoneOtpCode("");
+  };
+
+  const handleRequestPhoneOtp = async () => {
+    const trimmed = phoneInput.trim();
+    if (!trimmed || !/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+      toast({ title: "Invalid phone number", description: "Enter a full international number (e.g. +2348012345678).", variant: "destructive" });
       return;
     }
-    setIsPhoneVerifying(true);
+    setIsSavingPhone(true);
     try {
       const { data, error } = await supabase.functions.invoke("request-phone-change-otp", {
-        body: { phone: phoneNumber },
+        body: { phone: trimmed },
       });
       if (error || data?.error) {
         toast({
@@ -123,19 +141,19 @@ export default function ClientProfilePage() {
         return;
       }
       setPhoneOtpSent(true);
-      toast({ title: "Verification code sent", description: `Check your SMS messages at ${phoneNumber}.` });
+      toast({ title: "Code sent", description: `Enter the code we sent to ${trimmed}.` });
     } finally {
-      setIsPhoneVerifying(false);
+      setIsSavingPhone(false);
     }
   };
 
-  const handleVerifyPhoneOtp = async () => {
-    const phoneNumber = profile?.phone || customers[0]?.phone || "";
-    if (!phoneOtpCode || !phoneNumber) return;
-    setIsSubmittingOtp(true);
+  const handleConfirmPhoneOtp = async () => {
+    const trimmed = phoneInput.trim();
+    if (phoneOtpCode.length !== 6 || !trimmed) return;
+    setIsVerifyingPhoneOtp(true);
     try {
       const { data, error } = await supabase.functions.invoke("confirm-phone-change", {
-        body: { phone: phoneNumber, otp: phoneOtpCode },
+        body: { phone: trimmed, otp: phoneOtpCode },
       });
       if (error || data?.error) {
         toast({
@@ -143,14 +161,14 @@ export default function ClientProfilePage() {
           description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
           variant: "destructive",
         });
+        setPhoneOtpCode("");
         return;
       }
-      setPhoneOtpSent(false);
-      setPhoneOtpCode("");
       await refreshAccount();
-      toast({ title: "Phone verified" });
+      cancelEditPhone();
+      toast({ title: "Phone number updated" });
     } finally {
-      setIsSubmittingOtp(false);
+      setIsVerifyingPhoneOtp(false);
     }
   };
 
@@ -246,11 +264,8 @@ export default function ClientProfilePage() {
                       <Phone className="h-4 w-4" />
                       Phone
                     </Label>
-                    <PhoneInput
-                      value={phone}
-                      onChange={setPhone}
-                      defaultCountry={customers[0]?.tenant?.country || "GH"}
-                    />
+                    <Input value={profile?.phone || customers[0]?.phone || "Not set"} disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground">Manage under Security → Phone number.</p>
                   </div>
                 </div>
 
@@ -280,26 +295,70 @@ export default function ClientProfilePage() {
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Email verification</p>
                       <p className="mt-2 font-medium">{emailVerified ? "Verified" : "Pending"}</p>
                     </div>
-                    <div className="rounded-xl border p-4 space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone verification</p>
-                      <p className="font-medium">{phoneVerified ? "Verified" : "Not verified"}</p>
-                      {!phoneVerified && !phoneOtpSent && (
-                        <Button size="sm" variant="outline" onClick={handleSendPhoneOtp} disabled={isPhoneVerifying}>
-                          {isPhoneVerifying ? "Sending..." : "Verify phone"}
-                        </Button>
-                      )}
-                      {!phoneVerified && phoneOtpSent && (
-                        <div className="flex gap-2 items-center pt-1">
-                          <Input
-                            className="h-8 w-24 text-sm"
-                            placeholder="000000"
-                            value={phoneOtpCode}
-                            maxLength={6}
-                            onChange={(e) => setPhoneOtpCode(e.target.value)}
+                    <div className="rounded-xl border p-4 space-y-2 md:col-span-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone number</p>
+                        {!editingPhone && (
+                          <button
+                            type="button"
+                            onClick={startEditPhone}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title={profile?.phone ? "Change phone number" : "Add phone number"}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {editingPhone && phoneOtpSent ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to {phoneInput}.</p>
+                          <InputOTP maxLength={6} value={phoneOtpCode} onChange={setPhoneOtpCode} disabled={isVerifyingPhoneOtp}>
+                            <InputOTPGroup>
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <InputOTPSlot key={i} index={i} />
+                              ))}
+                            </InputOTPGroup>
+                          </InputOTP>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditPhone} disabled={isVerifyingPhoneOtp}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleConfirmPhoneOtp} disabled={isVerifyingPhoneOtp || phoneOtpCode.length !== 6}>
+                              {isVerifyingPhoneOtp ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Verify
+                            </Button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setPhoneOtpSent(false); setPhoneOtpCode(""); }}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            disabled={isVerifyingPhoneOtp}
+                          >
+                            Use a different number
+                          </button>
+                        </div>
+                      ) : editingPhone ? (
+                        <div className="space-y-2">
+                          <PhoneInput
+                            value={phoneInput}
+                            onChange={setPhoneInput}
+                            defaultCountry={customers[0]?.tenant?.country || "GH"}
                           />
-                          <Button size="sm" onClick={handleVerifyPhoneOtp} disabled={isSubmittingOtp || phoneOtpCode.length < 4}>
-                            {isSubmittingOtp ? "Verifying..." : "Confirm"}
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditPhone} disabled={isSavingPhone}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleRequestPhoneOtp} disabled={isSavingPhone}>
+                              {isSavingPhone ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Send code
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm">{profile?.phone || customers[0]?.phone || "Not set"}</p>
+                          <p className="text-xs text-muted-foreground">{phoneVerified ? "Verified" : "Not verified"}</p>
                         </div>
                       )}
                     </div>

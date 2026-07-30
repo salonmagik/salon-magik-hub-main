@@ -41,29 +41,29 @@ serve(async (req) => {
     }
     if (typeof phone === "string") {
       const trimmed = phone.trim();
-      if (trimmed && !/^\+[1-9][0-9]{6,14}$/.test(trimmed)) {
+      const { data: existingProfile } = await admin
+        .from("profiles")
+        .select("phone")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+
+      if (trimmed && trimmed !== existingProfile?.phone) {
+        // Setting a NEW number must go through request-phone-change-otp /
+        // confirm-phone-change so it's proven and checked for uniqueness
+        // first — this endpoint only allows clearing a phone (nothing to
+        // prove ownership of there) or leaving it unchanged.
         return new Response(
-          JSON.stringify({ error: "Phone number must be in international format, e.g. +2348012345678" }),
+          JSON.stringify({ error: "Changing your phone number requires verification. Use 'Change number' under Security." }),
           { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }
-      updates.phone = trimmed || null;
+      if (!trimmed && existingProfile?.phone) {
+        updates.phone = null;
+        updates.phone_verified_at = null;
+      }
     }
 
     if (Object.keys(updates).length > 0) {
-      if ("phone" in updates) {
-        const { data: existingProfile } = await admin
-          .from("profiles")
-          .select("phone")
-          .eq("user_id", authData.user.id)
-          .maybeSingle();
-        if (existingProfile?.phone !== updates.phone) {
-          // Changing the number invalidates any prior verification — the
-          // new number hasn't been proven yet.
-          updates.phone_verified_at = null;
-        }
-      }
-
       const { error: profileError } = await admin
         .from("profiles")
         .update(updates)
