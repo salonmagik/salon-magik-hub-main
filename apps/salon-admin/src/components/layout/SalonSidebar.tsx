@@ -463,23 +463,20 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const isTrialing = currentTenant.subscription_status === "trialing";
     const isPastDue = currentTenant.subscription_status === "past_due";
     const isActive = currentTenant.subscription_status === "active";
+    const planLabel = currentTenant.plan
+      ? currentTenant.plan.charAt(0).toUpperCase() + currentTenant.plan.slice(1)
+      : "Pro";
 
     if (isPastDue) {
       return { emoji: "⚠️", label: "Past Due" };
     }
-    if (isTrialing && currentTenant.trial_ends_at) {
-      const daysLeft = Math.ceil(
-        (new Date(currentTenant.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-      );
-      if (daysLeft > 0) {
-        return { emoji: "⏰", label: `Trial (${daysLeft}d)` };
-      }
-      return { emoji: "⚠️", label: "Trial Ended" };
+    if (isTrialing) {
+      // The countdown lives in the header chip only — this badge just shows
+      // which tier they'd be upgrading to, same styling whether trialing or
+      // already paying for it.
+      return { emoji: "✨", label: `${planLabel} plan (trial)` };
     }
     if (isActive) {
-      const planLabel = currentTenant.plan
-        ? currentTenant.plan.charAt(0).toUpperCase() + currentTenant.plan.slice(1)
-        : "Pro";
       return { emoji: "✨", label: planLabel };
     }
     return { emoji: "🎁", label: "Free" };
