@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { getClientIp, checkIpOtpRateLimit } from "../_shared/otp-ip-throttle.ts";
+import { sendOtpEmailFallback } from "../_shared/otp-email-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -132,6 +133,8 @@ serve(async (req) => {
       message: `Your Salon Magik phone-change verification code is: ${otp}. Valid for ${OTP_TTL_MINUTES} minutes. Do not share this code.`,
       useCase: "transactional",
     });
+
+    await sendOtpEmailFallback(admin, callerId, otp, OTP_TTL_MINUTES);
 
     return json({ success: true });
   } catch (err: unknown) {
