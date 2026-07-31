@@ -24,6 +24,9 @@ interface TenantRoleEntry {
   tenant_name: string;
   role: string;
   is_active: boolean;
+  plan: string | null;
+  subscription_status: string | null;
+  trial_ends_at: string | null;
 }
 
 interface BackofficeUserRow {
@@ -43,6 +46,26 @@ const ROLE_LABELS: Record<string, string> = {
   receptionist: "Receptionist",
   staff: "Staff",
 };
+
+const PLAN_LABELS: Record<string, string> = {
+  solo: "Solo",
+  studio: "Studio",
+  chain: "Chain",
+};
+
+function planSummary(tr: TenantRoleEntry): string {
+  const plan = tr.plan ? PLAN_LABELS[tr.plan] || tr.plan : "No plan";
+  if (tr.subscription_status === "trialing") {
+    const daysLeft = tr.trial_ends_at
+      ? Math.max(0, Math.ceil((new Date(tr.trial_ends_at).getTime() - Date.now()) / 86400000))
+      : null;
+    return `${plan} · Trial${daysLeft !== null ? ` (${daysLeft}d left)` : ""}`;
+  }
+  if (tr.subscription_status === "active") return `${plan} · Active`;
+  if (tr.subscription_status === "past_due") return `${plan} · Past due`;
+  if (tr.subscription_status === "canceled") return `${plan} · Canceled`;
+  return plan;
+}
 
 function useBackofficeUsers() {
   return useQuery({
@@ -134,7 +157,7 @@ export default function CustomersUsersPage() {
                             <div className="flex flex-wrap gap-1">
                               {user.tenant_roles.slice(0, 2).map((tr) => (
                                 <Badge key={tr.tenant_id} variant="outline" className="whitespace-nowrap">
-                                  {tr.tenant_name} · {ROLE_LABELS[tr.role] || tr.role}
+                                  {tr.tenant_name} · {ROLE_LABELS[tr.role] || tr.role} · {planSummary(tr)}
                                 </Badge>
                               ))}
                               {user.tenant_roles.length > 2 && (
@@ -204,7 +227,10 @@ export default function CustomersUsersPage() {
                   <div className="space-y-2">
                     {selectedUser.tenant_roles.map((tr) => (
                       <div key={tr.tenant_id} className="flex items-center justify-between rounded-xl bg-muted/30 px-3 py-2">
-                        <span className="text-sm font-medium">{tr.tenant_name}</span>
+                        <div>
+                          <span className="text-sm font-medium">{tr.tenant_name}</span>
+                          <p className="text-xs text-muted-foreground">{planSummary(tr)}</p>
+                        </div>
                         <div className="flex items-center gap-2">
                           {!tr.is_active && <Badge variant="secondary">Inactive</Badge>}
                           <Badge variant="outline">{ROLE_LABELS[tr.role] || tr.role}</Badge>
