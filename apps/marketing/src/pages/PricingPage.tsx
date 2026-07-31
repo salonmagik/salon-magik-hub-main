@@ -289,6 +289,26 @@ export default function PricingPage() {
 												);
 											})}
 										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Services, products, packages &amp; vouchers
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim
+															? lim.max_services == null
+																? "Unlimited"
+																: `Up to ${lim.max_services} each`
+															: "—"}
+													</td>
+												);
+											})}
+										</tr>
 
 										{[
 											{
@@ -343,6 +363,12 @@ export default function PricingPage() {
 													},
 													{
 														label: "Sales reports",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Daily digest email",
 														solo: true,
 														studio: true,
 														chain: true,

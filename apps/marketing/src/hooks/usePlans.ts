@@ -26,6 +26,8 @@ export interface PlanLimit {
 	max_staff: number;
 	max_services: number | null;
 	max_products: number | null;
+	max_packages: number | null;
+	max_vouchers: number | null;
 	monthly_messages: number;
 	features_enabled: Record<string, boolean>;
 }
@@ -72,7 +74,7 @@ export function usePlanLimits() {
 			const { data, error } = await supabase
 				.from("plan_limits")
 				.select(
-					"id, plan_id, max_locations, max_staff, max_services, max_products, monthly_messages, features_enabled",
+					"id, plan_id, max_locations, max_staff, max_services, max_products, max_packages, max_vouchers, monthly_messages, features_enabled",
 				);
 
 			if (error) throw error;
