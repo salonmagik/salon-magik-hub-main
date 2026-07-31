@@ -157,6 +157,7 @@ serve(async (req) => {
         cancel_action: cancelUrl,
         intent: "subscription_activation",
         billing_mode: isAnnual ? "paystack_subscription" : "self_managed",
+        billing_cycle: isAnnual ? "annual" : "monthly",
         discount_applied: discount,
       },
     };

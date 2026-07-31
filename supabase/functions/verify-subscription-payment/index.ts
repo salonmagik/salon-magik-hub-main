@@ -146,14 +146,16 @@ serve(async (req) => {
       tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
 
-    // Self-managed (monthly) signups have no Paystack Subscription — schedule
-    // the first self-managed cycle so process-recurring-addon-billing picks
-    // them up. Annual signups keep relying on Paystack's own Subscription
-    // engine and must NOT get a next_billing_at, or they'd be double-billed.
-    if (meta.billing_mode === "self_managed") {
-      tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      tenantUpdate.billing_retry_count = 0;
+    // Every tenant is scheduled into the self-managed monthly cron — for
+    // monthly billing_cycle tenants that covers the full price (base +
+    // add-ons), for annual tenants compute_tenant_recurring_total excludes
+    // the base price (their annual Paystack Subscription already covers
+    // that) and only charges the add-on portion each month.
+    if (meta.billing_cycle === "annual" || meta.billing_cycle === "monthly") {
+      tenantUpdate.billing_cycle = meta.billing_cycle;
     }
+    tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    tenantUpdate.billing_retry_count = 0;
 
     // Activate the subscription
     const { error: updateError } = await supabase

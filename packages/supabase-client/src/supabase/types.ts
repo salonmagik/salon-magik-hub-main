@@ -7060,6 +7060,7 @@ export type Database = {
           auto_assign_staff: boolean
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
+          billing_cycle: string
           billing_retry_count: number
           booking_page_bio: string | null
           booking_status_message: string | null
@@ -7124,6 +7125,7 @@ export type Database = {
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
+          billing_cycle?: string
           billing_retry_count?: number
           booking_page_bio?: string | null
           booking_status_message?: string | null
@@ -7188,6 +7190,7 @@ export type Database = {
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
+          billing_cycle?: string
           billing_retry_count?: number
           booking_page_bio?: string | null
           booking_status_message?: string | null
