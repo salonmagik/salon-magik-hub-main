@@ -326,7 +326,7 @@ export function useDashboardStats() {
         purseUsage: canViewPayments ? purseUsage : 0,
         refundsPendingApproval: canViewPayments ? (refundsPendingResult.count || 0) : 0,
         communicationCredits,
-        lowCommunicationCredits: communicationCredits < 5,
+        lowCommunicationCredits: communicationCredits <= 10,
         showUpRate,
         newClientsThisWeek,
         prepaidCustomers: canViewPayments ? (prepaidCountResult.count || 0) : 0,

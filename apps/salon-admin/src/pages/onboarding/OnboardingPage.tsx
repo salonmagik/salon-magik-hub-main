@@ -504,7 +504,17 @@ export default function OnboardingPage() {
         }
       }
 
-      if (googleOAuthIntent?.source === "signup" && googleOAuthIntent.inviteToken) {
+      // Mark the originating waitlist lead converted, regardless of which
+      // signup path was used. Previously this only ran for the Google OAuth
+      // flow (keyed on a client-side invite token saved before the OAuth
+      // redirect) — the regular email/password path never threads that
+      // token through (it can't: signup there requires an email-confirm
+      // step in between), so every non-Google conversion silently never
+      // marked its lead, leaving the backoffice "Converted" tab empty.
+      // Matching on the now-authenticated user's own email instead works
+      // universally, since it doesn't depend on any state surviving the
+      // signup → confirm → login → onboarding journey.
+      if (email) {
         const { error: waitlistUpdateError } = await supabase
           .from("waitlist_leads")
           .update({
@@ -512,7 +522,8 @@ export default function OnboardingPage() {
             converted_tenant_id: tenantId,
             converted_at: new Date().toISOString(),
           })
-          .eq("invitation_token", googleOAuthIntent.inviteToken);
+          .eq("email", email.toLowerCase().trim())
+          .eq("status", "invited");
 
         if (waitlistUpdateError) {
           console.error("Waitlist conversion update error:", waitlistUpdateError);
@@ -536,6 +547,16 @@ export default function OnboardingPage() {
           });
         } else if (promoClaimData?.success) {
           clearPendingSalesPromoCode();
+          // Grant the trial-day bonus immediately — every eligibility
+          // condition (trialing, within window, has a redemption) is
+          // already true at this exact moment, so there's no reason to
+          // make the tenant come back later and click through a separate
+          // banner for something they already qualify for.
+          try {
+            await (supabase.rpc as any)("apply_promo_trial_bonus", { p_tenant_id: tenantId });
+          } catch (bonusError) {
+            console.error("Promo trial bonus grant error:", bonusError);
+          }
         } else if (promoClaimData?.message) {
           toast({
             title: "Promo not attached",

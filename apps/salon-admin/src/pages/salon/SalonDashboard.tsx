@@ -343,8 +343,14 @@ export default function SalonDashboard() {
 						<div className="flex items-center gap-2.5">
 							<MessageSquare className="w-4 h-4 text-warning-foreground flex-shrink-0" />
 							<p className="text-sm text-warning-foreground">
-								<span className="font-medium">Low messaging credits</span> —{" "}
-								{stats.communicationCredits} remaining.
+								{stats.communicationCredits === 0 ? (
+									<span className="font-medium">You're out of SMS marketing credits.</span>
+								) : (
+									<>
+										<span className="font-medium">SMS marketing credits are running low</span> —{" "}
+										{stats.communicationCredits} remaining.
+									</>
+								)}
 							</p>
 						</div>
 						<Button
