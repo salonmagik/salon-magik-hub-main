@@ -376,6 +376,12 @@ export default function PricingPage() {
 														studio: true,
 														chain: true,
 													},
+													{
+														label: "Staff Operations add-on (check-ins & time-off)",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
 												],
 											},
 											{
@@ -478,9 +484,9 @@ export default function PricingPage() {
 								available: true,
 							},
 							{
-								name: "Location check-in for staff",
-								desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.",
-								available: false,
+								name: "Staff Operations",
+								desc: "Location check-ins, time-off requests, leave allowances, and manager approvals. Available on Studio and Chain plans.",
+								available: true,
 							},
 							{
 								name: "WhatsApp messaging",

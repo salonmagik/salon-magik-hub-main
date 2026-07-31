@@ -271,6 +271,9 @@ export default function StaffPage() {
   });
 
   const staffOperationsEnabled = Boolean(staffOperationsEntitlement?.id);
+  const staffOperationsPlanEligible = ["studio", "chain"].includes(
+    String(currentTenant?.plan || "").toLowerCase(),
+  );
   const staffOperationsLocationCount = Math.max(tenantLocations.length, 1);
   const staffOperationsMonthlyTotal =
     Number(staffOperationsPricing?.unit_price_per_location || 0)
@@ -317,9 +320,12 @@ export default function StaffPage() {
           : "Check-ins and time-off management are ready to use.",
       });
     } catch (error: any) {
+      const isPlanIneligible = String(error?.message || "").includes("PLAN_NOT_ELIGIBLE");
       toast({
         title: "Could not update add-on",
-        description: error?.message || "Please try again.",
+        description: isPlanIneligible
+          ? "Staff Operations is available on Studio and Chain plans. Upgrade your plan to enable it."
+          : error?.message || "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -811,24 +817,39 @@ export default function StaffPage() {
               </div>
               <p className="mt-0.5 text-sm text-muted-foreground">
                 Location check-ins, time-off requests, leave allowances, and manager approvals.
-                {!staffOperationsEnabled && staffOperationsPriceLabel
+                {!staffOperationsEnabled && staffOperationsPlanEligible && staffOperationsPriceLabel
                   ? ` ${staffOperationsPriceLabel}/month for ${staffOperationsLocationCount} location${staffOperationsLocationCount === 1 ? "" : "s"}.`
+                  : ""}
+                {!staffOperationsEnabled && !staffOperationsPlanEligible
+                  ? " Available on Studio and Chain plans."
                   : ""}
               </p>
             </div>
           </div>
           {currentUserIsOwner ? (
-            <Button
-              variant={staffOperationsEnabled ? "outline" : "default"}
-              className="shrink-0 rounded-full"
-              disabled={!staffOperationsEnabled && !hasValidStaffOperationsPrice}
-              onClick={() => setStaffOperationsConfirmOpen(true)}
-            >
-              {staffOperationsEnabled ? "Disable add-on" : "Enable add-on"}
-            </Button>
+            staffOperationsEnabled || staffOperationsPlanEligible ? (
+              <Button
+                variant={staffOperationsEnabled ? "outline" : "default"}
+                className="shrink-0 rounded-full"
+                disabled={!staffOperationsEnabled && !hasValidStaffOperationsPrice}
+                onClick={() => setStaffOperationsConfirmOpen(true)}
+              >
+                {staffOperationsEnabled ? "Disable add-on" : "Enable add-on"}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="shrink-0 rounded-full"
+                onClick={() => navigate("/salon/settings?tab=subscription")}
+              >
+                Upgrade to enable
+              </Button>
+            )
           ) : !staffOperationsEnabled ? (
             <p className="shrink-0 text-xs text-muted-foreground">
-              Ask the salon owner to enable it.
+              {staffOperationsPlanEligible
+                ? "Ask the salon owner to enable it."
+                : "Available on Studio and Chain plans."}
             </p>
           ) : null}
         </div>
