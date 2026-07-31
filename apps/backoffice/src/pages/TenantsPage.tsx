@@ -38,10 +38,11 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
  } from "@ui/dropdown-menu";
- import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert } from "lucide-react";
+ import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown } from "lucide-react";
  import { format } from "date-fns";
 import { toast } from "sonner";
 import { EmptyState } from "@ui/empty-state";
+import { AddTenantOwnerDialog } from "@/components/AddTenantOwnerDialog";
 
 interface ChainUnlockRequestRow {
   id: string;
@@ -67,6 +68,7 @@ export default function TenantsPage() {
    const [currency, setCurrency] = useState("USD");
    const [reason, setReason] = useState("");
    const [selectedTenant, setSelectedTenant] = useState<TenantWithStats | null>(null);
+   const [addOwnerTenant, setAddOwnerTenant] = useState<TenantWithStats | null>(null);
 
    const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
      queryKey: ["chain-unlock-requests"],
@@ -312,6 +314,12 @@ export default function TenantsPage() {
                                  <Eye className="mr-2 h-4 w-4" />
                                  View Details
                                </DropdownMenuItem>
+                               {!tenant.owner_email && backofficeUser?.role === "super_admin" && (
+                                 <DropdownMenuItem onClick={() => setAddOwnerTenant(tenant)}>
+                                   <Crown className="mr-2 h-4 w-4" />
+                                   Add owner
+                                 </DropdownMenuItem>
+                               )}
                              </DropdownMenuContent>
                            </DropdownMenu>
                          </TableCell>
@@ -519,6 +527,12 @@ export default function TenantsPage() {
            </DialogFooter>
          </DialogContent>
        </Dialog>
+
+       <AddTenantOwnerDialog
+         tenant={addOwnerTenant ? { id: addOwnerTenant.id, name: addOwnerTenant.name } : null}
+         onOpenChange={(open) => !open && setAddOwnerTenant(null)}
+         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
+       />
      </BackofficeLayout>
    );
  }

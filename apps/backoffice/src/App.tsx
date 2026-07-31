@@ -10,6 +10,7 @@ import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import BackofficeDashboardPage from "@/pages/BackofficeDashboardPage";
 import CustomersWaitlistsPage from "@/pages/customers/CustomersWaitlistsPage";
 import CustomersTenantsPage from "@/pages/customers/CustomersTenantsPage";
+import CustomersUsersPage from "@/pages/customers/CustomersUsersPage";
 import CustomersOpsMonitorPage from "@/pages/customers/CustomersOpsMonitorPage";
 import CustomersSupportPage from "@/pages/customers/CustomersSupportPage";
 import FeatureFlagsPage from "@/pages/FeatureFlagsPage";
@@ -127,6 +128,15 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="customers_tenants">
                   <CustomersTenantsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/customers/users"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="customers_users">
+                  <CustomersUsersPage />
                 </BackofficeProtectedRoute>
               }
           />

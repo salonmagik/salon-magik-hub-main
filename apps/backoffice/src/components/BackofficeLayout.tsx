@@ -65,6 +65,7 @@ const navItems: NavItem[] = [
     children: [
       { href: "/customers/waitlists", label: "Waitlists", pageKey: "customers_waitlists" },
       { href: "/customers/tenants", label: "Tenants", pageKey: "customers_tenants" },
+      { href: "/customers/users", label: "Users", pageKey: "customers_users" },
       { href: "/customers/ops-monitor", label: "Ops Monitor", pageKey: "customers_ops_monitor" },
       { href: "/customers/support", label: "Support", pageKey: "settings" },
     ],
