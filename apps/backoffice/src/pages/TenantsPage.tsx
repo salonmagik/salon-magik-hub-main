@@ -38,12 +38,13 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
  } from "@ui/dropdown-menu";
- import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown, Info } from "lucide-react";
+ import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown, Info, RefreshCcw } from "lucide-react";
  import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
  import { format } from "date-fns";
 import { toast } from "sonner";
 import { EmptyState } from "@ui/empty-state";
 import { AddTenantOwnerDialog } from "@/components/AddTenantOwnerDialog";
+import { MigrateTenantBillingDialog } from "@/components/MigrateTenantBillingDialog";
 
 interface ChainUnlockRequestRow {
   id: string;
@@ -70,6 +71,7 @@ export default function TenantsPage() {
    const [reason, setReason] = useState("");
    const [selectedTenant, setSelectedTenant] = useState<TenantWithStats | null>(null);
    const [addOwnerTenant, setAddOwnerTenant] = useState<TenantWithStats | null>(null);
+   const [migrateBillingTenant, setMigrateBillingTenant] = useState<TenantWithStats | null>(null);
 
    const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
      queryKey: ["chain-unlock-requests"],
@@ -350,6 +352,14 @@ export default function TenantsPage() {
                                    Add owner
                                  </DropdownMenuItem>
                                )}
+                               {backofficeUser?.role === "super_admin" &&
+                                 tenant.subscription_status === "active" &&
+                                 !tenant.next_billing_at && (
+                                   <DropdownMenuItem onClick={() => setMigrateBillingTenant(tenant)}>
+                                     <RefreshCcw className="mr-2 h-4 w-4" />
+                                     Migrate to self-managed billing
+                                   </DropdownMenuItem>
+                               )}
                              </DropdownMenuContent>
                            </DropdownMenu>
                          </TableCell>
@@ -574,6 +584,12 @@ export default function TenantsPage() {
        <AddTenantOwnerDialog
          tenant={addOwnerTenant ? { id: addOwnerTenant.id, name: addOwnerTenant.name } : null}
          onOpenChange={(open) => !open && setAddOwnerTenant(null)}
+         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
+       />
+
+       <MigrateTenantBillingDialog
+         tenant={migrateBillingTenant ? { id: migrateBillingTenant.id, name: migrateBillingTenant.name } : null}
+         onOpenChange={(open) => !open && setMigrateBillingTenant(null)}
          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
        />
      </BackofficeLayout>
