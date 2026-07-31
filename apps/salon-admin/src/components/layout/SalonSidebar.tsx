@@ -66,6 +66,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@ui/alert-dialog";
 
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExpanded: boolean; isMobileOpen: boolean; onCloseMobile: () => void }) {
@@ -961,7 +971,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				/>
 
 				<button
-					onClick={() => setConfirmSignOutOpen(true)}
+					onClick={() => {
+						setIsMobileOpen(false);
+						setConfirmSignOutOpen(true);
+					}}
 					className={cn(
 						"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
 						"text-white/80 hover:text-white hover:bg-white/10",
@@ -1260,36 +1273,31 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</DialogContent>
 					</Dialog>
 
-					<Dialog
+					<AlertDialog
 						open={confirmSignOutOpen}
 						onOpenChange={setConfirmSignOutOpen}
 					>
-						<DialogContent className="sm:max-w-md">
-							<DialogHeader>
-								<DialogTitle>Sign out?</DialogTitle>
-								<DialogDescription>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Sign out?</AlertDialogTitle>
+								<AlertDialogDescription>
 									You are about to sign out of your account.
-								</DialogDescription>
-							</DialogHeader>
-							<DialogFooter>
-								<Button
-									variant="outline"
-									onClick={() => setConfirmSignOutOpen(false)}
-								>
-									Cancel
-								</Button>
-								<Button
-									variant="destructive"
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogAction
+									className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 									onClick={async () => {
 										setConfirmSignOutOpen(false);
 										await handleLogout();
 									}}
 								>
 									Sign out
-								</Button>
-							</DialogFooter>
-						</DialogContent>
-					</Dialog>
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
 					<NewDeviceReviewModal
 						open={reviewSessionsOpen}
 						onClose={() => setReviewSessionsOpen(false)}
