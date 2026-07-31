@@ -92,6 +92,8 @@ export default function OnboardingPage() {
     email: "",
     phone: "",
   });
+  const [ownerInviteError, setOwnerInviteError] = useState<string | null>(null);
+  const [isCheckingOwnerEmail, setIsCheckingOwnerEmail] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
     planFromUrl && VALID_PLAN_SLUGS.includes(planFromUrl) ? planFromUrl : null,
@@ -212,10 +214,34 @@ export default function OnboardingPage() {
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     const currentIndex = stepFlow.indexOf(step);
     if (currentIndex < stepFlow.length - 1) {
       const next = stepFlow[currentIndex + 1];
+
+      if (step === "owner-invite") {
+        setIsCheckingOwnerEmail(true);
+        try {
+          const { data, error } = await (supabase.rpc as any)("check_owner_invite_email", {
+            p_email: ownerInvite.email.trim().toLowerCase(),
+          });
+          if (error) {
+            setOwnerInviteError("Something went wrong checking this email. Please try again.");
+            return;
+          }
+          if (data?.available === false) {
+            setOwnerInviteError(
+              data.reason === "already_owner"
+                ? "This email already owns another salon on Salon Magik. Each owner can only manage one active salon — try a different email for this owner."
+                : "This email already has a Salon Magik account. We can't send an owner invite to an existing account yet — try a different email, or have them sign in and set this up themselves once you're done.",
+            );
+            return;
+          }
+          setOwnerInviteError(null);
+        } finally {
+          setIsCheckingOwnerEmail(false);
+        }
+      }
 
       if (next === "locations" && locationsConfig.locations.length !== Math.max(1, effectiveExpectedChainLocations)) {
         const totalLocations = Math.max(1, effectiveExpectedChainLocations);
@@ -447,7 +473,7 @@ export default function OnboardingPage() {
 
       if (!isOwner && ownerInvite.email) {
         try {
-          await supabase.functions.invoke("send-staff-invitation", {
+          const { data: inviteData, error: inviteError } = await supabase.functions.invoke("send-staff-invitation", {
             body: {
               firstName: ownerInvite.name.split(" ")[0] || ownerInvite.name,
               lastName: ownerInvite.name.split(" ").slice(1).join(" ") || "",
@@ -459,8 +485,22 @@ export default function OnboardingPage() {
               invitedByName: `${firstName} ${lastName}`.trim(),
             },
           });
+          if (inviteError || inviteData?.error) {
+            toast({
+              title: "Owner invite didn't go through",
+              description:
+                inviteData?.error ||
+                "Your salon is set up, but we couldn't invite the owner. Add them from Staff once you're in.",
+              variant: "destructive",
+            });
+          }
         } catch (inviteError) {
           console.error("Owner invitation error:", inviteError);
+          toast({
+            title: "Owner invite didn't go through",
+            description: "Your salon is set up, but we couldn't invite the owner. Add them from Staff once you're in.",
+            variant: "destructive",
+          });
         }
       }
 
@@ -812,7 +852,12 @@ export default function OnboardingPage() {
             )}
 
             {step === "owner-invite" && (
-              <OwnerInviteStep ownerInfo={ownerInvite} onChange={setOwnerInvite} />
+              <OwnerInviteStep
+                ownerInfo={ownerInvite}
+                onChange={setOwnerInvite}
+                serverError={ownerInviteError}
+                onClearServerError={() => setOwnerInviteError(null)}
+              />
             )}
 
             {step === "business" && (
@@ -947,15 +992,20 @@ export default function OnboardingPage() {
             <button
               type="button"
               onClick={nextStep}
-              disabled={!canProceed() || isLoading}
+              disabled={!canProceed() || isLoading || isCheckingOwnerEmail}
               className={cn(
                 "flex items-center gap-2 rounded-full px-6 py-[11px] text-[14.5px] font-medium transition-colors",
-                canProceed() && !isLoading
+                canProceed() && !isLoading && !isCheckingOwnerEmail
                   ? "bg-[#2E1F4E] text-white hover:bg-[#3A2660]"
                   : "cursor-not-allowed bg-black/10 text-black/30",
               )}
             >
-              {isLoading ? (
+              {isCheckingOwnerEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking...
+                </>
+              ) : isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Setting up...
