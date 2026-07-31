@@ -31,6 +31,7 @@ import {
   PauseCircle,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
+import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { supabase } from "@/lib/supabase";
@@ -1057,24 +1058,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									<Menu className="w-5 h-5" />
 								</button>
 
-								{/* Tenant display */}
+								{/* Tenant display / switcher */}
 								<div className="flex-1 flex items-center gap-2.5 min-w-0 ml-1 lg:ml-0">
-									{currentTenant?.logo_url ? (
-										<img
-											src={currentTenant.logo_url}
-											alt={currentTenant.name || ""}
-											className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
-										/>
-									) : (
-										<div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
-											<span className="text-sm font-bold text-white leading-none">
-												{currentTenant?.name?.[0]?.toUpperCase() || "?"}
-											</span>
-										</div>
-									)}
-									<span className="font-semibold text-sm text-foreground truncate max-w-[120px] sm:max-w-[180px]">
-										{currentTenant?.name || "Your Salon"}
-									</span>
+									<TenantSwitcher />
 									{(() => {
 										if (!currentTenant) return null;
 										if (
