@@ -46,6 +46,7 @@ import { useStaff, type StaffMember } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useAuth } from "@/hooks/useAuth";
 import { DEFAULT_ROLE_PERMISSIONS, MODULE_LABELS } from "@/hooks/usePermissions";
+import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -119,7 +120,6 @@ export default function StaffPage() {
   });
   const [editCanManageSessions, setEditCanManageSessions] = useState(false);
   const [staffOperationsConfirmOpen, setStaffOperationsConfirmOpen] = useState(false);
-  const [staffOperationsUpdating, setStaffOperationsUpdating] = useState(false);
   const [initialEditSnapshot, setInitialEditSnapshot] = useState<{
     firstName: string;
     lastName: string;
@@ -224,114 +224,19 @@ export default function StaffPage() {
     enabled: Boolean(currentTenant?.id && currentUserIsOwner),
   });
 
-  const { data: staffOperationsPricing } = useQuery({
-    queryKey: [
-      "staff-operations-addon-pricing",
-      currentTenant?.country,
-      currentTenant?.currency,
-    ],
-    queryFn: async () => {
-      if (!currentTenant?.country || !currentTenant?.currency) return null;
-      const { data, error } = await (supabase.from as any)(
-        "staff_operations_addon_pricing",
-      )
-        .select("id,currency,unit_price_per_location")
-        .eq("country_code", currentTenant.country)
-        .eq("currency", currentTenant.currency)
-        .eq("status", "active")
-        .lte("effective_from", new Date().toISOString())
-        .order("effective_from", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data as {
-        id: string;
-        currency: string;
-        unit_price_per_location: number;
-      } | null;
-    },
-    enabled: Boolean(currentTenant?.country && currentTenant?.currency),
-  });
-
-  const { data: staffOperationsEntitlement } = useQuery({
-    queryKey: ["staff-operations-addon-entitlement", currentTenant?.id],
-    queryFn: async () => {
-      if (!currentTenant?.id) return null;
-      const { data, error } = await (supabase.from as any)(
-        "tenant_addon_entitlements",
-      )
-        .select("id,status,started_at")
-        .eq("tenant_id", currentTenant.id)
-        .eq("addon_type", "staff_operations")
-        .eq("status", "active")
-        .maybeSingle();
-      if (error) throw error;
-      return data as { id: string; status: string; started_at: string } | null;
-    },
-    enabled: Boolean(currentTenant?.id),
-  });
-
-  const staffOperationsEnabled = Boolean(staffOperationsEntitlement?.id);
-  const staffOperationsPlanEligible = ["studio", "chain"].includes(
-    String(currentTenant?.plan || "").toLowerCase(),
-  );
-  const staffOperationsLocationCount = Math.max(tenantLocations.length, 1);
-  const staffOperationsMonthlyTotal =
-    Number(staffOperationsPricing?.unit_price_per_location || 0)
-    * staffOperationsLocationCount;
-  const hasValidStaffOperationsPrice =
-    typeof staffOperationsPricing?.currency === "string"
-    && staffOperationsPricing.currency.trim().length === 3
-    && Number.isFinite(Number(staffOperationsPricing.unit_price_per_location));
-  const staffOperationsPriceLabel = hasValidStaffOperationsPrice
-    ? new Intl.NumberFormat("en", {
-        style: "currency",
-        currency: staffOperationsPricing!.currency,
-        maximumFractionDigits: 2,
-      }).format(staffOperationsMonthlyTotal)
-    : null;
+  const {
+    isEnabled: staffOperationsEnabled,
+    isPlanEligible: staffOperationsPlanEligible,
+    locationCount: staffOperationsLocationCount,
+    hasValidPrice: hasValidStaffOperationsPrice,
+    priceLabel: staffOperationsPriceLabel,
+    isUpdating: staffOperationsUpdating,
+    toggle: toggleStaffOperations,
+  } = useStaffOperationsAddon();
 
   const handleToggleStaffOperations = async () => {
-    if (!currentTenant?.id) return;
-    setStaffOperationsUpdating(true);
-    try {
-      const functionName = staffOperationsEnabled
-        ? "cancel_staff_operations_addon"
-        : "activate_staff_operations_addon";
-      const { error } = await (supabase.rpc as any)(functionName, {
-        p_tenant_id: currentTenant.id,
-        p_reason: staffOperationsEnabled
-          ? "Disabled by owner from Staff"
-          : "Enabled by owner from Staff",
-      });
-      if (error) throw error;
-      await queryClient.invalidateQueries({
-        queryKey: ["staff-operations-addon-entitlement", currentTenant?.id],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["tenant-runtime-entitlements", currentTenant?.id],
-      });
-      setStaffOperationsConfirmOpen(false);
-      toast({
-        title: staffOperationsEnabled
-          ? "Staff Operations disabled"
-          : "Staff Operations enabled",
-        description: staffOperationsEnabled
-          ? "Check-ins and time-off management are no longer billed."
-          : "Check-ins and time-off management are ready to use.",
-      });
-    } catch (error: any) {
-      const isPlanIneligible = String(error?.message || "").includes("PLAN_NOT_ELIGIBLE");
-      toast({
-        title: "Could not update add-on",
-        description: isPlanIneligible
-          ? "Staff Operations is available on Studio and Chain plans. Upgrade your plan to enable it."
-          : error?.message || "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setStaffOperationsUpdating(false);
-    }
+    const succeeded = await toggleStaffOperations();
+    if (succeeded) setStaffOperationsConfirmOpen(false);
   };
 
   const handleCancelClick = (id: string) => {

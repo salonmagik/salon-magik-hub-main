@@ -99,6 +99,8 @@ import {
 import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
+import { useTenantRecurringTotal } from "@/hooks/useTenantRecurringTotal";
+import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
@@ -238,6 +240,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const { data: entitlements, refetch: refetchEntitlements } =
 		useTenantEntitlements(currentTenant?.id);
 	const currentPlan = plans?.find((plan) => plan.slug === currentTenant?.plan);
+	const { data: recurringTotal } = useTenantRecurringTotal();
+	const staffOperationsAddon = useStaffOperationsAddon();
 
 	const { data: ecommerceThemePricing } = useQuery({
 		queryKey: [
@@ -3111,22 +3115,27 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				)}
 				<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
 					<div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-						<div className="flex items-center justify-between mb-2">
-							<p className="font-semibold capitalize">
-								{currentTenant?.plan || "Solo"} Plan
+						<div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+							<p className="font-serif text-xl capitalize">
+								{currentTenant?.plan || "Solo"}
 							</p>
-							<Badge
-								className={cn(
-									currentTenant?.subscription_status === "active"
-										? "bg-success text-success-foreground"
-										: currentTenant?.subscription_status === "trialing"
-											? "bg-primary text-primary-foreground"
-											: "bg-destructive text-destructive-foreground",
-								)}
-							>
-								{currentTenant?.subscription_status?.replace("_", " ") ||
-									"Unknown"}
-							</Badge>
+							<div className="flex items-center gap-2">
+								<Badge variant="secondary" className="capitalize">
+									{recurringTotal?.breakdown.billing_cycle || "monthly"} billing
+								</Badge>
+								<Badge
+									className={cn(
+										currentTenant?.subscription_status === "active"
+											? "bg-success text-success-foreground"
+											: currentTenant?.subscription_status === "trialing"
+												? "bg-primary text-primary-foreground"
+												: "bg-destructive text-destructive-foreground",
+									)}
+								>
+									{currentTenant?.subscription_status?.replace("_", " ") ||
+										"Unknown"}
+								</Badge>
+							</div>
 						</div>
 						{isTrialing && trialEndsAt && (
 							<div className="mt-3">
@@ -3143,6 +3152,59 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<p className="text-xs text-muted-foreground mt-1">
 									Ends {format(trialEndsAt, "MMM d, yyyy")}
 								</p>
+							</div>
+						)}
+						{!isTrialing && recurringTotal && (
+							<div className="mt-3">
+								<div className="flex items-baseline justify-between">
+									<p className="font-serif text-3xl">
+										{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}
+									</p>
+									<p className="text-xs text-muted-foreground">
+										{currentTenant?.next_billing_at
+											? `next charge · ${format(new Date(currentTenant.next_billing_at), "MMM d")}`
+											: "next charge"}
+									</p>
+								</div>
+								<div className="mt-3 space-y-1 border-t border-dashed pt-3 text-sm">
+									<div className="flex items-center justify-between text-muted-foreground">
+										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
+										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
+									</div>
+									{recurringTotal.breakdown.addon_breakdown.extra_seats > 0 && (
+										<div className="flex items-center justify-between text-muted-foreground">
+											<span>Extra seats ({recurringTotal.breakdown.addon_breakdown.extra_seats})</span>
+											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.seat_addon_total, recurringTotal.currency)}</span>
+										</div>
+									)}
+									{recurringTotal.breakdown.addon_breakdown.location_addon_total > 0 && (
+										<div className="flex items-center justify-between text-muted-foreground">
+											<span>Additional locations</span>
+											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.location_addon_total, recurringTotal.currency)}</span>
+										</div>
+									)}
+									{recurringTotal.breakdown.addon_breakdown.staff_operations_enabled && (
+										<div className="flex items-center justify-between text-muted-foreground">
+											<span>Staff Operations</span>
+											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.staff_operations_total, recurringTotal.currency)}</span>
+										</div>
+									)}
+									{recurringTotal.breakdown.discount > 0 && (
+										<div className="flex items-center justify-between text-success">
+											<span>Promo discount</span>
+											<span>−{formatCurrency(recurringTotal.breakdown.discount, recurringTotal.currency)}</span>
+										</div>
+									)}
+									<div className="flex items-center justify-between border-t pt-2 mt-2 font-medium text-foreground">
+										<span>Total this cycle</span>
+										<span>{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}</span>
+									</div>
+									{recurringTotal.breakdown.billing_cycle === "annual" && (
+										<p className="pt-1 text-xs text-muted-foreground">
+											Base plan is billed annually and isn't part of this monthly line — this covers add-ons only.
+										</p>
+									)}
+								</div>
 							</div>
 						)}
 					</div>
@@ -3337,6 +3399,31 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</Button>
 						</div>
 
+						<div className="space-y-3">
+							<p className="text-sm font-medium">Add-ons</p>
+							<div className="rounded-lg border p-4 flex items-center justify-between gap-4">
+								<div>
+									<p className="text-sm font-medium">Staff Operations</p>
+									<p className="mt-0.5 text-xs text-muted-foreground">
+										Check-ins, time-off requests, and leave allowances.
+										{!staffOperationsAddon.isEnabled && staffOperationsAddon.isPlanEligible && staffOperationsAddon.priceLabel
+											? ` ${staffOperationsAddon.priceLabel}/month.`
+											: ""}
+										{!staffOperationsAddon.isPlanEligible ? " Available on Studio and Chain plans." : ""}
+									</p>
+								</div>
+								{staffOperationsAddon.isPlanEligible ? (
+									<Switch
+										checked={staffOperationsAddon.isEnabled}
+										disabled={staffOperationsAddon.isUpdating || (!staffOperationsAddon.isEnabled && !staffOperationsAddon.hasValidPrice)}
+										onCheckedChange={() => staffOperationsAddon.toggle()}
+									/>
+								) : (
+									<Badge variant="outline" className="shrink-0">Studio+ only</Badge>
+								)}
+							</div>
+						</div>
+
 						<div className="rounded-lg border p-4">
 							<p className="font-medium">Booking page themes</p>
 							<p className="mt-1 text-sm text-muted-foreground">
@@ -3346,89 +3433,91 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</p>
 						</div>
 					</div>
-					{isTrialing && (
-						<div className="pt-4 border-t">
-							{subscriptionPromo ? (
-								<div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm">
-									<p className="font-medium">Active subscription promo</p>
-									<p className="text-muted-foreground">
-										{subscriptionPromo.code} · {subscriptionPromo.campaign_name}{" "}
-										· {subscriptionPromo.remaining_uses} use
-										{subscriptionPromo.remaining_uses === 1 ? "" : "s"}{" "}
-										remaining
-									</p>
-								</div>
-							) : (
-								<div className="mb-4 space-y-2">
-									<Label>Apply Sales Promo Code</Label>
-									<div className="flex gap-2">
-										<Input
-											value={subscriptionPromoCode}
-											onChange={(event) =>
-												setSubscriptionPromoCode(
-													event.target.value.toUpperCase(),
-												)
+					<div className="pt-4 border-t space-y-3">
+						<p className="text-sm font-medium">Promo code</p>
+						{subscriptionPromo ? (
+							<div className="flex items-center justify-between rounded-lg bg-success/10 text-success p-3 text-sm font-medium">
+								<span>
+									{subscriptionPromo.code} applied · {subscriptionPromo.campaign_name}
+								</span>
+								<span className="font-normal">
+									{subscriptionPromo.remaining_uses} use{subscriptionPromo.remaining_uses === 1 ? "" : "s"} left
+								</span>
+							</div>
+						) : (
+							<div className="space-y-2">
+								<Label>Apply Sales Promo Code</Label>
+								<div className="flex gap-2">
+									<Input
+										value={subscriptionPromoCode}
+										onChange={(event) =>
+											setSubscriptionPromoCode(
+												event.target.value.toUpperCase(),
+											)
+										}
+										placeholder="Enter promo code"
+									/>
+									<Button
+										variant="outline"
+										onClick={async () => {
+											try {
+												await claimTenantPromo.mutateAsync({
+													code: subscriptionPromoCode,
+													surface: "subscription",
+												});
+												setSubscriptionPromoCode("");
+												toast({
+													title: "Promo claimed",
+													description:
+														"The promo is now attached to this tenant for subscription billing.",
+												});
+											} catch (error) {
+												toast({
+													title: "Promo unavailable",
+													description:
+														error instanceof Error
+															? error.message
+															: "Failed to claim promo code.",
+													variant: "destructive",
+												});
 											}
-											placeholder="Enter promo code"
-										/>
-										<Button
-											variant="outline"
-											onClick={async () => {
-												try {
-													await claimTenantPromo.mutateAsync({
-														code: subscriptionPromoCode,
-														surface: "subscription",
-													});
-													setSubscriptionPromoCode("");
-													toast({
-														title: "Promo claimed",
-														description:
-															"The promo is now attached to this tenant for subscription billing.",
-													});
-												} catch (error) {
-													toast({
-														title: "Promo unavailable",
-														description:
-															error instanceof Error
-																? error.message
-																: "Failed to claim promo code.",
-														variant: "destructive",
-													});
-												}
-											}}
-											disabled={
-												!subscriptionPromoCode.trim() ||
-												claimTenantPromo.isPending
-											}
-										>
-											{claimTenantPromo.isPending ? (
-												<Loader2 className="w-4 h-4 animate-spin" />
-											) : (
-												"Apply"
-											)}
-										</Button>
-									</div>
+										}}
+										disabled={
+											!subscriptionPromoCode.trim() ||
+											claimTenantPromo.isPending
+										}
+									>
+										{claimTenantPromo.isPending ? (
+											<Loader2 className="w-4 h-4 animate-spin" />
+										) : (
+											"Apply"
+										)}
+									</Button>
 								</div>
-							)}
-							<Button
-								className="w-full gap-2"
-								onClick={startSubscriptionCheckout}
-								disabled={isStartingSubscriptionCheckout}
-							>
-								{isStartingSubscriptionCheckout ? (
-									<Loader2 className="w-4 h-4 animate-spin" />
-								) : (
-									<Zap className="w-4 h-4" />
-								)}
-								{isStartingSubscriptionCheckout
-									? "Redirecting..."
-									: "Upgrade Now"}
-							</Button>
-							<p className="text-xs text-muted-foreground text-center mt-2">
-								Continue using all features after your trial ends
-							</p>
-						</div>
-					)}
+							</div>
+						)}
+						{isTrialing && (
+							<>
+								<Button
+									className="w-full gap-2"
+									onClick={startSubscriptionCheckout}
+									disabled={isStartingSubscriptionCheckout}
+								>
+									{isStartingSubscriptionCheckout ? (
+										<Loader2 className="w-4 h-4 animate-spin" />
+									) : (
+										<Zap className="w-4 h-4" />
+									)}
+									{isStartingSubscriptionCheckout
+										? "Redirecting..."
+										: "Upgrade Now"}
+								</Button>
+								<p className="text-xs text-muted-foreground text-center">
+									Continue using all features after your trial ends
+								</p>
+							</>
+						)}
+					</div>
 				</CardContent>
 			</Card>
 		);
