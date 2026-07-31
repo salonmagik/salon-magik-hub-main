@@ -58,6 +58,7 @@ import {
 } from "@ui/dropdown-menu";
 import { PermissionsTab } from "@/components/staff/PermissionsTab";
 import { TimeOffTab } from "@/components/staff/TimeOffTab";
+import { CheckInsTab } from "@/components/staff/CheckInsTab";
 import type { Tables } from "@supabase-client";
 
 const roleLabels: Record<StaffMember["role"], string> = {
@@ -878,6 +879,12 @@ export default function StaffPage() {
                 Time off
               </TabsTrigger>
             )}
+            {currentUserCanAssign && staffOperationsEnabled && (
+              <TabsTrigger value="check-ins" className="flex h-10 shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
+                <Clock className="h-3.5 w-3.5" />
+                Check-ins
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Team Members Tab */}
@@ -1253,6 +1260,11 @@ export default function StaffPage() {
                 staff={staff}
                 canManage={currentUserCanAssign}
               />
+            </TabsContent>
+          )}
+          {currentUserCanAssign && staffOperationsEnabled && (
+            <TabsContent value="check-ins" className="mt-5">
+              <CheckInsTab staff={staff} />
             </TabsContent>
           )}
         </Tabs>

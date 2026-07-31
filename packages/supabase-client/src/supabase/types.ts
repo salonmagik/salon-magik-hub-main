@@ -5851,6 +5851,70 @@ export type Database = {
         }
         Relationships: []
       }
+      staff_check_ins: {
+        Row: {
+          check_in_latitude: number | null
+          check_in_longitude: number | null
+          check_out_latitude: number | null
+          check_out_longitude: number | null
+          checked_in_at: string
+          checked_out_at: string | null
+          created_at: string
+          id: string
+          location_id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          check_in_latitude?: number | null
+          check_in_longitude?: number | null
+          check_out_latitude?: number | null
+          check_out_longitude?: number | null
+          checked_in_at?: string
+          checked_out_at?: string | null
+          created_at?: string
+          id?: string
+          location_id: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          check_in_latitude?: number | null
+          check_in_longitude?: number | null
+          check_out_latitude?: number | null
+          check_out_longitude?: number | null
+          checked_in_at?: string
+          checked_out_at?: string | null
+          created_at?: string
+          id?: string
+          location_id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_check_ins_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_check_ins_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_check_ins_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_invitations: {
         Row: {
           accepted_at: string | null
@@ -6318,6 +6382,9 @@ export type Database = {
           id: string
           leave_type: string
           note: string | null
+          rejection_reason: string | null
+          responded_at: string | null
+          responded_by: string | null
           starts_on: string
           status: string
           tenant_id: string
@@ -6333,6 +6400,9 @@ export type Database = {
           id?: string
           leave_type: string
           note?: string | null
+          rejection_reason?: string | null
+          responded_at?: string | null
+          responded_by?: string | null
           starts_on: string
           status?: string
           tenant_id: string
@@ -6348,6 +6418,9 @@ export type Database = {
           id?: string
           leave_type?: string
           note?: string | null
+          rejection_reason?: string | null
+          responded_at?: string | null
+          responded_by?: string | null
           starts_on?: string
           status?: string
           tenant_id?: string

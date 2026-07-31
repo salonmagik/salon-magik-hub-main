@@ -28,6 +28,7 @@ import {
   Shield,
   Zap,
   User,
+  Clock,
   PauseCircle,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
@@ -292,6 +293,7 @@ const mainNavItems: NavItem[] = [
 		module: "messaging",
 	},
 	{ label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+	{ label: "My Shift", icon: Clock, path: "/salon/my-shift" },
 	{
 		label: "All Notifications",
 		icon: Bell,

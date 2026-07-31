@@ -16,6 +16,7 @@ import { toast } from "@ui/ui/use-toast";
 
 type LeaveType = "annual" | "sick" | "compassionate";
 type Policy = { leave_type: LeaveType; allowance_days: number };
+type TimeOffStatus = "pending" | "approved" | "rejected" | "cancelled";
 type TimeOff = {
   id: string;
   user_id: string;
@@ -24,7 +25,7 @@ type TimeOff = {
   ends_on: string;
   days_used: number;
   note: string | null;
-  status: "approved" | "cancelled";
+  status: TimeOffStatus;
 };
 
 const leaveMeta: Record<LeaveType, { label: string; icon: typeof Leaf; tone: string }> = {
@@ -84,6 +85,47 @@ export function TimeOffTab({
       if (error) throw error;
       return data || [];
     },
+  });
+
+  const pendingRequests = useMemo(
+    () => timeOff.filter((item) => item.status === "pending"),
+    [timeOff],
+  );
+
+  const [rejectTarget, setRejectTarget] = useState<TimeOff | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  const respondMutation = useMutation({
+    mutationFn: async ({
+      id,
+      status,
+      reason,
+    }: {
+      id: string;
+      status: "approved" | "rejected";
+      reason?: string;
+    }) => {
+      const { error } = await (supabase as any)
+        .from("staff_time_off")
+        .update({
+          status,
+          responded_at: new Date().toISOString(),
+          responded_by: actorId,
+          rejection_reason: status === "rejected" ? reason?.trim() || null : null,
+        })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: async (_data, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["staff-time-off", tenantId] });
+      setRejectTarget(null);
+      setRejectionReason("");
+      toast({
+        title: variables.status === "approved" ? "Request approved" : "Request declined",
+      });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Could not respond", description: error.message, variant: "destructive" }),
   });
 
   const allowance = (type: LeaveType) =>
@@ -175,6 +217,54 @@ export function TimeOffTab({
         )}
       </div>
 
+      {canManage && pendingRequests.length > 0 && (
+        <Card className="overflow-hidden rounded-[18px] border-amber-200 bg-amber-50/40 shadow-none">
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base font-normal">Pending requests</CardTitle>
+            <Badge variant="secondary" className="bg-amber-100 text-amber-800">
+              {pendingRequests.length} waiting
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingRequests.map((item) => {
+              const meta = leaveMeta[item.leave_type];
+              return (
+                <div key={item.id} className="rounded-[14px] border border-black/[0.07] bg-white p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{staffNames.get(item.user_id) || "Team member"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {meta.label} · {item.starts_on} – {item.ends_on} · {item.days_used} day{item.days_used === 1 ? "" : "s"}
+                      </p>
+                      {item.note && <p className="mt-1 text-xs text-muted-foreground">"{item.note}"</p>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 rounded-full"
+                      disabled={respondMutation.isPending}
+                      onClick={() => respondMutation.mutate({ id: item.id, status: "approved" })}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
+                      disabled={respondMutation.isPending}
+                      onClick={() => setRejectTarget(item)}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="scrollbar-hide flex gap-3 overflow-x-auto pb-1">
         {(Object.keys(leaveMeta) as LeaveType[]).map((type) => {
           const meta = leaveMeta[type];
@@ -231,6 +321,38 @@ export function TimeOffTab({
           <DialogHeader><DialogTitle className="font-serif text-xl">Default time-off limits</DialogTitle><DialogDescription>Set the number of days available to each staff member per calendar year.</DialogDescription></DialogHeader>
           <div className="space-y-3">{(Object.keys(leaveMeta) as LeaveType[]).map((type) => <div key={type} className="flex items-center justify-between gap-4"><Label htmlFor={`policy-${type}`}>{leaveMeta[type].label}</Label><Input id={`policy-${type}`} type="number" min={0} className="h-11 w-28" value={policyDraft[type]} onChange={(event) => setPolicyDraft((current) => ({ ...current, [type]: Number(event.target.value) }))} /></div>)}</div>
           <DialogFooter><Button variant="outline" className="rounded-full" onClick={() => setPolicyOpen(false)}>Cancel</Button><Button className="rounded-full" disabled={policyMutation.isPending} onClick={() => policyMutation.mutate()}>Save limits</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(rejectTarget)} onOpenChange={(open) => !open && setRejectTarget(null)}>
+        <DialogContent className="rounded-[22px] sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Decline request</DialogTitle>
+            <DialogDescription>
+              Let {rejectTarget ? staffNames.get(rejectTarget.user_id) || "the team member" : "them"} know why, if you'd like.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={rejectionReason}
+            onChange={(event) => setRejectionReason(event.target.value)}
+            placeholder="Reason (optional)"
+          />
+          <DialogFooter>
+            <Button variant="outline" className="rounded-full" onClick={() => setRejectTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-full"
+              disabled={respondMutation.isPending}
+              onClick={() =>
+                rejectTarget &&
+                respondMutation.mutate({ id: rejectTarget.id, status: "rejected", reason: rejectionReason })
+              }
+            >
+              Decline request
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -29,6 +29,7 @@ const ReportsPage = lazy(() => import("./pages/salon/ReportsPage"));
 const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
 const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
 const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
+const MyShiftPage = lazy(() => import("./pages/salon/MyShiftPage"));
 const EmailTemplatesPage = lazy(() => import("./pages/salon/EmailTemplatesPage"));
 const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
@@ -296,6 +297,14 @@ const App = () => (
                     <ModuleProtectedRoute module="staff">
                       <StaffPage />
                     </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/my-shift"
+                element={
+                  <ProtectedRoute>
+                    <MyShiftPage />
                   </ProtectedRoute>
                 }
               />
