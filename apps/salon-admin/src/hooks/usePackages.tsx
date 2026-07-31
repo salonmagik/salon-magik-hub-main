@@ -230,9 +230,12 @@ export function usePackages() {
       return pkg;
     } catch (err: any) {
       console.error("Error creating package:", err);
+      const isLimitReached = String(err?.message || "").includes("RESOURCE_LIMIT_REACHED");
       toast({
-        title: "Error",
-        description: err?.message || "Failed to create package",
+        title: isLimitReached ? "Package limit reached" : "Error",
+        description: isLimitReached
+          ? "Your plan allows up to 5 active packages. Archive one or upgrade your plan to add more."
+          : err?.message || "Failed to create package",
         variant: "destructive",
       });
       return null;

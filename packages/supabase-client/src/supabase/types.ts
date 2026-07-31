@@ -4097,9 +4097,11 @@ export type Database = {
           features_enabled: Json
           id: string
           max_locations: number
+          max_packages: number | null
           max_products: number | null
           max_services: number | null
           max_staff: number
+          max_vouchers: number | null
           monthly_messages: number
           plan_id: string
           updated_at: string
@@ -4109,9 +4111,11 @@ export type Database = {
           features_enabled?: Json
           id?: string
           max_locations?: number
+          max_packages?: number | null
           max_products?: number | null
           max_services?: number | null
           max_staff?: number
+          max_vouchers?: number | null
           monthly_messages?: number
           plan_id: string
           updated_at?: string
@@ -4121,9 +4125,11 @@ export type Database = {
           features_enabled?: Json
           id?: string
           max_locations?: number
+          max_packages?: number | null
           max_products?: number | null
           max_services?: number | null
           max_staff?: number
+          max_vouchers?: number | null
           monthly_messages?: number
           plan_id?: string
           updated_at?: string
@@ -8533,6 +8539,31 @@ export type Database = {
           user_id: string
         }[]
       }
+      backoffice_list_users: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          last_sign_in_at: string
+          phone: string
+          tenant_roles: Json
+          user_id: string
+        }[]
+      }
+      backoffice_list_waitlist_signups: {
+        Args: never
+        Returns: {
+          email: string
+          invited_at: string
+          lead_id: string
+          name: string
+          phone: string
+          plan_interest: string
+          signed_up_at: string
+          user_id: string
+        }[]
+      }
       backoffice_member_status: {
         Args: { p_is_active: boolean; p_temp_password_required: boolean }
         Returns: string
@@ -8708,6 +8739,7 @@ export type Database = {
         Args: { p_email: string; p_phone: string }
         Returns: string
       }
+      check_owner_invite_email: { Args: { p_email: string }; Returns: Json }
       check_phone_available: {
         Args: { p_exclude_user_id: string; p_phone: string }
         Returns: boolean
@@ -9369,6 +9401,14 @@ export type Database = {
       sync_customer_purse_balance: {
         Args: { p_currency: string; p_customer_id: string; p_tenant_id: string }
         Returns: number
+      }
+      tenant_user_allows_promo_trial_bonus: {
+        Args: {
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_tenant_id: string
+          p_user_id: string
+        }
+        Returns: boolean
       }
       update_staff_role: {
         Args: {

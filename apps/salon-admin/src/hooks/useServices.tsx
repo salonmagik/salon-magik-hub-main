@@ -206,9 +206,12 @@ export function useServices() {
       return service;
     } catch (err: any) {
       console.error("Error creating service:", err);
+      const isLimitReached = String(err?.message || "").includes("RESOURCE_LIMIT_REACHED");
       toast({
-        title: "Error",
-        description: err?.message || "Failed to create service",
+        title: isLimitReached ? "Service limit reached" : "Error",
+        description: isLimitReached
+          ? "Your plan allows up to 5 active services. Archive one or upgrade your plan to add more."
+          : err?.message || "Failed to create service",
         variant: "destructive",
       });
       return null;

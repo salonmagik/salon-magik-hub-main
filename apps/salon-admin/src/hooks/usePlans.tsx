@@ -12,6 +12,8 @@ export interface PlanLimit {
   max_staff: number;
   max_services: number | null;
   max_products: number | null;
+  max_packages: number | null;
+  max_vouchers: number | null;
   monthly_messages: number;
   features_enabled: Record<string, boolean>;
 }
@@ -83,6 +85,8 @@ export function usePlans() {
               max_staff: limits.find((l) => l.plan_id === plan.id)!.max_staff,
               max_services: limits.find((l) => l.plan_id === plan.id)!.max_services,
               max_products: limits.find((l) => l.plan_id === plan.id)!.max_products,
+              max_packages: limits.find((l) => l.plan_id === plan.id)!.max_packages,
+              max_vouchers: limits.find((l) => l.plan_id === plan.id)!.max_vouchers,
               monthly_messages: limits.find((l) => l.plan_id === plan.id)!.monthly_messages,
               features_enabled: limits.find((l) => l.plan_id === plan.id)!.features_enabled as Record<string, boolean>,
             }
