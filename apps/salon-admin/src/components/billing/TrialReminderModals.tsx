@@ -10,6 +10,7 @@ import { Button } from "@ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useTrialEnforcement } from "@/hooks/useTrialEnforcement";
 import { usePromoTrialBonusEligibility } from "@/hooks/usePromoTrialBonus";
+import { usePermissions } from "@/hooks/usePermissions";
 
 type Threshold = "7d" | "3d" | "24h";
 
@@ -31,6 +32,7 @@ export function TrialReminderModals() {
   const { currentTenant } = useAuth();
   const { trialStatus, startUpgradeCheckout } = useTrialEnforcement();
   const { eligible: promoEligible, config: promoConfig } = usePromoTrialBonusEligibility();
+  const { hasPermission } = usePermissions();
   const [activeThreshold, setActiveThreshold] = useState<Threshold | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -93,7 +95,7 @@ export function TrialReminderModals() {
 
   const c = copy[activeThreshold];
   const Icon = c.icon;
-  const showPromoMention = activeThreshold === "7d" && promoEligible && promoConfig;
+  const showPromoMention = activeThreshold === "7d" && promoEligible && promoConfig && hasPermission("promo_trial_bonus");
 
   return (
     <Dialog open onOpenChange={(o) => !o && dismiss()}>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Gift, X } from "lucide-react";
 import { usePromoTrialBonusEligibility } from "@/hooks/usePromoTrialBonus";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ApplyPromoCodeDialog } from "./ApplyPromoCodeDialog";
 
 /**
@@ -8,13 +9,19 @@ import { ApplyPromoCodeDialog } from "./ApplyPromoCodeDialog";
  * tenant is still within the promo-bonus eligibility window. Lives in the
  * content area, below the header's own trial countdown chip — never
  * touches the sidebar or header.
+ *
+ * Applying a promo code is billing-adjacent, so this only renders for
+ * roles with the promo_trial_bonus permission (owner + manager by default,
+ * toggleable per-role/per-user from Staff → Roles & Permissions) — the
+ * RPCs enforce the same gate server-side regardless of this check.
  */
 export function PromoTrialBonusBanner() {
   const { eligible, config, daysLeftInWindow } = usePromoTrialBonusEligibility();
+  const { hasPermission } = usePermissions();
   const [dismissed, setDismissed] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
 
-  if (!eligible || dismissed || !config) return null;
+  if (!eligible || dismissed || !config || !hasPermission("promo_trial_bonus")) return null;
 
   return (
     <>
