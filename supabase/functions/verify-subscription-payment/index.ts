@@ -146,6 +146,15 @@ serve(async (req) => {
       tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
 
+    // Self-managed (monthly) signups have no Paystack Subscription — schedule
+    // the first self-managed cycle so process-recurring-addon-billing picks
+    // them up. Annual signups keep relying on Paystack's own Subscription
+    // engine and must NOT get a next_billing_at, or they'd be double-billed.
+    if (meta.billing_mode === "self_managed") {
+      tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      tenantUpdate.billing_retry_count = 0;
+    }
+
     // Activate the subscription
     const { error: updateError } = await supabase
       .from("tenants")
@@ -160,12 +169,22 @@ serve(async (req) => {
       });
     }
 
+    const discountApplied = Number(meta.discount_applied || 0);
+    if (discountApplied > 0) {
+      await supabase.rpc("consume_tenant_sales_promo_use", {
+        p_tenant_id: tenantId,
+        p_surface: "subscription",
+        p_usage_reference: `checkout:${reference}`,
+        p_amount: discountApplied,
+      });
+    }
+
     await supabase.from("audit_logs").insert({
       action: "subscription.activated",
       entity_type: "tenants",
       entity_id: tenantId,
       actor_user_id: user.id,
-      metadata: { reference, currency, intent: "subscription_activation" },
+      metadata: { reference, currency, intent: "subscription_activation", discount_applied: discountApplied },
     });
 
     const receiptEmail = txData?.customer?.email || user.email;

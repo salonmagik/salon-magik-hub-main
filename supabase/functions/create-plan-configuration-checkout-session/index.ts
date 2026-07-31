@@ -121,6 +121,8 @@ serve(async (req) => {
       );
     }
 
+    const discountAmount = Number(quote.discount_amount || 0);
+    const chargeAmount = Math.max(quote.price_delta - discountAmount, 0);
     const currency = quote.currency || "NGN";
     const { key: paystackKey, error: keyError } = getPaystackKeyForCurrency(currency);
     if (!paystackKey) {
@@ -132,19 +134,26 @@ serve(async (req) => {
 
     // Card already on file: charge the delta now, no redirect needed.
     if (tenant.paystack_authorization_code) {
-      const chargeResult = await chargeAuthorization(paystackKey, {
-        authorizationCode: tenant.paystack_authorization_code,
-        email: tenant.paystack_authorization_email || user.email!,
-        amountInMajorUnits: quote.price_delta,
-        currency,
-        metadata: { intent: "plan_configuration", tenant_id: tenantId, branches, seats },
-      });
+      let reference = `promo-covered:${crypto.randomUUID()}`;
 
-      if (!chargeResult.success) {
-        return new Response(JSON.stringify({ error: chargeResult.error || "Charge failed" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // A promo can fully cover the delta — nothing to charge, but the
+      // change still applies and the promo use still gets consumed below.
+      if (chargeAmount > 0) {
+        const chargeResult = await chargeAuthorization(paystackKey, {
+          authorizationCode: tenant.paystack_authorization_code,
+          email: tenant.paystack_authorization_email || user.email!,
+          amountInMajorUnits: chargeAmount,
+          currency,
+          metadata: { intent: "plan_configuration", tenant_id: tenantId, branches, seats },
         });
+
+        if (!chargeResult.success) {
+          return new Response(JSON.stringify({ error: chargeResult.error || "Charge failed" }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        reference = chargeResult.reference;
       }
 
       const { data: applyResult, error: applyError } = await userClient.rpc("apply_plan_configuration", {
@@ -158,7 +167,7 @@ serve(async (req) => {
       if (applyError) {
         console.error("apply_plan_configuration error after successful charge:", applyError);
         return new Response(
-          JSON.stringify({ error: "Payment succeeded but applying the change failed. Contact support.", reference: chargeResult.reference }),
+          JSON.stringify({ error: "Payment succeeded but applying the change failed. Contact support.", reference }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
@@ -168,28 +177,84 @@ serve(async (req) => {
       // banners forever.
       await supabase.from("tenants").update({ subscription_status: "active" }).eq("id", tenantId);
 
+      if (discountAmount > 0) {
+        await supabase.rpc("consume_tenant_sales_promo_use", {
+          p_tenant_id: tenantId,
+          p_surface: "subscription",
+          p_usage_reference: `plan-config:${reference}`,
+          p_amount: discountAmount,
+        });
+      }
+
       await supabase.from("audit_logs").insert({
         tenant_id: tenantId,
         actor_user_id: user.id,
         action: "plan_configuration_charged",
         entity_type: "tenant",
         entity_id: tenantId,
-        metadata: { reference: chargeResult.reference, branches, seats, price_delta: quote.price_delta, currency },
+        metadata: { reference, branches, seats, price_delta: quote.price_delta, discount_amount: discountAmount, charged: chargeAmount, currency },
       });
 
       const receiptEmail = tenant.paystack_authorization_email || user.email;
-      if (receiptEmail) {
+      if (receiptEmail && chargeAmount > 0) {
         await sendReceiptEmail({
           recipientEmail: receiptEmail,
           salonName: tenant.name,
           salonLogoUrl: tenant.logo_url,
           title: "Your Salon Magik billing was updated",
-          lineItems: [{ label: `Plan configuration update (${branches} branches, ${seats} seats)`, amount: quote.price_delta }],
-          total: quote.price_delta,
+          lineItems: [{ label: `Plan configuration update (${branches} branches, ${seats} seats)`, amount: chargeAmount }],
+          total: chargeAmount,
           currency,
-          reference: chargeResult.reference,
+          reference,
         });
       }
+
+      return new Response(
+        JSON.stringify({ charged: true, immediate: true, applyResult }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // No card on file, but a promo fully covers the delta — nothing to
+    // collect, apply directly rather than sending the owner through checkout
+    // for a ₦0/GH₵0 charge.
+    if (chargeAmount <= 0) {
+      const { data: applyResult, error: applyError } = await userClient.rpc("apply_plan_configuration", {
+        p_tenant_id: tenantId,
+        p_branches: branches,
+        p_seats: seats,
+        p_source: "owner_self_serve",
+        p_reason: "Plan configuration change (fully covered by promo)",
+      });
+
+      if (applyError) {
+        console.error("apply_plan_configuration error (promo-covered):", applyError);
+        return new Response(JSON.stringify({ error: applyError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      await supabase.from("tenants").update({ subscription_status: "active" }).eq("id", tenantId);
+
+      const promoReference = `plan-config:promo-covered:${crypto.randomUUID()}`;
+      if (discountAmount > 0) {
+        await supabase.rpc("consume_tenant_sales_promo_use", {
+          p_tenant_id: tenantId,
+          p_surface: "subscription",
+          p_usage_reference: promoReference,
+          p_amount: discountAmount,
+        });
+      }
+
+      await supabase.from("audit_logs").insert({
+        tenant_id: tenantId,
+        actor_user_id: user.id,
+        action: "plan_configuration_charged",
+        entity_type: "tenant",
+        entity_id: tenantId,
+        metadata: { reference: promoReference, branches, seats, price_delta: quote.price_delta, discount_amount: discountAmount, charged: 0, currency },
+      });
 
       return new Response(
         JSON.stringify({ charged: true, immediate: true, applyResult }),
@@ -207,7 +272,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         email: user.email,
-        amount: Math.round(quote.price_delta * 100),
+        amount: Math.round(chargeAmount * 100),
         currency,
         callback_url: successUrl,
         metadata: {
@@ -216,6 +281,7 @@ serve(async (req) => {
           seats,
           cancel_action: cancelUrl,
           intent: "plan_configuration",
+          discount_amount: discountAmount,
         },
       }),
     });

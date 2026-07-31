@@ -8794,10 +8794,19 @@ export type Database = {
           current_allowed_staff: number
           current_monthly_price: number
           current_plan_slug: string
+          discount_amount: number
           price_delta: number
           required_plan_slug: string
           requires_custom_locations: boolean
           total_monthly_price: number
+        }[]
+      }
+      compute_tenant_recurring_total: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          breakdown: Json
+          currency: string
+          total_amount: number
         }[]
       }
       consume_backoffice_step_up_challenge: {
@@ -9005,6 +9014,10 @@ export type Database = {
         Returns: Json
       }
       generate_invoice_number: { Args: { _tenant_id: string }; Returns: string }
+      get_active_subscription_promo_discount: {
+        Args: { p_amount: number; p_surface?: string; p_tenant_id: string }
+        Returns: number
+      }
       get_auth_user_by_email: { Args: { lookup_email: string }; Returns: Json }
       get_customer_engagement_summary: {
         Args: { p_customer_id: string; p_tenant_id: string }

@@ -94,7 +94,8 @@ serve(async (req) => {
       );
     }
 
-    // Look up the Paystack plan code for this plan + currency combination
+    // Look up the Paystack plan code (annual only, see below) and list price
+    // for this plan + currency combination.
     let paystackPlanCode: string | null = null;
     let localPlanAmount: number = 0; // the amount to be paid stored in our records
     if (tenant.plan) {
@@ -121,9 +122,32 @@ serve(async (req) => {
       }
     }
 
+    // Any active subscription-surface promo discount applies to the first charge.
+    let discount = 0;
+    if (localPlanAmount > 0) {
+      const { data: discountValue } = await supabase.rpc("get_active_subscription_promo_discount", {
+        p_tenant_id: tenantId,
+        p_amount: localPlanAmount,
+      });
+      discount = Number(discountValue || 0);
+    }
+    const chargeAmount = Math.max(localPlanAmount - discount, 0);
+
     // Build Paystack transaction initialization payload.
-    // Providing a `plan` code causes Paystack to automatically create a recurring
-    // subscription after the first successful payment — no separate API call needed.
+    //
+    // Monthly signups are self-managed from here on: no `plan` code is sent,
+    // so Paystack never creates its own recurring Subscription object (that
+    // fixed-price engine is what let tier upgrades silently keep billing the
+    // old price forever — see compute_tenant_recurring_total). Instead this
+    // is a one-time transaction; the saved card authorization is charged the
+    // server-computed total (base + seats + locations + add-ons - promo)
+    // every cycle by process-recurring-addon-billing.
+    //
+    // Annual signups still go through Paystack's native Subscription (no
+    // billing_cycle is persisted anywhere yet, so the self-managed monthly
+    // cron has no way to know a tenant already paid for the year — building
+    // that is separate, deferred work, not something to improvise here).
+    const isAnnual = billingCycle === "annual";
     const paystackBody: Record<string, unknown> = {
       email: user.email,
       callback_url: successUrl,
@@ -132,23 +156,28 @@ serve(async (req) => {
         tenant_name: tenant.name,
         cancel_action: cancelUrl,
         intent: "subscription_activation",
+        billing_mode: isAnnual ? "paystack_subscription" : "self_managed",
+        discount_applied: discount,
       },
     };
 
-    if (paystackPlanCode && localPlanAmount > 0) {
+    if (isAnnual && paystackPlanCode && localPlanAmount > 0) {
       // Paystack requires `amount` even when a plan code is provided — it
       // validates the two match (or uses it as the charge amount). Both are
       // now kept in sync via backoffice → "Sync to Paystack", so they agree.
       paystackBody.plan = paystackPlanCode;
-      paystackBody.amount = Math.round(localPlanAmount * 100);
+      paystackBody.amount = Math.round(chargeAmount * 100);
+      paystackBody.currency = currency;
+    } else if (chargeAmount > 0) {
+      paystackBody.amount = Math.round(chargeAmount * 100);
       paystackBody.currency = currency;
     } else {
-      // No plan code configured yet — fall back to a small authorization charge.
+      // No price configured yet — fall back to a small authorization charge.
       // Amount in lowest unit (kobo / pesewas): 100 = ₦1 / GH₵1.
       paystackBody.amount = 100;
       paystackBody.currency = currency;
       console.warn(
-        `No Paystack plan code for tenant ${tenantId} (plan: ${tenant.plan}, currency: ${currency}). Falling back to ₦1/GH₵1 authorization.`,
+        `No plan price for tenant ${tenantId} (plan: ${tenant.plan}, currency: ${currency}). Falling back to ₦1/GH₵1 authorization.`,
       );
     }
 

@@ -222,6 +222,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		required_plan_slug: string;
 		total_monthly_price: number | null;
 		price_delta: number | null;
+		discount_amount: number | null;
 		requires_custom_locations: boolean;
 		currency: string;
 	} | null>(null);
@@ -2037,7 +2038,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</CardDescription>
 				</CardHeader>
 			)}
-			<CardContent className="space-y-6">
+			<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
 				{locationsLoading ? (
 					<div className="space-y-4">
 						{[1, 2, 3].map((i) => (
@@ -2148,7 +2149,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</CardDescription>
 				</CardHeader>
 			)}
-			<CardContent className="space-y-4">
+			<CardContent className={cn(isChainScope && "pt-6", "space-y-4")}>
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Email appointment reminders</p>
@@ -2521,7 +2522,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</CardDescription>
 				</CardHeader>
 			)}
-			<CardContent className="space-y-6">
+			<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
 					<div className="space-y-6">
 						{bookingUrl ? (
 							<div className="space-y-2">
@@ -3097,7 +3098,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		return (
 			<Card>
 				{!isChainScope && (
-					<CardHeader>
+					<CardHeader className="flex items-center gap-2">
 						<CardTitle>Subscription</CardTitle>
 						<CardDescription>
 							Your business is on the{" "}
@@ -3108,7 +3109,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</CardDescription>
 					</CardHeader>
 				)}
-				<CardContent className="space-y-6">
+				<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
 					<div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
 						<div className="flex items-center justify-between mb-2">
 							<p className="font-semibold capitalize">
@@ -3242,7 +3243,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
 										{isPlanConfigUnchanged ? (
 											<p>
-												You're currently on this configuration —{" "}
+												You're currently on this plan —{" "}
 												<span className="font-medium capitalize">
 													{planConfigQuote.required_plan_slug}
 												</span>{" "}
@@ -3282,6 +3283,25 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 														? `+${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — payment required`
 														: `${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — applies immediately, no charge`}
 												</p>
+												{isPlanConfigIncrease &&
+													(planConfigQuote.discount_amount || 0) > 0 && (
+														<p className="text-success">
+															Promo discount: −
+															{formatCurrency(
+																planConfigQuote.discount_amount || 0,
+																planConfigQuote.currency,
+															)}{" "}
+															· you'll be charged{" "}
+															{formatCurrency(
+																Math.max(
+																	(planConfigQuote.price_delta || 0) -
+																		(planConfigQuote.discount_amount || 0),
+																	0,
+																),
+																planConfigQuote.currency,
+															)}
+														</p>
+													)}
 											</>
 										)}
 									</div>

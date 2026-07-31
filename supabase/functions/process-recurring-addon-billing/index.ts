@@ -47,19 +47,19 @@ Deno.serve(async (req) => {
 
     for (const tenant of dueTenants || []) {
       try {
-        const { data: addonRows, error: addonError } = await supabase.rpc("compute_current_addon_total", {
+        const { data: totalRows, error: totalError } = await supabase.rpc("compute_tenant_recurring_total", {
           p_tenant_id: tenant.id,
         });
 
-        if (addonError) {
-          console.error(`compute_current_addon_total failed for tenant ${tenant.id}:`, addonError);
-          results.push({ tenantId: tenant.id, status: "error", error: addonError.message });
+        if (totalError) {
+          console.error(`compute_tenant_recurring_total failed for tenant ${tenant.id}:`, totalError);
+          results.push({ tenantId: tenant.id, status: "error", error: totalError.message });
           continue;
         }
 
-        const addon = addonRows?.[0];
-        const addonTotal = addon?.addon_total || 0;
-        const currency = addon?.currency || (tenant.currency || "NGN").toUpperCase();
+        const totalRow = totalRows?.[0];
+        const addonTotal = totalRow?.total_amount || 0;
+        const currency = totalRow?.currency || (tenant.currency || "NGN").toUpperCase();
         const nextBillingAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
         if (addonTotal <= 0) {
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
             .from("tenants")
             .update({ next_billing_at: nextBillingAt, billing_retry_count: 0 })
             .eq("id", tenant.id);
-          results.push({ tenantId: tenant.id, status: "skipped_zero_addon" });
+          results.push({ tenantId: tenant.id, status: "skipped_zero_total" });
           continue;
         }
 
@@ -113,12 +113,22 @@ Deno.serve(async (req) => {
           .update({ next_billing_at: nextBillingAt, billing_retry_count: 0 })
           .eq("id", tenant.id);
 
+        const discountApplied = Number(totalRow?.breakdown?.discount || 0);
+        if (discountApplied > 0) {
+          await supabase.rpc("consume_tenant_sales_promo_use", {
+            p_tenant_id: tenant.id,
+            p_surface: "subscription",
+            p_usage_reference: `recurring:${chargeResult.reference}`,
+            p_amount: discountApplied,
+          });
+        }
+
         await supabase.from("audit_logs").insert({
           tenant_id: tenant.id,
           action: "recurring_addon_billing_charged",
           entity_type: "tenant",
           entity_id: tenant.id,
-          metadata: { reference: chargeResult.reference, addon_total: addonTotal, currency, breakdown: addon?.breakdown },
+          metadata: { reference: chargeResult.reference, total: addonTotal, currency, breakdown: totalRow?.breakdown },
         });
 
         if (tenant.paystack_authorization_email) {
@@ -126,8 +136,8 @@ Deno.serve(async (req) => {
             recipientEmail: tenant.paystack_authorization_email,
             salonName: tenant.name,
             salonLogoUrl: tenant.logo_url,
-            title: "Your Salon Magik monthly add-ons were billed",
-            lineItems: [{ label: "Salon Magik add-ons (this billing cycle)", amount: addonTotal }],
+            title: "Your Salon Magik subscription was billed",
+            lineItems: [{ label: "Salon Magik subscription (this billing cycle)", amount: addonTotal }],
             total: addonTotal,
             currency,
             reference: chargeResult.reference,

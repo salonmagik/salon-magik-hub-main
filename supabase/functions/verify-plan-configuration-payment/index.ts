@@ -177,6 +177,16 @@ serve(async (req) => {
     }
 
     const amount = (txData?.amount || 0) / 100;
+    const discountAmount = Number(meta.discount_amount || 0);
+
+    if (discountAmount > 0) {
+      await supabase.rpc("consume_tenant_sales_promo_use", {
+        p_tenant_id: tenantId,
+        p_surface: "subscription",
+        p_usage_reference: `plan-config:${reference}`,
+        p_amount: discountAmount,
+      });
+    }
 
     await supabase.from("audit_logs").insert({
       tenant_id: tenantId,
@@ -184,7 +194,7 @@ serve(async (req) => {
       action: "plan_configuration_charged",
       entity_type: "tenant",
       entity_id: tenantId,
-      metadata: { reference, branches, seats, price_delta: amount, currency },
+      metadata: { reference, branches, seats, price_delta: amount, discount_amount: discountAmount, currency },
     });
 
     const receiptEmail = txData?.customer?.email || user.email;
