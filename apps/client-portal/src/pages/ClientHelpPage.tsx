@@ -9,7 +9,15 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Badge } from "@ui/badge";
-import { HelpCircle, Mail, MessageCircle, LifeBuoy } from "lucide-react";
+import { HelpCircle, Mail, MessageCircle, LifeBuoy, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+
+const TICKET_STATUS_TOOLTIPS: Record<string, string> = {
+  open: "We've received your request and it's waiting to be picked up.",
+  in_progress: "Someone on our team is actively working on this.",
+  resolved: "We consider this resolved — reply if it isn't.",
+  closed: "This ticket is closed and no longer being tracked.",
+};
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 
@@ -252,7 +260,14 @@ export default function ClientHelpPage() {
                             {salonName} · {new Date(ticket.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <Badge variant="secondary">{ticket.status.replace(/_/g, " ")}</Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className="cursor-default">{ticket.status.replace(/_/g, " ")}</Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            {TICKET_STATUS_TOOLTIPS[ticket.status] || "Current status of this support request."}
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
                   );

@@ -8,9 +8,10 @@ import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
-import { Calendar, Clock, MapPin, Store, XCircle, ChevronRight } from "lucide-react";
+import { Calendar, Clock, MapPin, Store, XCircle, ChevronRight, Info } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type BookingFilter = "upcoming" | "completed" | "cancelled";
 type ApprovalAwareBooking = ClientAppointmentWithDetails & {
@@ -87,15 +88,36 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
           {/* Left side - Main info */}
           <div className="space-y-2 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className={statusColors[booking.status] || "bg-muted"}>
-                {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-              </Badge>
-              <Badge className={paymentColors[booking.payment_status] || "bg-muted"}>
-                {getPaymentLabel(booking.payment_status)}
-              </Badge>
-              <Badge className={approvalColors[booking.approval_status || "not_required"] || "bg-muted"}>
-                {getApprovalLabel(booking.approval_status)}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className={`cursor-default ${statusColors[booking.status] || "bg-muted"}`}>
+                    {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  Where the appointment is in its lifecycle — scheduled, in progress, or completed.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className={`cursor-default ${paymentColors[booking.payment_status] || "bg-muted"}`}>
+                    {getPaymentLabel(booking.payment_status)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  How much of this booking has been paid for.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className={`cursor-default ${approvalColors[booking.approval_status || "not_required"] || "bg-muted"}`}>
+                    {getApprovalLabel(booking.approval_status)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  Whether the salon has confirmed this booking, or a reschedule they proposed.
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             {/* Salon name */}

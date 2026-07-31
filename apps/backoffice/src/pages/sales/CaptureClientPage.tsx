@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@ui/dialog";
 import { MoreHorizontal, Ticket } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { EmptyState } from "@ui/empty-state";
 
 export default function CaptureClientPage() {
@@ -184,9 +185,16 @@ export default function CaptureClientPage() {
                     <TableCell className="font-medium">{promoCode.code}</TableCell>
                     <TableCell>{promoCode.target_email}</TableCell>
                     <TableCell>
-                      <Badge variant={promoCode.status === "active" ? "default" : "secondary"}>
-                        {promoCode.status}
-                      </Badge>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant={promoCode.status === "active" ? "default" : "secondary"} className="cursor-default">
+                            {promoCode.status}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          "Active" means this code can still be claimed. It stops being active once redeemed, invalidated, or past its expiry date.
+                        </TooltipContent>
+                      </Tooltip>
                     </TableCell>
                     <TableCell>{new Date(promoCode.expires_at).toLocaleString()}</TableCell>
                     <TableCell>

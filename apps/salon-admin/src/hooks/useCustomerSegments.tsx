@@ -23,13 +23,33 @@ export type CustomerTag =
 
 export const CUSTOMER_TAG_META: Record<
   CustomerTag,
-  { label: string; className: string }
+  { label: string; className: string; description: string }
 > = {
-  vip: { label: "VIP", className: "bg-amber-100 text-amber-800" },
-  big_spender: { label: "Big spender", className: "bg-success-bg text-success" },
-  regular: { label: "Regular", className: "bg-primary/10 text-primary" },
-  loves_packages: { label: "Loves packages", className: "bg-primary/10 text-primary" },
-  lapsed: { label: "Lapsed", className: "bg-warning-bg text-warning-foreground" },
+  vip: {
+    label: "VIP",
+    className: "bg-amber-100 text-amber-800",
+    description: "Marked manually by your team — click the star on a customer to toggle it.",
+  },
+  big_spender: {
+    label: "Big spender",
+    className: "bg-success-bg text-success",
+    description: "Top 10% of paying customers at this salon by total amount spent. Only shown once you have at least 5 paying customers.",
+  },
+  regular: {
+    label: "Regular",
+    className: "bg-primary/10 text-primary",
+    description: "Visited 5 or more times.",
+  },
+  loves_packages: {
+    label: "Loves packages",
+    className: "bg-primary/10 text-primary",
+    description: "Bought 3 or more packages in the last 3 months.",
+  },
+  lapsed: {
+    label: "Lapsed",
+    className: "bg-warning-bg text-warning-foreground",
+    description: "Hasn't visited in over 45 days.",
+  },
 };
 
 /** Ordered tag list for a segment row (most notable first). */

@@ -36,8 +36,9 @@ import {
 } from "@ui/dialog";
 import {
   UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
-  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2, Plus, CalendarOff
+  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2, Plus, CalendarOff, Info
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { cn } from "@shared/utils";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
@@ -749,8 +750,16 @@ export default function StaffPage() {
           </Card>
           <Card className="rounded-[14px] border-black/[0.06] bg-white shadow-none">
             <CardHeader className="px-5 pb-2 pt-5">
-              <CardTitle className="text-[13px] font-normal text-muted-foreground">
+              <CardTitle className="flex items-center gap-1 text-[13px] font-normal text-muted-foreground">
                 Staff role
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 cursor-default" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    Everyone who isn't an owner or manager — supervisors, receptionists, and stylists combined.
+                  </TooltipContent>
+                </Tooltip>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-5 pb-5">

@@ -40,6 +40,7 @@ import {
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, Globe } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
@@ -82,19 +83,36 @@ export default function WaitlistPage() {
     setSelectedLead(null);
   };
 
+  const WAITLIST_STATUS_TOOLTIPS: Record<string, string> = {
+    pending: "Signed up for the waitlist — hasn't been reviewed yet.",
+    invited: "Approved and sent an invite email — hasn't signed up for an account yet.",
+    rejected: "Declined — will not be invited.",
+    converted: "Signed up for a real account using their invite.",
+  };
+
   const getStatusBadge = (status: WaitlistStatus) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="warning">Pending</Badge>;
-      case "invited":
-        return <Badge variant="info">Invited</Badge>;
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      case "converted":
-        return <Badge variant="success">Converted</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
+    const badge = (() => {
+      switch (status) {
+        case "pending":
+          return <Badge variant="warning" className="cursor-default">Pending</Badge>;
+        case "invited":
+          return <Badge variant="info" className="cursor-default">Invited</Badge>;
+        case "rejected":
+          return <Badge variant="destructive" className="cursor-default">Rejected</Badge>;
+        case "converted":
+          return <Badge variant="success" className="cursor-default">Converted</Badge>;
+        default:
+          return <Badge variant="secondary" className="cursor-default">{status}</Badge>;
+      }
+    })();
+    const tooltip = WAITLIST_STATUS_TOOLTIPS[status];
+    if (!tooltip) return badge;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-56 text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
   };
 
   const getPlanBadge = (plan: string | null) => {
@@ -119,11 +137,23 @@ export default function WaitlistPage() {
       qualified: "success",
       closed: "neutral",
     };
+    const tooltips: Record<MarketInterestStatus, string> = {
+      new: "Just registered interest — hasn't been looked at yet.",
+      reviewing: "Someone on the team is currently assessing this lead.",
+      contacted: "We've reached out to this person directly.",
+      qualified: "Assessed as a good fit — ready to move forward.",
+      closed: "No longer being pursued.",
+    };
 
     return (
-      <Badge variant={variants[status]}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant={variants[status]} className="cursor-default">
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-56 text-xs">{tooltips[status]}</TooltipContent>
+      </Tooltip>
     );
   };
 

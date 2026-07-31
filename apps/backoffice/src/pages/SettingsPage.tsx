@@ -30,7 +30,8 @@ import {
   SelectValue,
 } from "@ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, Calendar, Gift, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+import { AlertTriangle, Calendar, Gift, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import type { Json } from "@/lib/supabase";
 
 type LegalStatus = "planned" | "legal_approved" | "active" | "paused";
@@ -1332,9 +1333,18 @@ export default function BackofficeSettingsPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={override.status === "active" ? "default" : "secondary"}>
-                          {override.status}
-                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant={override.status === "active" ? "default" : "secondary"} className="cursor-default">
+                              {override.status}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            {override.status === "active"
+                              ? "Currently in effect — this tenant's trial window is extended."
+                              : "No longer in effect, either because it expired naturally or was manually revoked."}
+                          </TooltipContent>
+                        </Tooltip>
                         {override.status === "active" && (
                           <Button
                             size="sm"
@@ -1359,7 +1369,17 @@ export default function BackofficeSettingsPage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Arkesel SMS Balance</CardTitle>
+                    <CardTitle className="flex items-center gap-1.5">
+                      Arkesel SMS Balance
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Live balance on our third-party SMS gateway (Arkesel), fetched in real time — not stored in our database. At zero, OTP and marketing SMS stop sending for that account until topped up.
+                        </TooltipContent>
+                      </Tooltip>
+                    </CardTitle>
                     <CardDescription>Live credit balance for each country Arkesel account.</CardDescription>
                   </div>
                   <Button

@@ -7,7 +7,8 @@ import { Input } from "@ui/input";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { EmptyState } from "@ui/empty-state";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Textarea } from "@ui/textarea";
 import {
@@ -228,7 +229,14 @@ export default function CampaignsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={campaign.is_active ? "success" : "neutral"}>{campaign.is_active ? "Active" : "Inactive"}</Badge>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant={campaign.is_active ? "success" : "neutral"} className="cursor-default">{campaign.is_active ? "Active" : "Inactive"}</Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-56 text-xs">
+                      A manual on/off toggle, independent of the campaign's Starts/Ends dates above — a campaign inside its date window can still be switched off.
+                    </TooltipContent>
+                  </Tooltip>
                   <Button size="sm" variant="outline" onClick={() => toggleCampaign.mutate({ id: campaign.id, isActive: !campaign.is_active })}>
                     {campaign.is_active ? "Deactivate" : "Activate"}
                   </Button>

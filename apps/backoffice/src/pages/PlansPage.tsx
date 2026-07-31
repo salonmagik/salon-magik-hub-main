@@ -60,7 +60,9 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Info,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
 
 type CurrencyCode = "USD" | "NGN" | "GHS";
@@ -2131,19 +2133,47 @@ export default function PlansPage() {
         <Card className="border-dashed">
           <CardContent className="pt-4 text-sm text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                Plans {planCount}/{MAX_PLANS}
-              </Badge>
-              <Badge variant="secondary">
-                Remaining slots: {remainingPlanSlots}
-              </Badge>
-              <Badge variant="secondary">
-                Without active pricing: {plansWithoutActivePricing.length}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-default">
+                    Plans {planCount}/{MAX_PLANS}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  The platform enforces a hard cap of {MAX_PLANS} plans — you can't create more until one is removed.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-default">
+                    Remaining slots: {remainingPlanSlots}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  How many more plans you can create before hitting the {MAX_PLANS}-plan cap.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-default">
+                    Without active pricing: {plansWithoutActivePricing.length}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  Plans with no active pricing row — currently unsellable until pricing is added.
+                </TooltipContent>
+              </Tooltip>
               {recommendedPlanId ? (
-                <Badge variant="default">
-                  Recommended: {getPlanName(recommendedPlanId)}
-                </Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="default" className="cursor-default">
+                      Recommended: {getPlanName(recommendedPlanId)}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    The plan highlighted as "recommended" to prospects on the pricing page.
+                  </TooltipContent>
+                </Tooltip>
               ) : (
                 <Badge variant="outline">No recommended plan set</Badge>
               )}

@@ -8,6 +8,7 @@ import {
   Clock3,
   Store,
   WalletCards,
+  Info,
 } from "lucide-react";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import {
@@ -19,6 +20,7 @@ import {
 import { Badge } from "@ui/badge";
 import { Button } from "@ui/button";
 import { Skeleton } from "@ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
 
@@ -183,16 +185,23 @@ export default function ClientDashboard() {
                       </p>
                     </div>
                     <div className="flex items-center justify-between gap-4 sm:justify-end">
-                      <Badge
-                        className={cn(
-                          "rounded-full border-0 px-4 py-1 font-normal capitalize",
-                          status.toLowerCase().includes("pending")
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-emerald-100 text-emerald-800",
-                        )}
-                      >
-                        {status}
-                      </Badge>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            className={cn(
+                              "cursor-default rounded-full border-0 px-4 py-1 font-normal capitalize",
+                              status.toLowerCase().includes("pending")
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-100 text-emerald-800",
+                            )}
+                          >
+                            {status}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Shows your payment status when there is one to report, otherwise the appointment's status.
+                        </TooltipContent>
+                      </Tooltip>
                       <ChevronRight className="h-5 w-5 text-muted-foreground transition group-hover:translate-x-0.5" />
                     </div>
                   </Link>
@@ -242,12 +251,22 @@ export default function ClientDashboard() {
                         <p className="text-lg font-medium">
                           {entitlement.package?.name || "Salon package"}
                         </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {used} of {total} item{total === 1 ? "" : "s"} used
-                          {salon ? ` · ${salon.name}` : ""}
-                          {entitlement.expires_at
-                            ? ` · expires ${format(new Date(entitlement.expires_at), "d MMM")}`
-                            : ""}
+                        <p className="mt-1 flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+                          <span>
+                            {used} of {total} item{total === 1 ? "" : "s"} used
+                            {salon ? ` · ${salon.name}` : ""}
+                            {entitlement.expires_at
+                              ? ` · expires ${format(new Date(entitlement.expires_at), "d MMM")}`
+                              : ""}
+                          </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Combined count across every service or product included in this package — not just one item.
+                            </TooltipContent>
+                          </Tooltip>
                         </p>
                       </div>
                       <Badge className="rounded-full border-0 bg-[#f3edff] text-primary">
@@ -401,7 +420,17 @@ export default function ClientDashboard() {
                       </div>
                       <div className="min-w-0">
                         <p className="truncate font-medium">{customer.tenant.name}</p>
-                        <p className="text-xs text-muted-foreground">Available balance</p>
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs text-muted-foreground">Available balance</p>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Paid funds plus store credit combined — may include amounts already reserved for an upcoming booking.
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                     <p className="shrink-0 font-serif text-lg font-semibold">

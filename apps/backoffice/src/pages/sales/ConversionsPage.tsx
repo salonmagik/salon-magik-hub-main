@@ -6,6 +6,7 @@ import { Badge } from "@ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 export default function ConversionsPage() {
   const { backofficeUser } = useBackofficeAuth();
@@ -76,7 +77,14 @@ export default function ConversionsPage() {
                         {row.sales_promo_codes?.code || "No code"} · {new Date(row.created_at).toLocaleString()}
                       </p>
                     </div>
-                    <Badge variant={row.status === "finalized" ? "default" : "secondary"}>{row.status}</Badge>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant={row.status === "finalized" ? "default" : "secondary"} className="cursor-default">{row.status}</Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">
+                        "Finalized" means this redemption is confirmed and locked in. Other statuses mean it's still pending or was reversed.
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 ))}
                 {!visibleRedemptions.length && <p className="text-sm text-muted-foreground">No redemptions yet.</p>}
@@ -99,7 +107,14 @@ export default function ConversionsPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-medium">{Number(row.total_amount || 0).toLocaleString()}</p>
-                      <Badge variant={row.status === "accrued" ? "default" : "secondary"}>{row.status}</Badge>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant={row.status === "accrued" ? "default" : "secondary"} className="cursor-default">{row.status}</Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          "Accrued" means this commission is owed and will be paid out. Other statuses mean it was cancelled or hasn't accrued yet.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   </div>
                 ))}

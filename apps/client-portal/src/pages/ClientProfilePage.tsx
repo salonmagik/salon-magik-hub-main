@@ -9,8 +9,9 @@ import { Label } from "@ui/label";
 import { Switch } from "@ui/switch";
 import { Separator } from "@ui/separator";
 import { Avatar, AvatarFallback } from "@ui/avatar";
-import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck, Pencil, X, Check, Loader2 } from "lucide-react";
+import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck, Pencil, X, Check, Loader2, Info } from "lucide-react";
 import { PhoneInput } from "@ui/phone-input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -366,7 +367,17 @@ export default function ClientProfilePage() {
                 <CardContent className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="rounded-xl border p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Password</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Password</p>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            "Required" means you've only ever signed in with a one-time code and haven't set a password yet.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                       <p className="mt-2 font-medium">{hasPassword ? "Configured" : "Required"}</p>
                     </div>
                     <div className="rounded-xl border p-4 space-y-2">

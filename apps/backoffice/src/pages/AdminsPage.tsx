@@ -50,7 +50,8 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import { Alert, AlertDescription } from "@ui/alert";
-import { Loader2, Plus, MoreHorizontal, Shield, Users } from "lucide-react";
+import { Loader2, Plus, MoreHorizontal, Shield, Users, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { EmptyState } from "@ui/empty-state";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
@@ -567,17 +568,35 @@ export default function AdminsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={user.status === "active" ? "default" : user.status === "invited" ? "secondary" : "destructive"}>
-                              {user.status}
-                            </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant={user.status === "active" ? "default" : user.status === "invited" ? "secondary" : "destructive"} className="cursor-default">
+                                  {user.status}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                {user.status === "invited"
+                                  ? "Sent an invite but hasn't signed in yet — can't access backoffice until they do."
+                                  : user.status === "active"
+                                    ? "Can sign in to the backoffice."
+                                    : "Deactivated — can no longer sign in."}
+                              </TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
                             {user.totp_enabled ? <Badge>Enabled</Badge> : <Badge variant="secondary">Not set</Badge>}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={user.is_logged_in ? "default" : "secondary"}>
-                              {user.is_logged_in ? "Yes" : "No"}
-                            </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant={user.is_logged_in ? "default" : "secondary"} className="cursor-default">
+                                  {user.is_logged_in ? "Yes" : "No"}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                Has a currently active, unexpired session right now — not whether they've ever logged in before.
+                              </TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>{formatTimestamp(user.last_login_at)}</TableCell>
                           <TableCell>{formatTimestamp(user.last_activity_at)}</TableCell>
@@ -643,9 +662,45 @@ export default function AdminsPage() {
                     <TableRow>
                       <TableHead>Role Name</TableHead>
                       <TableHead>Admins</TableHead>
-                      <TableHead>Access - Pages</TableHead>
-                      <TableHead>Access - Subpages</TableHead>
-                      <TableHead>Permissions</TableHead>
+                      <TableHead>
+                        <span className="inline-flex items-center gap-1">
+                          Access - Pages
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Top-level nav sections this role can open (e.g. Customers, Tenants).
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
+                      </TableHead>
+                      <TableHead>
+                        <span className="inline-flex items-center gap-1">
+                          Access - Subpages
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Specific pages within those sections this role can open.
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
+                      </TableHead>
+                      <TableHead>
+                        <span className="inline-flex items-center gap-1">
+                          Permissions
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Specific actions this role can take (e.g. approve refunds), separate from which pages it can view.
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
+                      </TableHead>
                       <TableHead className="w-[150px]" />
                     </TableRow>
                   </TableHeader>

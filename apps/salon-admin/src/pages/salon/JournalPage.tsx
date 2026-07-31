@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Banknote, Plus, Search } from "lucide-react";
+import { Banknote, Plus, Search, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { useCashLedger } from "@/hooks/useCashLedger";
@@ -53,7 +54,17 @@ export default function JournalPage() {
             <p className="mt-2 text-2xl font-semibold">{formatCurrency(todayTotal, currentTenant?.currency)}</p>
           </CardContent></Card>
           <Card><CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Ledger total</p>
+            <div className="flex items-center gap-1">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Ledger total</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  All-time sum of every offline cash payment ever recorded here — not scoped to today, and doesn't include card or mobile money revenue.
+                </TooltipContent>
+              </Tooltip>
+            </div>
             <p className="mt-2 text-2xl font-semibold">{formatCurrency(total, currentTenant?.currency)}</p>
           </CardContent></Card>
         </div>

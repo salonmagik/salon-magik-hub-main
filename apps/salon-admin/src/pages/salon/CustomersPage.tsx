@@ -31,6 +31,7 @@ import {
   Trash2,
   CheckCircle,
   Plus,
+  Info,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
@@ -41,6 +42,7 @@ import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDi
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Textarea } from "@ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { useCustomers } from "@/hooks/useCustomers";
 import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import { useCustomerSegments, segmentTags, CUSTOMER_TAG_META } from "@/hooks/useCustomerSegments";
@@ -234,7 +236,14 @@ export default function CustomersPage() {
 
   const statusCards = [
     { label: "Total Customers", count: stats.total, icon: Users, color: "text-primary", bgColor: "bg-primary/10" },
-    { label: "VIP Customers", count: stats.vip, icon: Tag, color: "text-purple-600", bgColor: "bg-purple-50" },
+    {
+      label: "VIP Customers",
+      count: stats.vip,
+      icon: Tag,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      description: "Customers you've manually starred as VIP — a different, hand-picked list from the \"VIP\" segment tag shown on individual customer rows below.",
+    },
     {
       label: "New This Month",
       count: stats.thisMonth,
@@ -242,7 +251,14 @@ export default function CustomersPage() {
       color: "text-success",
       bgColor: "bg-success/10",
     },
-    { label: "Inactive", count: stats.inactive, icon: Calendar, color: "text-muted-foreground", bgColor: "bg-muted" },
+    {
+      label: "Inactive",
+      count: stats.inactive,
+      icon: Calendar,
+      color: "text-muted-foreground",
+      bgColor: "bg-muted",
+      description: `Hasn't booked in the last ${inactiveDaysThreshold} days — you can change this threshold below. Different from the "Lapsed" segment tag, which always uses a fixed 45-day cutoff.`,
+    },
   ];
 
   const getInitials = (name: string) => {
@@ -413,9 +429,21 @@ export default function CustomersPage() {
 							>
 								<CardContent className="flex items-center justify-between px-5 py-4">
 									<div>
-										<p className="text-sm text-muted-foreground">
-											{card.label}
-										</p>
+										<div className="flex items-center gap-1">
+											<p className="text-sm text-muted-foreground">
+												{card.label}
+											</p>
+											{card.description && (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+													</TooltipTrigger>
+													<TooltipContent side="top" className="max-w-56 text-xs">
+														{card.description}
+													</TooltipContent>
+												</Tooltip>
+											)}
+										</div>
 										<div className="mt-1 font-serif text-2xl font-semibold">
 											{isLoading ? (
 												<Skeleton className="h-8 w-8" />
@@ -609,9 +637,16 @@ export default function CustomersPage() {
 													{segmentTags(segments[customer.id])
 														.filter((tag) => tag !== "vip")
 														.map((tag) => (
-															<Badge key={tag} variant="secondary" className={cn("text-xs", CUSTOMER_TAG_META[tag].className)}>
-																{CUSTOMER_TAG_META[tag].label}
-															</Badge>
+															<Tooltip key={tag}>
+																<TooltipTrigger asChild>
+																	<Badge variant="secondary" className={cn("text-xs cursor-default", CUSTOMER_TAG_META[tag].className)}>
+																		{CUSTOMER_TAG_META[tag].label}
+																	</Badge>
+																</TooltipTrigger>
+																<TooltipContent side="top" className="max-w-56 text-xs">
+																	{CUSTOMER_TAG_META[tag].description}
+																</TooltipContent>
+															</Tooltip>
 														))}
 												</div>
 											)}

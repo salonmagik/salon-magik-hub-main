@@ -1094,7 +1094,17 @@ export default function MessagingPage() {
           <Card className={compactTintedMetricCardClass.primary}>
             <CardContent className="flex items-start justify-between p-4">
               <div>
-                <p className="text-sm text-muted-foreground">SMS Credits</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">SMS Credits</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-56 text-xs">
+                      Your plan's monthly free SMS allocation. Once used up, further texts are billed against purchased credits.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <p className="mt-1 text-3xl font-semibold">
                   {stats.smsCreditsUsedThisMonth}
                   <span className="text-lg font-normal text-muted-foreground">/{stats.freeAllocation}</span>

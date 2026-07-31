@@ -4,9 +4,10 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { formatCurrency } from "@shared/currency";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
-import { Loader2, Wallet, Plus, ArrowUpRight } from "lucide-react";
+import { Loader2, Wallet, Plus, ArrowUpRight, Info } from "lucide-react";
 import { WithdrawalDialog } from "./WithdrawalDialog";
 import { TopUpDialog } from "./TopUpDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 export function SalonWalletCard() {
   const { currentTenant } = useAuth();
@@ -64,7 +65,17 @@ export function SalonWalletCard() {
         ) : (
           <div className="space-y-6">
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Available Balance</p>
+              <div className="flex items-center gap-1">
+                <p className="text-sm text-muted-foreground">Available Balance</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    Your salon's own operating balance, from payouts and top-ups. Separate from customer store credit or prepaid funds.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <p className="text-4xl font-bold">
                 {formatCurrency(Number(wallet?.balance || 0), wallet?.currency)}
               </p>

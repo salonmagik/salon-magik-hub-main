@@ -41,6 +41,7 @@ import {
   Package,
   RotateCcw,
   Star,
+  Info,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -449,7 +450,17 @@ export function CustomerDetailDialog({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Card className="rounded-[14px] border-border/60 shadow-none">
                   <CardContent className="p-5">
-                    <p className="text-sm text-muted-foreground">Store credit</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-muted-foreground">Store credit</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          This customer's combined salon balance — paid funds plus salon-issued credit, added together.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <p className="mt-1 font-serif text-2xl font-semibold">
                       {currencySymbol}{Number(purse?.balance || 0).toFixed(2)}
                     </p>
@@ -457,7 +468,17 @@ export function CustomerDetailDialog({
                 </Card>
                 <Card className="rounded-[14px] border-border/60 shadow-none">
                   <CardContent className="p-5">
-                    <p className="text-sm text-muted-foreground">Outstanding</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-muted-foreground">Outstanding</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Unpaid balances from this customer's completed appointments.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <p className="mt-1 font-serif text-2xl font-semibold text-[#8a6510]">
                       {currencySymbol}{outstandingBalance.toFixed(2)}
                     </p>
@@ -910,7 +931,17 @@ export function CustomerDetailDialog({
               <Card className="mb-4">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Current Balance</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-muted-foreground">Current Balance</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Combined balance — paid funds plus salon-issued credit, added together.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <p className="text-2xl font-semibold">
                       {currency} {Number(purse?.balance || 0).toFixed(2)}
                     </p>

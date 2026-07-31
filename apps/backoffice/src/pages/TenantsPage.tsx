@@ -38,7 +38,8 @@ import {
    DropdownMenuItem,
    DropdownMenuTrigger,
  } from "@ui/dropdown-menu";
- import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown } from "lucide-react";
+ import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown, Info } from "lucide-react";
+ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
  import { format } from "date-fns";
 import { toast } from "sonner";
 import { EmptyState } from "@ui/empty-state";
@@ -128,23 +129,42 @@ export default function TenantsPage() {
      (tenant) => tenant.subscription_status === "past_due",
    ).length;
  
+  const STATUS_BADGE_TOOLTIPS: Record<string, string> = {
+    active: "Paying subscriber in good standing.",
+    trialing: "In their free trial — hasn't been charged yet.",
+    past_due: "A charge failed; still active but at risk of losing access.",
+    canceled: "Subscription was canceled — can typically resubscribe.",
+    permanently_deactivated: "Manually deactivated by the platform team — cannot resubscribe without intervention.",
+    inactive: "No active or trialing subscription, and not explicitly canceled or deactivated.",
+  };
+
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "active":
-        return <Badge variant="success">Active</Badge>;
-      case "trialing":
-        return <Badge variant="info">Trial</Badge>;
-      case "past_due":
-        return <Badge variant="warning">Past Due</Badge>;
-      case "canceled":
-        return <Badge variant="destructive">Canceled</Badge>;
-      case "permanently_deactivated":
-        return <Badge variant="neutral">Deactivated</Badge>;
-      case "inactive":
-        return <Badge variant="secondary">Inactive</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
+    const badge = (() => {
+      switch (status) {
+        case "active":
+          return <Badge variant="success" className="cursor-default">Active</Badge>;
+        case "trialing":
+          return <Badge variant="info" className="cursor-default">Trial</Badge>;
+        case "past_due":
+          return <Badge variant="warning" className="cursor-default">Past Due</Badge>;
+        case "canceled":
+          return <Badge variant="destructive" className="cursor-default">Canceled</Badge>;
+        case "permanently_deactivated":
+          return <Badge variant="neutral" className="cursor-default">Deactivated</Badge>;
+        case "inactive":
+          return <Badge variant="secondary" className="cursor-default">Inactive</Badge>;
+        default:
+          return <Badge variant="secondary" className="cursor-default">{status}</Badge>;
+      }
+    })();
+    const tooltip = STATUS_BADGE_TOOLTIPS[status];
+    if (!tooltip) return badge;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-56 text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
   };
  
    return (
@@ -162,15 +182,25 @@ export default function TenantsPage() {
 
          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
            {[
-             { label: "Active salons", value: activeCount, icon: Building2, tone: "text-emerald-700 bg-emerald-50" },
-             { label: "Trial accounts", value: trialCount, icon: Users, tone: "text-violet-700 bg-violet-50" },
-             { label: "Past due accounts", value: pastDueCount, icon: TriangleAlert, tone: "text-red-700 bg-red-50" },
-             { label: "Open unlock requests", value: chainUnlockRequests.length, icon: CircleDollarSign, tone: "text-amber-700 bg-amber-50" },
+             { label: "Active salons", value: activeCount, icon: Building2, tone: "text-emerald-700 bg-emerald-50", description: "Subscription status is exactly \"active\" — trialing salons aren't counted here." },
+             { label: "Trial accounts", value: trialCount, icon: Users, tone: "text-violet-700 bg-violet-50", description: "Subscription status is \"trialing\"." },
+             { label: "Past due accounts", value: pastDueCount, icon: TriangleAlert, tone: "text-red-700 bg-red-50", description: "A charge failed — still active but at risk of losing access." },
+             { label: "Open unlock requests", value: chainUnlockRequests.length, icon: CircleDollarSign, tone: "text-amber-700 bg-amber-50", description: "Chain-plan salons asking to exceed their default location cap, awaiting your approval." },
            ].map((metric) => (
              <Card key={metric.label} className="backoffice-panel">
                <CardContent className="flex items-start justify-between p-5">
                  <div>
-                   <p className="text-sm uppercase tracking-wide text-muted-foreground">{metric.label}</p>
+                   <div className="flex items-center gap-1">
+                     <p className="text-sm uppercase tracking-wide text-muted-foreground">{metric.label}</p>
+                     <Tooltip>
+                       <TooltipTrigger asChild>
+                         <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                       </TooltipTrigger>
+                       <TooltipContent side="top" className="max-w-56 text-xs">
+                         {metric.description}
+                       </TooltipContent>
+                     </Tooltip>
+                   </div>
                    <p className="mt-2 text-2xl font-medium">{metric.value.toLocaleString()}</p>
                  </div>
                  <div className={`rounded-xl p-3 ${metric.tone}`}>
@@ -492,6 +522,7 @@ export default function TenantsPage() {
                    {
                      label: "Payment setup",
                      value: selectedTenant.payment_setup_status.replace(/_/g, " "),
+                     description: "Whether this salon has connected a payout method. Until it's complete, online deposits collected from their clients can't be settled to them.",
                    },
                    {
                      label: "Next billing",
@@ -501,9 +532,21 @@ export default function TenantsPage() {
                    },
                  ].map((item) => (
                    <div key={item.label} className="rounded-2xl border bg-muted/20 p-4">
-                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                       {item.label}
-                     </p>
+                     <div className="flex items-center gap-1">
+                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                         {item.label}
+                       </p>
+                       {"description" in item && item.description && (
+                         <Tooltip>
+                           <TooltipTrigger asChild>
+                             <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                           </TooltipTrigger>
+                           <TooltipContent side="top" className="max-w-56 text-xs">
+                             {item.description}
+                           </TooltipContent>
+                         </Tooltip>
+                       )}
+                     </div>
                      <p className="mt-1.5 capitalize">{item.value}</p>
                    </div>
                  ))}
