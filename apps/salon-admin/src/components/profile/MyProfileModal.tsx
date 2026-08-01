@@ -38,6 +38,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@ui/ui/use-toast";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -99,6 +101,9 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
   const [editingPhone, setEditingPhone] = useState(false);
   const [phoneInput, setPhoneInput] = useState("");
   const [isSavingPhone, setIsSavingPhone] = useState(false);
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneOtpCode, setPhoneOtpCode] = useState("");
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
 
   // ── sessions state ─────────────────────────────────────────────────────────
   const [confirmSessionId, setConfirmSessionId] = useState<string | null>(null);
@@ -247,35 +252,93 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
   function cancelEditPhone() {
     setEditingPhone(false);
     setPhoneInput("");
+    setPhoneOtpSent(false);
+    setPhoneOtpCode("");
   }
 
-  async function handleSavePhone() {
+  // Removing a phone number entirely doesn't need OTP verification — there's
+  // nothing to prove ownership of. Setting a new number does: it's gated by a
+  // code sent to that new number, and checked for uniqueness against every
+  // other account first.
+  async function handleRequestPhoneOtp() {
     if (!user?.id) return;
     const trimmed = phoneInput.trim();
-    if (trimmed && !/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+
+    if (!trimmed) {
+      setIsSavingPhone(true);
+      try {
+        const { error } = await supabase.from("profiles").update({ phone: null }).eq("user_id", user.id);
+        if (error) throw error;
+        await refreshProfile();
+        cancelEditPhone();
+        toast({ title: "Phone number removed" });
+      } catch {
+        toast({ title: "Failed to update phone", variant: "destructive" });
+      } finally {
+        setIsSavingPhone(false);
+      }
+      return;
+    }
+
+    if (!/^\+[1-9]\d{7,14}$/.test(trimmed)) {
       toast({ title: "Invalid phone number", description: "Enter a full international number (e.g. +2348012345678).", variant: "destructive" });
       return;
     }
+
     setIsSavingPhone(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ phone: trimmed || null })
-        .eq("user_id", user.id);
-      if (error) throw error;
-      await refreshProfile();
-      setEditingPhone(false);
-      toast({ title: "Phone number updated" });
+      const { data, error } = await supabase.functions.invoke("request-phone-change-otp", {
+        body: { phone: trimmed },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Couldn't send code",
+          description: data?.error || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        return;
+      }
+      setPhoneOtpSent(true);
+      toast({ title: "Code sent", description: `Enter the code we sent to ${trimmed}.` });
     } catch {
-      toast({ title: "Failed to update phone", variant: "destructive" });
+      toast({ title: "Couldn't send code", description: "Please try again.", variant: "destructive" });
     } finally {
       setIsSavingPhone(false);
     }
   }
 
+  async function handleConfirmPhoneOtp() {
+    if (!user?.id) return;
+    const trimmed = phoneInput.trim();
+    if (phoneOtpCode.length !== 6) return;
+
+    setIsVerifyingPhoneOtp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("confirm-phone-change", {
+        body: { phone: trimmed, otp: phoneOtpCode },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Verification failed",
+          description: data?.error || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        setPhoneOtpCode("");
+        return;
+      }
+      await refreshProfile();
+      cancelEditPhone();
+      toast({ title: "Phone number updated" });
+    } catch {
+      toast({ title: "Verification failed", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIsVerifyingPhoneOtp(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { handleDiscard(); cancelEditPhone(); onClose(); } }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-sm:!top-1/2 max-sm:!bottom-auto max-sm:!-translate-y-1/2">
         <DialogHeader>
           <DialogTitle>My Profile</DialogTitle>
           <DialogDescription className="sr-only">
@@ -398,7 +461,55 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
                     <p className="text-xs text-muted-foreground mb-0.5 flex items-center gap-1">
                       <Phone className="h-3 w-3" /> Phone
                     </p>
-                    {editingPhone ? (
+                    {editingPhone && phoneOtpSent ? (
+                      <div className="mt-2 space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          Enter the 6-digit code sent to {phoneInput}.
+                        </p>
+                        <InputOTP
+                          maxLength={6}
+                          value={phoneOtpCode}
+                          onChange={setPhoneOtpCode}
+                          disabled={isVerifyingPhoneOtp}
+                        >
+                          <InputOTPGroup>
+                            {Array.from({ length: 6 }).map((_, i) => (
+                              <InputOTPSlot key={i} index={i} />
+                            ))}
+                          </InputOTPGroup>
+                        </InputOTP>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1"
+                            onClick={cancelEditPhone}
+                            disabled={isVerifyingPhoneOtp}
+                          >
+                            <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={handleConfirmPhoneOtp}
+                            disabled={isVerifyingPhoneOtp || phoneOtpCode.length !== 6}
+                          >
+                            {isVerifyingPhoneOtp
+                              ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                              : <Check className="w-3.5 h-3.5 mr-1" />}
+                            Verify & Save
+                          </Button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setPhoneOtpSent(false); setPhoneOtpCode(""); }}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          disabled={isVerifyingPhoneOtp}
+                        >
+                          Use a different number
+                        </button>
+                      </div>
+                    ) : editingPhone ? (
                       <div className="mt-2 space-y-2">
                         <AuthPhoneInput
                           label=""
@@ -419,13 +530,13 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
                           <Button
                             size="sm"
                             className="flex-1"
-                            onClick={handleSavePhone}
+                            onClick={handleRequestPhoneOtp}
                             disabled={isSavingPhone}
                           >
                             {isSavingPhone
                               ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
                               : <Check className="w-3.5 h-3.5 mr-1" />}
-                            Save
+                            {phoneInput.trim() ? "Send code" : "Save"}
                           </Button>
                         </div>
                       </div>

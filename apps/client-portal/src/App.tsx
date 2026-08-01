@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { TooltipProvider } from "@ui/tooltip";
 import ClientLoginPage from "@/pages/ClientLoginPage";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientBookingsPage from "@/pages/ClientBookingsPage";
@@ -14,9 +15,10 @@ import { ClientProtectedRoute, ClientPublicOnlyRoute } from "@/components/Client
 
 function App() {
   return (
-    <BrowserRouter>
-      <ClientAuthProvider>
-        <Routes>
+    <TooltipProvider>
+      <BrowserRouter>
+        <ClientAuthProvider>
+          <Routes>
           <Route
             path="/login"
             element={
@@ -99,9 +101,10 @@ function App() {
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </ClientAuthProvider>
-    </BrowserRouter>
+          </Routes>
+        </ClientAuthProvider>
+      </BrowserRouter>
+    </TooltipProvider>
   );
 }
 

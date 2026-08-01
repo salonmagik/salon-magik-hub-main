@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomers } from "@/hooks/useCustomers";
+import { useCustomerSegments } from "@/hooks/useCustomerSegments";
 import { useEmailTemplates, templateTypeLabels, type TemplateType } from "@/hooks/useEmailTemplates";
 import { useSMSTemplates, smsTemplateTypeLabels, type SMSTemplateType } from "@/hooks/useSMSTemplates";
 import { useMessagingCredits, type MessageLog } from "@/hooks/useMessagingCredits";
@@ -61,6 +62,10 @@ type BroadcastChannel = "sms" | "email";
 type AudiencePreset =
   | "all_customers"
   | "vip_customers"
+  | "big_spenders"
+  | "regulars"
+  | "loves_packages"
+  | "lapsed_customers"
   | "no_appointment_30"
   | "no_appointment_60"
   | "new_customers"
@@ -310,6 +315,7 @@ export default function MessagingPage() {
   const { currentTenant, user, activeContextType, activeLocationId } = useAuth();
   const queryClient = useQueryClient();
   const { customers: rawCustomers } = useCustomers();
+  const { segments } = useCustomerSegments();
   const customers = rawCustomers as CustomerListItem[];
   const { credits, messageLogs, stats, isLoading: creditsLoading, refetch: refetchCredits } = useMessagingCredits();
   const { templates: emailTemplates, isLoading: emailTemplatesLoading, refetch: refetchEmailTemplates } = useEmailTemplates();
@@ -480,14 +486,18 @@ export default function MessagingPage() {
 
     return [
       { id: "all_customers", label: "All customers", helper: "Everyone in your customer list.", customerIds: customerIdsFor(() => true) },
-      { id: "vip_customers", label: "VIP customers", helper: "Customers marked as VIP.", customerIds: customerIdsFor((customer) => customer.status === "vip") },
+      { id: "vip_customers", label: "VIP customers", helper: "Customers marked as VIP.", customerIds: customerIdsFor((customer) => Boolean(segments[customer.id]?.is_vip)) },
+      { id: "big_spenders", label: "Big spenders", helper: "Your top 10% by lifetime spend.", customerIds: customerIdsFor((customer) => Boolean(segments[customer.id]?.is_big_spender)) },
+      { id: "regulars", label: "Regulars", helper: "5+ visits.", customerIds: customerIdsFor((customer) => Boolean(segments[customer.id]?.is_regular)) },
+      { id: "loves_packages", label: "Loves packages", helper: "3+ package purchases this quarter.", customerIds: customerIdsFor((customer) => Boolean(segments[customer.id]?.loves_packages)) },
+      { id: "lapsed_customers", label: "Lapsed", helper: "No visit in 45+ days.", customerIds: customerIdsFor((customer) => Boolean(segments[customer.id]?.is_lapsed)) },
       { id: "no_appointment_30", label: "No appointment in 30 days", helper: "Useful for reactivation outreach.", customerIds: customerIdsFor((customer) => !customer.last_visit_at || new Date(customer.last_visit_at) < noAppointment30Cutoff) },
       { id: "no_appointment_60", label: "No appointment in 60 days", helper: "A colder reactivation segment.", customerIds: customerIdsFor((customer) => !customer.last_visit_at || new Date(customer.last_visit_at) < noAppointment60Cutoff) },
       { id: "new_customers", label: "New customers", helper: "Customers added in the last 30 days.", customerIds: customerIdsFor((customer) => new Date(customer.created_at) >= newCustomerCutoff) },
       { id: "upcoming_appointments", label: "Upcoming appointments", helper: "Customers with a future booking.", customerIds: customerIdsFor((customer) => upcomingAppointmentCustomerIds.has(customer.id)) },
       { id: "cancelled_appointments", label: "Cancelled appointments", helper: "Customers with cancelled bookings.", customerIds: customerIdsFor((customer) => cancelledAppointmentCustomerIds.has(customer.id)) },
     ];
-  }, [activeCustomers, cancelledAppointmentCustomerIds, upcomingAppointmentCustomerIds]);
+  }, [activeCustomers, cancelledAppointmentCustomerIds, upcomingAppointmentCustomerIds, segments]);
 
   const selectedAudienceDefinition = useMemo(
     () => audienceDefinitions.find((definition) => definition.id === selectedAudience) ?? audienceDefinitions[0],
@@ -1073,7 +1083,7 @@ export default function MessagingPage() {
             <Button variant="outline" onClick={() => setHowItWorksOpen(true)}>
               How it works
             </Button>
-            <Button onClick={() => setCreditPurchaseDialogOpen(true)} className="gap-2">
+            <Button onClick={() => setCreditPurchaseDialogOpen(true)} className="hidden lg:inline-flex gap-2">
               <Plus className="h-4 w-4" />
               Buy SMS Credits
             </Button>
@@ -1084,7 +1094,17 @@ export default function MessagingPage() {
           <Card className={compactTintedMetricCardClass.primary}>
             <CardContent className="flex items-start justify-between p-4">
               <div>
-                <p className="text-sm text-muted-foreground">SMS Credits</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">SMS Credits</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-56 text-xs">
+                      Your plan's monthly free SMS allocation. Once used up, further texts are billed against purchased credits.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
                 <p className="mt-1 text-3xl font-semibold">
                   {stats.smsCreditsUsedThisMonth}
                   <span className="text-lg font-normal text-muted-foreground">/{stats.freeAllocation}</span>
@@ -2153,6 +2173,16 @@ export default function MessagingPage() {
           }}
           templateType={editingSmsTemplate}
         />
+
+        {/* Mobile buy-credits FAB */}
+        <button
+          type="button"
+          aria-label="Buy SMS credits"
+          onClick={() => setCreditPurchaseDialogOpen(true)}
+          className="lg:hidden fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
 
         <CreditPurchaseDialog
           open={creditPurchaseDialogOpen}

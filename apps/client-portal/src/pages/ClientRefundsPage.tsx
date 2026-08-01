@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Gift,
   History,
+  Info,
   Loader2,
   Package,
   Plus,
@@ -24,9 +25,16 @@ import { Skeleton } from "@ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
 import { useSearchParams } from "react-router-dom";
+
+const BALANCE_COPY: Record<string, string> = {
+  "Paid funds": "Money you've paid into this salon's balance yourself, e.g. top-ups or prepaid packages.",
+  "Store credit": "Credit the salon has issued you — refunds, goodwill, or promotions. Not money you paid in.",
+  "Reserved": "Held against an upcoming booking — not available to spend until that booking is completed or cancelled.",
+};
 
 const sourceLabels: Record<string, string> = {
   paid_topup: "Paid funds",
@@ -143,19 +151,56 @@ export default function ClientRefundsPage() {
                         <div>
                           <p className="text-sm text-muted-foreground">{customer.tenant.name}</p>
                           <CardTitle className="mt-1 text-3xl">{formatCurrency(available, customer.tenant.currency)}</CardTitle>
-                          <p className="mt-1 text-xs text-muted-foreground">Available to spend</p>
+                          <div className="mt-1 flex items-center gap-1">
+                            <p className="text-xs text-muted-foreground">Available to spend</p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                Total balance minus anything reserved for an upcoming booking.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                         </div>
                         <div className="rounded-xl bg-primary/10 p-2.5"><WalletCards className="h-5 w-5 text-primary" /></div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4 p-5">
                       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
-                        <div><p className="text-xs text-muted-foreground">Paid funds</p><p className="mt-1 text-sm font-semibold">{formatCurrency(paid, customer.tenant.currency)}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Store credit</p><p className="mt-1 text-sm font-semibold">{formatCurrency(storeCredit, customer.tenant.currency)}</p></div>
-                        <div><p className="text-xs text-muted-foreground">Reserved</p><p className="mt-1 text-sm font-semibold">{formatCurrency(reserved, customer.tenant.currency)}</p></div>
+                        {[
+                          { label: "Paid funds", value: paid },
+                          { label: "Store credit", value: storeCredit },
+                          { label: "Reserved", value: reserved },
+                        ].map((stat) => (
+                          <div key={stat.label}>
+                            <div className="flex items-center gap-1">
+                              <p className="text-xs text-muted-foreground">{stat.label}</p>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-56 text-xs">
+                                  {BALANCE_COPY[stat.label]}
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                            <p className="mt-1 text-sm font-semibold">{formatCurrency(stat.value, customer.tenant.currency)}</p>
+                          </div>
+                        ))}
                       </div>
                       <div className="flex flex-col gap-3 border-t pt-4 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
-                        <p className="text-xs text-muted-foreground">Total balance {formatCurrency(total, customer.tenant.currency)}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs text-muted-foreground">Total balance {formatCurrency(total, customer.tenant.currency)}</p>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Paid funds plus store credit, before subtracting anything reserved for an upcoming booking.
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                         <Button size="sm" variant="outline" onClick={() => setTopupCustomerId(customer.id)}>
                           <Plus className="mr-1.5 h-3.5 w-3.5" />Add funds
                         </Button>
@@ -214,15 +259,32 @@ export default function ClientRefundsPage() {
                         <div key={entitlement.id} className="rounded-xl border p-4">
                           <div className="flex items-start justify-between">
                             <div><p className="font-medium">{entitlement.package?.name || "Package"}</p><p className="text-xs text-muted-foreground">{customer?.tenant.name}</p></div>
-                            <Badge variant="outline">{entitlement.status}</Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="cursor-default">{entitlement.status}</Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                "Active" means you can still use it. "Expired" or "depleted" packages can no longer be redeemed.
+                              </TooltipContent>
+                            </Tooltip>
                           </div>
                           <div className="mt-4 space-y-2">
                             {entitlement.items.map((item) => (
                           <div key={item.id} className="flex flex-col gap-1 rounded-lg bg-surface p-3 text-sm min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between">
                                 <span className="min-w-0">{item.service?.name || item.product?.name || "Package item"}</span>
-                                <span className="shrink-0 font-medium">
+                                <span className="shrink-0 flex items-center gap-1 font-medium">
                                   {item.remaining_quantity - item.reserved_quantity} available
                                   {item.reserved_quantity > 0 ? ` · ${item.reserved_quantity} reserved` : ""}
+                                  {item.reserved_quantity > 0 && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-56 text-xs">
+                                        "Reserved" is held against an upcoming booking — not available to use until that booking is completed or cancelled.
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
                                 </span>
                               </div>
                             ))}
@@ -274,7 +336,14 @@ export default function ClientRefundsPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{refund.tenant?.name || "Salon"}</p>
-                        <Badge variant="outline">{refund.status}</Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="cursor-default">{refund.status}</Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            Where this refund is in the salon's approval process — pending, approved, completed, or rejected.
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       <p className="mt-1 text-sm text-muted-foreground">{refund.reason}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{format(new Date(refund.created_at), "MMM d, yyyy")}</p>

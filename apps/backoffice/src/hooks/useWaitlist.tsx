@@ -26,6 +26,28 @@
    updated_at: string;
  }
  
+ export interface WaitlistSignup {
+   lead_id: string;
+   name: string;
+   email: string;
+   phone: string | null;
+   plan_interest: string | null;
+   invited_at: string | null;
+   signed_up_at: string;
+   user_id: string;
+ }
+
+ export function useWaitlistSignups() {
+   return useQuery({
+     queryKey: ["waitlist-signups"],
+     queryFn: async () => {
+       const { data, error } = await (supabase.rpc as any)("backoffice_list_waitlist_signups");
+       if (error) throw error;
+       return (data || []) as WaitlistSignup[];
+     },
+   });
+ }
+
  export function useWaitlist(statusFilter?: WaitlistStatus) {
    return useQuery({
      queryKey: ["waitlist", statusFilter],

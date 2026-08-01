@@ -5,9 +5,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/c
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
-import { CreditCard, Calendar, ArrowUpRight, ArrowDownLeft, Store } from "lucide-react";
+import { CreditCard, Calendar, ArrowUpRight, ArrowDownLeft, Store, Info } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+
+const TYPE_TOOLTIPS: Record<string, string> = {
+  payment: "A payment made for a booking.",
+  deposit: "A deposit paid to secure a booking.",
+  refund: "Money refunded back to you.",
+  purse_topup: "Money you added to your salon balance.",
+  purse_redemption: "Salon balance you spent on a booking.",
+};
+
+const STATUS_TOOLTIP = "Whether this transaction has fully processed. \"Completed\" means it's final.";
 
 export default function ClientHistoryPage() {
   const navigate = useNavigate();
@@ -97,6 +108,16 @@ export default function ClientHistoryPage() {
                               <span className="font-medium">
                                 {typeLabels[tx.type] || tx.type}
                               </span>
+                              {TYPE_TOOLTIPS[tx.type] && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">
+                                    {TYPE_TOOLTIPS[tx.type]}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                               <Badge variant="outline" className="text-xs">
                                 {tx.method}
                               </Badge>
@@ -115,12 +136,17 @@ export default function ClientHistoryPage() {
                             {tx.type === "refund" ? "+" : ""}
                             {formatCurrency(tx.amount, tx.currency)}
                           </p>
-                          <Badge
-                            variant="secondary"
-                            className={tx.status === "completed" ? "bg-green-100 text-green-800" : ""}
-                          >
-                            {tx.status}
-                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant="secondary"
+                                className={`cursor-default ${tx.status === "completed" ? "bg-green-100 text-green-800" : ""}`}
+                              >
+                                {tx.status}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">{STATUS_TOOLTIP}</TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
                     ))}

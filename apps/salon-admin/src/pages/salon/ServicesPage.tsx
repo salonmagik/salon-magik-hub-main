@@ -75,6 +75,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
+import { usePlanBySlug } from "@/hooks/usePlans";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
@@ -121,11 +122,11 @@ export default function ServicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabValue>("all");
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
-  
+
   // Multi-select state - supports mixed selection in "All" tab
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectedTypes, setSelectedTypes] = useState<Set<ItemType>>(new Set());
-  
+
   // Dialog states
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -142,11 +143,11 @@ export default function ServicesPage() {
   const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
   const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
   const [isApplyingFix, setIsApplyingFix] = useState(false);
-  
+
   // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
-  
+
   // Pending deletion with undo
   const undoRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const undoToastRef = useRef<Map<string, { dismiss: () => void; update: (props: any) => void }>>(new Map());
@@ -159,13 +160,14 @@ export default function ServicesPage() {
   const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
   const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
+  const { data: currentPlan } = usePlanBySlug(String(currentTenant?.plan || ""));
   const { issuesByItemKey, refetch: refetchIssues } = useCatalogIntegrityIssues();
   const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem, refetch: refetchBinItems } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
   const currency = currentTenant?.currency || "USD";
   const isLoading = servicesLoading || packagesLoading || productsLoading || vouchersLoading;
-  
+
   // Permission checks
   const canEdit = hasPermission("catalog:edit");
   const canDelete = hasPermission("catalog:delete");
@@ -294,7 +296,7 @@ export default function ServicesPage() {
   const handleSelectItem = (id: string, type: ItemType) => {
     setSelectedItems((prev) => {
       const newSet = new Set(prev);
-      
+
       if (newSet.has(id)) {
         newSet.delete(id);
         // Recalculate selected types
@@ -341,9 +343,9 @@ export default function ServicesPage() {
   };
 
   // Determine bulk action availability
-  const canCreatePackage = 
+  const canCreatePackage =
     (selectedTypes.has("service") || selectedTypes.has("product")) &&
-    !selectedTypes.has("package") && 
+    !selectedTypes.has("package") &&
     !selectedTypes.has("voucher");
 
   const showCreatePackage = activeTab === "all" || activeTab === "services" || activeTab === "products";
@@ -446,17 +448,17 @@ export default function ServicesPage() {
   // Handle Delete (Owner only - soft delete with 5-sec undo)
   const handleDelete = () => {
     if (!user?.id) return;
-    
+
     const itemsToDelete = Array.from(selectedItemsInfo);
-    
+
     // Close dialog and clear selection
     setDeleteDialogOpen(false);
     clearSelection();
-    
+
     // Start countdown for batch
     let countdown = 5;
     const batchId = Date.now().toString();
-    
+
     const undoToast = toast({
         title: `Deleting ${itemsToDelete.length} item(s)...`,
         description: `Click Undo to cancel (${countdown}s)`,
@@ -473,7 +475,7 @@ export default function ServicesPage() {
         ),
       });
     undoToastRef.current.set(batchId, { dismiss: undoToast.dismiss, update: undoToast.update });
-    
+
     const interval = setInterval(() => {
       countdown--;
       if (countdown <= 0) {
@@ -489,7 +491,7 @@ export default function ServicesPage() {
         });
       }
     }, 1000);
-    
+
     undoRef.current.set(batchId, interval);
   };
 
@@ -512,7 +514,7 @@ export default function ServicesPage() {
           deleted_by_id: user?.id,
           deletion_reason: "Direct deletion by owner",
         };
-        
+
         switch (item.type) {
           case "service":
             await supabase.from("services").update(updateData).eq("id", item.id);
@@ -528,10 +530,10 @@ export default function ServicesPage() {
             break;
         }
       }
-      
-      toast({ 
-        title: "Sent to Bin", 
-        description: `${items.length} item(s) moved to bin. Can be restored within 7 days.` 
+
+      toast({
+        title: "Sent to Bin",
+        description: `${items.length} item(s) moved to bin. Can be restored within 7 days.`
       });
       await Promise.all([refetchAll(), refetchBinItems()]);
     } catch (err) {
@@ -840,6 +842,51 @@ export default function ServicesPage() {
 
   const addButtonLabel = getAddButtonLabel();
 
+  const resourceLimits = useMemo(() => {
+    const limits = currentPlan?.limits;
+    return {
+      service: {
+        count: services.filter((s: any) => s.status === "active").length,
+        max: limits?.max_services ?? null,
+        label: "service",
+        pluralLabel: "services",
+      },
+      product: {
+        count: products.filter((p: any) => p.status === "active").length,
+        max: limits?.max_products ?? null,
+        label: "product",
+        pluralLabel: "products",
+      },
+      package: {
+        count: packages.filter((p: any) => p.status === "active").length,
+        max: limits?.max_packages ?? null,
+        label: "package",
+        pluralLabel: "packages",
+      },
+      voucher: {
+        count: vouchers.filter((v: any) => v.status === "active").length,
+        max: limits?.max_vouchers ?? null,
+        label: "voucher",
+        pluralLabel: "vouchers",
+      },
+    } as const;
+  }, [currentPlan?.limits, services, products, packages, vouchers]);
+
+  const activeTabResourceType: ItemType | null =
+    activeTab === "services"
+      ? "service"
+      : activeTab === "products"
+        ? "product"
+        : activeTab === "packages"
+          ? "package"
+          : activeTab === "vouchers"
+            ? "voucher"
+            : null;
+
+  const activeResourceLimit = activeTabResourceType ? resourceLimits[activeTabResourceType] : null;
+  const isActiveResourceFull =
+    activeResourceLimit?.max != null && activeResourceLimit.count >= activeResourceLimit.max;
+
   // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
@@ -916,15 +963,51 @@ export default function ServicesPage() {
               </>
             )}
 
+            {activeResourceLimit?.max != null && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
+                  isActiveResourceFull ? "bg-warning-bg text-warning-foreground" : "bg-primary/10 text-primary",
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                {activeResourceLimit.count} of {activeResourceLimit.max} used
+              </span>
+            )}
+
             {activeTab === "all" ? (
-              <AddItemPopover onSelect={handleAddFromPopover} />
+              <AddItemPopover
+                onSelect={handleAddFromPopover}
+                disabledTypes={{
+                  service: resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max,
+                  product: resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max,
+                  package: resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max,
+                  voucher: resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max,
+                }}
+              />
             ) : (
-              addButtonLabel && (
+              addButtonLabel &&
+              (isActiveResourceFull ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button disabled className="h-12 rounded-full px-7">
+                        <Plus className="w-4 h-4 mr-2" />
+                        {addButtonLabel}
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    Your plan allows up to {activeResourceLimit?.max} active {activeResourceLimit?.pluralLabel}.
+                    Archive one, or upgrade your plan for unlimited {activeResourceLimit?.pluralLabel}.
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
                 <Button onClick={handleAddClick} className="h-12 rounded-full px-7">
                   <Plus className="w-4 h-4 mr-2" />
                   {addButtonLabel}
                 </Button>
-              )
+              ))
             )}
           </div>
         </div>
@@ -950,6 +1033,19 @@ export default function ServicesPage() {
               Vouchers
             </TabsTrigger>
           </TabsList>
+
+          {isActiveResourceFull && activeResourceLimit && (
+            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-bg/50 px-4 py-3 text-sm text-warning-foreground">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                <span className="font-medium">
+                  You've reached your plan's {activeResourceLimit.label} limit.
+                </span>{" "}
+                Archive an existing {activeResourceLimit.label} to free up a slot, or upgrade your plan for
+                unlimited {activeResourceLimit.pluralLabel}.
+              </p>
+            </div>
+          )}
 
           <div className="mt-5">
             {/* Search */}
@@ -989,10 +1085,10 @@ export default function ServicesPage() {
                       {filteredItems
                         .filter((item) => shouldShowItem(item.type, item.id))
                         .map((item) => (
-                        <SelectableItemCard 
-                          key={item.id} 
-                          item={item} 
-                          currency={currency} 
+                        <SelectableItemCard
+                          key={item.id}
+                          item={item}
+                          currency={currency}
                           formatCurrency={formatCurrency}
                           isSelected={selectedItems.has(item.id)}
                           onSelect={handleSelectItem}
@@ -1267,31 +1363,60 @@ export default function ServicesPage() {
             <Plus className="h-6 w-6" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="top" className="mb-2 w-56">
-          <DropdownMenuItem onClick={() => setServiceDialogOpen(true)}>
-            <Scissors className="mr-2 h-4 w-4" />Add service
+        <DropdownMenuContent
+          align="end"
+          side="top"
+          className="mb-2 w-56 duration-200 data-[side=top]:slide-in-from-bottom-4"
+        >
+          <DropdownMenuItem
+            disabled={resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max}
+            onClick={() => setServiceDialogOpen(true)}
+          >
+            <Scissors className="mr-2 h-4 w-4 text-primary" />
+            Add service
+            {resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max && (
+              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
+            )}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setProductDialogOpen(true)}>
-            <ShoppingBag className="mr-2 h-4 w-4" />Add product
+          <DropdownMenuItem
+            disabled={resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max}
+            onClick={() => setProductDialogOpen(true)}
+          >
+            <ShoppingBag className="mr-2 h-4 w-4 text-primary" />
+            Add product
+            {resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max && (
+              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
+            )}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setPackageDialogOpen(true)}>
-            <Package className="mr-2 h-4 w-4" />Create package
+          <DropdownMenuItem
+            disabled={resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max}
+            onClick={() => setPackageDialogOpen(true)}
+          >
+            <Package className="mr-2 h-4 w-4 text-primary" />
+            Create package
+            {resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max && (
+              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
+            )}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setVoucherDialogOpen(true)}>
-            <Gift className="mr-2 h-4 w-4" />Create voucher
+          <DropdownMenuItem
+            disabled={resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max}
+            onClick={() => setVoucherDialogOpen(true)}
+          >
+            <Gift className="mr-2 h-4 w-4 text-primary" />
+            Create voucher
+            {resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max && (
+              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
+            )}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => {
             setImportType("services");
             setImportDialogOpen(true);
           }}>
-            <Download className="mr-2 h-4 w-4" />Import catalog
+            <Download className="mr-2 h-4 w-4 text-primary" />Import catalog
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => setBinOpen(true)}
-            className="bg-[#f7e5e5] text-[#a23b3b] focus:bg-[#f3dada] focus:text-[#8f3030]"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
+          <DropdownMenuItem onClick={() => setBinOpen(true)}>
+            <Trash2 className="mr-2 h-4 w-4 text-[#a23b3b]" />
             Bin ({binItems.length})
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -1844,7 +1969,7 @@ function StatusChip({ status, isFlagged }: { status?: string; isFlagged?: boolea
       </Badge>
     );
   }
-  
+
   if (status === "archived") {
     return (
       <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">
@@ -1853,7 +1978,7 @@ function StatusChip({ status, isFlagged }: { status?: string; isFlagged?: boolea
       </Badge>
     );
   }
-  
+
   return null;
 }
 

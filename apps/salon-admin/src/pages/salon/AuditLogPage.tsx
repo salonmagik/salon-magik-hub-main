@@ -86,6 +86,7 @@ export default function AuditLogPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<AuditLogFilters>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const hookFilters = useMemo(
     () => ({ ...filters, actorUserId }),
     [actorUserId, filters]
@@ -118,9 +119,28 @@ export default function AuditLogPage() {
             </h1>
             <p className="text-muted-foreground">Track activity across your business.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="hidden sm:inline-flex gap-2">
             <RefreshCw className="w-4 h-4" />
             Refresh
+          </Button>
+        </div>
+
+        {/* Mobile: inline Filters toggle + Refresh */}
+        <div className="flex sm:hidden items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="flex-1 justify-between gap-2"
+          >
+            <span className="flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              Filters
+            </span>
+            <ChevronDown className={`w-4 h-4 transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => refetch()} aria-label="Refresh">
+            <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
 
@@ -144,14 +164,14 @@ export default function AuditLogPage() {
           </Card>
         ) : null}
 
-        <Card>
-          <CardHeader className="pb-4">
+        <Card className={`${filtersOpen ? "" : "hidden"} sm:block`}>
+          <CardHeader className="hidden sm:block pb-4">
             <CardTitle className="text-base flex items-center gap-2">
               <Filter className="w-4 h-4" />
               Filters
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="max-sm:pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

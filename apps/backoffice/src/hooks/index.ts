@@ -1,5 +1,5 @@
 export { BackofficeAuthProvider, useBackofficeAuth } from "./useBackofficeAuth";
-export { useWaitlist, useWaitlistActions, type WaitlistLead, type WaitlistStatus } from "./useWaitlist";
+export { useWaitlist, useWaitlistActions, useWaitlistSignups, type WaitlistLead, type WaitlistStatus, type WaitlistSignup } from "./useWaitlist";
 export { useTenants, type TenantWithStats } from "./useTenants";
 export { useFeatureFlagsAdmin } from "./useFeatureFlagsAdmin";
 export { useBackofficeUsers, type BackofficeUserWithTemplate } from "./useBackofficeUsers";

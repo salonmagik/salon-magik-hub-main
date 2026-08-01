@@ -9,7 +9,8 @@ import { StatCard } from "@ui/stat-card";
 import { Badge } from "@ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@ui/chart";
 import { Link, Navigate } from "react-router-dom";
-import { Users, Building2, Clock, UserCog, Sparkles, Globe2 } from "lucide-react";
+import { Users, Building2, Clock, UserCog, Sparkles, Globe2, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import {
   Bar,
   BarChart,
@@ -149,6 +150,7 @@ export default function BackofficeDashboardPage() {
       title: "Total Tenants",
       value: tenants?.length || 0,
       description: "All salons",
+      tooltip: "Every tenant record, regardless of subscription status — including trialing, past due, and canceled.",
       icon: Users,
       href: "/customers/tenants",
       tone: "info" as const,
@@ -157,6 +159,7 @@ export default function BackofficeDashboardPage() {
       title: "Active Tenants",
       value: activeCount,
       description: "Currently active",
+      tooltip: "Subscription status is exactly \"active\" — trialing tenants are counted separately below, not included here.",
       icon: Building2,
       href: "/customers/tenants",
       tone: "success" as const,
@@ -165,6 +168,7 @@ export default function BackofficeDashboardPage() {
       title: "Trialing",
       value: trialingCount,
       description: "In free trial",
+      tooltip: "Subscription status is \"trialing\" — hasn't converted to a paid plan yet.",
       icon: Sparkles,
       href: "/customers/tenants",
       tone: "default" as const,
@@ -173,6 +177,7 @@ export default function BackofficeDashboardPage() {
       title: "Pending Leads",
       value: pendingCount,
       description: "Awaiting review",
+      tooltip: "Waitlist signups with status \"pending\" — not yet invited.",
       icon: Clock,
       href: "/customers/waitlists",
       tone: "warning" as const,
@@ -181,6 +186,7 @@ export default function BackofficeDashboardPage() {
       title: "Total Staff",
       value: totalStaff,
       description: "Across all tenants",
+      tooltip: "Sum of staff counts across every tenant, regardless of that tenant's subscription status.",
       icon: UserCog,
       href: "/admins",
       tone: "default" as const,
@@ -189,6 +195,7 @@ export default function BackofficeDashboardPage() {
       title: "New This Month",
       value: newThisMonth,
       description: "Signed up in the last 30 days",
+      tooltip: "A rolling 30-day window from today — not the current calendar month.",
       icon: Globe2,
       href: "/customers/tenants",
       tone: "info" as const,
@@ -212,6 +219,7 @@ export default function BackofficeDashboardPage() {
               label={stat.title}
               value={stat.value}
               description={stat.description}
+              tooltip={stat.tooltip}
               icon={stat.icon}
               tone={stat.tone}
               href={stat.href}
@@ -256,7 +264,17 @@ export default function BackofficeDashboardPage() {
                       </div>
                       <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
                         <div>
-                          <p className="text-muted-foreground">Active/Trialing</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-muted-foreground">Active/Trialing</p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                Active and trialing tenants combined — note this is broader than the "Active Tenants" stat above, which excludes trialing.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                           <p className="text-xl font-semibold">{region.active}</p>
                         </div>
                         <div>
@@ -264,7 +282,17 @@ export default function BackofficeDashboardPage() {
                           <p className="text-xl font-semibold">{region.staff}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">Active Rate</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-muted-foreground">Active Rate</p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-56 text-xs">
+                                Active-or-trialing tenants as a share of all tenants in this country.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                           <p className="text-xl font-semibold">{activeRate}%</p>
                         </div>
                       </div>

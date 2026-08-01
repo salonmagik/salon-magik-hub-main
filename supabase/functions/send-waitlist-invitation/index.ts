@@ -8,6 +8,7 @@ import {
   smallText,
   buildFromAddress,
 } from "../_shared/email-template.ts";
+import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
  
  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
  
@@ -107,11 +108,8 @@ function buildInvitationEmail(name: string, invitationLink: string): string {
        );
      }
  
-     // Build invitation link — always target salon-admin, never the caller's origin
-     const baseUrl =
-       Deno.env.get("SALON_APP_URL") ||
-       Deno.env.get("BASE_URL") ||
-       "https://app.salonmagik.com";
+     // Build invitation link, targeting salon-admin regardless of caller.
+     const baseUrl = getSalonAppUrl(req);
      const invitationUrl = new URL("/signup", `${baseUrl.replace(/\/+$/, "")}/`);
      invitationUrl.searchParams.set("invite", lead.invitation_token);
      const invitationLink = invitationUrl.toString();

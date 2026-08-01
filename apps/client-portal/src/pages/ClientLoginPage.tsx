@@ -12,6 +12,7 @@ import { useToast } from "@ui/ui/use-toast";
 import { ArrowLeft, Lock, Mail, Phone, ShieldCheck } from "lucide-react";
 import { Button } from "@ui/button";
 import { PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 
 type LoginStep = "identifier" | "otp" | "password";
 type IdentifierTab = "email" | "phone";
@@ -179,7 +180,10 @@ export default function ClientLoginPage() {
 
       if (emailOtpError || data?.error) {
         console.error("Email OTP send failed:", { emailOtpError, dataError: data?.error });
-        setError("We're having trouble sending your verification email. Please try again.");
+        setError(
+          (data?.error as string | undefined) ||
+            (await getFunctionErrorMessage(emailOtpError, "We couldn't send your verification email. Please try again.")),
+        );
         return false;
       }
 
@@ -187,7 +191,7 @@ export default function ClientLoginPage() {
         data?.verificationType === "magiclink" ? "magiclink" : "email",
       );
     } else {
-      const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-phone-otp", {
+      const { data: phoneOtpData, error: phoneOtpError } = await supabase.functions.invoke("send-client-phone-otp", {
         body: { phone: targetIdentifier },
       });
 
@@ -195,7 +199,10 @@ export default function ClientLoginPage() {
         if (phoneOtpData?.error === "cooldown") {
           setError("Please wait 60 seconds before requesting another code.");
         } else {
-          setError("We're having trouble sending your verification code. Please try again.");
+          setError(
+            (phoneOtpData?.error as string | undefined) ||
+              (await getFunctionErrorMessage(phoneOtpError, "We couldn't send your verification code. Please try again.")),
+          );
         }
         return false;
       }
@@ -445,7 +452,15 @@ export default function ClientLoginPage() {
               </div>
             )}
 
-            <AuthButton type="submit" isLoading={isLoading}>
+            <AuthButton
+              type="submit"
+              isLoading={isLoading}
+              disabled={
+                activeTab === "email"
+                  ? !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue.trim())
+                  : phoneValue.replace(/\D/g, "").length < 7
+              }
+            >
               Continue
             </AuthButton>
           </form>
@@ -482,7 +497,7 @@ export default function ClientLoginPage() {
               </button>
             </div>
 
-            <AuthButton type="submit" isLoading={isLoading}>
+            <AuthButton type="submit" isLoading={isLoading} disabled={!password}>
               Sign in
             </AuthButton>
           </form>
@@ -511,7 +526,11 @@ export default function ClientLoginPage() {
               {error && <p className="text-center text-sm text-destructive">{error}</p>}
             </div>
 
-            <AuthButton type="submit" isLoading={isLoading}>
+            <AuthButton
+              type="submit"
+              isLoading={isLoading}
+              disabled={otp.length !== (resolution?.identifierType === "phone" ? 6 : 8)}
+            >
               Verify Code
             </AuthButton>
 

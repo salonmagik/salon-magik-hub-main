@@ -28,9 +28,11 @@ import {
   Shield,
   Zap,
   User,
+  Clock,
   PauseCircle,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
+import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
 import { cn } from "@shared/utils";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { supabase } from "@/lib/supabase";
@@ -45,7 +47,10 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerModal } from "@/components/banners";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { TrialBanner } from "@/components/billing/TrialBanner";
+import { TrialReminderModals } from "@/components/billing/TrialReminderModals";
+import { PromoTrialBonusBanner } from "@/components/billing/PromoTrialBonusBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
 import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
@@ -64,6 +69,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@ui/alert-dialog";
 
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExpanded: boolean; isMobileOpen: boolean; onCloseMobile: () => void }) {
@@ -237,12 +252,6 @@ const mainNavItems: NavItem[] = [
 		module: "salons_overview",
 	},
 	{
-		label: "Staff",
-		icon: UserCog,
-		path: "/salon/overview/staff",
-		module: "staff",
-	},
-	{
 		label: "Appointments",
 		icon: Calendar,
 		path: "/salon/appointments",
@@ -278,18 +287,12 @@ const mainNavItems: NavItem[] = [
 		path: "/salon/messaging",
 		module: "messaging",
 	},
-	{ label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
+	{ label: "Staff", icon: UserCog, path: "/salon/staff-group" },
 	{
 		label: "All Notifications",
 		icon: Bell,
 		path: "/salon/all-notifications",
 		module: "notifications",
-	},
-	{
-		label: "Audit Log",
-		icon: FileText,
-		path: "/salon/audit-log",
-		module: "audit_log",
 	},
 	{
 		label: "Settings",
@@ -352,6 +355,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const notificationsData = useNotifications();
   const { unreadCount } = notificationsData;
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
+  const staffOperationsAddon = useStaffOperationsAddon();
   const {
     currentTenant,
     activeContextType,
@@ -373,15 +377,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
     if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
+    const canSeeTeamMembers = hasPermission("staff");
+    const canSeeMyShift = staffOperationsAddon.isEnabled;
     const visibleItems = mainNavItems.filter((item) => {
-      if (item.path === "/salon/overview/staff") {
-        return activeContextType === "owner_hub" && hasPermission("staff");
+      if (item.path === "/salon/staff-group") {
+        return canSeeTeamMembers || canSeeMyShift;
       }
       if (item.path === "/salon/all-notifications") {
         return activeContextType === "owner_hub";
-      }
-      if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
-        return false;
       }
       if (item.path === "/salon/audit-log" && currentTenant?.plan === "chain" && activeContextType !== "owner_hub") {
         return false;
@@ -399,6 +402,21 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     });
     const isChain = currentTenant?.plan === "chain";
     return visibleItems.map((item) => {
+      if (item.path === "/salon/staff-group") {
+        const teamMembersPath = activeContextType === "owner_hub" ? "/salon/overview/staff" : "/salon/staff";
+        const children: Omit<NavItem, "children">[] = [];
+        if (canSeeTeamMembers) {
+          children.push({ label: "Team Members", icon: UserCog, path: teamMembersPath });
+        }
+        if (canSeeMyShift) {
+          children.push({ label: "My Shift", icon: Clock, path: "/salon/my-shift" });
+        }
+        // Single-child case: skip the dropdown wrapper and link straight in.
+        if (children.length === 1) {
+          return { ...item, label: children[0].label, icon: children[0].icon, path: children[0].path };
+        }
+        return { ...item, children };
+      }
       if (item.path === "/salon/settings") {
         if (activeContextType === "owner_hub") {
           if (isChain) {
@@ -415,6 +433,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
                 { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+                { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
               ],
             };
           }
@@ -431,6 +450,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
               { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+              { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
             ],
           };
         }
@@ -441,6 +461,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           children: [
             { label: "Branch Profile", icon: Building2, path: "/salon/branch-settings?tab=profile" },
             { label: "Branch Hours", icon: CalendarX2, path: "/salon/branch-settings?tab=hours" },
+            // Chain audit trail only makes sense rolled up at the business level.
+            ...(isChain ? [] : [{ label: "Audit Log", icon: FileText, path: "/salon/audit-log" }]),
           ],
         };
       }
@@ -449,7 +471,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       }
       return item;
     });
-  }, [activeContextType, availableContexts, canUseOwnerHub, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
+  }, [activeContextType, availableContexts, canUseOwnerHub, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading, staffOperationsAddon.isEnabled]);
 
   const contextValue = useMemo(() => {
     if (activeContextType === "owner_hub") return "owner_hub";
@@ -463,23 +485,20 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     const isTrialing = currentTenant.subscription_status === "trialing";
     const isPastDue = currentTenant.subscription_status === "past_due";
     const isActive = currentTenant.subscription_status === "active";
+    const planLabel = currentTenant.plan
+      ? currentTenant.plan.charAt(0).toUpperCase() + currentTenant.plan.slice(1)
+      : "Pro";
 
     if (isPastDue) {
       return { emoji: "⚠️", label: "Past Due" };
     }
-    if (isTrialing && currentTenant.trial_ends_at) {
-      const daysLeft = Math.ceil(
-        (new Date(currentTenant.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-      );
-      if (daysLeft > 0) {
-        return { emoji: "⏰", label: `Trial (${daysLeft}d)` };
-      }
-      return { emoji: "⚠️", label: "Trial Ended" };
+    if (isTrialing) {
+      // The countdown lives in the header chip only — this badge just shows
+      // which tier they'd be upgrading to, same styling whether trialing or
+      // already paying for it.
+      return { emoji: "✨", label: `${planLabel} plan (trial)` };
     }
     if (isActive) {
-      const planLabel = currentTenant.plan
-        ? currentTenant.plan.charAt(0).toUpperCase() + currentTenant.plan.slice(1)
-        : "Pro";
       return { emoji: "✨", label: planLabel };
     }
     return { emoji: "🎁", label: "Free" };
@@ -962,7 +981,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				/>
 
 				<button
-					onClick={() => setConfirmSignOutOpen(true)}
+					onClick={() => {
+						setIsMobileOpen(false);
+						setConfirmSignOutOpen(true);
+					}}
 					className={cn(
 						"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
 						"text-white/80 hover:text-white hover:bg-white/10",
@@ -1045,24 +1067,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									<Menu className="w-5 h-5" />
 								</button>
 
-								{/* Tenant display */}
+								{/* Tenant display / switcher */}
 								<div className="flex-1 flex items-center gap-2.5 min-w-0 ml-1 lg:ml-0">
-									{currentTenant?.logo_url ? (
-										<img
-											src={currentTenant.logo_url}
-											alt={currentTenant.name || ""}
-											className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
-										/>
-									) : (
-										<div className="w-8 h-8 rounded-lg bg-amber-400 flex items-center justify-center flex-shrink-0">
-											<span className="text-sm font-bold text-white leading-none">
-												{currentTenant?.name?.[0]?.toUpperCase() || "?"}
-											</span>
-										</div>
-									)}
-									<span className="font-semibold text-sm text-foreground truncate max-w-[120px] sm:max-w-[180px]">
-										{currentTenant?.name || "Your Salon"}
-									</span>
+									<TenantSwitcher />
 									{(() => {
 										if (!currentTenant) return null;
 										if (
@@ -1128,27 +1135,32 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
 							{/* Trial Banner */}
 							<TrialBanner />
+							<TrialReminderModals />
 							<PlanChangeBanner />
 							<AnnualLockinBanner />
 
 							{/* Page Content */}
-							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
+							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
 								<div className="w-full min-w-0 max-w-full [&>*]:min-w-0">
+									<PromoTrialBonusBanner />
 									{children}
 								</div>
 							</div>
 
 							{/* Mobile Bottom Navigation */}
-							<nav className="fixed bottom-0 inset-x-0 lg:hidden bg-white border-t border-border z-50 pb-[env(safe-area-inset-bottom)]">
-								<div className="flex items-center justify-around h-16">
+							<nav className="fixed bottom-0 inset-x-0 lg:hidden z-50 pb-[env(safe-area-inset-bottom)]">
+								<div
+									className="mx-2.5 mb-3 flex items-center justify-around rounded-[26px] px-1.5 py-2 shadow-[0_16px_32px_rgba(46,31,78,0.35)]"
+									style={{ background: "linear-gradient(175deg, #4B3A76 0%, #3D2E63 100%)" }}
+								>
 									{[
 										{
-											label: "",
+											label: "Home",
 											icon: LayoutDashboard,
 											path: "/salon",
 										},
 										{
-											label: "",
+											label: "Bookings",
 											icon: Calendar,
 											path: "/salon/appointments",
 										},
@@ -1158,12 +1170,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											path: "/salon/services",
 										},
 										{
-											label: "",
+											label: "Payments",
 											icon: CreditCard,
 											path: "/salon/transactions",
 										},
 										{
-											label: "",
+											label: "Clients",
 											icon: Users,
 											path: "/salon/customers",
 										},
@@ -1174,31 +1186,26 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												key={path}
 												type="button"
 												onClick={() => navigate(path)}
-												className="flex flex-col items-center gap-0.5 flex-1 py-2 transition-colors"
+												className={cn(
+													"flex flex-1 flex-col items-center gap-[3px] rounded-2xl px-2 py-[7px] transition-colors",
+													active && "bg-[#F4C84E]",
+												)}
 											>
-												<div
+												<Icon
+													strokeWidth={1.8}
 													className={cn(
-														"flex flex-col items-center gap-0.5",
-														active
-															? "bg-primary rounded-lg px-3 py-2"
-															: "text-muted-foreground",
+														"h-[19px] w-[19px]",
+														active ? "text-[#2E1F4E]" : "text-white/60",
+													)}
+												/>
+												<span
+													className={cn(
+														"text-[9.5px] font-semibold",
+														active ? "text-[#2E1F4E]" : "text-white/60",
 													)}
 												>
-													<Icon
-														className={cn(
-															"w-[22px] h-[22px]",
-															active ? "text-white" : "text-muted-foreground",
-														)}
-													/>
-													<span
-														className={cn(
-															"text-[10px] font-medium",
-															active ? "text-white" : "text-muted-foreground",
-														)}
-													>
-														{label}
-													</span>
-												</div>
+													{label}
+												</span>
 											</button>
 										);
 									})}
@@ -1259,36 +1266,31 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</DialogContent>
 					</Dialog>
 
-					<Dialog
+					<AlertDialog
 						open={confirmSignOutOpen}
 						onOpenChange={setConfirmSignOutOpen}
 					>
-						<DialogContent className="sm:max-w-md">
-							<DialogHeader>
-								<DialogTitle>Sign out?</DialogTitle>
-								<DialogDescription>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Sign out?</AlertDialogTitle>
+								<AlertDialogDescription>
 									You are about to sign out of your account.
-								</DialogDescription>
-							</DialogHeader>
-							<DialogFooter>
-								<Button
-									variant="outline"
-									onClick={() => setConfirmSignOutOpen(false)}
-								>
-									Cancel
-								</Button>
-								<Button
-									variant="destructive"
+								</AlertDialogDescription>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogAction
+									className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 									onClick={async () => {
 										setConfirmSignOutOpen(false);
 										await handleLogout();
 									}}
 								>
 									Sign out
-								</Button>
-							</DialogFooter>
-						</DialogContent>
-					</Dialog>
+								</AlertDialogAction>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
 					<NewDeviceReviewModal
 						open={reviewSessionsOpen}
 						onClose={() => setReviewSessionsOpen(false)}

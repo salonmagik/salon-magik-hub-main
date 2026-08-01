@@ -19,6 +19,7 @@ import {
   Star,
   Wallet,
   MessageSquare,
+  Info,
 } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import type { LapsedClient, UpcomingAppointment } from "@/hooks/useDashboardStats";
@@ -27,6 +28,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Skeleton } from "@ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 // ─── Checklist metadata ────────────────────────────────────────────────────────
 const CHECKLIST_META: Record<
@@ -343,8 +345,14 @@ export default function SalonDashboard() {
 						<div className="flex items-center gap-2.5">
 							<MessageSquare className="w-4 h-4 text-warning-foreground flex-shrink-0" />
 							<p className="text-sm text-warning-foreground">
-								<span className="font-medium">Low messaging credits</span> —{" "}
-								{stats.communicationCredits} remaining.
+								{stats.communicationCredits === 0 ? (
+									<span className="font-medium">You're out of SMS marketing credits.</span>
+								) : (
+									<>
+										<span className="font-medium">SMS marketing credits are running low</span> —{" "}
+										{stats.communicationCredits} remaining.
+									</>
+								)}
 							</p>
 						</div>
 						<Button
@@ -431,9 +439,19 @@ export default function SalonDashboard() {
 							</>
 						) : (
 							<>
-								<p className="text-[12px] tracking-[0.05em] text-muted-foreground uppercase mb-2.5">
-									Show-up Rate
-								</p>
+								<div className="flex items-center gap-1 mb-2.5">
+									<p className="text-[12px] tracking-[0.05em] text-muted-foreground uppercase">
+										Show-up Rate
+									</p>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+										</TooltipTrigger>
+										<TooltipContent side="top" className="max-w-56 text-xs">
+											Share of booked appointments the customer actually showed up to, over the last 7 days.
+										</TooltipContent>
+									</Tooltip>
+								</div>
 								<p className="font-serif text-[26px] leading-none">
 									{canViewReports && stats.showUpRate !== null
 										? `${stats.showUpRate}%`
@@ -589,9 +607,19 @@ export default function SalonDashboard() {
 											<div className="w-[34px] h-[34px] rounded-[9px] bg-warning-bg flex items-center justify-center flex-shrink-0">
 												<AlertTriangle className="w-4 h-4 text-warning-foreground" />
 											</div>
-											<span className="text-[12.5px] text-muted-foreground flex-1">
-												Outstanding fees
-											</span>
+											<div className="flex flex-1 items-center gap-1">
+												<span className="text-[12.5px] text-muted-foreground">
+													Outstanding fees
+												</span>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+													</TooltipTrigger>
+													<TooltipContent side="top" className="max-w-56 text-xs">
+														Unpaid balances from completed appointments — money customers still owe you.
+													</TooltipContent>
+												</Tooltip>
+											</div>
 											<span
 												className={`font-serif text-[17px] tabular-nums ${stats.outstandingFees > 0 ? "text-foreground" : "text-muted-foreground"}`}
 											>
@@ -606,9 +634,19 @@ export default function SalonDashboard() {
 											<div className="w-[34px] h-[34px] rounded-[9px] bg-primary/10 flex items-center justify-center flex-shrink-0">
 												<RefreshCcw className="w-4 h-4 text-primary" />
 											</div>
-											<span className="text-[12.5px] text-muted-foreground flex-1">
-												Refunds pending
-											</span>
+											<div className="flex flex-1 items-center gap-1">
+												<span className="text-[12.5px] text-muted-foreground">
+													Refunds pending
+												</span>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+													</TooltipTrigger>
+													<TooltipContent side="top" className="max-w-56 text-xs">
+														Refund requests waiting on your approval.
+													</TooltipContent>
+												</Tooltip>
+											</div>
 											<span
 												className={`font-serif text-[17px] tabular-nums ${stats.refundsPendingApproval > 0 ? "text-warning-foreground" : "text-muted-foreground"}`}
 											>
@@ -623,9 +661,19 @@ export default function SalonDashboard() {
 											<div className="w-[34px] h-[34px] rounded-[9px] bg-primary/10 flex items-center justify-center flex-shrink-0">
 												<Wallet className="w-4 h-4 text-primary" />
 											</div>
-											<span className="text-[12.5px] text-muted-foreground flex-1">
-												Prepaid customers
-											</span>
+											<div className="flex flex-1 items-center gap-1">
+												<span className="text-[12.5px] text-muted-foreground">
+													Prepaid customers
+												</span>
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+													</TooltipTrigger>
+													<TooltipContent side="top" className="max-w-56 text-xs">
+														Customers with a positive salon balance — paid funds or store credit they can spend on a future visit.
+													</TooltipContent>
+												</Tooltip>
+											</div>
 											<span className="font-serif text-[17px] tabular-nums text-muted-foreground">
 												{stats.prepaidCustomers}
 											</span>

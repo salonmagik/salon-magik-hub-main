@@ -5,6 +5,7 @@ import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
 import { useWaitlistMode } from "@/hooks/useFeatureFlags";
 import { MarketingLayout } from "@/components/MarketingLayout";
 import { PlanCard } from "@/components/PlanCard";
+import { useWaitlist } from "@/components/WaitlistProvider";
 import { cn } from "@shared/utils";
 
 const SUPPORTED_CURRENCIES = [
@@ -27,6 +28,7 @@ export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [currency, setCurrency] = useState("USD");
   const { isWaitlistMode } = useWaitlistMode();
+  const { openWaitlist } = useWaitlist();
 
   const { data: plans, isLoading: plansLoading } = usePlans();
   const { data: features } = usePlanFeatures();
@@ -168,6 +170,7 @@ export default function PricingPage() {
 									limit={getPlanLimit(plan.id)}
 									isAnnual={isAnnual}
 									isWaitlistMode={isWaitlistMode}
+									onWaitlistClick={openWaitlist}
 									symbol={symbol}
 									salonAppUrl={salonAppUrl}
 								/>
@@ -286,6 +289,26 @@ export default function PricingPage() {
 												);
 											})}
 										</tr>
+										<tr>
+											<td className="py-4 text-[14.5px] text-brand-ink/75">
+												Services, products, packages &amp; vouchers
+											</td>
+											{(plans ?? []).map((plan) => {
+												const lim = getPlanLimit(plan.id);
+												return (
+													<td
+														key={plan.id}
+														className="py-4 text-center text-[14.5px] text-brand-ink"
+													>
+														{lim
+															? lim.max_services == null
+																? "Unlimited"
+																: `Up to ${lim.max_services} each`
+															: "—"}
+													</td>
+												);
+											})}
+										</tr>
 
 										{[
 											{
@@ -345,6 +368,12 @@ export default function PricingPage() {
 														chain: true,
 													},
 													{
+														label: "Daily digest email",
+														solo: true,
+														studio: true,
+														chain: true,
+													},
+													{
 														label: "Staff performance reports",
 														solo: false,
 														studio: true,
@@ -369,6 +398,12 @@ export default function PricingPage() {
 													},
 													{
 														label: "Permission controls",
+														solo: false,
+														studio: true,
+														chain: true,
+													},
+													{
+														label: "Staff Operations add-on (check-ins & time-off)",
 														solo: false,
 														studio: true,
 														chain: true,
@@ -475,9 +510,10 @@ export default function PricingPage() {
 								available: true,
 							},
 							{
-								name: "Location check-in for staff",
-								desc: "Confirms a stylist is on-site before their shift starts. Requires GPS on staff devices.",
-								available: false,
+								name: "Staff Operations",
+								desc: "Track when your staff arrive, time off and their leave requests.",
+								price: "Available on Studio and Chain plans.",
+								available: true,
 							},
 							{
 								name: "WhatsApp messaging",

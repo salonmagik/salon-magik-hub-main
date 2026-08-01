@@ -31,6 +31,7 @@ import {
   Trash2,
   CheckCircle,
   Plus,
+  Info,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { AddCustomerDialog } from "@/components/dialogs/AddCustomerDialog";
@@ -41,8 +42,10 @@ import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDi
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Textarea } from "@ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { useCustomers } from "@/hooks/useCustomers";
 import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
+import { useCustomerSegments, segmentTags, CUSTOMER_TAG_META } from "@/hooks/useCustomerSegments";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
@@ -62,7 +65,17 @@ interface InactiveCustomerRow {
   last_transaction_at: string | null;
 }
 
-const statusFilters = ["All", "Active", "VIP", "Inactive", "Blocked"];
+const statusFilters = [
+  "All",
+  "Active",
+  "VIP",
+  "Big spender",
+  "Regular",
+  "Loves packages",
+  "Lapsed",
+  "Inactive",
+  "Blocked",
+];
 
 export default function CustomersPage() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -96,11 +109,14 @@ export default function CustomersPage() {
     refetch,
     updateCustomerStatus,
     bulkUpdateCustomerStatus,
+    setCustomerVip,
+    bulkSetCustomerVip,
     flagCustomer,
     bulkFlagCustomers,
     deleteCustomer,
     bulkDeleteCustomers,
   } = useCustomers();
+  const { segments } = useCustomerSegments();
   const { hasPermission } = usePermissions();
 
   const currency = currentTenant?.currency || "USD";
@@ -207,7 +223,7 @@ export default function CustomersPage() {
   const stats = useMemo(() => {
     const activeCustomers = customers.filter((customer) => customer.status !== "deleted");
     const total = activeCustomers.length;
-    const vip = activeCustomers.filter((c) => c.status === "vip").length;
+    const vip = activeCustomers.filter((c) => (c as { is_starred?: boolean }).is_starred).length;
     const thisMonth = activeCustomers.filter((c) => {
       const created = new Date(c.created_at);
       const now = new Date();
@@ -220,7 +236,14 @@ export default function CustomersPage() {
 
   const statusCards = [
     { label: "Total Customers", count: stats.total, icon: Users, color: "text-primary", bgColor: "bg-primary/10" },
-    { label: "VIP Customers", count: stats.vip, icon: Tag, color: "text-purple-600", bgColor: "bg-purple-50" },
+    {
+      label: "VIP Customers",
+      count: stats.vip,
+      icon: Tag,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+      description: "Customers you've manually starred as VIP — a different, hand-picked list from the \"VIP\" segment tag shown on individual customer rows below.",
+    },
     {
       label: "New This Month",
       count: stats.thisMonth,
@@ -228,7 +251,14 @@ export default function CustomersPage() {
       color: "text-success",
       bgColor: "bg-success/10",
     },
-    { label: "Inactive", count: stats.inactive, icon: Calendar, color: "text-muted-foreground", bgColor: "bg-muted" },
+    {
+      label: "Inactive",
+      count: stats.inactive,
+      icon: Calendar,
+      color: "text-muted-foreground",
+      bgColor: "bg-muted",
+      description: `Hasn't booked in the last ${inactiveDaysThreshold} days — you can change this threshold below. Different from the "Lapsed" segment tag, which always uses a fixed 45-day cutoff.`,
+    },
   ];
 
   const getInitials = (name: string) => {
@@ -261,22 +291,36 @@ export default function CustomersPage() {
         (customer.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (customer.phone || "").includes(searchQuery);
 
-      const matchesFilter = activeFilter === "All" || customer.status.toLowerCase() === activeFilter.toLowerCase();
+      const seg = segments[customer.id];
+      const matchesFilter =
+        activeFilter === "All"
+          ? true
+          : activeFilter === "VIP"
+            ? Boolean((customer as { is_starred?: boolean }).is_starred)
+            : activeFilter === "Big spender"
+              ? Boolean(seg?.is_big_spender)
+              : activeFilter === "Regular"
+                ? Boolean(seg?.is_regular)
+                : activeFilter === "Loves packages"
+                  ? Boolean(seg?.loves_packages)
+                  : activeFilter === "Lapsed"
+                    ? Boolean(seg?.is_lapsed)
+                    : customer.status.toLowerCase() === activeFilter.toLowerCase();
 
       return matchesSearch && matchesFilter;
     });
-  }, [customers, searchQuery, activeFilter]);
+  }, [customers, searchQuery, activeFilter, segments]);
 
   const allVisibleSelected =
     filteredCustomers.length > 0 &&
     filteredCustomers.every((customer) => selectedCustomerIds.includes(customer.id));
 
   const handleMakeVIP = async (customer: Customer) => {
-    await updateCustomerStatus(customer.id, "vip");
+    await setCustomerVip(customer.id, true);
   };
 
   const handleRemoveVIP = async (customer: Customer) => {
-    await updateCustomerStatus(customer.id, "active");
+    await setCustomerVip(customer.id, false);
   };
 
   const handleFlagCustomer = async (reason: string) => {
@@ -316,7 +360,7 @@ export default function CustomersPage() {
   };
 
   const handleBulkMakeVIP = async () => {
-    const success = await bulkUpdateCustomerStatus(selectedCustomerIds, "vip");
+    const success = await bulkSetCustomerVip(selectedCustomerIds, true);
     if (success) clearSelection();
   };
 
@@ -385,9 +429,21 @@ export default function CustomersPage() {
 							>
 								<CardContent className="flex items-center justify-between px-5 py-4">
 									<div>
-										<p className="text-sm text-muted-foreground">
-											{card.label}
-										</p>
+										<div className="flex items-center gap-1">
+											<p className="text-sm text-muted-foreground">
+												{card.label}
+											</p>
+											{card.description && (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+													</TooltipTrigger>
+													<TooltipContent side="top" className="max-w-56 text-xs">
+														{card.description}
+													</TooltipContent>
+												</Tooltip>
+											)}
+										</div>
 										<div className="mt-1 font-serif text-2xl font-semibold">
 											{isLoading ? (
 												<Skeleton className="h-8 w-8" />
@@ -557,15 +613,16 @@ export default function CustomersPage() {
 												<h3 className="truncate text-base font-medium">
 													{customer.full_name}
 												</h3>
+															{(customer as { is_starred?: boolean }).is_starred && (
+																<Star className="h-4 w-4 flex-shrink-0 fill-amber-400 text-amber-400" aria-label="VIP" />
+															)}
 												<Badge
 													variant="secondary"
 													className={cn(
 														"capitalize text-xs",
 														customer.status === "active"
 															? "bg-success/10 text-success"
-															: customer.status === "vip"
-																? "bg-purple-100 text-purple-700"
-																: customer.status === "blocked"
+															: customer.status === "blocked"
 																	? "bg-destructive/10 text-destructive"
 																	: "bg-muted text-muted-foreground",
 													)}
@@ -574,6 +631,25 @@ export default function CustomersPage() {
 												</Badge>
 											</div>
 
+											{/* Auto-derived segment tags */}
+											{segmentTags(segments[customer.id]).filter((tag) => tag !== "vip").length > 0 && (
+												<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+													{segmentTags(segments[customer.id])
+														.filter((tag) => tag !== "vip")
+														.map((tag) => (
+															<Tooltip key={tag}>
+																<TooltipTrigger asChild>
+																	<Badge variant="secondary" className={cn("text-xs cursor-default", CUSTOMER_TAG_META[tag].className)}>
+																		{CUSTOMER_TAG_META[tag].label}
+																	</Badge>
+																</TooltipTrigger>
+																<TooltipContent side="top" className="max-w-56 text-xs">
+																	{CUSTOMER_TAG_META[tag].description}
+																</TooltipContent>
+															</Tooltip>
+														))}
+												</div>
+											)}
 											<div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
 												{customer.email && (
 													<div className="flex items-center gap-1">
@@ -657,7 +733,7 @@ export default function CustomersPage() {
 
 												{canMakeVIP && (
 													<>
-														{customer.status === "vip" ? (
+														{(customer as { is_starred?: boolean }).is_starred ? (
 															<DropdownMenuItem
 																onClick={() => handleRemoveVIP(customer)}
 															>

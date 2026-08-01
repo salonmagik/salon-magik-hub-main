@@ -326,7 +326,7 @@ export function useDashboardStats() {
         purseUsage: canViewPayments ? purseUsage : 0,
         refundsPendingApproval: canViewPayments ? (refundsPendingResult.count || 0) : 0,
         communicationCredits,
-        lowCommunicationCredits: communicationCredits < 5,
+        lowCommunicationCredits: communicationCredits <= 10,
         showUpRate,
         newClientsThisWeek,
         prepaidCustomers: canViewPayments ? (prepaidCountResult.count || 0) : 0,
@@ -373,7 +373,7 @@ export function useDashboardStats() {
       // Checklist
       const checklist: ChecklistItem[] = [
         { id: "payments", label: "Set up payouts", completed: currentTenant.payment_setup_status === "ready", href: "/salon/transactions?tab=payouts" },
-        { id: "booking", label: "Enable online booking", completed: currentTenant.online_booking_enabled || false, href: "/salon/settings?tab=booking" },
+        { id: "booking", label: "Enable online booking", completed: currentTenant.online_booking_enabled || false, href: "/salon/business-settings?tab=booking" },
         { id: "products", label: "Add products", completed: (productsCountResult.count || 0) > 0, href: "/salon/services?tab=products" },
         { id: "appointment", label: "Book your first appointment", completed: apts.length > 0 || (completedAptsResult.data?.length || 0) > 0, href: "/salon/appointments" },
         { id: "services", label: "Add services", completed: (servicesCountResult.count || 0) > 0, href: "/salon/services?tab=services" },

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@ui/tooltip";
 import { CustomerDetailDialog } from "./CustomerDetailDialog";
 
 vi.mock("@ui/dialog", () => ({
@@ -55,17 +56,19 @@ vi.mock("@/lib/supabase", () => ({
 describe("CustomerDetailDialog", () => {
   it("renders customer details without hook-order errors", async () => {
     render(
-      <CustomerDetailDialog
-        open
-        onOpenChange={vi.fn()}
-        customer={{
-          id: "customer-1",
-          full_name: "Ada Lovelace",
-          email: "ada@example.com",
-          phone: "+233000000000",
-          created_at: "2026-01-01T00:00:00.000Z",
-        } as never}
-      />
+      <TooltipProvider>
+        <CustomerDetailDialog
+          open
+          onOpenChange={vi.fn()}
+          customer={{
+            id: "customer-1",
+            full_name: "Ada Lovelace",
+            email: "ada@example.com",
+            phone: "+233000000000",
+            created_at: "2026-01-01T00:00:00.000Z",
+          } as never}
+        />
+      </TooltipProvider>
     );
     await waitFor(() => {
       expect(screen.getByText(/ada lovelace/i)).toBeInTheDocument();

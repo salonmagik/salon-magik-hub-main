@@ -47,7 +47,7 @@ export function useRefunds() {
         .select(`
           *,
           customer:customers(id, full_name),
-          transaction:transactions(id, tenant_id, customer_id, appointment_id, amount, method, currency, status, type)
+          transaction:transactions!transaction_id(id, tenant_id, customer_id, appointment_id, amount, method, currency, status, type)
         `)
         .eq("tenant_id", currentTenant.id)
         .order("created_at", { ascending: false });

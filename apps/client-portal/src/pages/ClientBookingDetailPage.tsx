@@ -27,9 +27,11 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { startClientBookingPayment } from "@/lib/bookingPayments";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -497,9 +499,30 @@ export default function ClientBookingDetailPage() {
 
         {/* Status Cards */}
         <div className="flex flex-wrap gap-2">
-          <Badge className={status.className}>{status.label}</Badge>
-          <Badge className={payment.className}>{payment.label}</Badge>
-          <Badge className={approvalStatus.className}>{approvalStatus.label}</Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className={`cursor-default ${status.className}`}>{status.label}</Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-56 text-xs">
+              Where the appointment is in its lifecycle — scheduled, in progress, or completed.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className={`cursor-default ${payment.className}`}>{payment.label}</Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-56 text-xs">
+              How much of this booking has been paid for.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge className={`cursor-default ${approvalStatus.className}`}>{approvalStatus.label}</Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-56 text-xs">
+              Whether the salon has confirmed this booking, or a reschedule they proposed.
+            </TooltipContent>
+          </Tooltip>
           {booking.is_walk_in && <Badge variant="outline">Walk-in</Badge>}
           {bookingReference && <Badge variant="outline">Ref {bookingReference}</Badge>}
         </div>

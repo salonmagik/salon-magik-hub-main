@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@ui/tooltip";
 import StaffPage from "./StaffPage";
 import { useStaff } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
@@ -126,7 +127,9 @@ describe("StaffPage team member modal", () => {
 
     render(
       <MemoryRouter initialEntries={["/salon/overview/staff"]}>
-        <StaffPage />
+        <TooltipProvider>
+          <StaffPage />
+        </TooltipProvider>
       </MemoryRouter>
     );
 

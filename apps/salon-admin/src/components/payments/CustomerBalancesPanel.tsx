@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Gift, Loader2, Plus, Search, WalletCards } from "lucide-react";
+import { Gift, Info, Loader2, Plus, Search, WalletCards } from "lucide-react";
 import { useCustomerBalances } from "@/hooks/useCustomerBalances";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -11,7 +11,14 @@ import { Skeleton } from "@ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
+
+const BALANCE_STAT_COPY: Record<string, string> = {
+  "Customer balances": "Total available balance across all customers — paid funds plus salon-issued store credit, minus anything reserved for upcoming bookings.",
+  "Paid funds": "Money customers have paid into their salon wallet themselves, e.g. prepaid packages or top-ups.",
+  "Store credit": "Credit your salon has issued — refunds, goodwill, or loyalty rewards. Not money the customer paid in.",
+};
 
 export function CustomerBalancesPanel({ canAdjust }: { canAdjust: boolean }) {
   const { currentTenant } = useAuth();
@@ -59,9 +66,28 @@ export function CustomerBalancesPanel({ canAdjust }: { canAdjust: boolean }) {
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card><CardContent className="p-5"><p className="text-xs uppercase tracking-wide text-muted-foreground">Customer balances</p><p className="mt-2 text-2xl font-semibold">{formatCurrency(balances.reduce((sum, item) => sum + Number(item.balance), 0), currentTenant?.currency)}</p></CardContent></Card>
-        <Card><CardContent className="p-5"><p className="text-xs uppercase tracking-wide text-muted-foreground">Paid funds</p><p className="mt-2 text-2xl font-semibold">{formatCurrency(balances.reduce((sum, item) => sum + item.paidFunds, 0), currentTenant?.currency)}</p></CardContent></Card>
-        <Card><CardContent className="p-5"><p className="text-xs uppercase tracking-wide text-muted-foreground">Store credit</p><p className="mt-2 text-2xl font-semibold">{formatCurrency(balances.reduce((sum, item) => sum + item.storeCredit, 0), currentTenant?.currency)}</p></CardContent></Card>
+        {[
+          { label: "Customer balances", value: balances.reduce((sum, item) => sum + Number(item.balance), 0) },
+          { label: "Paid funds", value: balances.reduce((sum, item) => sum + item.paidFunds, 0) },
+          { label: "Store credit", value: balances.reduce((sum, item) => sum + item.storeCredit, 0) },
+        ].map((stat) => (
+          <Card key={stat.label}>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-1">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    {BALANCE_STAT_COPY[stat.label]}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">{formatCurrency(stat.value, currentTenant?.currency)}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-4">
@@ -80,7 +106,23 @@ export function CustomerBalancesPanel({ canAdjust }: { canAdjust: boolean }) {
                 <div><p className="font-medium">{balance.customer?.full_name || "Customer"}</p><p className="text-xs text-muted-foreground">{balance.customer?.email || balance.customer?.phone || "No contact details"}</p></div>
               </div>
               <div className="flex items-center gap-5">
-                <div className="text-right"><p className="font-semibold">{formatCurrency(Number(balance.balance) - balance.reserved, balance.currency)}</p><div className="mt-1 flex gap-1.5"><Badge variant="outline">{formatCurrency(balance.paidFunds, balance.currency)} paid</Badge><Badge variant="outline">{formatCurrency(balance.storeCredit, balance.currency)} credit</Badge></div></div>
+                <div className="text-right">
+                  <p className="font-semibold">{formatCurrency(Number(balance.balance) - balance.reserved, balance.currency)}</p>
+                  <div className="mt-1 flex gap-1.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="cursor-default">{formatCurrency(balance.paidFunds, balance.currency)} paid</Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">{BALANCE_STAT_COPY["Paid funds"]}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="cursor-default">{formatCurrency(balance.storeCredit, balance.currency)} credit</Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">{BALANCE_STAT_COPY["Store credit"]}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
                 {canAdjust && <Button size="sm" variant="outline" onClick={() => { setSelectedCustomerId(balance.customer_id); setStage("form"); }}><Plus className="mr-1.5 h-3.5 w-3.5" />Add credit</Button>}
               </div>
             </div>

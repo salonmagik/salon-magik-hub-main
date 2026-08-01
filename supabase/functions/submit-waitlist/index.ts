@@ -43,6 +43,40 @@ function buildWaitlistConfirmationEmail(firstName: string): string {
   return wrapEmailTemplate(content);
 }
 
+function buildAdminNotificationEmail(lead: {
+  name: string;
+  email: string;
+  phone: string | null;
+  country: string;
+  planInterest: string | null;
+  teamSize: string | null;
+  notes: string | null;
+  position: number;
+}): string {
+  const rows = [
+    ["Name", lead.name],
+    ["Email", lead.email],
+    ["Phone", lead.phone || "—"],
+    ["Country", lead.country],
+    ["Plan interest", lead.planInterest || "—"],
+    ["Team size", lead.teamSize || "—"],
+    ["Waitlist position", `#${lead.position}`],
+  ]
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding: 6px 12px 6px 0; color: ${EMAIL_STYLES.textLight}; font-size: 14px; white-space: nowrap;">${label}</td><td style="padding: 6px 0; color: ${EMAIL_STYLES.textColor}; font-size: 14px; font-weight: 600;">${value}</td></tr>`,
+    )
+    .join("");
+
+  const content = `
+    ${heading("New exclusive access request")}
+    ${paragraph("Someone just requested early access. Review it in the backoffice waitlist queue.")}
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">${rows}</table>
+    ${lead.notes ? createInfoBox(`<strong>Notes:</strong> ${lead.notes}`) : ""}
+  `;
+  return wrapEmailTemplate(content);
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -84,26 +118,35 @@ serve(async (req) => {
       );
     }
 
-    // Check if email already exists
-    const { data: existing } = await supabaseClient
-      .from("waitlist_leads")
-      .select("id, position, status")
-      .eq("email", email.toLowerCase().trim())
-      .maybeSingle();
-
-    if (existing) {
-      // If already on waitlist, return their position
-      if (existing.status === "pending" || existing.status === "invited") {
-        return new Response(
-          JSON.stringify({ 
-            success: true, 
-            position: existing.position,
-            message: "You're already on the waitlist!"
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      // If converted or rejected, allow re-registration
+    // Reject reuse of an email/phone that already belongs to an active salon
+    // account, or that already has a pending/invited access request.
+    const { data: conflict, error: conflictError } = await supabaseClient.rpc(
+      "check_identity_availability",
+      { p_email: email, p_phone: phone ?? null },
+    );
+    if (conflictError) {
+      console.error("Identity availability check failed:", conflictError);
+      // This is a safety gate, not a nice-to-have — fail closed rather than
+      // silently letting the request through when we can't verify it.
+      return new Response(
+        JSON.stringify({ error: "Something went wrong. Please try again." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else if (conflict === "tenant_email") {
+      return new Response(
+        JSON.stringify({ error: "A salon already exists with this email. Try signing in instead." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else if (conflict === "tenant_phone") {
+      return new Response(
+        JSON.stringify({ error: "A salon already exists with this phone number. Try signing in instead." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else if (conflict === "waitlist_pending" || conflict === "waitlist_invited") {
+      return new Response(
+        JSON.stringify({ error: "You've already requested exclusive access. Hang tight — we'll reach out with your invitation soon." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Insert new waitlist lead
@@ -158,6 +201,36 @@ serve(async (req) => {
       } catch (emailError) {
         // Log email error but don't fail the request
         console.error("Failed to send confirmation email:", emailError);
+      }
+
+      // Notify the platform admin so new requests get reviewed — separate
+      // try/catch so a failure here never affects the requester-facing
+      // response or blocks their own confirmation email above.
+      const adminEmail = Deno.env.get("ADMIN_EMAIL") || Deno.env.get("SUPER_ADMIN_EMAIL");
+      if (adminEmail) {
+        try {
+          const resend = new Resend(resendApiKey);
+          await resend.emails.send({
+            from: buildFromAddress({ mode: "product", fromEmail }),
+            to: [adminEmail],
+            subject: `New exclusive access request — ${first_name.trim()} ${last_name.trim()}`,
+            html: buildAdminNotificationEmail({
+              name: `${first_name.trim()} ${last_name.trim()}`,
+              email: email.toLowerCase().trim(),
+              phone: phone?.trim() || null,
+              country: normalizedCountry,
+              planInterest: plan_interest || null,
+              teamSize: team_size || null,
+              notes: notes?.trim() || null,
+              position: newLead.position,
+            }),
+          });
+          console.log(`Admin notified of new waitlist lead: ${email}`);
+        } catch (adminEmailError) {
+          console.error("Failed to send admin notification email:", adminEmailError);
+        }
+      } else {
+        console.warn("Admin notification not sent: ADMIN_EMAIL/SUPER_ADMIN_EMAIL not configured");
       }
     } else {
       console.warn("Email not sent: RESEND_API_KEY or RESEND_FROM_EMAIL not configured");

@@ -5,6 +5,7 @@ import {
   useMarketInterestActions,
   useWaitlist,
   useWaitlistActions,
+  useWaitlistSignups,
   WaitlistLead,
   WaitlistStatus,
   type MarketInterestStatus,
@@ -39,15 +40,19 @@ import {
 } from "@ui/alert-dialog";
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
-import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, Globe } from "lucide-react";
+import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, Globe, UserCheck } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
 export default function WaitlistPage() {
-  const [applicationsTab, setApplicationsTab] = useState<WaitlistStatus | "all">("pending");
+  const [applicationsTab, setApplicationsTab] = useState<WaitlistStatus | "all" | "signed_up">("pending");
   const [activeMainTab, setActiveMainTab] = useState<"applications" | "interest">("applications");
   const [interestStatusFilter, setInterestStatusFilter] = useState<MarketInterestStatus | "all">("all");
-  const { data: leads, isLoading } = useWaitlist(applicationsTab === "all" ? undefined : applicationsTab);
+  const { data: leads, isLoading } = useWaitlist(
+    applicationsTab === "all" || applicationsTab === "signed_up" ? undefined : applicationsTab,
+  );
+  const { data: signups, isLoading: signupsLoading } = useWaitlistSignups();
   const { data: marketInterestLeads, isLoading: isMarketInterestLoading } = useMarketInterest({
     status: interestStatusFilter,
   });
@@ -82,19 +87,36 @@ export default function WaitlistPage() {
     setSelectedLead(null);
   };
 
+  const WAITLIST_STATUS_TOOLTIPS: Record<string, string> = {
+    pending: "Signed up for the waitlist — hasn't been reviewed yet.",
+    invited: "Approved and sent an invite email — hasn't signed up for an account yet.",
+    rejected: "Declined — will not be invited.",
+    converted: "Signed up for a real account using their invite.",
+  };
+
   const getStatusBadge = (status: WaitlistStatus) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="warning">Pending</Badge>;
-      case "invited":
-        return <Badge variant="info">Invited</Badge>;
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      case "converted":
-        return <Badge variant="success">Converted</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
+    const badge = (() => {
+      switch (status) {
+        case "pending":
+          return <Badge variant="warning" className="cursor-default">Pending</Badge>;
+        case "invited":
+          return <Badge variant="info" className="cursor-default">Invited</Badge>;
+        case "rejected":
+          return <Badge variant="destructive" className="cursor-default">Rejected</Badge>;
+        case "converted":
+          return <Badge variant="success" className="cursor-default">Converted</Badge>;
+        default:
+          return <Badge variant="secondary" className="cursor-default">{status}</Badge>;
+      }
+    })();
+    const tooltip = WAITLIST_STATUS_TOOLTIPS[status];
+    if (!tooltip) return badge;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-56 text-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
   };
 
   const getPlanBadge = (plan: string | null) => {
@@ -119,11 +141,23 @@ export default function WaitlistPage() {
       qualified: "success",
       closed: "neutral",
     };
+    const tooltips: Record<MarketInterestStatus, string> = {
+      new: "Just registered interest — hasn't been looked at yet.",
+      reviewing: "Someone on the team is currently assessing this lead.",
+      contacted: "We've reached out to this person directly.",
+      qualified: "Assessed as a good fit — ready to move forward.",
+      closed: "No longer being pursued.",
+    };
 
     return (
-      <Badge variant={variants[status]}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant={variants[status]} className="cursor-default">
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-56 text-xs">{tooltips[status]}</TooltipContent>
+      </Tooltip>
     );
   };
 
@@ -146,20 +180,74 @@ export default function WaitlistPage() {
               <CardHeader>
                 <CardTitle>Applications</CardTitle>
                 <CardDescription>
-                  {leads?.length || 0} {applicationsTab === "all" ? "total" : applicationsTab} leads
+                  {applicationsTab === "signed_up"
+                    ? `${signups?.length || 0} signed up, not yet converted`
+                    : `${leads?.length || 0} ${applicationsTab === "all" ? "total" : applicationsTab} leads`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs value={applicationsTab} onValueChange={(v) => setApplicationsTab(v as WaitlistStatus | "all")}> 
+                <Tabs value={applicationsTab} onValueChange={(v) => setApplicationsTab(v as WaitlistStatus | "all" | "signed_up")}>
                   <TabsList>
                     <TabsTrigger value="pending" className="gap-2"><Clock className="h-4 w-4" />Pending</TabsTrigger>
                     <TabsTrigger value="invited" className="gap-2"><Mail className="h-4 w-4" />Invited</TabsTrigger>
+                    <TabsTrigger value="signed_up" className="gap-2"><UserCheck className="h-4 w-4" />Signed up</TabsTrigger>
                     <TabsTrigger value="converted" className="gap-2"><Check className="h-4 w-4" />Converted</TabsTrigger>
                     <TabsTrigger value="rejected" className="gap-2"><X className="h-4 w-4" />Rejected</TabsTrigger>
                     <TabsTrigger value="all" className="gap-2"><Users className="h-4 w-4" />All</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value={applicationsTab} className="mt-4">
+                  <TabsContent value="signed_up" className="mt-4">
+                    {signupsLoading ? (
+                      <div className="flex justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : signups?.length === 0 ? (
+                      <EmptyState
+                        icon={UserCheck}
+                        title="No signups yet"
+                        description="People who created an account from their invite but haven't finished onboarding will appear here."
+                      />
+                    ) : (
+                      <div className="rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>
+                                <span className="inline-flex items-center gap-1">
+                                  Interested in
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="cursor-default text-muted-foreground">ⓘ</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-56 text-xs">
+                                      The plan they said they were interested in when applying to the waitlist — not necessarily what they'll pick during onboarding.
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </span>
+                              </TableHead>
+                              <TableHead>Invited</TableHead>
+                              <TableHead>Signed up</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {signups?.map((signup) => (
+                              <TableRow key={signup.lead_id}>
+                                <TableCell className="font-medium">{signup.name}</TableCell>
+                                <TableCell>{signup.email}</TableCell>
+                                <TableCell className="capitalize">{signup.plan_interest || "—"}</TableCell>
+                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "—"}</TableCell>
+                                <TableCell>{format(new Date(signup.signed_up_at), "MMM d, yyyy")}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value={applicationsTab === "signed_up" ? "__leads__" : applicationsTab} className="mt-4">
                     {isLoading ? (
                       <div className="flex justify-center py-12">
                         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

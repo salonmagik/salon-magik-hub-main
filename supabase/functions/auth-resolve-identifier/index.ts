@@ -24,6 +24,15 @@ function buildFullName(name: string | null | undefined) {
   return (name || "").trim() || "Salon Magik Client";
 }
 
+// verify-phone-otp assigns this placeholder email to phone-only accounts so
+// it can use the magiclink session-minting primitive. It's never a real,
+// deliverable address — a later-discovered real email must still be able to
+// overwrite it, so it can't be treated the same as "has a real email".
+const PLACEHOLDER_EMAIL_DOMAIN = "@phone.internal.salonmagik.com";
+function isPlaceholderEmail(email: string | null | undefined) {
+  return !!email && email.endsWith(PLACEHOLDER_EMAIL_DOMAIN);
+}
+
 type AdminClient = ReturnType<typeof createClient>;
 type AuthUserSummary = {
   id: string;
@@ -74,8 +83,17 @@ async function findAuthUserByIdentifier(
 }
 
 async function findAuthUserById(admin: AdminClient, userId: string): Promise<AuthUserSummary | null> {
-  const users = await listAllAuthUsers(admin);
-  return users.find((user) => user.id === userId) ?? null;
+  // Targeted lookup — this is the hot path (every repeat login already has a
+  // linked user_id), so it must not fall back to scanning the whole user
+  // table like findAuthUserByIdentifier does.
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data?.user) return null;
+  return {
+    id: data.user.id,
+    email: data.user.email ?? null,
+    phone: data.user.phone ?? null,
+    user_metadata: (data.user.user_metadata as Record<string, unknown> | null) ?? {},
+  };
 }
 
 serve(async (req) => {
@@ -142,20 +160,37 @@ serve(async (req) => {
       console.warn("Multiple linked auth users found for identifier", normalized.value, linkedUserIds);
     }
 
+    const firstCustomer = matchedCustomers[0];
+    // Provision the client auth account with BOTH the email and phone from the
+    // customer record (when present) so the customer can later log in with
+    // either identifier. Falls back to the identifier they logged in with.
+    const provisionEmail =
+      (firstCustomer.email || "").trim().toLowerCase() ||
+      (normalized.type === "email" ? normalized.value : null);
+    const provisionPhone =
+      (firstCustomer.phone || "").trim() ||
+      (normalized.type === "phone" ? normalized.value : null);
+
+    // Deliberately DOES NOT fall back to matching profiles.phone: a salon
+    // admin's contact number and a customer's login phone are different
+    // identity domains and must never be merged, even when the digits match
+    // (e.g. an admin adds a customer using their own phone). Only
+    // auth.users.phone (an actual phone-login identity) is treated as a
+    // reusable match here — see send-phone-otp for how a resulting shared
+    // phone digit-string across the two domains is disambiguated at login.
     let authUser =
       (linkedUserIds[0] ? await findAuthUserById(admin, linkedUserIds[0]) : null) ??
       (await findAuthUserByIdentifier(admin, normalized.value, normalized.type));
 
     if (!authUser) {
-      const firstCustomer = matchedCustomers[0];
       const firstName = buildFullName(firstCustomer.full_name).split(" ")[0];
       const remainingNames = buildFullName(firstCustomer.full_name).split(" ").slice(1).join(" ");
       const metadata = {
         first_name: firstName,
         last_name: remainingNames || null,
         full_name: buildFullName(firstCustomer.full_name),
-        phone: firstCustomer.phone || null,
-        email: firstCustomer.email || null,
+        phone: provisionPhone,
+        email: provisionEmail,
         client_account: true,
         password_initialized: false,
       };
@@ -165,11 +200,8 @@ serve(async (req) => {
         email_confirm: false,
         phone_confirm: false,
       };
-      if (normalized.type === "email") {
-        createPayload.email = normalized.value;
-      } else {
-        createPayload.phone = normalized.value;
-      }
+      if (provisionEmail) createPayload.email = provisionEmail;
+      if (provisionPhone) createPayload.phone = provisionPhone;
 
       const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser(createPayload);
       if (createUserError) {
@@ -182,6 +214,18 @@ serve(async (req) => {
         phone: createdUser.user.phone,
         user_metadata: createdUser.user.user_metadata ?? {},
       };
+    } else if (provisionEmail && (!authUser.email || isPlaceholderEmail(authUser.email))) {
+      // Existing client account created via phone has no real email (or only
+      // the internal placeholder verify-phone-otp assigned it) — backfill so
+      // email OTP login can find the account.
+      const { error: backfillErr } = await admin.auth.admin.updateUserById(authUser.id, {
+        email: provisionEmail,
+      });
+      if (backfillErr) {
+        console.warn("auth-resolve-identifier: email backfill failed", backfillErr.message);
+      } else {
+        authUser.email = provisionEmail;
+      }
     }
 
     const matchedCustomerIds = matchedCustomers.map((customer) => customer.id);

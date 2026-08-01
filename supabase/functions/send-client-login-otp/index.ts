@@ -117,7 +117,6 @@ serve(async (req) => {
     }
 
     const emailOtp = (generated.data?.properties as Record<string, unknown> | undefined)?.email_otp;
-    console.log("Generated OTP for", "OTP:", emailOtp); // TODO: remove this after testing
     if (!emailOtp || typeof emailOtp !== "string") {
       throw new Error("Failed to generate email OTP");
     }

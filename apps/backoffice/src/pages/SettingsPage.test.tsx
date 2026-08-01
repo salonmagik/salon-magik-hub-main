@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@ui/tooltip";
 import SettingsPage from "./SettingsPage";
 
 vi.mock("@tanstack/react-query", () => ({
@@ -31,7 +32,11 @@ vi.mock("@/lib/supabase", () => ({
 
 describe("SettingsPage", () => {
   it("renders settings and market management tab", () => {
-    render(<SettingsPage />);
+    render(
+      <TooltipProvider>
+        <SettingsPage />
+      </TooltipProvider>,
+    );
     expect(screen.getByRole("heading", { name: /settings/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /markets/i })).toBeInTheDocument();
   });

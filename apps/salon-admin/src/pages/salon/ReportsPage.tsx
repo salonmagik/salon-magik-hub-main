@@ -32,10 +32,13 @@ import {
   CreditCard,
   Banknote,
   Smartphone,
+  Info,
 } from "lucide-react";
 import { useReports } from "@/hooks/useReports";
+import { useCustomerSegments } from "@/hooks/useCustomerSegments";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@ui/ui/use-toast";
+import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import {
   ComposedChart,
   Bar,
@@ -69,6 +72,7 @@ interface StatChipProps {
   label: string;
   value: string;
   sub?: string;
+  description?: string;
   changePercent?: number | null;
   prevLabel?: string;
   icon: React.ElementType;
@@ -76,7 +80,7 @@ interface StatChipProps {
   loading?: boolean;
 }
 
-function StatChip({ label, value, sub, changePercent, prevLabel, icon: Icon, color, loading }: StatChipProps) {
+function StatChip({ label, value, sub, description, changePercent, prevLabel, icon: Icon, color, loading }: StatChipProps) {
   const isPositive = changePercent != null && changePercent >= 0;
   const hasChange = changePercent != null;
 
@@ -92,9 +96,21 @@ function StatChip({ label, value, sub, changePercent, prevLabel, icon: Icon, col
         ) : (
           <>
             <div className="mb-2.5 flex items-start justify-between gap-2">
-              <p className="min-w-0 text-[11px] font-normal uppercase tracking-[0.04em] text-[#141014]/60">
-                {label}
-              </p>
+              <div className="flex min-w-0 items-center gap-1">
+                <p className="min-w-0 text-[11px] font-normal uppercase tracking-[0.04em] text-[#141014]/60">
+                  {label}
+                </p>
+                {description && (
+                  <UiTooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3 w-3 shrink-0 text-[#141014]/42 cursor-default" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-56 text-xs">
+                      {description}
+                    </TooltipContent>
+                  </UiTooltip>
+                )}
+              </div>
               <div className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg ${color}`}>
                 <Icon className="h-[15px] w-[15px]" />
               </div>
@@ -125,6 +141,56 @@ export default function ReportsPage() {
   });
   const { currentTenant } = useAuth();
   const { stats, isLoading } = useReports(period, reportRange);
+  const { segments, isLoading: segmentsLoading } = useCustomerSegments();
+
+  const segmentBreakdown = [
+    {
+      key: "vip",
+      label: "VIP",
+      icon: Star,
+      iconClass: "bg-[#fbf0d4] text-[#7a5e12]",
+      count: Object.values(segments).filter((s) => s.is_vip).length,
+      revenue: Object.values(segments).filter((s) => s.is_vip).reduce((sum, s) => sum + s.total_paid, 0),
+      description: "Marked manually by your team — click the star on a customer to toggle it.",
+    },
+    {
+      key: "big_spender",
+      label: "Big spenders",
+      icon: Coins,
+      iconClass: "bg-[#e3f3eb] text-[#2e7d5b]",
+      count: Object.values(segments).filter((s) => s.is_big_spender).length,
+      revenue: Object.values(segments).filter((s) => s.is_big_spender).reduce((sum, s) => sum + s.total_paid, 0),
+      description: "Top 10% of paying customers at this salon by total amount spent. Only shown once you have at least 5 paying customers.",
+    },
+    {
+      key: "regular",
+      label: "Regulars",
+      icon: Repeat2,
+      iconClass: "bg-[#f1eafa] text-[#4a3878]",
+      count: Object.values(segments).filter((s) => s.is_regular).length,
+      revenue: Object.values(segments).filter((s) => s.is_regular).reduce((sum, s) => sum + s.total_paid, 0),
+      description: "Visited 5 or more times.",
+    },
+    {
+      key: "loves_packages",
+      label: "Loves packages",
+      icon: BarChart3,
+      iconClass: "bg-[#f1eafa] text-[#4a3878]",
+      count: Object.values(segments).filter((s) => s.loves_packages).length,
+      revenue: Object.values(segments).filter((s) => s.loves_packages).reduce((sum, s) => sum + s.total_paid, 0),
+      description: "Bought 3 or more packages in the last 3 months.",
+    },
+    {
+      key: "lapsed",
+      label: "Lapsed",
+      icon: XCircle,
+      iconClass: "bg-[#f7e5e5] text-[#a23b3b]",
+      count: Object.values(segments).filter((s) => s.is_lapsed).length,
+      revenue: Object.values(segments).filter((s) => s.is_lapsed).reduce((sum, s) => sum + s.total_paid, 0),
+      description: "Hasn't visited in over 45 days.",
+    },
+  ];
+  const hasSegmentData = Object.keys(segments).length > 0;
   const reportPresets: DateRangePreset[] = [
     { label: "Today", getRange: () => ({ from: new Date(), to: new Date() }) },
     { label: "This week", getRange: () => ({ from: startOfWeek(new Date()), to: endOfWeek(new Date()) }) },
@@ -211,6 +277,7 @@ export default function ReportsPage() {
           <StatChip
             label="Inflow"
             value={fmt(stats.totalRevenue)}
+            description="Total money collected in this period — completed payments only, before refunds."
             changePercent={stats.revenueChangePercent}
             prevLabel={stats.prevPeriodLabel}
             icon={Coins}
@@ -221,6 +288,7 @@ export default function ReportsPage() {
             label="Completed"
             value={stats.completedAppointments.toString()}
             sub="appointments done"
+            description="Appointments marked completed in this period."
             icon={Calendar}
             color="bg-[#f2eefa] text-[#2e1f4e]"
             loading={isLoading}
@@ -229,6 +297,7 @@ export default function ReportsPage() {
             label="Cancelled"
             value={stats.cancelledAppointments.toString()}
             sub={stats.cancellationRate > 0 ? `${stats.cancellationRate}% of total` : "none this period"}
+            description="Appointments cancelled in this period, as a share of everything booked."
             icon={XCircle}
             color="bg-[#f7e5e5] text-[#a23b3b]"
             loading={isLoading}
@@ -237,6 +306,7 @@ export default function ReportsPage() {
             label="New Clients"
             value={stats.newCustomers.toString()}
             sub="joined this period"
+            description="Customers who booked with you for the very first time in this period."
             icon={Users}
             color="bg-[#2e1f4e]/[0.08] text-[#2e1f4e]"
             loading={isLoading}
@@ -245,6 +315,7 @@ export default function ReportsPage() {
             label="Returning"
             value={stats.returningCustomers.toString()}
             sub={stats.retentionPercent != null ? `${stats.retentionPercent}% retention` : "clients came back"}
+            description="Existing customers who booked again in this period. Retention % is this as a share of your total active clients."
             icon={Repeat2}
             color="bg-[#2e7d5b]/10 text-[#2e7d5b]"
             loading={isLoading}
@@ -253,6 +324,7 @@ export default function ReportsPage() {
             label="Average income"
             value={fmt(stats.avgTransactionValue)}
             sub="per transaction"
+            description="Total inflow this period divided by number of paid transactions — not per appointment or per client."
             icon={BarChart3}
             color="bg-[#fbf0d4] text-[#7a5e12]"
             loading={isLoading}
@@ -451,6 +523,55 @@ export default function ReportsPage() {
                     <p className="shrink-0 font-serif text-[15px]">{fmt(staff.revenue)}</p>
                   </div>
                 ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Customer Segments */}
+        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+          <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base font-normal">Customer segments</CardTitle>
+            </div>
+            <p className="text-[13px] text-muted-foreground">Who your customers are, and what they're worth</p>
+          </CardHeader>
+          <CardContent className="px-5 pb-5 sm:px-6">
+            {segmentsLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+              </div>
+            ) : !hasSegmentData ? (
+              <div className="text-center py-10 text-sm text-muted-foreground">
+                <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <p>No customers yet. Segments appear once you start adding customers.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {segmentBreakdown.map((segment) => {
+                  const Icon = segment.icon;
+                  return (
+                    <div key={segment.key} className="rounded-xl border border-[#141014]/[0.06] p-3.5">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-[9px] mb-2 ${segment.iconClass}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <p className="text-[13.5px] font-medium">{segment.label}</p>
+                        <UiTooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            {segment.description}
+                          </TooltipContent>
+                        </UiTooltip>
+                      </div>
+                      <p className="font-serif text-[19px] mt-0.5">{segment.count}</p>
+                      <p className="text-[11.5px] text-muted-foreground mt-0.5">{fmt(segment.revenue)} lifetime</p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

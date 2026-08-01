@@ -283,12 +283,12 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
           <div className="py-4">
             <Alert>
-              <AlertDescription className="space-y-2">
+              <AlertDescription className="space-y-2 border-l border-warning pl-4">
                 <p className="font-medium">
                   Current: {currentLocationCount} / {allowedLocations} branches
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Add more branches from Subscription settings — you'll see the new monthly total before you pay.
+                  Add more branches from Subscription settings, you'll see the new monthly total before you pay.
                 </p>
               </AlertDescription>
             </Alert>

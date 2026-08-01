@@ -29,16 +29,26 @@ describe("ClientLoginPage", () => {
     invokeMock.mockReset();
   });
 
-  it("validates identifier before continuing", async () => {
+  it("disables continue until a valid email is entered", () => {
     render(
       <MemoryRouter future={routerFuture}>
         <ClientLoginPage />
       </MemoryRouter>
     );
 
-    // Email tab is active by default — submitting empty shows email validation error
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    expect(await screen.findByText(/please enter a valid email address/i)).toBeInTheDocument();
+    // Email tab is active by default — Continue stays disabled rather than
+    // letting an empty/invalid submit through and showing a post-hoc error.
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText(/enter your email/i), {
+      target: { value: "not-an-email" },
+    });
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText(/enter your email/i), {
+      target: { value: "client@example.com" },
+    });
+    expect(screen.getByRole("button", { name: /continue/i })).not.toBeDisabled();
   });
 
   it("advances to OTP step for valid email", async () => {

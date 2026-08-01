@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@ui/toaster";
 import { Toaster as Sonner } from "@ui/sonner";
+import { TooltipProvider } from "@ui/tooltip";
 import BackofficeLoginPage from "@/pages/BackofficeLoginPage";
 import BackofficeForgotPasswordPage from "@/pages/BackofficeForgotPasswordPage";
 import BackofficeResetPasswordPage from "@/pages/BackofficeResetPasswordPage";
@@ -10,6 +11,7 @@ import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import BackofficeDashboardPage from "@/pages/BackofficeDashboardPage";
 import CustomersWaitlistsPage from "@/pages/customers/CustomersWaitlistsPage";
 import CustomersTenantsPage from "@/pages/customers/CustomersTenantsPage";
+import CustomersUsersPage from "@/pages/customers/CustomersUsersPage";
 import CustomersOpsMonitorPage from "@/pages/customers/CustomersOpsMonitorPage";
 import CustomersSupportPage from "@/pages/customers/CustomersSupportPage";
 import FeatureFlagsPage from "@/pages/FeatureFlagsPage";
@@ -27,7 +29,7 @@ import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/Ba
 
 function App() {
   return (
-    <>
+    <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
@@ -127,6 +129,15 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="customers_tenants">
                   <CustomersTenantsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/customers/users"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="customers_users">
+                  <CustomersUsersPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -243,7 +254,7 @@ function App() {
           </Routes>
         </BackofficeAuthProvider>
       </BrowserRouter>
-    </>
+    </TooltipProvider>
   );
 }
 

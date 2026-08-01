@@ -38,6 +38,13 @@ export interface PhoneInputProps {
   className?: string;
 }
 
+// Sample national-format numbers shown as the input placeholder per country, so
+// users see the expected shape (and prefix) for their selected country.
+const PHONE_PLACEHOLDERS: Record<string, string> = {
+  GH: "24 123 4567",
+  NG: "803 123 4567",
+};
+
 const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
   (
     {
@@ -213,7 +220,7 @@ const PhoneInput = React.forwardRef<HTMLInputElement, PhoneInputProps>(
           ref={ref}
           type="tel"
           inputMode="numeric"
-          placeholder={placeholder}
+          placeholder={PHONE_PLACEHOLDERS[selectedCountry.code] ?? placeholder}
           value={nationalNumber}
           onChange={handleNumberChange}
           disabled={disabled}

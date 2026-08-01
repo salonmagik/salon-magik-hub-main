@@ -9,12 +9,15 @@ import { Label } from "@ui/label";
 import { Switch } from "@ui/switch";
 import { Separator } from "@ui/separator";
 import { Avatar, AvatarFallback } from "@ui/avatar";
-import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck } from "lucide-react";
+import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck, Pencil, X, Check, Loader2, Info } from "lucide-react";
 import { PhoneInput } from "@ui/phone-input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { ValidationChecklist } from "@ui/validation-checklist";
 import { validatePasswordStrength } from "@shared/validation";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 
 export default function ClientProfilePage() {
   const { user, customers, profile, preferences, signOut, refreshAccount } = useClientAuth();
@@ -24,20 +27,39 @@ export default function ClientProfilePage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [fullName, setFullName] = useState(profile?.full_name || customers[0]?.full_name || "");
-  const [phone, setPhone] = useState(profile?.phone || customers[0]?.phone || "");
   const [emailBookingUpdates, setEmailBookingUpdates] = useState(preferences?.email_booking_updates ?? true);
   const [smsBookingUpdates, setSmsBookingUpdates] = useState(preferences?.sms_booking_updates ?? false);
   const [marketingOptIn, setMarketingOptIn] = useState(preferences?.marketing_opt_in ?? false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isPhoneVerifying, setIsPhoneVerifying] = useState(false);
+
+  // Phone number is never edited directly — changing it (or re-verifying the
+  // current one) always goes through request-phone-change-otp /
+  // confirm-phone-change so it's proven before it's saved.
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [phoneOtpCode, setPhoneOtpCode] = useState("");
-  const [isSubmittingOtp, setIsSubmittingOtp] = useState(false);
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
 
+  // Same pattern as phone: email is never edited directly. Also, a
+  // phone-only account gets an internal, non-deliverable placeholder email
+  // assigned under the hood (see verify-phone-otp) purely so Supabase's
+  // session-minting primitive has an email to key off — that's never a real
+  // address the user owns, so treat it as "no email set" everywhere here.
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState("");
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
+
+  const PLACEHOLDER_EMAIL_DOMAIN = "@phone.internal.salonmagik.com";
+  const hasPlaceholderEmail = user?.email?.endsWith(PLACEHOLDER_EMAIL_DOMAIN) ?? false;
   const primaryCustomer = customers[0];
-  const userName = fullName || primaryCustomer?.full_name || user?.email?.split("@")[0] || "User";
-  const userEmail = user?.email || primaryCustomer?.email || "";
+  const realEmail = hasPlaceholderEmail ? "" : (user?.email || primaryCustomer?.email || "");
+  const userName = fullName || primaryCustomer?.full_name || (realEmail ? realEmail.split("@")[0] : "") || "User";
   const initials = userName
     .split(" ")
     .map((n) => n[0])
@@ -47,8 +69,8 @@ export default function ClientProfilePage() {
 
   const passwordState = useMemo(() => validatePasswordStrength(newPassword), [newPassword]);
   const hasPassword = profile?.client_password_initialized === true || user?.user_metadata?.password_initialized === true;
-  const emailVerified = Boolean(user?.email_confirmed_at);
-  const phoneVerified = Boolean(user?.phone_confirmed_at);
+  const emailVerified = !hasPlaceholderEmail && Boolean(user?.email_confirmed_at);
+  const phoneVerified = Boolean(profile?.phone_verified_at);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -66,7 +88,7 @@ export default function ClientProfilePage() {
     setIsSavingProfile(true);
     try {
       const { data, error } = await supabase.functions.invoke("update-client-account", {
-        body: { fullName, phone },
+        body: { fullName },
       });
       if (error || data?.error) {
         toast({ title: "Failed to update profile", description: data?.error || error?.message, variant: "destructive" });
@@ -102,42 +124,129 @@ export default function ClientProfilePage() {
     }
   };
 
-  const handleSendPhoneOtp = async () => {
-    const phoneNumber = profile?.phone || customers[0]?.phone || "";
-    if (!phoneNumber) {
-      toast({ title: "No phone number saved", description: "Add a phone number in your profile first.", variant: "destructive" });
+  const startEditPhone = () => {
+    setPhoneInput(profile?.phone || customers[0]?.phone || "");
+    setEditingPhone(true);
+  };
+
+  const cancelEditPhone = () => {
+    setEditingPhone(false);
+    setPhoneInput("");
+    setPhoneOtpSent(false);
+    setPhoneOtpCode("");
+  };
+
+  const handleRequestPhoneOtp = async () => {
+    const trimmed = phoneInput.trim();
+    if (!trimmed || !/^\+[1-9]\d{7,14}$/.test(trimmed)) {
+      toast({ title: "Invalid phone number", description: "Enter a full international number (e.g. +2348012345678).", variant: "destructive" });
       return;
     }
-    setIsPhoneVerifying(true);
+    setIsSavingPhone(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: phoneNumber });
-      if (error) {
-        toast({ title: "Could not send code", description: error.message, variant: "destructive" });
+      const { data, error } = await supabase.functions.invoke("request-phone-change-otp", {
+        body: { phone: trimmed },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Could not send code",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
         return;
       }
       setPhoneOtpSent(true);
-      toast({ title: "Verification code sent", description: `Check your SMS messages at ${phoneNumber}.` });
+      toast({ title: "Code sent", description: `Enter the code we sent to ${trimmed}.` });
     } finally {
-      setIsPhoneVerifying(false);
+      setIsSavingPhone(false);
     }
   };
 
-  const handleVerifyPhoneOtp = async () => {
-    const phoneNumber = profile?.phone || customers[0]?.phone || "";
-    if (!phoneOtpCode || !phoneNumber) return;
-    setIsSubmittingOtp(true);
+  const handleConfirmPhoneOtp = async () => {
+    const trimmed = phoneInput.trim();
+    if (phoneOtpCode.length !== 6 || !trimmed) return;
+    setIsVerifyingPhoneOtp(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ phone: phoneNumber, token: phoneOtpCode, type: "sms" });
-      if (error) {
-        toast({ title: "Verification failed", description: error.message, variant: "destructive" });
+      const { data, error } = await supabase.functions.invoke("confirm-phone-change", {
+        body: { phone: trimmed, otp: phoneOtpCode },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Verification failed",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        setPhoneOtpCode("");
         return;
       }
-      setPhoneOtpSent(false);
-      setPhoneOtpCode("");
       await refreshAccount();
-      toast({ title: "Phone verified" });
+      cancelEditPhone();
+      toast({ title: "Phone number updated" });
     } finally {
-      setIsSubmittingOtp(false);
+      setIsVerifyingPhoneOtp(false);
+    }
+  };
+
+  const startEditEmail = () => {
+    setEmailInput(realEmail);
+    setEditingEmail(true);
+  };
+
+  const cancelEditEmail = () => {
+    setEditingEmail(false);
+    setEmailInput("");
+    setEmailOtpSent(false);
+    setEmailOtpCode("");
+  };
+
+  const handleRequestEmailOtp = async () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast({ title: "Invalid email", description: "Enter a valid email address.", variant: "destructive" });
+      return;
+    }
+    setIsSavingEmail(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("request-email-change-otp", {
+        body: { email: trimmed },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Could not send code",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        return;
+      }
+      setEmailOtpSent(true);
+      toast({ title: "Code sent", description: `Enter the code we sent to ${trimmed}.` });
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleConfirmEmailOtp = async () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (emailOtpCode.length !== 6 || !trimmed) return;
+    setIsVerifyingEmailOtp(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("confirm-email-change", {
+        body: { email: trimmed, otp: emailOtpCode },
+      });
+      if (error || data?.error) {
+        toast({
+          title: "Verification failed",
+          description: data?.error || data?.message || (await getFunctionErrorMessage(error)),
+          variant: "destructive",
+        });
+        setEmailOtpCode("");
+        return;
+      }
+      await refreshAccount();
+      cancelEditEmail();
+      toast({ title: "Email updated" });
+    } finally {
+      setIsVerifyingEmailOtp(false);
     }
   };
 
@@ -225,7 +334,8 @@ export default function ClientProfilePage() {
                       <Mail className="h-4 w-4" />
                       Email
                     </Label>
-                    <Input id="email" value={userEmail} disabled className="bg-muted" />
+                    <Input id="email" value={realEmail || "Not set"} disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground">Manage under Security → Email.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -233,11 +343,8 @@ export default function ClientProfilePage() {
                       <Phone className="h-4 w-4" />
                       Phone
                     </Label>
-                    <PhoneInput
-                      value={phone}
-                      onChange={setPhone}
-                      defaultCountry={customers[0]?.tenant?.country || "GH"}
-                    />
+                    <Input value={profile?.phone || customers[0]?.phone || "Not set"} disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground">Manage under Security → Phone number.</p>
                   </div>
                 </div>
 
@@ -260,33 +367,152 @@ export default function ClientProfilePage() {
                 <CardContent className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-3">
                     <div className="rounded-xl border p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Password</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Password</p>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            "Required" means you've only ever signed in with a one-time code and haven't set a password yet.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                       <p className="mt-2 font-medium">{hasPassword ? "Configured" : "Required"}</p>
                     </div>
-                    <div className="rounded-xl border p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Email verification</p>
-                      <p className="mt-2 font-medium">{emailVerified ? "Verified" : "Pending"}</p>
-                    </div>
                     <div className="rounded-xl border p-4 space-y-2">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone verification</p>
-                      <p className="font-medium">{phoneVerified ? "Verified" : "Not verified"}</p>
-                      {!phoneVerified && !phoneOtpSent && (
-                        <Button size="sm" variant="outline" onClick={handleSendPhoneOtp} disabled={isPhoneVerifying}>
-                          {isPhoneVerifying ? "Sending..." : "Verify phone"}
-                        </Button>
-                      )}
-                      {!phoneVerified && phoneOtpSent && (
-                        <div className="flex gap-2 items-center pt-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Email</p>
+                        {!editingEmail && (
+                          <button
+                            type="button"
+                            onClick={startEditEmail}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title={realEmail ? "Change email" : "Add email"}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {editingEmail && emailOtpSent ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to {emailInput}.</p>
+                          <InputOTP maxLength={6} value={emailOtpCode} onChange={setEmailOtpCode} disabled={isVerifyingEmailOtp}>
+                            <InputOTPGroup>
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <InputOTPSlot key={i} index={i} />
+                              ))}
+                            </InputOTPGroup>
+                          </InputOTP>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditEmail} disabled={isVerifyingEmailOtp}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleConfirmEmailOtp} disabled={isVerifyingEmailOtp || emailOtpCode.length !== 6}>
+                              {isVerifyingEmailOtp ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Verify
+                            </Button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setEmailOtpSent(false); setEmailOtpCode(""); }}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            disabled={isVerifyingEmailOtp}
+                          >
+                            Use a different email
+                          </button>
+                        </div>
+                      ) : editingEmail ? (
+                        <div className="space-y-2">
                           <Input
-                            className="h-8 w-24 text-sm"
-                            placeholder="000000"
-                            value={phoneOtpCode}
-                            maxLength={6}
-                            onChange={(e) => setPhoneOtpCode(e.target.value)}
+                            type="email"
+                            value={emailInput}
+                            onChange={(e) => setEmailInput(e.target.value)}
+                            placeholder="you@example.com"
+                            disabled={isSavingEmail}
                           />
-                          <Button size="sm" onClick={handleVerifyPhoneOtp} disabled={isSubmittingOtp || phoneOtpCode.length < 4}>
-                            {isSubmittingOtp ? "Verifying..." : "Confirm"}
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditEmail} disabled={isSavingEmail}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleRequestEmailOtp} disabled={isSavingEmail}>
+                              {isSavingEmail ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Send code
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm truncate">{realEmail || "Not set"}</p>
+                          <p className="text-xs text-muted-foreground">{emailVerified ? "Verified" : "Not verified"}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded-xl border p-4 space-y-2 md:col-span-1">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Phone number</p>
+                        {!editingPhone && (
+                          <button
+                            type="button"
+                            onClick={startEditPhone}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title={profile?.phone ? "Change phone number" : "Add phone number"}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {editingPhone && phoneOtpSent ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-muted-foreground">Enter the 6-digit code sent to {phoneInput}.</p>
+                          <InputOTP maxLength={6} value={phoneOtpCode} onChange={setPhoneOtpCode} disabled={isVerifyingPhoneOtp}>
+                            <InputOTPGroup>
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <InputOTPSlot key={i} index={i} />
+                              ))}
+                            </InputOTPGroup>
+                          </InputOTP>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditPhone} disabled={isVerifyingPhoneOtp}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleConfirmPhoneOtp} disabled={isVerifyingPhoneOtp || phoneOtpCode.length !== 6}>
+                              {isVerifyingPhoneOtp ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Verify
+                            </Button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => { setPhoneOtpSent(false); setPhoneOtpCode(""); }}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            disabled={isVerifyingPhoneOtp}
+                          >
+                            Use a different number
+                          </button>
+                        </div>
+                      ) : editingPhone ? (
+                        <div className="space-y-2">
+                          <PhoneInput
+                            value={phoneInput}
+                            onChange={setPhoneInput}
+                            defaultCountry={customers[0]?.tenant?.country || "GH"}
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1" onClick={cancelEditPhone} disabled={isSavingPhone}>
+                              <X className="w-3.5 h-3.5 mr-1" /> Cancel
+                            </Button>
+                            <Button size="sm" className="flex-1" onClick={handleRequestPhoneOtp} disabled={isSavingPhone}>
+                              {isSavingPhone ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                              Send code
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="font-medium text-sm">{profile?.phone || customers[0]?.phone || "Not set"}</p>
+                          <p className="text-xs text-muted-foreground">{phoneVerified ? "Verified" : "Not verified"}</p>
                         </div>
                       )}
                     </div>

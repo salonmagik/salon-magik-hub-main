@@ -146,6 +146,17 @@ serve(async (req) => {
       tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
 
+    // Every tenant is scheduled into the self-managed monthly cron — for
+    // monthly billing_cycle tenants that covers the full price (base +
+    // add-ons), for annual tenants compute_tenant_recurring_total excludes
+    // the base price (their annual Paystack Subscription already covers
+    // that) and only charges the add-on portion each month.
+    if (meta.billing_cycle === "annual" || meta.billing_cycle === "monthly") {
+      tenantUpdate.billing_cycle = meta.billing_cycle;
+    }
+    tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    tenantUpdate.billing_retry_count = 0;
+
     // Activate the subscription
     const { error: updateError } = await supabase
       .from("tenants")
@@ -160,12 +171,22 @@ serve(async (req) => {
       });
     }
 
+    const discountApplied = Number(meta.discount_applied || 0);
+    if (discountApplied > 0) {
+      await supabase.rpc("consume_tenant_sales_promo_use", {
+        p_tenant_id: tenantId,
+        p_surface: "subscription",
+        p_usage_reference: `checkout:${reference}`,
+        p_amount: discountApplied,
+      });
+    }
+
     await supabase.from("audit_logs").insert({
       action: "subscription.activated",
       entity_type: "tenants",
       entity_id: tenantId,
       actor_user_id: user.id,
-      metadata: { reference, currency, intent: "subscription_activation" },
+      metadata: { reference, currency, intent: "subscription_activation", discount_applied: discountApplied },
     });
 
     const receiptEmail = txData?.customer?.email || user.email;
