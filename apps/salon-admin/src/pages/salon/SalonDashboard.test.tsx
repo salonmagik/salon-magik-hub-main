@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@ui/tooltip";
 import SalonDashboard from "./SalonDashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -33,7 +34,9 @@ const mockedUseDashboardStats = vi.mocked(useDashboardStats);
 function renderDashboard() {
   return render(
     <MemoryRouter>
-      <SalonDashboard />
+      <TooltipProvider>
+        <SalonDashboard />
+      </TooltipProvider>
     </MemoryRouter>
   );
 }
