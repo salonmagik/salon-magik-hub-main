@@ -511,7 +511,8 @@ export default function PricingPage() {
 							},
 							{
 								name: "Staff Operations",
-								desc: "Location check-ins, time-off requests, leave allowances, and manager approvals. Available on Studio and Chain plans.",
+								desc: "Track when your staff arrive, time off and their leave requests.",
+								price: "Available on Studio and Chain plans.",
 								available: true,
 							},
 							{

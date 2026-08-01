@@ -734,16 +734,18 @@ export default function StaffPage() {
 								</Badge>
 							</div>
 							<p className="mt-0.5 text-sm text-muted-foreground">
-								Get insight on staff arrival times, time off and leave requests.
-								{!staffOperationsEnabled &&
-								staffOperationsPlanEligible &&
-								staffOperationsPriceLabel
-									? ` ${staffOperationsPriceLabel}/month for ${staffOperationsLocationCount} location${staffOperationsLocationCount === 1 ? "" : "s"}.`
-									: ""}
-								{!staffOperationsEnabled && !staffOperationsPlanEligible
-									? " Available on Studio and Chain plans."
-									: ""}
+								Track when your staff arrive, time off and their leave requests.
 							</p>
+							{!staffOperationsEnabled && staffOperationsPlanEligible && staffOperationsPriceLabel && (
+								<p className="mt-1 text-xs text-muted-foreground">
+									{staffOperationsPriceLabel}/month for {staffOperationsLocationCount} location{staffOperationsLocationCount === 1 ? "" : "s"}.
+								</p>
+							)}
+							{!staffOperationsEnabled && !staffOperationsPlanEligible && (
+								<p className="mt-1 text-xs text-muted-foreground">
+									Available on Studio and Chain plans.
+								</p>
+							)}
 						</div>
 					</div>
 					{currentUserIsOwner ? (
@@ -771,9 +773,9 @@ export default function StaffPage() {
 						)
 					) : !staffOperationsEnabled ? (
 						<p className="shrink-0 text-xs text-muted-foreground">
-							{/* {staffOperationsPlanEligible
-                ? "Ask the salon owner to enable it."
-                : "Available on Studio and Chain plans."} */}
+							{staffOperationsPlanEligible
+								? "Ask the salon owner to enable it."
+								: "Available on Studio and Chain plans."}
 						</p>
 					) : null}
 				</div>
