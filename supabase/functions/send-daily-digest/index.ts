@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
-import { fetchPlatformTemplate } from "../_shared/platform-templates.ts";
+import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
 import { createButton } from "../_shared/email-template.ts";
 
 const corsHeaders = {
@@ -11,12 +11,6 @@ const corsHeaders = {
 
 interface DigestRequest {
   tenantId?: string;
-}
-
-function replaceTokens(template: string, values: Record<string, string>) {
-  return Object.entries(values).reduce((content, [key, value]) => {
-    return content.replaceAll(`{{${key}}}`, value);
-  }, template);
 }
 
 function startOfUtcDay(date: Date) {
@@ -202,14 +196,14 @@ Deno.serve(async (req) => {
         const activePlatformBody =
           platformTemplateResult?.is_active === false ? null : platformTemplateResult?.body;
 
-        const subject = replaceTokens(
+        const subject = renderPlatformTemplate(
           activePlatformSubject ||
             (templateResult.data?.is_active === false
               ? defaultSubject
               : templateResult.data?.subject || defaultSubject),
           values,
         );
-        const htmlContent = replaceTokens(
+        const htmlContent = renderPlatformTemplate(
           activePlatformBody ||
             (templateResult.data?.is_active === false
               ? defaultBody
