@@ -17,6 +17,7 @@ const InvitationExpiredPage = lazy(() => import("./pages/auth/InvitationExpiredP
 const VerifyEmailPage = lazy(() => import("./pages/auth/VerifyEmailPage"));
 const CompleteSignupPage = lazy(() => import("./pages/auth/CompleteSignupPage"));
 const OnboardingPage = lazy(() => import("./pages/onboarding/OnboardingPage"));
+const OnboardingCompletePage = lazy(() => import("./pages/onboarding/OnboardingCompletePage"));
 const SalonDashboard = lazy(() => import("./pages/salon/SalonDashboard"));
 const AppointmentsPage = lazy(() => import("./pages/salon/AppointmentsPage"));
 const CustomersPage = lazy(() => import("./pages/salon/CustomersPage"));
@@ -202,6 +203,18 @@ const App = () => (
                   <OnboardingRoute>
                     <OnboardingPage />
                   </OnboardingRoute>
+                }
+              />
+
+              {/* Rendered right after onboarding completes. Uses the plain
+                  ProtectedRoute (not OnboardingRoute) since hasCompletedOnboarding
+                  is already true by the time we navigate here. */}
+              <Route
+                path="/onboarding/complete"
+                element={
+                  <ProtectedRoute>
+                    <OnboardingCompletePage />
+                  </ProtectedRoute>
                 }
               />
 

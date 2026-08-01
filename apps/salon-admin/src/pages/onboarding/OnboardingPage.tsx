@@ -16,7 +16,6 @@ import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanSte
 import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
-import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
@@ -29,7 +28,7 @@ import {
 } from "@/lib/googleOAuthFlow";
 import { getGoogleProfileFields } from "@/lib/authCompletion";
 
-type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
+type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review";
 
 function SegmentProgress({ currentIndex, total }: { currentIndex: number; total: number }) {
   return (
@@ -206,7 +205,6 @@ export default function OnboardingPage() {
           locationsConfig.locations.every((loc) => loc.city.trim() !== "")
         );
       case "review":
-        if (promoCode.trim() && !promoPreview?.valid) return false;
         if (!isChain) return true;
         return Boolean(configuredChainQuote);
       default:
@@ -605,7 +603,17 @@ export default function OnboardingPage() {
         });
       }
 
-      setStep("complete");
+      navigate("/onboarding/complete", {
+        replace: true,
+        state: {
+          initialPlan: selectedPlan || "solo",
+          currency: businessInfo.currency || "NGN",
+          trialDays: onboardingTrialDays,
+          promoPreview,
+          chainLocations: isChain ? locationsConfig.locations : [],
+          businessName: businessInfo.name,
+        },
+      });
     } catch (error: any) {
       console.error("Onboarding error:", error);
       toast({
@@ -617,22 +625,6 @@ export default function OnboardingPage() {
       setIsLoading(false);
     }
   };
-
-  if (step === "complete") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F8F6F2] p-4">
-        <WelcomeModal
-          initialPlan={selectedPlan || "solo"}
-          currency={businessInfo.currency || "NGN"}
-          trialDays={onboardingTrialDays}
-          promoPreview={promoPreview}
-          chainLocations={isChain ? locationsConfig.locations : []}
-          businessName={businessInfo.name}
-          onDismiss={() => navigate("/salon/overview")}
-        />
-      </div>
-    );
-  }
 
   const profileInfo = {
     firstName,
@@ -983,14 +975,6 @@ export default function OnboardingPage() {
                     : null
                 }
                 trialDays={onboardingTrialDays}
-                promoCode={promoCode}
-                onPromoCodeChange={(value) => {
-                  setPromoCode(value);
-                  setPromoPreview(null);
-                }}
-                onApplyPromo={handleApplyPromo}
-                isApplyingPromo={isApplyingPromo}
-                promoPreview={promoPreview}
               />
             )}
 

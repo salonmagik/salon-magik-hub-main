@@ -200,9 +200,13 @@ export default function LoginPage() {
     try {
       persistRememberMePreference(rememberMe);
       persistRememberedEmail(email, rememberMe);
+      // Trim both fields — copying credentials out of an invitation email
+      // (especially a generated password ending in punctuation) easily grabs
+      // an invisible leading/trailing space, which reads to the user as
+      // "the password is wrong" even though what they typed was correct.
       const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: email.trim(),
+        password: password.trim(),
       });
 
       if (error) {

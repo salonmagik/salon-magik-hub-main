@@ -75,7 +75,7 @@ export function ApplyPromoCodeDialog({ open, onOpenChange }: ApplyPromoCodeDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="content-start sm:max-w-sm">
         <DialogHeader>
           <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
             <Gift className="h-5 w-5 text-primary" />

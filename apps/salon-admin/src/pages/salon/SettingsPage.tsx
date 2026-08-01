@@ -73,6 +73,8 @@ import {
 	ExternalLink,
 	Palette,
 	Sparkles,
+	Minus,
+	Plus,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -216,6 +218,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [isPurchasingTheme, setIsPurchasingTheme] = useState(false);
 	const [branchesInput, setBranchesInput] = useState("1");
 	const [seatsInput, setSeatsInput] = useState("1");
+	const planConfigSectionRef = useRef<HTMLDivElement>(null);
 	const [planConfigQuote, setPlanConfigQuote] = useState<{
 		current_plan_slug: string;
 		current_allowed_locations: number;
@@ -3115,27 +3118,43 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				)}
 				<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
 					<div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-						<div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-							<p className="font-serif text-xl capitalize">
-								{currentTenant?.plan || "Solo"}
-							</p>
-							<div className="flex items-center gap-2">
-								<Badge variant="secondary" className="capitalize">
-									{recurringTotal?.breakdown.billing_cycle || "monthly"} billing
-								</Badge>
-								<Badge
-									className={cn(
-										currentTenant?.subscription_status === "active"
-											? "bg-success text-success-foreground"
-											: currentTenant?.subscription_status === "trialing"
-												? "bg-primary text-primary-foreground"
-												: "bg-destructive text-destructive-foreground",
-									)}
-								>
-									{currentTenant?.subscription_status?.replace("_", " ") ||
-										"Unknown"}
-								</Badge>
+						<div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+							<div>
+								<p className="font-serif text-xl capitalize">
+									{currentTenant?.plan || "Solo"}
+								</p>
+								<div className="mt-1.5 flex items-center gap-2">
+									<Badge variant="secondary" className="capitalize">
+										{recurringTotal?.breakdown.billing_cycle || "monthly"} billing
+									</Badge>
+									<Badge
+										className={cn(
+											currentTenant?.subscription_status === "active"
+												? "bg-success text-success-foreground"
+												: currentTenant?.subscription_status === "trialing"
+													? "bg-primary text-primary-foreground"
+													: "bg-destructive text-destructive-foreground",
+										)}
+									>
+										{currentTenant?.subscription_status?.replace("_", " ") ||
+											"Unknown"}
+									</Badge>
+								</div>
 							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="rounded-full"
+								onClick={() =>
+									planConfigSectionRef.current?.scrollIntoView({
+										behavior: "smooth",
+										block: "center",
+									})
+								}
+							>
+								Change plan
+							</Button>
 						</div>
 						{isTrialing && trialEndsAt && (
 							<div className="mt-3">
@@ -3154,16 +3173,20 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</p>
 							</div>
 						)}
-						{!isTrialing && recurringTotal && (
+						{recurringTotal && (
 							<div className="mt-3">
 								<div className="flex items-baseline justify-between">
 									<p className="font-serif text-3xl">
 										{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}
 									</p>
 									<p className="text-xs text-muted-foreground">
-										{currentTenant?.next_billing_at
-											? `next charge · ${format(new Date(currentTenant.next_billing_at), "MMM d")}`
-											: "next charge"}
+										{isTrialing
+											? trialEndsAt
+												? `starts after trial · ${format(trialEndsAt, "MMM d")}`
+												: "starts after trial"
+											: currentTenant?.next_billing_at
+												? `next charge · ${format(new Date(currentTenant.next_billing_at), "MMM d")}`
+												: "next charge"}
 									</p>
 								</div>
 								<div className="mt-3 space-y-1 border-t border-dashed pt-3 text-sm">
@@ -3210,18 +3233,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</div>
 
 					<div className="grid gap-4 md:grid-cols-3">
-						<div className="rounded-lg border p-4">
-							<p className="text-sm text-muted-foreground">Locations</p>
-							<p className="mt-1 text-2xl font-semibold">
+						<div className="rounded-xl bg-muted/50 p-4">
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Locations</p>
+							<p className="mt-1 font-serif text-2xl">
 								{entitlements?.used_locations ?? 0} /{" "}
 								{entitlements?.allowed_locations ??
 									currentPlan?.limits?.max_locations ??
 									1}
 							</p>
 						</div>
-						<div className="rounded-lg border p-4">
-							<p className="text-sm text-muted-foreground">Seats</p>
-							<p className="mt-1 text-2xl font-semibold">
+						<div className="rounded-xl bg-muted/50 p-4">
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Seats</p>
+							<p className="mt-1 font-serif text-2xl">
 								{entitlements?.used_staff ?? 0} /{" "}
 								{entitlements?.allowed_staff ??
 									currentPlan?.limits?.max_staff ??
@@ -3233,9 +3256,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									: "All included in your plan"}
 							</p>
 						</div>
-						<div className="rounded-lg border p-4">
-							<p className="text-sm text-muted-foreground">Storefront Theme</p>
-							<p className="mt-1 text-lg font-semibold">
+						<div className="rounded-xl bg-muted/50 p-4">
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Storefront Theme</p>
+							<p className="mt-1 font-serif text-lg">
 								{entitlements?.has_ecommerce_theme
 									? "E-commerce active"
 									: "Default theme"}
@@ -3248,7 +3271,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</div>
 					</div>
 
-					<div className="space-y-3">
+					<div ref={planConfigSectionRef} className="space-y-3 scroll-mt-6">
 						<p className="text-sm font-medium">Manage branches & team size</p>
 						<div className="rounded-lg border p-4 space-y-4">
 							<p className="text-sm text-muted-foreground">
@@ -3264,26 +3287,74 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									here does.
 								</p>
 							)}
-							<div className="grid gap-4 sm:grid-cols-2">
-								<div>
-									<Label htmlFor="config-branches">Branches</Label>
-									<Input
-										id="config-branches"
-										type="number"
-										min={1}
-										value={branchesInput}
-										onChange={(event) => setBranchesInput(event.target.value)}
-									/>
+							<div className="divide-y rounded-lg border">
+								<div className="flex items-center justify-between gap-4 p-3.5">
+									<div>
+										<Label htmlFor="config-branches" className="text-sm font-medium">Branches</Label>
+										<p className="text-xs text-muted-foreground">
+											{planConfigQuote
+												? `${planConfigQuote.current_allowed_locations} included on ${planConfigQuote.current_plan_slug}`
+												: "How many locations you operate"}
+										</p>
+									</div>
+									<div className="flex shrink-0 items-center gap-3">
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											className="h-7 w-7 rounded-full"
+											disabled={Number(branchesInput) <= 1}
+											onClick={() => setBranchesInput(String(Math.max(1, branchesValue - 1)))}
+										>
+											<Minus className="h-3.5 w-3.5" />
+										</Button>
+										<span id="config-branches" className="min-w-[1.5rem] text-center font-serif text-lg">
+											{branchesInput}
+										</span>
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											className="h-7 w-7 rounded-full"
+											onClick={() => setBranchesInput(String(branchesValue + 1))}
+										>
+											<Plus className="h-3.5 w-3.5" />
+										</Button>
+									</div>
 								</div>
-								<div>
-									<Label htmlFor="config-seats">Team seats</Label>
-									<Input
-										id="config-seats"
-										type="number"
-										min={0}
-										value={seatsInput}
-										onChange={(event) => setSeatsInput(event.target.value)}
-									/>
+								<div className="flex items-center justify-between gap-4 p-3.5">
+									<div>
+										<Label htmlFor="config-seats" className="text-sm font-medium">Team seats</Label>
+										<p className="text-xs text-muted-foreground">
+											{planConfigQuote
+												? `${planConfigQuote.current_allowed_staff} included on ${planConfigQuote.current_plan_slug}`
+												: "How many staff accounts you need"}
+										</p>
+									</div>
+									<div className="flex shrink-0 items-center gap-3">
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											className="h-7 w-7 rounded-full"
+											disabled={Number(seatsInput) <= 0}
+											onClick={() => setSeatsInput(String(Math.max(0, seatsValue - 1)))}
+										>
+											<Minus className="h-3.5 w-3.5" />
+										</Button>
+										<span id="config-seats" className="min-w-[1.5rem] text-center font-serif text-lg">
+											{seatsInput}
+										</span>
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											className="h-7 w-7 rounded-full"
+											onClick={() => setSeatsInput(String(seatsValue + 1))}
+										>
+											<Plus className="h-3.5 w-3.5" />
+										</Button>
+									</div>
 								</div>
 							</div>
 

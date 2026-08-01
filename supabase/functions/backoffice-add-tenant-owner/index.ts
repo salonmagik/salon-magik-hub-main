@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as OTPAuth from "npm:otpauth@9.2.2";
-import { wrapEmailTemplate, heading, paragraph, smallText, createButton, buildFromAddress } from "../_shared/email-template.ts";
+import { wrapEmailTemplate, heading, paragraph, smallText, createButton, createCredentialBox, buildFromAddress } from "../_shared/email-template.ts";
 import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -27,7 +27,8 @@ function buildNewOwnerEmail(firstName: string, tenantName: string, loginEmail: s
     ${paragraph(`Hi ${firstName},`)}
     ${paragraph(`The Salon Magik team has set up an account for you as the owner of <strong>${tenantName}</strong>.`)}
     ${paragraph(`Your login email: <strong>${loginEmail}</strong>`)}
-    ${paragraph(`Temporary password (you'll set a new one on first login): <strong>${tempPassword}</strong>`)}
+    ${paragraph("Temporary password — you'll set a new one on first login:")}
+    ${createCredentialBox("Temporary password", tempPassword)}
     ${createButton("Sign in now", loginLink)}
     ${smallText("For your security, you'll be asked to choose a new password the first time you sign in.")}
   `;

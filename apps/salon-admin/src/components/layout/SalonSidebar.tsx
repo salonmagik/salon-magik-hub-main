@@ -47,6 +47,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerModal } from "@/components/banners";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { TrialBanner } from "@/components/billing/TrialBanner";
 import { TrialReminderModals } from "@/components/billing/TrialReminderModals";
 import { PromoTrialBonusBanner } from "@/components/billing/PromoTrialBonusBanner";
@@ -251,12 +252,6 @@ const mainNavItems: NavItem[] = [
 		module: "salons_overview",
 	},
 	{
-		label: "Staff",
-		icon: UserCog,
-		path: "/salon/overview/staff",
-		module: "staff",
-	},
-	{
 		label: "Appointments",
 		icon: Calendar,
 		path: "/salon/appointments",
@@ -292,19 +287,12 @@ const mainNavItems: NavItem[] = [
 		path: "/salon/messaging",
 		module: "messaging",
 	},
-	{ label: "Staff", icon: UserCog, path: "/salon/staff", module: "staff" },
-	{ label: "My Shift", icon: Clock, path: "/salon/my-shift" },
+	{ label: "Staff", icon: UserCog, path: "/salon/staff-group" },
 	{
 		label: "All Notifications",
 		icon: Bell,
 		path: "/salon/all-notifications",
 		module: "notifications",
-	},
-	{
-		label: "Audit Log",
-		icon: FileText,
-		path: "/salon/audit-log",
-		module: "audit_log",
 	},
 	{
 		label: "Settings",
@@ -367,6 +355,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const notificationsData = useNotifications();
   const { unreadCount } = notificationsData;
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
+  const staffOperationsAddon = useStaffOperationsAddon();
   const {
     currentTenant,
     activeContextType,
@@ -388,15 +377,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // Filter nav items based on permissions - return empty during loading to prevent flash
   const filteredMainNavItems = useMemo(() => {
     if (permissionsLoading || isAssignmentPending) return []; // Return EMPTY to prevent flash
+    const canSeeTeamMembers = hasPermission("staff");
+    const canSeeMyShift = staffOperationsAddon.isEnabled;
     const visibleItems = mainNavItems.filter((item) => {
-      if (item.path === "/salon/overview/staff") {
-        return activeContextType === "owner_hub" && hasPermission("staff");
+      if (item.path === "/salon/staff-group") {
+        return canSeeTeamMembers || canSeeMyShift;
       }
       if (item.path === "/salon/all-notifications") {
         return activeContextType === "owner_hub";
-      }
-      if (item.path === "/salon/staff" && activeContextType === "owner_hub") {
-        return false;
       }
       if (item.path === "/salon/audit-log" && currentTenant?.plan === "chain" && activeContextType !== "owner_hub") {
         return false;
@@ -414,6 +402,21 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     });
     const isChain = currentTenant?.plan === "chain";
     return visibleItems.map((item) => {
+      if (item.path === "/salon/staff-group") {
+        const teamMembersPath = activeContextType === "owner_hub" ? "/salon/overview/staff" : "/salon/staff";
+        const children: Omit<NavItem, "children">[] = [];
+        if (canSeeTeamMembers) {
+          children.push({ label: "Team Members", icon: UserCog, path: teamMembersPath });
+        }
+        if (canSeeMyShift) {
+          children.push({ label: "My Shift", icon: Clock, path: "/salon/my-shift" });
+        }
+        // Single-child case: skip the dropdown wrapper and link straight in.
+        if (children.length === 1) {
+          return { ...item, label: children[0].label, icon: children[0].icon, path: children[0].path };
+        }
+        return { ...item, children };
+      }
       if (item.path === "/salon/settings") {
         if (activeContextType === "owner_hub") {
           if (isChain) {
@@ -430,6 +433,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
                 { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+                { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
               ],
             };
           }
@@ -446,6 +450,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
               { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+              { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
             ],
           };
         }
@@ -456,6 +461,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           children: [
             { label: "Branch Profile", icon: Building2, path: "/salon/branch-settings?tab=profile" },
             { label: "Branch Hours", icon: CalendarX2, path: "/salon/branch-settings?tab=hours" },
+            // Chain audit trail only makes sense rolled up at the business level.
+            ...(isChain ? [] : [{ label: "Audit Log", icon: FileText, path: "/salon/audit-log" }]),
           ],
         };
       }
@@ -464,7 +471,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       }
       return item;
     });
-  }, [activeContextType, availableContexts, canUseOwnerHub, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading]);
+  }, [activeContextType, availableContexts, canUseOwnerHub, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading, staffOperationsAddon.isEnabled]);
 
   const contextValue = useMemo(() => {
     if (activeContextType === "owner_hub") return "owner_hub";
