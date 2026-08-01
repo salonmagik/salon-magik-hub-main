@@ -735,15 +735,13 @@ export default function StaffPage() {
 							</div>
 							<p className="mt-0.5 text-sm text-muted-foreground">
 								Track when your staff arrive, time off and their leave requests.
+								{!staffOperationsEnabled && !staffOperationsPlanEligible
+									? " Available on Studio and Chain plans."
+									: ""}
 							</p>
 							{!staffOperationsEnabled && staffOperationsPlanEligible && staffOperationsPriceLabel && (
 								<p className="mt-1 text-xs text-muted-foreground">
 									{staffOperationsPriceLabel}/month for {staffOperationsLocationCount} location{staffOperationsLocationCount === 1 ? "" : "s"}.
-								</p>
-							)}
-							{!staffOperationsEnabled && !staffOperationsPlanEligible && (
-								<p className="mt-1 text-xs text-muted-foreground">
-									Available on Studio and Chain plans.
 								</p>
 							)}
 						</div>
@@ -752,7 +750,7 @@ export default function StaffPage() {
 						staffOperationsEnabled || staffOperationsPlanEligible ? (
 							<Button
 								variant={staffOperationsEnabled ? "outline" : "default"}
-								className="shrink-0 rounded-full"
+								className="w-full shrink-0 rounded-full sm:w-auto"
 								disabled={
 									!staffOperationsEnabled && !hasValidStaffOperationsPrice
 								}
@@ -763,7 +761,7 @@ export default function StaffPage() {
 						) : (
 							<Button
 								variant="outline"
-								className="shrink-0 rounded-full"
+								className="w-full shrink-0 rounded-full sm:w-auto"
 								onClick={() =>
 									navigate("/salon/business-settings?tab=subscription")
 								}
@@ -771,11 +769,9 @@ export default function StaffPage() {
 								Upgrade to enable
 							</Button>
 						)
-					) : !staffOperationsEnabled ? (
+					) : !staffOperationsEnabled && staffOperationsPlanEligible ? (
 						<p className="shrink-0 text-xs text-muted-foreground">
-							{staffOperationsPlanEligible
-								? "Ask the salon owner to enable it."
-								: "Available on Studio and Chain plans."}
+							Ask the salon owner to enable it.
 						</p>
 					) : null}
 				</div>
