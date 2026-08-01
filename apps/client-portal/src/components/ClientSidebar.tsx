@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
+import { ConfirmDetailsModal } from "@/components/ConfirmDetailsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -131,7 +132,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
     <div className="flex flex-col h-full">
       <div className="p-4 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <SalonMagikLogo variant="white" size="sm" />
+          <SalonMagikLogo variant="white" transparentIcon size="sm" />
         </Link>
       </div>
 
@@ -207,7 +208,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           </Sheet>
           <div className="flex-1">
             <Link to="/" className="flex items-center gap-2">
-              <SalonMagikLogo variant="white" size="sm" />
+              <SalonMagikLogo variant="white" transparentIcon size="sm" />
             </Link>
           </div>
         </header>
@@ -282,6 +283,8 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        <ConfirmDetailsModal />
       </div>
     </ClientInactivityGuard>
   );

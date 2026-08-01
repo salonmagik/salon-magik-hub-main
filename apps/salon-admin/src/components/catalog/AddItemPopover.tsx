@@ -23,9 +23,10 @@ const options: AddItemOption[] = [
 
 interface AddItemPopoverProps {
   onSelect: (type: "service" | "product" | "package" | "voucher") => void;
+  disabledTypes?: Partial<Record<"service" | "product" | "package" | "voucher", boolean>>;
 }
 
-export function AddItemPopover({ onSelect }: AddItemPopoverProps) {
+export function AddItemPopover({ onSelect, disabledTypes }: AddItemPopoverProps) {
   const [open, setOpen] = useState(false);
 
   const handleSelect = (type: "service" | "product" | "package" | "voucher") => {
@@ -44,17 +45,22 @@ export function AddItemPopover({ onSelect }: AddItemPopoverProps) {
       <PopoverContent className="w-48 p-1" align="end">
         {options.map((option) => {
           const Icon = option.icon;
+          const isDisabled = Boolean(disabledTypes?.[option.type]);
           return (
             <button
               key={option.type}
+              disabled={isDisabled}
               onClick={() => handleSelect(option.type)}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm",
-                "hover:bg-muted transition-colors text-left"
+                isDisabled
+                  ? "cursor-not-allowed text-muted-foreground/50"
+                  : "hover:bg-muted transition-colors text-left"
               )}
             >
               <Icon className="w-4 h-4 text-muted-foreground" />
               {option.label}
+              {isDisabled && <span className="ml-auto text-xs">Limit reached</span>}
             </button>
           );
         })}

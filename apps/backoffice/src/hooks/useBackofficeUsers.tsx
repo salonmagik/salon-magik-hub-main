@@ -167,10 +167,13 @@ export function useBackofficeUsers() {
 
   const setUserActive = useMutation({
     mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
-      const { error } = await supabase
-        .from("backoffice_users")
-        .update({ is_active: isActive })
-        .eq("id", userId);
+      // Must go through a SECURITY DEFINER RPC: RLS on backoffice_users only
+      // allows self-updates, so a direct .update() of another admin silently
+      // matches zero rows.
+      const { error } = await (supabase.rpc as any)("backoffice_set_user_active", {
+        p_backoffice_user_id: userId,
+        p_is_active: isActive,
+      });
 
       if (error) throw error;
     },

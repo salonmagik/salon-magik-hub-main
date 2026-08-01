@@ -1,8 +1,9 @@
 import * as React from "react";
-import { ArrowRight, type LucideIcon } from "lucide-react";
+import { ArrowRight, Info, type LucideIcon } from "lucide-react";
 
 import { cn } from "@shared/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 export type StatCardTone = "default" | "success" | "warning" | "destructive" | "info";
 
@@ -18,19 +19,32 @@ export interface StatCardProps {
   label: string;
   value: string | number;
   description?: string;
+  tooltip?: string;
   icon: LucideIcon;
   tone?: StatCardTone;
   href?: string;
   className?: string;
 }
 
-export function StatCard({ label, value, description, icon: Icon, tone = "default", href, className }: StatCardProps) {
+export function StatCard({ label, value, description, tooltip, icon: Icon, tone = "default", href, className }: StatCardProps) {
   const { bg, icon } = toneClasses[tone];
 
   return (
     <Card className={cn(className)}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <CardTitle className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+          {label}
+          {tooltip && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3 w-3 cursor-default" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-56 text-xs">
+                {tooltip}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </CardTitle>
         <div className={cn("rounded-full p-2", bg)}>
           <Icon className={cn("h-4 w-4", icon)} />
         </div>

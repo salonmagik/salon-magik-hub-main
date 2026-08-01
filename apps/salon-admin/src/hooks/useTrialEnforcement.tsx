@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/lib/supabase";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 
 export interface TrialStatus {
   isTrialing: boolean;
@@ -65,9 +66,9 @@ export function useTrialEnforcement() {
   }, [currentTenant]);
 
   // Initiate Paystack subscription checkout (used from trial expiry blocking modal)
-  const startUpgradeCheckout = useCallback(async (): Promise<{ success: boolean; checkoutUrl: string | null }> => {
+  const startUpgradeCheckout = useCallback(async (): Promise<{ success: boolean; checkoutUrl: string | null; error?: string }> => {
     if (!currentTenant?.id) {
-      return { success: false, checkoutUrl: null };
+      return { success: false, checkoutUrl: null, error: "No active salon found." };
     }
 
     try {
@@ -79,15 +80,19 @@ export function useTrialEnforcement() {
         },
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        const message = data?.error || (await getFunctionErrorMessage(error));
+        return { success: false, checkoutUrl: null, error: message };
+      }
 
-      return {
-        success: true,
-        checkoutUrl: data.url || null,
-      };
+      if (!data?.url) {
+        return { success: false, checkoutUrl: null, error: "Something went wrong starting checkout. Please try again." };
+      }
+
+      return { success: true, checkoutUrl: data.url };
     } catch (err) {
       console.error("Error creating checkout session:", err);
-      return { success: false, checkoutUrl: null };
+      return { success: false, checkoutUrl: null, error: "Something went wrong starting checkout. Please try again." };
     }
   }, [currentTenant?.id]);
 

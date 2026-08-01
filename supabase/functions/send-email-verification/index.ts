@@ -124,6 +124,32 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
+      // Block reuse of an email/phone already tied to an active salon account,
+      // or that only has a *pending* (not yet invited) access request. Invited
+      // leads are allowed through to complete their signup.
+      const { data: conflict, error: conflictError } = await supabase.rpc(
+        "check_identity_availability",
+        { p_email: normalizedEmail, p_phone: phone ?? null },
+      );
+      if (conflictError) {
+        console.error("Identity availability check failed:", conflictError);
+      } else if (conflict === "tenant_email") {
+        return new Response(
+          JSON.stringify({ error: "A salon already exists with this email. Please sign in." }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      } else if (conflict === "tenant_phone") {
+        return new Response(
+          JSON.stringify({ error: "A salon already exists with this phone number. Please sign in." }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      } else if (conflict === "waitlist_pending") {
+        return new Response(
+          JSON.stringify({ error: "You already have an exclusive access request pending. Please wait for your invitation before signing up." }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
       const existingUser = await findUserByEmail(supabase, normalizedEmail);
 
       if (existingUser?.email_confirmed_at) {

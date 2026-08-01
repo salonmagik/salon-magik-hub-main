@@ -127,6 +127,15 @@ export default {
           from: { transform: "rotate(0deg)" },
           to: { transform: "rotate(360deg)" },
         },
+        jiggle: {
+          "0%": { transform: "rotate(0deg) scale(1)" },
+          "15%": { transform: "rotate(-9deg) scale(1.05)" },
+          "30%": { transform: "rotate(8deg) scale(1.05)" },
+          "45%": { transform: "rotate(-6deg) scale(1.02)" },
+          "60%": { transform: "rotate(4deg) scale(1.02)" },
+          "75%": { transform: "rotate(-2deg) scale(1)" },
+          "100%": { transform: "rotate(0deg) scale(1)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -136,6 +145,7 @@ export default {
         "slide-in-right": "slide-in-right 0.3s ease-out",
         "slide-out-right": "slide-out-right 0.3s ease-out",
         "spin-slow": "spin-slow 2s linear infinite",
+        jiggle: "jiggle 1.8s ease-in-out 0.15s 1",
       },
       boxShadow: {
         card: "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",

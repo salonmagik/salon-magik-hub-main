@@ -125,13 +125,29 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         unpaidBalancesQuery = unpaidBalancesQuery.in("location_id", scopedLocationIds);
       }
 
-      // Fetch active staff sessions for real-time online count
-      let staffSessionsQuery = supabase
-        .from("staff_sessions")
-        .select("location_id")
+      // Staff Operations tenants get a real presence count (check-ins);
+      // everyone else falls back to the "has an active app session" proxy.
+      const { data: staffOpsEntitlement } = await supabase
+        .from("tenant_addon_entitlements" as never)
+        .select("id")
         .eq("tenant_id", currentTenant.id)
-        .is("ended_at", null)
-        .gte("last_activity_at", activityThreshold.toISOString());
+        .eq("addon_type", "staff_operations")
+        .eq("status", "active")
+        .maybeSingle() as unknown as { data: { id: string } | null };
+      const usesRealCheckIns = Boolean(staffOpsEntitlement?.id);
+
+      let staffSessionsQuery = usesRealCheckIns
+        ? supabase
+            .from("staff_check_ins" as never)
+            .select("location_id")
+            .eq("tenant_id", currentTenant.id)
+            .is("checked_out_at", null)
+        : supabase
+            .from("staff_sessions")
+            .select("location_id")
+            .eq("tenant_id", currentTenant.id)
+            .is("ended_at", null)
+            .gte("last_activity_at", activityThreshold.toISOString());
 
       if (hasScope) {
         staffSessionsQuery = staffSessionsQuery.in("location_id", scopedLocationIds);

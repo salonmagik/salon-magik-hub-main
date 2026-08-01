@@ -17,6 +17,7 @@ const InvitationExpiredPage = lazy(() => import("./pages/auth/InvitationExpiredP
 const VerifyEmailPage = lazy(() => import("./pages/auth/VerifyEmailPage"));
 const CompleteSignupPage = lazy(() => import("./pages/auth/CompleteSignupPage"));
 const OnboardingPage = lazy(() => import("./pages/onboarding/OnboardingPage"));
+const OnboardingCompletePage = lazy(() => import("./pages/onboarding/OnboardingCompletePage"));
 const SalonDashboard = lazy(() => import("./pages/salon/SalonDashboard"));
 const AppointmentsPage = lazy(() => import("./pages/salon/AppointmentsPage"));
 const CustomersPage = lazy(() => import("./pages/salon/CustomersPage"));
@@ -29,6 +30,7 @@ const ReportsPage = lazy(() => import("./pages/salon/ReportsPage"));
 const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
 const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
 const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
+const MyShiftPage = lazy(() => import("./pages/salon/MyShiftPage"));
 const EmailTemplatesPage = lazy(() => import("./pages/salon/EmailTemplatesPage"));
 const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
@@ -204,6 +206,18 @@ const App = () => (
                 }
               />
 
+              {/* Rendered right after onboarding completes. Uses the plain
+                  ProtectedRoute (not OnboardingRoute) since hasCompletedOnboarding
+                  is already true by the time we navigate here. */}
+              <Route
+                path="/onboarding/complete"
+                element={
+                  <ProtectedRoute>
+                    <OnboardingCompletePage />
+                  </ProtectedRoute>
+                }
+              />
+
               {/* Protected Salon Platform Routes */}
               <Route
                 path="/salon"
@@ -296,6 +310,14 @@ const App = () => (
                     <ModuleProtectedRoute module="staff">
                       <StaffPage />
                     </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/my-shift"
+                element={
+                  <ProtectedRoute>
+                    <MyShiftPage />
                   </ProtectedRoute>
                 }
               />

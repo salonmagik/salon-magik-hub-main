@@ -212,10 +212,12 @@ export function useVouchers() {
     } catch (err: any) {
       console.error("Error creating voucher:", err);
       const customMessage = typeof err?.message === "string" ? err.message : null;
+      const isLimitReached = customMessage?.includes("RESOURCE_LIMIT_REACHED");
       toast({
-        title: "Error",
-        description:
-          customMessage?.includes("unique")
+        title: isLimitReached ? "Voucher limit reached" : "Error",
+        description: isLimitReached
+          ? "Your plan allows up to 5 active vouchers. Let existing vouchers redeem or expire, or upgrade your plan to add more."
+          : customMessage?.includes("unique")
             ? "Voucher code already exists"
             : customMessage || "Failed to create voucher",
         variant: "destructive",

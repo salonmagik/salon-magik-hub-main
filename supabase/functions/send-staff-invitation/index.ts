@@ -6,6 +6,7 @@ import {
   paragraph,
   smallText,
   createButton,
+  createCredentialBox,
   buildFromAddress,
 } from "../_shared/email-template.ts";
 import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
@@ -60,7 +61,8 @@ function buildInvitationEmailContent(
     ${paragraph(`Hi ${firstName},`)}
     ${paragraph(`You've been invited to join <strong>${salonName}</strong> as a <strong>${role}</strong>.`)}
     ${paragraph(`Your login email: <strong>${email}</strong>`)}
-    ${paragraph(`Temporary password (you’ll set a new one on first login): <strong>${tempPassword}</strong>`)}
+    ${paragraph("Temporary password — you'll set a new one on first login:")}
+    ${createCredentialBox("Temporary password", tempPassword)}
     ${createButton("Sign in now", loginLink)}
     ${smallText("This invitation expires in 7 days. If you weren't expecting this, you can ignore the email.")}
   `;
@@ -415,6 +417,10 @@ const handler = async (req: Request): Promise<Response> => {
       // custom template to get the branded button without writing any markup.
       login_link_button: createButton("Accept invitation", loginLink),
       temp_password: tempPassword,
+      // Pre-rendered isolated credential block — prefer this over
+      // {{temp_password}} in a custom template so the password isn't
+      // embedded in prose, which is easy to mis-select when copying.
+      temp_password_box: createCredentialBox("Temporary password", tempPassword),
     };
     const subject = renderPlatformTemplate(
       platformTemplate?.is_active === false ? defaultSubject : platformTemplate?.subject || defaultSubject,

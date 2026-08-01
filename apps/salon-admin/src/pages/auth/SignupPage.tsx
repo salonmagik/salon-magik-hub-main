@@ -44,7 +44,7 @@ export default function SignupPage() {
    // Support both 'invitation' and 'invite' query params for waitlist tokens
    const invitationToken = searchParams.get("invitation") || searchParams.get("invite");
   const promoCodeFromUrl = searchParams.get("promo");
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [isValidatingToken, setIsValidatingToken] = useState(!!invitationToken);
   const [waitlistLead, setWaitlistLead] = useState<WaitlistLead | null>(null);
@@ -481,10 +481,6 @@ export default function SignupPage() {
         >
           Create account
         </AuthButton>
-
-        {!isFormValid && hasInteracted && validation.blockingReason && (
-          <p className="text-sm text-destructive">{validation.blockingReason}</p>
-        )}
       </form>
 
       {/* Login Link */}

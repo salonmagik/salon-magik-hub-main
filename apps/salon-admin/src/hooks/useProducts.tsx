@@ -177,9 +177,12 @@ export function useProducts() {
       return product;
     } catch (err: any) {
       console.error("Error creating product:", err);
+      const isLimitReached = String(err?.message || "").includes("RESOURCE_LIMIT_REACHED");
       toast({
-        title: "Error",
-        description: err?.message || "Failed to create product",
+        title: isLimitReached ? "Product limit reached" : "Error",
+        description: isLimitReached
+          ? "Your plan allows up to 5 active products. Archive one or upgrade your plan to add more."
+          : err?.message || "Failed to create product",
         variant: "destructive",
       });
       return null;

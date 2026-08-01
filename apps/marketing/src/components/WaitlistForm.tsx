@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,12 +25,13 @@ import {
   SelectValue,
 } from "@ui/select";
 import { Textarea } from "@ui/textarea";
-import { Loader2, PartyPopper, Sparkles } from "lucide-react";
+import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 import {
 	getCountryByDialCode,
 	parseE164,
 } from "@shared/countries";
 import { validatePhoneByCountry } from "@shared/validation";
+import { getFunctionErrorMessage } from "@shared/function-errors";
 import { PhoneInput } from "@ui/phone-input";
 import { useMarketingMarketCountries } from "@/hooks";
 
@@ -72,13 +74,17 @@ interface WaitlistFormProps {
 	compact?: boolean;
 	mode?: "waitlist" | "interest";
 	source?: "hero_cta" | "footer_cta" | "launch_section";
+	/** Called before navigating away from a success-state link, so a hosting dialog can close itself first. */
+	onClose?: () => void;
 }
 
 export function WaitlistForm({
 	compact = false,
 	mode = "waitlist",
 	source = "footer_cta",
+	onClose,
 }: WaitlistFormProps) {
+	const navigate = useNavigate();
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isSuccess, setIsSuccess] = useState(false);
 	const [position, setPosition] = useState<number | null>(null);
@@ -134,18 +140,9 @@ export function WaitlistForm({
 			});
 
 			if (fnError) {
-				const errorBody = fnError.context?.body;
-				if (typeof errorBody === "string") {
-					try {
-						const parsed = JSON.parse(errorBody);
-						if (parsed.error) {
-							throw new Error(parsed.error);
-						}
-					} catch {
-						// Not JSON, use original error
-					}
-				}
-				throw fnError;
+				// Surface the function's real message, never the generic
+				// "Edge Function returned a non-2xx status code".
+				throw new Error(await getFunctionErrorMessage(fnError));
 			}
 
 			// Check if response indicates already on waitlist
@@ -191,14 +188,14 @@ export function WaitlistForm({
 					angle: 60,
 					spread: 55,
 					origin: { x: 0 },
-					colors: ["#2563EB", "#7C3AED", "#EC4899", "#F59E0B"],
+					colors: ["#2E1F4E", "#F4C84E", "#F5F1FC"],
 				});
 				confetti({
 					particleCount: 3,
 					angle: 120,
 					spread: 55,
 					origin: { x: 1 },
-					colors: ["#2563EB", "#7C3AED", "#EC4899", "#F59E0B"],
+					colors: ["#2E1F4E", "#F4C84E", "#F5F1FC"],
 				});
 
 				if (Date.now() < end) {
@@ -211,21 +208,51 @@ export function WaitlistForm({
 	}, [isSuccess]);
 
 	if (isSuccess) {
+		const goTo = (path: string) => {
+			onClose?.();
+			navigate(path);
+		};
+
 		return (
-			<Card className="p-8 text-center bg-success-bg border-success/20">
-				<div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-					<PartyPopper className="w-8 h-8 text-primary" />
+			<Card className="p-8 text-center">
+				<div className="relative w-[68px] h-[68px] mx-auto mb-5 rounded-full bg-primary/10 ring-1 ring-accent/55 flex items-center justify-center">
+					<svg
+						width="34"
+						height="34"
+						viewBox="0 0 32 32"
+						fill="none"
+						className="motion-safe:animate-jiggle"
+						style={{ transformOrigin: "50% 55%" }}
+					>
+						<path
+							d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
+							stroke="hsl(var(--primary))"
+							strokeWidth="2.5"
+							strokeLinecap="round"
+							fill="none"
+						/>
+						<circle cx="16" cy="16" r="1.6" fill="hsl(var(--accent))" />
+					</svg>
 				</div>
-				<h3 className="text-xl font-medium mb-3">
+				<h3 className="font-serif text-2xl font-medium mb-2.5 text-balance">
 					{isInterestMode
-						? "Thanks for registering your interest!"
-						: "Welcome to Salon Magik!"}
+						? "Thanks for registering your interest"
+						: "Welcome to Salon Magik"}
 				</h3>
-				<p className="text-muted-foreground">
+				<p className="text-muted-foreground text-[14.5px] leading-relaxed mb-6 max-w-[320px] mx-auto">
 					{isInterestMode
 						? "We'll notify you as soon as we launch in your country."
-						: "You're officially on the waitlist. We'll notify you soon when it's time to get started."}
+						: "You're officially on the waitlist. We'll reach out the moment early access opens up for you."}
 				</p>
+				<div className="flex flex-col gap-2">
+					<Button className="w-full" onClick={() => goTo("/whos-it-for")}>
+						See who we built for
+						<ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+					</Button>
+					<Button variant="outline" className="w-full" onClick={() => goTo("/faq")}>
+						Curious? Get some answers
+					</Button>
+				</div>
 			</Card>
 		);
 	}

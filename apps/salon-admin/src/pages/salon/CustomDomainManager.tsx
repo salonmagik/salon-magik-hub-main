@@ -87,7 +87,7 @@ export function CustomDomainManager() {
         .eq("id", currentTenant.id);
 
       if (error) throw error;
-      
+
       toast({
         title: "Success",
         description: "Domain disconnected successfully.",
@@ -126,8 +126,8 @@ export function CustomDomainManager() {
                   <p className="text-sm text-success font-medium">Verified & Active</p>
                 </div>
               </div>
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={disconnectDomain}
                 disabled={isDisconnecting}
               >
@@ -139,13 +139,7 @@ export function CustomDomainManager() {
         </Card>
       ) : (
         <Card>
-          <CardHeader>
-            <CardTitle>Custom Domain</CardTitle>
-            <CardDescription>
-              Search for and register a custom domain for your booking site.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-6 pt-6">
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>Find a Domain</Label>
@@ -223,8 +217,8 @@ export function CustomDomainManager() {
                       {order.status.replace('_', ' ')}
                     </Badge>
                     {order.status === 'completed' && (!hasActiveDomain || currentTenant?.custom_booking_domain !== order.domain_name) && (
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         onClick={() => configureDomain(order.id)}
                         disabled={configuringId === order.id}
                       >
@@ -239,7 +233,7 @@ export function CustomDomainManager() {
           </CardContent>
         </Card>
       )}
-      
+
       {currentTenant && availabilityResult?.available && (
         <DomainPurchaseModal
           domain={searchDomain.toLowerCase()}

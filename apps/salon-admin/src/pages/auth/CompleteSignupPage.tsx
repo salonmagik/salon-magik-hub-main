@@ -106,7 +106,7 @@ export default function CompleteSignupPage() {
 
         <AuthPhoneInput label="Phone number" value={phone} onChange={setPhone} />
 
-        <AuthButton type="submit" isLoading={isSaving}>
+        <AuthButton type="submit" isLoading={isSaving} disabled={!firstName.trim() || !lastName.trim() || !phone.trim()}>
           Continue to onboarding
         </AuthButton>
       </form>

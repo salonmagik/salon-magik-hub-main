@@ -8,6 +8,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MAX_ATTEMPTS = 5;
+
 async function hashOtp(otp: string): Promise<string> {
   const enc = new TextEncoder();
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(otp));
@@ -35,7 +37,10 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(supabaseUrl, serviceKey);
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const otpHash = await hashOtp(otp);
     const now = new Date().toISOString();
@@ -43,7 +48,7 @@ serve(async (req) => {
     // Find most recent valid token for this phone
     const { data: token } = await admin
       .from("phone_otp_tokens")
-      .select("id, user_id, otp_hash, expires_at, used")
+      .select("id, user_id, otp_hash, attempts, expires_at, used")
       .eq("phone", phone)
       .eq("used", false)
       .gt("expires_at", now)
@@ -55,9 +60,24 @@ serve(async (req) => {
       return json({ error: "Code expired or not found. Request a new one." }, 400);
     }
 
-    // Constant-time hash comparison (both are hex strings of same length)
+    if (token.attempts >= MAX_ATTEMPTS) {
+      await admin.from("phone_otp_tokens").update({ used: true }).eq("id", token.id);
+      return json({ error: "Too many incorrect attempts. Request a new code." }, 429);
+    }
+
     if (token.otp_hash !== otpHash) {
-      return json({ error: "Incorrect code. Please try again." }, 400);
+      const attempts = token.attempts + 1;
+      await admin.from("phone_otp_tokens").update({ attempts }).eq("id", token.id);
+      const remaining = MAX_ATTEMPTS - attempts;
+      return json(
+        {
+          error:
+            remaining > 0
+              ? `Incorrect code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+              : "Too many incorrect attempts. Request a new code.",
+        },
+        400,
+      );
     }
 
     // Mark token as used immediately to prevent replay
@@ -66,33 +86,69 @@ serve(async (req) => {
       .update({ used: true })
       .eq("id", token.id);
 
-    // supabase-js v2 removed the createSession/signInAsUser SDK wrapper;
-    // call the GoTrue admin endpoint directly.
-    const sessionRes = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users/${token.user_id}/session`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify({}),
-      },
-    );
+    // A successful OTP-based login is itself proof of phone ownership —
+    // mark it verified so the profile screen never asks for a separate
+    // verification step for a number the user just logged in with.
+    await admin
+      .from("profiles")
+      .update({ phone_verified_at: new Date().toISOString() })
+      .eq("user_id", token.user_id as string)
+      .eq("phone", phone);
 
-    if (!sessionRes.ok) {
-      const errBody = await sessionRes.json().catch(() => ({})) as Record<string, unknown>;
-      console.error("[verify-phone-otp] session creation error:", errBody);
+    // Mint a session for the user. supabase-js v2 dropped the admin
+    // "create session" helper and GoTrue exposes no REST endpoint to mint a
+    // session by user id, so use the supported passwordless pattern: generate a
+    // magiclink token for the user (admin), then verify that token to obtain a
+    // real access/refresh token pair.
+    const { data: userData, error: getUserErr } = await admin.auth.admin.getUserById(
+      token.user_id as string,
+    );
+    if (getUserErr || !userData?.user) {
+      console.error("[verify-phone-otp] could not resolve user:", getUserErr);
       return json({ error: "Failed to create session. Please try again." }, 500);
     }
 
-    const sessionJson = await sessionRes.json() as Record<string, unknown>;
-    const access_token = sessionJson.access_token as string | undefined;
-    const refresh_token = sessionJson.refresh_token as string | undefined;
+    let email = userData.user.email;
+    if (!email) {
+      // Phone-only account (no email on file) — generateLink's magiclink type
+      // is email-keyed, so assign an internal, non-deliverable placeholder
+      // email so a session can still be minted. Never shown to the user and
+      // does not affect their real contact info (phone remains the identity
+      // they actually log in with).
+      email = `${token.user_id}@phone.internal.salonmagik.com`;
+      const { error: setEmailErr } = await admin.auth.admin.updateUserById(token.user_id as string, {
+        email,
+        email_confirm: true,
+      });
+      if (setEmailErr) {
+        console.error("[verify-phone-otp] failed to assign placeholder email:", setEmailErr);
+        return json({ error: "Failed to create session. Please try again." }, 500);
+      }
+    }
 
-    if (!access_token || !refresh_token) {
-      console.error("[verify-phone-otp] session missing tokens:", sessionJson);
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    const hashedToken = linkData?.properties?.hashed_token;
+    if (linkErr || !hashedToken) {
+      console.error("[verify-phone-otp] generateLink error:", linkErr);
+      return json({ error: "Failed to create session. Please try again." }, 500);
+    }
+
+    // Verify the magiclink token on a non-admin client to get a session back.
+    const authClient = createClient(supabaseUrl, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: sessionData, error: verifyErr } = await authClient.auth.verifyOtp({
+      type: "magiclink",
+      token_hash: hashedToken,
+    });
+    const access_token = sessionData?.session?.access_token;
+    const refresh_token = sessionData?.session?.refresh_token;
+
+    if (verifyErr || !access_token || !refresh_token) {
+      console.error("[verify-phone-otp] verifyOtp error:", verifyErr);
       return json({ error: "Failed to create session. Please try again." }, 500);
     }
 

@@ -41,6 +41,7 @@ import {
   CreditCard,
   MessageSquare,
   PauseCircle,
+  Info,
 } from "lucide-react";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
@@ -60,6 +61,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type DateRange = "today" | "week" | "month";
 
@@ -240,11 +242,11 @@ export default function SalonsOverviewPage() {
         {activeContextType === "owner_hub" && branchContexts.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-                { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null },
-                { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null },
-                { key: "unpaid-balances", label: "Unpaid Balances", icon: CreditCard, destination: "/salon/appointments?tab=unscheduled&payment=unpaid", count: aggregateStats?.totalUnpaidBalances ?? null },
-                { key: "messages", label: "Messages", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null },
-              ].map(({ key, label, icon: Icon, destination, count }) => {
+                { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null, description: null as string | null },
+                { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null, description: "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above." },
+                { key: "unpaid-balances", label: "Unpaid Balances", icon: CreditCard, destination: "/salon/appointments?tab=unscheduled&payment=unpaid", count: aggregateStats?.totalUnpaidBalances ?? null, description: "Appointments not yet fully paid or refunded — this count always reflects the current backlog, not the date range selected above." },
+                { key: "messages", label: "Messages", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null, description: null as string | null },
+              ].map(({ key, label, icon: Icon, destination, count, description }) => {
               const urgent = count !== null && count > 0;
               const filteredBranches = getBranchesForAction(key);
               return (
@@ -270,7 +272,19 @@ export default function SalonsOverviewPage() {
                       )}
                     </div>
                     <div className="flex w-full items-center justify-between">
-                      <span className="text-sm font-medium leading-tight">{label}</span>
+                      <span className="flex items-center gap-1">
+                        <span className="text-sm font-medium leading-tight">{label}</span>
+                        {description && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              {description}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
                       {filteredBranches.length > 1 && (
                         <ChevronDown className="h-3.5 w-3.5 text-blue-500/60 opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
@@ -367,6 +381,14 @@ export default function SalonsOverviewPage() {
                       <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                         <Coins className="w-3 h-3" />
                         Total Inflow
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            Completed payments across all branches in the selected date range.
+                          </TooltipContent>
+                        </Tooltip>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -392,6 +414,14 @@ export default function SalonsOverviewPage() {
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" />
                       Staff Online
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Staff currently clocked in, across all branches.
+                        </TooltipContent>
+                      </Tooltip>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -405,6 +435,14 @@ export default function SalonsOverviewPage() {
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       Outstanding
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Appointments that are scheduled, started, or paused — not yet completed or cancelled.
+                        </TooltipContent>
+                      </Tooltip>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -424,6 +462,14 @@ export default function SalonsOverviewPage() {
                     <CardTitle className="text-sm font-medium text-success flex items-center gap-2">
                       <TrendingUp className="w-4 h-4" />
                       Best Performing
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Branch with the highest inflow this period.
+                        </TooltipContent>
+                      </Tooltip>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -461,6 +507,14 @@ export default function SalonsOverviewPage() {
                     <CardTitle className="text-sm font-medium text-warning-foreground flex items-center gap-2">
                       <TrendingDown className="w-4 h-4" />
                       Needs Attention
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Branch with the lowest inflow this period — not necessarily a problem, just the one worth a closer look.
+                        </TooltipContent>
+                      </Tooltip>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -519,11 +573,47 @@ export default function SalonsOverviewPage() {
                         <TableRow>
                           <TableHead>Branches</TableHead>
                           {canViewRevenueAnalytics && (
-                            <TableHead className="text-right">Inflow</TableHead>
+                            <TableHead className="text-right">
+                              <span className="inline-flex items-center justify-end gap-1">
+                                Inflow
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3 w-3 cursor-default" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-56 text-xs">
+                                    Completed payments across all branches in the selected date range.
+                                  </TooltipContent>
+                                </Tooltip>
+                              </span>
+                            </TableHead>
                           )}
                           <TableHead className="text-right hidden sm:table-cell">Bookings</TableHead>
-                          <TableHead className="text-right hidden md:table-cell">Staff Online</TableHead>
-                          <TableHead className="text-right hidden lg:table-cell">Outstanding</TableHead>
+                          <TableHead className="text-right hidden md:table-cell">
+                            <span className="inline-flex items-center justify-end gap-1">
+                              Staff Online
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 cursor-default" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-56 text-xs">
+                                  Staff currently clocked in at that branch.
+                                </TooltipContent>
+                              </Tooltip>
+                            </span>
+                          </TableHead>
+                          <TableHead className="text-right hidden lg:table-cell">
+                            <span className="inline-flex items-center justify-end gap-1">
+                              Outstanding
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-3 w-3 cursor-default" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-56 text-xs">
+                                  Appointments that are scheduled, started, or paused — not yet completed or cancelled.
+                                </TooltipContent>
+                              </Tooltip>
+                            </span>
+                          </TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
                     </TableHeader>
@@ -620,7 +710,19 @@ export default function SalonsOverviewPage() {
                       <TableHead>Branch</TableHead>
                       <TableHead className="text-right">Revenue</TableHead>
                       <TableHead className="text-right">Bookings</TableHead>
-                      <TableHead className="text-right">Outstanding</TableHead>
+                      <TableHead className="text-right">
+                        <span className="inline-flex items-center justify-end gap-1">
+                          Outstanding
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Appointments that are scheduled, started, or paused — not yet completed or cancelled.
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

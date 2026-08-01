@@ -10,6 +10,30 @@ export interface Bank {
   currency: string;
 }
 
+// Paystack's bank list contains near-duplicate entries for the same institution
+// (e.g. "Absa Bank Ghana Limited" vs "Absa Bank Ghana Ltd", or the exact same
+// name twice). Collapse them by a normalized name key so the picker shows each
+// bank once. We keep the first occurrence's code; the account-number
+// verification step still validates the selected bank+account before saving.
+function dedupeBanks(banks: Bank[]): Bank[] {
+  const seen = new Set<string>();
+  const out: Bank[] = [];
+  for (const bank of banks) {
+    const key = bank.name
+      .toLowerCase()
+      .replace(/[.,]/g, "")
+      .replace(/\b(limited|ltd)\b/g, "ltd")
+      .replace(/\bplc\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (seen.has(key) || seen.has(bank.code)) continue;
+    seen.add(key);
+    seen.add(bank.code);
+    out.push(bank);
+  }
+  return out;
+}
+
 export function useBankList(country: "NG" | "GH", type?: "bank" | "mobile_money") {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,7 +58,7 @@ export function useBankList(country: "NG" | "GH", type?: "bank" | "mobile_money"
 
       if (error) throw error;
 
-      setBanks((data?.banks as Bank[]) || []);
+      setBanks(dedupeBanks((data?.banks as Bank[]) || []));
     } catch (err) {
       console.error("Error fetching banks:", err);
       setError(err as Error);

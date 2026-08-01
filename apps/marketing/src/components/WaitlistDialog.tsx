@@ -36,7 +36,7 @@ export function WaitlistDialog({
               : "Sign up to get early access to Salon Magik"}
           </DialogDescription>
         </DialogHeader>
-        <WaitlistForm mode={mode} source={source} />
+        <WaitlistForm mode={mode} source={source} onClose={() => onOpenChange(false)} />
       </DialogContent>
     </Dialog>
   );

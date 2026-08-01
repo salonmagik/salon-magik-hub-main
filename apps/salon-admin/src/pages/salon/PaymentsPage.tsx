@@ -46,7 +46,9 @@ import {
   Plus,
   FileText,
   FileSpreadsheet,
+  Info,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -451,15 +453,26 @@ export default function PaymentsPage() {
       {/* Stats */}
       <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
         {[
-          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
-          { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
-          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
+          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10", description: "Completed payments collected today." },
+          { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg", description: "Refund requests awaiting your approval, across all branches." },
+          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10", description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together." },
         ].map((s) => {
           const Icon = s.icon;
           return (
             <Card key={s.title} className="rounded-[14px] border-border/60 bg-white shadow-sm">
               <CardContent className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
-                <div><p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p><p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p></div>
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">{s.description}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p>
+                </div>
                 <div className={`flex h-10 w-10 items-center justify-center rounded-[10px] ${s.bg}`}><Icon className={`h-5 w-5 ${s.color}`} /></div>
               </CardContent>
             </Card>
@@ -563,7 +576,17 @@ export default function PaymentsPage() {
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-primary/10"><Wallet className="w-6 h-6 text-primary" /></div>
             <div>
-              <p className="text-sm text-muted-foreground">Payout Balance</p>
+              <div className="flex items-center gap-1">
+                <p className="text-sm text-muted-foreground">Payout Balance</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    Your salon's own operating balance, available to withdraw. Separate from customer store credit or prepaid funds.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
                 <p className="text-2xl font-semibold mt-0.5">
                   {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
@@ -702,15 +725,26 @@ export default function PaymentsPage() {
       {/* Stats */}
       <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
         {[
-          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10" },
-          { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg" },
-          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10" },
+          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10", description: "Completed payments collected today." },
+          { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg", description: "Refund requests awaiting your approval, across all branches." },
+          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10", description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together." },
         ].map((s) => {
           const Icon = s.icon;
           return (
             <Card key={s.title} className="rounded-[14px] border-border/60 bg-white shadow-sm">
               <CardContent className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
-                <div><p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p><p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p></div>
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">{s.description}</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p>
+                </div>
                 <div className={`flex h-10 w-10 items-center justify-center rounded-[10px] ${s.bg}`}><Icon className={`h-5 w-5 ${s.color}`} /></div>
               </CardContent>
             </Card>

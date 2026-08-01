@@ -40,6 +40,8 @@ import {
   Scissors,
   Package,
   RotateCcw,
+  Star,
+  Info,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -343,7 +345,7 @@ export function CustomerDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[24px] border-0 p-5 shadow-2xl sm:max-w-5xl sm:p-8">
+      <DialogContent className="max-h-[92vh] overflow-x-hidden overflow-y-auto rounded-[24px] border-0 p-5 shadow-2xl sm:max-w-xl sm:p-8">
         <DialogHeader>
           <DialogDescription className="sr-only">
             Customer profile, engagement summary, appointments, notes, and transaction history.
@@ -354,7 +356,12 @@ export function CustomerDetailDialog({
                 {getInitials(customer.full_name)}
               </div>
               <div>
-                <DialogTitle className="text-2xl font-medium">{customer.full_name}</DialogTitle>
+                <DialogTitle className="text-2xl font-medium flex items-center gap-2">
+                  {customer.full_name}
+                  {(customer as { is_starred?: boolean }).is_starred && (
+                    <Star className="h-5 w-5 flex-shrink-0 fill-amber-400 text-amber-400" aria-label="VIP" />
+                  )}
+                </DialogTitle>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge
                     variant="secondary"
@@ -378,9 +385,9 @@ export function CustomerDetailDialog({
                     size="default"
                     onClick={() => setSendMessageDialogOpen(true)}
                     disabled={!canSendMessage}
-                    className="h-11 flex-shrink-0 rounded-full px-6"
+                    className="h-8 flex-shrink-0 rounded-full px-4 py-2 text-sm font-medium"
                   >
-                    <MessageSquare className="w-4 h-4 mr-2" />
+                    <MessageSquare className="w-3 h-3 mr-2" />
                     Send Message
                   </Button>
                 </TooltipTrigger>
@@ -392,7 +399,7 @@ export function CustomerDetailDialog({
           </div>
         </DialogHeader>
 
-          <Tabs defaultValue="overview" className="mt-4">
+          <Tabs defaultValue="overview" className="mt-4 min-w-0">
             <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1">
               <TabsTrigger value="overview" className="h-10 shrink-0 rounded-full px-6">Overview</TabsTrigger>
               <TabsTrigger value="appointments" className="h-10 shrink-0 rounded-full px-6">Appointments</TabsTrigger>
@@ -443,7 +450,17 @@ export function CustomerDetailDialog({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Card className="rounded-[14px] border-border/60 shadow-none">
                   <CardContent className="p-5">
-                    <p className="text-sm text-muted-foreground">Store credit</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-muted-foreground">Store credit</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          This customer's combined salon balance — paid funds plus salon-issued credit, added together.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <p className="mt-1 font-serif text-2xl font-semibold">
                       {currencySymbol}{Number(purse?.balance || 0).toFixed(2)}
                     </p>
@@ -451,7 +468,17 @@ export function CustomerDetailDialog({
                 </Card>
                 <Card className="rounded-[14px] border-border/60 shadow-none">
                   <CardContent className="p-5">
-                    <p className="text-sm text-muted-foreground">Outstanding</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-muted-foreground">Outstanding</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Unpaid balances from this customer's completed appointments.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <p className="mt-1 font-serif text-2xl font-semibold text-[#8a6510]">
                       {currencySymbol}{outstandingBalance.toFixed(2)}
                     </p>
@@ -904,7 +931,17 @@ export function CustomerDetailDialog({
               <Card className="mb-4">
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Current Balance</p>
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-muted-foreground">Current Balance</p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Combined balance — paid funds plus salon-issued credit, added together.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <p className="text-2xl font-semibold">
                       {currency} {Number(purse?.balance || 0).toFixed(2)}
                     </p>

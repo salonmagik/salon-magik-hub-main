@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { SalonSidebar } from "./SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,6 +67,19 @@ vi.mock("@/hooks/useNotifications", () => ({
   useNotifications: vi.fn(),
 }));
 
+vi.mock("@/hooks/useStaffOperationsAddon", () => ({
+  useStaffOperationsAddon: () => ({
+    isEnabled: false,
+    isPlanEligible: false,
+    locationCount: 1,
+    monthlyTotal: 0,
+    hasValidPrice: false,
+    priceLabel: null,
+    isUpdating: false,
+    toggle: vi.fn(),
+  }),
+}));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: { signOut: vi.fn() },
@@ -94,6 +108,7 @@ describe("SalonSidebar access refresh modal", () => {
         plan: "chain",
         subscription_status: "active",
       },
+      tenants: [{ id: "tenant-1", name: "Tenant", slug: "tenant" }],
       activeContextType: "location",
       activeLocationId: "loc-1",
       availableContexts: [{ type: "location", locationId: "loc-1", label: "Main Location" }],
@@ -133,12 +148,15 @@ describe("SalonSidebar access refresh modal", () => {
       markAllAsRead: vi.fn(),
     } as any);
 
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
-      <MemoryRouter initialEntries={["/salon/appointments"]}>
-        <SalonSidebar>
-          <div>Child Content</div>
-        </SalonSidebar>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/salon/appointments"]}>
+          <SalonSidebar>
+            <div>Child Content</div>
+          </SalonSidebar>
+        </MemoryRouter>
+      </QueryClientProvider>
     );
 
     expect(screen.getByText("Access Updated")).toBeInTheDocument();
@@ -157,6 +175,7 @@ describe("SalonSidebar access refresh modal", () => {
         plan: "chain",
         subscription_status: "active",
       },
+      tenants: [{ id: "tenant-1", name: "Tenant", slug: "tenant" }],
       activeContextType: "location",
       activeLocationId: "loc-1",
       availableContexts: [{ type: "location", locationId: "loc-1", label: "Main Location" }],
@@ -180,12 +199,15 @@ describe("SalonSidebar access refresh modal", () => {
       markAllAsRead: vi.fn(),
     } as any);
 
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
-      <MemoryRouter initialEntries={["/salon/appointments"]}>
-        <SalonSidebar>
-          <LocationProbe />
-        </SalonSidebar>
-      </MemoryRouter>,
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/salon/appointments"]}>
+          <SalonSidebar>
+            <LocationProbe />
+          </SalonSidebar>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
 
     const reportsLink = screen.getAllByRole("link", { name: "Reports" })[0];

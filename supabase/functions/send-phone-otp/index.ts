@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { getClientIp, checkIpOtpRateLimit } from "../_shared/otp-ip-throttle.ts";
+import { sendOtpEmailFallback } from "../_shared/otp-email-fallback.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,16 +42,46 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const admin = createClient(supabaseUrl, serviceKey);
 
-    // Look up user by phone stored in profiles table
-    const { data: profile } = await admin
+    // This is the salon-admin login endpoint specifically — see
+    // send-client-phone-otp for the client-portal counterpart. Split into two
+    // functions (rather than a client-suppliable `strict` flag) so which
+    // identity gets preferred, and whether a miss is silent or honest, can
+    // never be toggled by whoever is calling.
+    //
+    // Look up user by phone stored in profiles table. A salon admin's contact
+    // number and a customer's client-portal login phone are different
+    // identity domains, kept deliberately separate — but both live in the
+    // same profiles.phone column, so the SAME digits can legitimately match
+    // two different accounts (e.g. an admin adds a customer using their own
+    // number). .maybeSingle() would throw on that (previously left
+    // unchecked, silently misreported as "no profile found"). Fetch all
+    // matches and, when ambiguous, prefer the active salon-admin account.
+    const { data: profileRows, error: profileLookupError } = await admin
       .from("profiles")
       .select("user_id")
-      .eq("phone", phone)
-      .maybeSingle();
+      .eq("phone", phone);
+
+    if (profileLookupError) {
+      console.error("[send-phone-otp] profile lookup error:", profileLookupError);
+      return json({ error: "Something went wrong. Please try again." }, 500);
+    }
+
+    let profile: { user_id: string } | null = profileRows?.[0] ?? null;
+    if (profileRows && profileRows.length > 1) {
+      const candidateIds = profileRows.map((r) => r.user_id);
+      const { data: adminRoles } = await admin
+        .from("user_roles")
+        .select("user_id")
+        .in("user_id", candidateIds)
+        .eq("is_active", true);
+      const adminIds = new Set((adminRoles || []).map((r) => r.user_id));
+      profile = profileRows.find((r) => adminIds.has(r.user_id)) ?? profileRows[0];
+    }
 
     if (!profile?.user_id) {
-      // No profile found — silent success to avoid phone enumeration, but log for debugging.
       console.warn(`[send-phone-otp] no profile found for phone prefix +${phone.slice(1, 4)}`);
+      // Silent success to avoid phone-number enumeration on the admin
+      // login surface.
       return json({ success: true });
     }
 
@@ -63,6 +95,13 @@ serve(async (req) => {
     const rlEnabled = typeof rlValue.enabled === "boolean" ? rlValue.enabled : true;
     const rlMaxPerHour = typeof rlValue.max_per_hour === "number" ? rlValue.max_per_hour : 3;
     const rlCooldownSeconds = typeof rlValue.cooldown_seconds === "number" ? rlValue.cooldown_seconds : 60;
+    const rlMaxPerHourPerIp = typeof rlValue.max_per_hour_per_ip === "number" ? rlValue.max_per_hour_per_ip : 10;
+
+    const clientIp = getClientIp(req);
+    const { allowed: ipAllowed } = await checkIpOtpRateLimit(admin, clientIp, rlEnabled, rlMaxPerHourPerIp);
+    if (!ipAllowed) {
+      return json({ error: "hourly_limit", message: "Too many OTP requests. Please try again later." }, 429);
+    }
 
     if (rlEnabled) {
       // Hourly window cap — use select("id") without head:true so the count
@@ -108,6 +147,7 @@ serve(async (req) => {
       otp_hash: otpHash,
       user_id: profile.user_id,
       expires_at: expiresAt,
+      ip_address: clientIp,
     });
 
     console.log(`[send-phone-otp] Sending OTP to ${phone} for user ${profile.user_id}`);
@@ -118,6 +158,8 @@ serve(async (req) => {
       useCase: "transactional",
     });
     console.log(`[send-phone-otp] SMS sent successfully. Message ID: ${JSON.stringify(smsResult?.data)}`);
+
+    await sendOtpEmailFallback(admin, profile.user_id, otp, OTP_TTL_MINUTES);
 
     return json({ success: true });
   } catch (err: unknown) {

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@ui/tooltip";
 import ClientDashboard from "./ClientDashboard";
 
 const routerFuture = {
@@ -89,7 +90,9 @@ describe("ClientDashboard", () => {
   it("renders the redesigned dashboard from live-data shapes", () => {
     render(
       <MemoryRouter future={routerFuture}>
-        <ClientDashboard />
+        <TooltipProvider>
+          <ClientDashboard />
+        </TooltipProvider>
       </MemoryRouter>,
     );
 

@@ -218,6 +218,28 @@ serve(async (req) => {
       );
     }
 
+    // Hard server-side gate: a salon whose trial has ended (past grace) or
+    // whose paid subscription has lapsed must not accept new bookings —
+    // enforced here independently of the storefront UI, which just won't
+    // show this tenant at all (see public_booking_tenants).
+    const { data: isOperational, error: operationalError } = await (supabase.rpc as any)(
+      "is_tenant_operational",
+      { p_tenant_id: tenantId },
+    );
+    if (operationalError) {
+      console.error("create-public-booking: operational check failed", operationalError);
+      return new Response(
+        JSON.stringify({ error: "Something went wrong. Please try again." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    if (!isOperational) {
+      return new Response(
+        JSON.stringify({ error: "This salon isn't currently accepting bookings. Please contact them directly." }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Never trust catalog names, prices, availability, or package contents sent
     // by the browser. Voucher totals and payment amounts are derived from this
     // server-authoritative snapshot.

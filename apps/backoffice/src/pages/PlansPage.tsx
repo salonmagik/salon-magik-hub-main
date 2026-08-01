@@ -60,7 +60,9 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Info,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
 
 type CurrencyCode = "USD" | "NGN" | "GHS";
@@ -95,6 +97,8 @@ interface PlanLimit {
   max_staff: number;
   max_services: number | null;
   max_products: number | null;
+  max_packages: number | null;
+  max_vouchers: number | null;
   monthly_messages: number;
 }
 
@@ -125,6 +129,8 @@ interface PlanDraft {
   max_staff: number;
   max_services: string;
   max_products: string;
+  max_packages: string;
+  max_vouchers: string;
   monthly_messages: number;
   reason: string;
   features: FeatureDraft[];
@@ -301,6 +307,8 @@ const createPlanDraft = (displayOrder: number): PlanDraft => ({
   max_staff: 1,
   max_services: "",
   max_products: "",
+  max_packages: "",
+  max_vouchers: "",
   monthly_messages: 30,
   reason: "",
   features: [createFeatureDraft(0)],
@@ -850,6 +858,8 @@ export default function PlansPage() {
         max_staff: planLimit?.max_staff || 1,
         max_services: planLimit?.max_services ?? null,
         max_products: planLimit?.max_products ?? null,
+        max_packages: planLimit?.max_packages ?? null,
+        max_vouchers: planLimit?.max_vouchers ?? null,
         monthly_messages: planLimit?.monthly_messages || 30,
       },
       p_pricing_json: pricingRows,
@@ -1153,6 +1163,8 @@ export default function PlansPage() {
           max_staff: draft.max_staff,
           max_services: draft.max_services.trim() ? Number(draft.max_services) : null,
           max_products: draft.max_products.trim() ? Number(draft.max_products) : null,
+          max_packages: draft.max_packages.trim() ? Number(draft.max_packages) : null,
+          max_vouchers: draft.max_vouchers.trim() ? Number(draft.max_vouchers) : null,
           monthly_messages: draft.monthly_messages,
         });
         if (limitsError) throw limitsError;
@@ -1251,6 +1263,8 @@ export default function PlansPage() {
           max_staff: draft.max_staff,
           max_services: draft.max_services.trim() ? Number(draft.max_services) : null,
           max_products: draft.max_products.trim() ? Number(draft.max_products) : null,
+          max_packages: draft.max_packages.trim() ? Number(draft.max_packages) : null,
+          max_vouchers: draft.max_vouchers.trim() ? Number(draft.max_vouchers) : null,
           monthly_messages: draft.monthly_messages,
         },
         p_pricing_json: pricingRows,
@@ -1866,6 +1880,8 @@ export default function PlansPage() {
       max_staff: planLimits?.max_staff || 1,
       max_services: planLimits?.max_services?.toString() || "",
       max_products: planLimits?.max_products?.toString() || "",
+      max_packages: planLimits?.max_packages?.toString() || "",
+      max_vouchers: planLimits?.max_vouchers?.toString() || "",
       monthly_messages: planLimits?.monthly_messages || 30,
       reason: "",
       features:
@@ -2131,19 +2147,47 @@ export default function PlansPage() {
         <Card className="border-dashed">
           <CardContent className="pt-4 text-sm text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                Plans {planCount}/{MAX_PLANS}
-              </Badge>
-              <Badge variant="secondary">
-                Remaining slots: {remainingPlanSlots}
-              </Badge>
-              <Badge variant="secondary">
-                Without active pricing: {plansWithoutActivePricing.length}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-default">
+                    Plans {planCount}/{MAX_PLANS}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  The platform enforces a hard cap of {MAX_PLANS} plans — you can't create more until one is removed.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-default">
+                    Remaining slots: {remainingPlanSlots}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  How many more plans you can create before hitting the {MAX_PLANS}-plan cap.
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-default">
+                    Without active pricing: {plansWithoutActivePricing.length}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-56 text-xs">
+                  Plans with no active pricing row — currently unsellable until pricing is added.
+                </TooltipContent>
+              </Tooltip>
               {recommendedPlanId ? (
-                <Badge variant="default">
-                  Recommended: {getPlanName(recommendedPlanId)}
-                </Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="default" className="cursor-default">
+                      Recommended: {getPlanName(recommendedPlanId)}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-56 text-xs">
+                    The plan highlighted as "recommended" to prospects on the pricing page.
+                  </TooltipContent>
+                </Tooltip>
               ) : (
                 <Badge variant="outline">No recommended plan set</Badge>
               )}
@@ -2223,6 +2267,12 @@ export default function PlansPage() {
                           <p className="text-muted-foreground">
                             {limit?.max_locations || 1} locations · {limit?.max_staff || 1} staff ·{" "}
                             {limit?.monthly_messages || 30} messages/mo
+                          </p>
+                          <p className="text-muted-foreground">
+                            {limit?.max_services ?? "Unlimited"} services ·{" "}
+                            {limit?.max_products ?? "Unlimited"} products ·{" "}
+                            {limit?.max_packages ?? "Unlimited"} packages ·{" "}
+                            {limit?.max_vouchers ?? "Unlimited"} vouchers
                           </p>
                         </div>
 
@@ -3256,6 +3306,26 @@ export default function PlansPage() {
                               }
                             />
                           </div>
+                          <div>
+                            <Label>Max Packages (optional)</Label>
+                            <Input
+                              type="number"
+                              value={draft.max_packages}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(draft.localId, "max_packages", event.target.value)
+                              }
+                            />
+                          </div>
+                          <div>
+                            <Label>Max Vouchers (optional)</Label>
+                            <Input
+                              type="number"
+                              value={draft.max_vouchers}
+                              onChange={(event) =>
+                                updateCreatePlanDraft(draft.localId, "max_vouchers", event.target.value)
+                              }
+                            />
+                          </div>
                         </div>
 
                         <div className="space-y-2">
@@ -3560,6 +3630,30 @@ export default function PlansPage() {
                     onChange={(event) =>
                       setEditPlanDraft((prev) =>
                         prev ? { ...prev, max_products: event.target.value } : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Max Packages (optional)</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.max_packages}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev ? { ...prev, max_packages: event.target.value } : prev,
+                      )
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Max Vouchers (optional)</Label>
+                  <Input
+                    type="number"
+                    value={editPlanDraft.max_vouchers}
+                    onChange={(event) =>
+                      setEditPlanDraft((prev) =>
+                        prev ? { ...prev, max_vouchers: event.target.value } : prev,
                       )
                     }
                   />

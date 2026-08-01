@@ -65,6 +65,7 @@ const navItems: NavItem[] = [
     children: [
       { href: "/customers/waitlists", label: "Waitlists", pageKey: "customers_waitlists" },
       { href: "/customers/tenants", label: "Tenants", pageKey: "customers_tenants" },
+      { href: "/customers/users", label: "Users", pageKey: "customers_users" },
       { href: "/customers/ops-monitor", label: "Ops Monitor", pageKey: "customers_ops_monitor" },
       { href: "/customers/support", label: "Support", pageKey: "settings" },
     ],
@@ -148,131 +149,153 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
       : "Team Member";
 
   return (
-    <InactivityGuard warningMinutes={22} logoutMinutes={30}>
-      <SidebarProvider>
-        <div className="flex min-h-screen w-full flex-col bg-[#f6f5f7]">
-          <div className="backoffice-env-bar">Salon Magik Backoffice · Internal use only · Production</div>
-          <div className="flex min-h-0 flex-1">
-          <Sidebar className="top-6 border-r border-white/10">
-            <SidebarHeader className="border-b border-white/10 px-4 py-4">
-              <div className="flex items-center gap-2">
-                <div className="rounded-lg bg-white/10 p-2">
-                  <Shield className="h-5 w-5 text-[#a9c9e8]" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-medium text-white">Salon Magik Admin</h1>
-                  <p className="text-[11px] text-[#a9c9e8]">Backoffice</p>
-                </div>
-              </div>
-            </SidebarHeader>
+		<InactivityGuard warningMinutes={22} logoutMinutes={30}>
+			<SidebarProvider>
+				<div className="flex min-h-screen w-full flex-col bg-[#f6f5f7]">
+					<div className="flex min-h-0 flex-1">
+						<Sidebar className=" border-r border-white/10">
+							<SidebarHeader className="border-b border-white/10 px-4 py-4">
+								<div className="flex items-center gap-2">
+									<div className="rounded-lg bg-white/10 p-2">
+										<Shield className="h-5 w-5 text-[#a9c9e8]" />
+									</div>
+									<div>
+										<h1 className="text-sm font-medium text-white">
+											Salon Magik Admin
+										</h1>
+										<p className="text-[11px] text-[#a9c9e8]">Backoffice</p>
+									</div>
+								</div>
+							</SidebarHeader>
 
-            <SidebarContent className="px-2 py-4 text-white/75">
-              <SidebarMenu>
-                {visibleNavItems.map((item) => {
-                  const hasChildren = Boolean(item.children?.length);
+							<SidebarContent className="px-2 py-4 text-white/75">
+								<SidebarMenu>
+									{visibleNavItems.map((item) => {
+										const hasChildren = Boolean(item.children?.length);
 
-                  if (!hasChildren) {
-                    const isActive =
-                      location.pathname === item.href ||
-                      (item.href !== "/" && location.pathname.startsWith(item.href));
-                    return (
-                      <SidebarMenuItem key={item.href}>
-                        <SidebarMenuButton asChild isActive={isActive}>
-                          <Link to={item.href} className="flex items-center gap-3">
-                            {item.icon ? <item.icon className="h-4 w-4" /> : null}
-                            <span>{item.label}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  }
+										if (!hasChildren) {
+											const isActive =
+												location.pathname === item.href ||
+												(item.href !== "/" &&
+													location.pathname.startsWith(item.href));
+											return (
+												<SidebarMenuItem key={item.href}>
+													<SidebarMenuButton asChild isActive={isActive}>
+														<Link
+															to={item.href}
+															className="flex items-center gap-3"
+														>
+															{item.icon ? (
+																<item.icon className="h-4 w-4" />
+															) : null}
+															<span>{item.label}</span>
+														</Link>
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											);
+										}
 
-                  const isOpen = openGroups[item.href] ?? false;
-                  const isParentActive = item.children!.some((child) => isChildActive(child, location.pathname));
+										const isOpen = openGroups[item.href] ?? false;
+										const isParentActive = item.children!.some((child) =>
+											isChildActive(child, location.pathname),
+										);
 
-                  return (
-                    <Collapsible key={item.href} open={isOpen} onOpenChange={() => toggleGroup(item.href)} asChild>
-                      <SidebarMenuItem>
-                        <CollapsibleTrigger asChild>
-                          <SidebarMenuButton isActive={isParentActive}>
-                            {item.icon ? <item.icon className="h-4 w-4" /> : null}
-                            <span>{item.label}</span>
-                            <ChevronDown
-                              className={`ml-auto h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-                            />
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <SidebarMenuSub>
-                            {item.children!.map((child) => {
-                              const childActive = isChildActive(child, location.pathname);
-                              return (
-                                <SidebarMenuSubItem key={child.href}>
-                                  <SidebarMenuSubButton asChild isActive={childActive}>
-                                    <Link to={child.href}>{child.label}</Link>
-                                  </SidebarMenuSubButton>
-                                </SidebarMenuSubItem>
-                              );
-                            })}
-                          </SidebarMenuSub>
-                        </CollapsibleContent>
-                      </SidebarMenuItem>
-                    </Collapsible>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarContent>
+										return (
+											<Collapsible
+												key={item.href}
+												open={isOpen}
+												onOpenChange={() => toggleGroup(item.href)}
+												asChild
+											>
+												<SidebarMenuItem>
+													<CollapsibleTrigger asChild>
+														<SidebarMenuButton isActive={isParentActive}>
+															{item.icon ? (
+																<item.icon className="h-4 w-4" />
+															) : null}
+															<span>{item.label}</span>
+															<ChevronDown
+																className={`ml-auto h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+															/>
+														</SidebarMenuButton>
+													</CollapsibleTrigger>
+													<CollapsibleContent>
+														<SidebarMenuSub>
+															{item.children!.map((child) => {
+																const childActive = isChildActive(
+																	child,
+																	location.pathname,
+																);
+																return (
+																	<SidebarMenuSubItem key={child.href}>
+																		<SidebarMenuSubButton
+																			asChild
+																			isActive={childActive}
+																		>
+																			<Link to={child.href}>{child.label}</Link>
+																		</SidebarMenuSubButton>
+																	</SidebarMenuSubItem>
+																);
+															})}
+														</SidebarMenuSub>
+													</CollapsibleContent>
+												</SidebarMenuItem>
+											</Collapsible>
+										);
+									})}
+								</SidebarMenu>
+							</SidebarContent>
 
-            <SidebarFooter className="border-t border-white/10 p-3">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-3 px-2 text-white hover:bg-white/10 hover:text-white"
-                  >
-                    <Avatar className="h-8 w-8">
-                    <AvatarFallback className="rounded-md bg-[#2f6ba6] text-xs text-white">
-                        {initials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-1 flex-col items-start text-left">
-                      <span className="max-w-[120px] truncate text-sm font-medium text-white">
-                        {profile?.full_name || "Admin"}
-                      </span>
-                      <span className="text-xs text-[#a9c9e8]">
-                        {roleBadge}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuItem
-                    onClick={handleSignOut}
-                    className="text-destructive"
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarFooter>
-          </Sidebar>
+							<SidebarFooter className="border-t border-white/10 p-3">
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button
+											variant="ghost"
+											className="w-full justify-start gap-3 px-2 text-white hover:bg-white/10 hover:text-white"
+										>
+											<Avatar className="h-8 w-8">
+												<AvatarFallback className="rounded-md bg-[#2f6ba6] text-xs text-white">
+													{initials}
+												</AvatarFallback>
+											</Avatar>
+											<div className="flex flex-1 flex-col items-start text-left">
+												<span className="max-w-[120px] truncate text-sm font-medium text-white">
+													{profile?.full_name || "Admin"}
+												</span>
+												<span className="text-xs text-[#a9c9e8]">
+													{roleBadge}
+												</span>
+											</div>
+											<ChevronDown className="h-4 w-4 text-muted-foreground" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="w-56">
+										<DropdownMenuItem
+											onClick={handleSignOut}
+											className="text-destructive"
+										>
+											<LogOut className="mr-2 h-4 w-4" />
+											Sign out
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</SidebarFooter>
+						</Sidebar>
 
-          <SidebarInset className="min-w-0 flex-1 bg-[#f6f5f7]">
-            <div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">BackOffice</span>
-              </div>
-              <SidebarTrigger className="h-9 w-9" />
-            </div>
-            <BackofficeOnboardingGate />
-            <main className="flex-1 overflow-auto">{children}</main>
-          </SidebarInset>
-          </div>
-        </div>
-      </SidebarProvider>
-    </InactivityGuard>
-  );
+						<SidebarInset className="min-w-0 flex-1 bg-[#f6f5f7]">
+							<div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
+								<div className="flex items-center gap-2">
+									<Shield className="h-4 w-4 text-primary" />
+									<span className="text-sm font-medium">BackOffice</span>
+								</div>
+								<SidebarTrigger className="h-9 w-9" />
+							</div>
+							<BackofficeOnboardingGate />
+							<main className="flex-1 overflow-auto">{children}</main>
+						</SidebarInset>
+					</div>
+				</div>
+			</SidebarProvider>
+		</InactivityGuard>
+	);
 }

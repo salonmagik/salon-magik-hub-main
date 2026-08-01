@@ -56,6 +56,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:request_delete": true,
     "catalog:archive": true,
     "catalog:flag": true,
+    promo_trial_bonus: true,
   },
   manager: {
     dashboard: true,
@@ -80,6 +81,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:request_delete": true,
     "catalog:archive": true,
     "catalog:flag": true,
+    promo_trial_bonus: true,
   },
   supervisor: {
     dashboard: true,
@@ -104,6 +106,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:request_delete": true,
     "catalog:archive": false,
     "catalog:flag": true,
+    promo_trial_bonus: false,
   },
   receptionist: {
     dashboard: true,
@@ -128,6 +131,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:request_delete": false,
     "catalog:archive": false,
     "catalog:flag": false,
+    promo_trial_bonus: false,
   },
   staff: {
     dashboard: false,
@@ -152,6 +156,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:request_delete": false,
     "catalog:archive": false,
     "catalog:flag": false,
+    promo_trial_bonus: false,
   },
 };
 
@@ -178,6 +183,7 @@ export const MODULE_LABELS: Record<string, string> = {
   "catalog:request_delete": "Request Catalog Deletion",
   "catalog:archive": "Archive Catalog Items",
   "catalog:flag": "Flag Catalog Items",
+  promo_trial_bonus: "Apply Promo Code / Trial Bonus",
 };
 
 export function usePermissions() {

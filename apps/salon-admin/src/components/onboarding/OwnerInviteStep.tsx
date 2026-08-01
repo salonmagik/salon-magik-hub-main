@@ -13,15 +13,19 @@ export interface OwnerInviteInfo {
 interface OwnerInviteStepProps {
   ownerInfo: OwnerInviteInfo;
   onChange: (info: OwnerInviteInfo) => void;
+  /** Server-validated error (e.g. "this email already owns another salon") — cleared automatically when the email changes. */
+  serverError?: string | null;
+  onClearServerError?: () => void;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
+export function OwnerInviteStep({ ownerInfo, onChange, serverError, onClearServerError }: OwnerInviteStepProps) {
   const [touched, setTouched] = useState({ name: false, email: false });
 
   const handleChange = (field: keyof OwnerInviteInfo, value: string) => {
     onChange({ ...ownerInfo, [field]: value });
+    if (field === "email") onClearServerError?.();
   };
 
   const nameError = touched.name && !ownerInfo.name.trim() ? "Owner's name is required" : null;
@@ -78,6 +82,7 @@ export function OwnerInviteStep({ ownerInfo, onChange }: OwnerInviteStepProps) {
             className={emailError ? "border-red-400 focus-visible:ring-red-300" : ""}
           />
           {emailError && <p className="text-[12px] text-red-500">{emailError}</p>}
+          {!emailError && serverError && <p className="text-[12px] text-red-500">{serverError}</p>}
         </div>
 
         <AuthPhoneInput

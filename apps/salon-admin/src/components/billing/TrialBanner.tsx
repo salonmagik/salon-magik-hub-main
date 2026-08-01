@@ -11,16 +11,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
-import { AlertTriangle, Clock, Loader2, Lock, X } from "lucide-react";
+import { AlertTriangle, Clock, Loader2, Lock, LogOut, X } from "lucide-react";
 import { cn } from "@shared/utils";
+import { supabase } from "@/lib/supabase";
+import { useToast } from "@ui/ui/use-toast";
 
 export function TrialBanner() {
   const navigate = useNavigate();
   const { trialStatus, shouldShowWarning, shouldShowUrgent, startUpgradeCheckout } = useTrialEnforcement();
   const { hasPermission } = usePermissions();
+  const { toast } = useToast();
   const [dismissed, setDismissed] = useState(false);
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const canAccessSettings = hasPermission("settings");
 
@@ -38,7 +42,24 @@ export function TrialBanner() {
     setIsLoading(false);
     if (result.success && result.checkoutUrl) {
       window.location.href = result.checkoutUrl;
+    } else {
+      toast({
+        title: "Couldn't start checkout",
+        description: result.error || "Please try again.",
+        variant: "destructive",
+      });
     }
+  };
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({ title: "Failed to sign out", description: "Please try again.", variant: "destructive" });
+      setIsSigningOut(false);
+      return;
+    }
+    navigate("/login");
   };
 
   // Hard-expired (grace period also elapsed) → blocking modal, no way out
@@ -73,6 +94,15 @@ export function TrialBanner() {
                   Contact Admin to Upgrade
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+                className="w-full text-muted-foreground"
+              >
+                {isSigningOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                Sign out
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

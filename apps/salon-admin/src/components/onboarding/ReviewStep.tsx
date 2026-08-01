@@ -1,6 +1,5 @@
-import { Input } from "@ui/input";
 import {
-  User, Building2, MapPin, Users, Sparkles, Loader2, Tag, CheckCircle2,
+  User, Building2, MapPin, Users, Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@shared/utils";
@@ -26,20 +25,6 @@ interface ReviewStepProps {
     requiresCustom?: boolean;
   } | null;
   trialDays?: number;
-  promoCode?: string;
-  onPromoCodeChange?: (value: string) => void;
-  onApplyPromo?: () => void;
-  isApplyingPromo?: boolean;
-  promoPreview?: {
-    valid: boolean;
-    message?: string;
-    campaignName?: string;
-    discountType?: string;
-    discountValue?: number;
-    maxUsesPerTenant?: number;
-    billingTargets?: string[];
-    campaignEndsAt?: string | null;
-  } | null;
   onEditStep?: (step: "role" | "owner-invite" | "business" | "plan") => void;
 }
 
@@ -131,11 +116,6 @@ export function ReviewStep({
   locations,
   chainSummary,
   trialDays = 14,
-  promoCode = "",
-  onPromoCodeChange,
-  onApplyPromo,
-  isApplyingPromo = false,
-  promoPreview = null,
   onEditStep,
 }: ReviewStepProps) {
   const formatTime = (time: string) => time.slice(0, 5);
@@ -222,59 +202,6 @@ export function ReviewStep({
             )}
           </ReviewCard>
         )}
-
-        {/* Promo code */}
-        <ReviewCard icon={Tag} title="Promo code">
-          <div className="flex gap-2">
-            <Input
-              value={promoCode}
-              onChange={(event) => onPromoCodeChange?.(event.target.value.toUpperCase())}
-              placeholder="Enter promo code"
-              className="h-[44px] text-[13.5px]"
-            />
-            <button
-              type="button"
-              onClick={onApplyPromo}
-              disabled={!promoCode.trim() || isApplyingPromo || promoPreview?.valid === true}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-4 text-[13.5px] font-medium transition-colors disabled:opacity-40",
-                promoPreview?.valid
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-black/[0.1] text-black/60 hover:border-black/20 hover:text-black/80",
-              )}
-            >
-              {isApplyingPromo ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : promoPreview?.valid ? (
-                <CheckCircle2 className="h-3.5 w-3.5" />
-              ) : null}
-              {promoPreview?.valid ? "Applied" : "Apply"}
-            </button>
-          </div>
-          {promoPreview ? (
-            <div className={cn(
-              "mt-2 rounded-[8px] px-3 py-2 text-[12.5px]",
-              promoPreview.valid ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600",
-            )}>
-              {promoPreview.valid ? (
-                <>
-                  <span className="font-medium">{promoPreview.campaignName}</span>
-                  {" · "}
-                  {promoPreview.discountType === "fixed"
-                    ? promoPreview.discountValue
-                    : `${promoPreview.discountValue}% off`}
-                  {promoPreview.billingTargets?.length
-                    ? ` · ${promoPreview.billingTargets.join(", ")}`
-                    : ""}
-                </>
-              ) : promoPreview.message}
-            </div>
-          ) : (
-            <p className="mt-2 text-[12px] text-black/35">
-              Optional. If valid, your discount is attached when setup completes.
-            </p>
-          )}
-        </ReviewCard>
 
         {/* Business details */}
         <ReviewCard

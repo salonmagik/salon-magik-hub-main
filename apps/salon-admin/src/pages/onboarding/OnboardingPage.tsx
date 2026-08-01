@@ -16,7 +16,6 @@ import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanSte
 import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
-import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { getCurrencyForCountry } from "@/hooks/usePlanPricing";
 import { seedDefaultPermissions } from "@/hooks/usePermissions";
 import { usePlans } from "@/hooks/usePlans";
@@ -29,7 +28,7 @@ import {
 } from "@/lib/googleOAuthFlow";
 import { getGoogleProfileFields } from "@/lib/authCompletion";
 
-type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review" | "complete";
+type OnboardingStep = "role" | "owner-invite" | "business" | "plan" | "locations" | "review";
 
 function SegmentProgress({ currentIndex, total }: { currentIndex: number; total: number }) {
   return (
@@ -92,6 +91,8 @@ export default function OnboardingPage() {
     email: "",
     phone: "",
   });
+  const [ownerInviteError, setOwnerInviteError] = useState<string | null>(null);
+  const [isCheckingOwnerEmail, setIsCheckingOwnerEmail] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
     planFromUrl && VALID_PLAN_SLUGS.includes(planFromUrl) ? planFromUrl : null,
@@ -204,7 +205,6 @@ export default function OnboardingPage() {
           locationsConfig.locations.every((loc) => loc.city.trim() !== "")
         );
       case "review":
-        if (promoCode.trim() && !promoPreview?.valid) return false;
         if (!isChain) return true;
         return Boolean(configuredChainQuote);
       default:
@@ -212,10 +212,34 @@ export default function OnboardingPage() {
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     const currentIndex = stepFlow.indexOf(step);
     if (currentIndex < stepFlow.length - 1) {
       const next = stepFlow[currentIndex + 1];
+
+      if (step === "owner-invite") {
+        setIsCheckingOwnerEmail(true);
+        try {
+          const { data, error } = await (supabase.rpc as any)("check_owner_invite_email", {
+            p_email: ownerInvite.email.trim().toLowerCase(),
+          });
+          if (error) {
+            setOwnerInviteError("Something went wrong checking this email. Please try again.");
+            return;
+          }
+          if (data?.available === false) {
+            setOwnerInviteError(
+              data.reason === "already_owner"
+                ? "This email already owns another salon on Salon Magik. Each owner can only manage one active salon — try a different email for this owner."
+                : "This email already has a Salon Magik account. We can't send an owner invite to an existing account yet — try a different email, or have them sign in and set this up themselves once you're done.",
+            );
+            return;
+          }
+          setOwnerInviteError(null);
+        } finally {
+          setIsCheckingOwnerEmail(false);
+        }
+      }
 
       if (next === "locations" && locationsConfig.locations.length !== Math.max(1, effectiveExpectedChainLocations)) {
         const totalLocations = Math.max(1, effectiveExpectedChainLocations);
@@ -447,7 +471,7 @@ export default function OnboardingPage() {
 
       if (!isOwner && ownerInvite.email) {
         try {
-          await supabase.functions.invoke("send-staff-invitation", {
+          const { data: inviteData, error: inviteError } = await supabase.functions.invoke("send-staff-invitation", {
             body: {
               firstName: ownerInvite.name.split(" ")[0] || ownerInvite.name,
               lastName: ownerInvite.name.split(" ").slice(1).join(" ") || "",
@@ -459,12 +483,36 @@ export default function OnboardingPage() {
               invitedByName: `${firstName} ${lastName}`.trim(),
             },
           });
+          if (inviteError || inviteData?.error) {
+            toast({
+              title: "Owner invite didn't go through",
+              description:
+                inviteData?.error ||
+                "Your salon is set up, but we couldn't invite the owner. Add them from Staff once you're in.",
+              variant: "destructive",
+            });
+          }
         } catch (inviteError) {
           console.error("Owner invitation error:", inviteError);
+          toast({
+            title: "Owner invite didn't go through",
+            description: "Your salon is set up, but we couldn't invite the owner. Add them from Staff once you're in.",
+            variant: "destructive",
+          });
         }
       }
 
-      if (googleOAuthIntent?.source === "signup" && googleOAuthIntent.inviteToken) {
+      // Mark the originating waitlist lead converted, regardless of which
+      // signup path was used. Previously this only ran for the Google OAuth
+      // flow (keyed on a client-side invite token saved before the OAuth
+      // redirect) — the regular email/password path never threads that
+      // token through (it can't: signup there requires an email-confirm
+      // step in between), so every non-Google conversion silently never
+      // marked its lead, leaving the backoffice "Converted" tab empty.
+      // Matching on the now-authenticated user's own email instead works
+      // universally, since it doesn't depend on any state surviving the
+      // signup → confirm → login → onboarding journey.
+      if (email) {
         const { error: waitlistUpdateError } = await supabase
           .from("waitlist_leads")
           .update({
@@ -472,7 +520,8 @@ export default function OnboardingPage() {
             converted_tenant_id: tenantId,
             converted_at: new Date().toISOString(),
           })
-          .eq("invitation_token", googleOAuthIntent.inviteToken);
+          .eq("email", email.toLowerCase().trim())
+          .eq("status", "invited");
 
         if (waitlistUpdateError) {
           console.error("Waitlist conversion update error:", waitlistUpdateError);
@@ -496,6 +545,16 @@ export default function OnboardingPage() {
           });
         } else if (promoClaimData?.success) {
           clearPendingSalesPromoCode();
+          // Grant the trial-day bonus immediately — every eligibility
+          // condition (trialing, within window, has a redemption) is
+          // already true at this exact moment, so there's no reason to
+          // make the tenant come back later and click through a separate
+          // banner for something they already qualify for.
+          try {
+            await (supabase.rpc as any)("apply_promo_trial_bonus", { p_tenant_id: tenantId });
+          } catch (bonusError) {
+            console.error("Promo trial bonus grant error:", bonusError);
+          }
         } else if (promoClaimData?.message) {
           toast({
             title: "Promo not attached",
@@ -544,7 +603,17 @@ export default function OnboardingPage() {
         });
       }
 
-      setStep("complete");
+      navigate("/onboarding/complete", {
+        replace: true,
+        state: {
+          initialPlan: selectedPlan || "solo",
+          currency: businessInfo.currency || "NGN",
+          trialDays: onboardingTrialDays,
+          promoPreview,
+          chainLocations: isChain ? locationsConfig.locations : [],
+          businessName: businessInfo.name,
+        },
+      });
     } catch (error: any) {
       console.error("Onboarding error:", error);
       toast({
@@ -556,22 +625,6 @@ export default function OnboardingPage() {
       setIsLoading(false);
     }
   };
-
-  if (step === "complete") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F8F6F2] p-4">
-        <WelcomeModal
-          initialPlan={selectedPlan || "solo"}
-          currency={businessInfo.currency || "NGN"}
-          trialDays={onboardingTrialDays}
-          promoPreview={promoPreview}
-          chainLocations={isChain ? locationsConfig.locations : []}
-          businessName={businessInfo.name}
-          onDismiss={() => navigate("/salon/overview")}
-        />
-      </div>
-    );
-  }
 
   const profileInfo = {
     firstName,
@@ -812,7 +865,12 @@ export default function OnboardingPage() {
             )}
 
             {step === "owner-invite" && (
-              <OwnerInviteStep ownerInfo={ownerInvite} onChange={setOwnerInvite} />
+              <OwnerInviteStep
+                ownerInfo={ownerInvite}
+                onChange={setOwnerInvite}
+                serverError={ownerInviteError}
+                onClearServerError={() => setOwnerInviteError(null)}
+              />
             )}
 
             {step === "business" && (
@@ -917,14 +975,6 @@ export default function OnboardingPage() {
                     : null
                 }
                 trialDays={onboardingTrialDays}
-                promoCode={promoCode}
-                onPromoCodeChange={(value) => {
-                  setPromoCode(value);
-                  setPromoPreview(null);
-                }}
-                onApplyPromo={handleApplyPromo}
-                isApplyingPromo={isApplyingPromo}
-                promoPreview={promoPreview}
               />
             )}
 
@@ -947,15 +997,20 @@ export default function OnboardingPage() {
             <button
               type="button"
               onClick={nextStep}
-              disabled={!canProceed() || isLoading}
+              disabled={!canProceed() || isLoading || isCheckingOwnerEmail}
               className={cn(
                 "flex items-center gap-2 rounded-full px-6 py-[11px] text-[14.5px] font-medium transition-colors",
-                canProceed() && !isLoading
+                canProceed() && !isLoading && !isCheckingOwnerEmail
                   ? "bg-[#2E1F4E] text-white hover:bg-[#3A2660]"
                   : "cursor-not-allowed bg-black/10 text-black/30",
               )}
             >
-              {isLoading ? (
+              {isCheckingOwnerEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking...
+                </>
+              ) : isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Setting up...
