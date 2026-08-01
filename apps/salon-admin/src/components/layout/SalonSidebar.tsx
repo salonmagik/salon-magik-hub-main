@@ -1165,7 +1165,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											path: "/salon/appointments",
 										},
 										{
-											label: "Services",
+											label: "",
 											icon: Scissors,
 											path: "/salon/services",
 										},
