@@ -1140,7 +1140,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<AnnualLockinBanner />
 
 							{/* Page Content */}
-							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
+							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
 								<div className="w-full min-w-0 max-w-full [&>*]:min-w-0">
 									<PromoTrialBonusBanner />
 									{children}
@@ -1148,31 +1148,34 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							</div>
 
 							{/* Mobile Bottom Navigation */}
-							<nav className="fixed bottom-0 inset-x-0 lg:hidden bg-white border-t border-border z-50 pb-[env(safe-area-inset-bottom)]">
-								<div className="flex items-center justify-around h-16">
+							<nav className="fixed bottom-0 inset-x-0 lg:hidden z-50 pb-[env(safe-area-inset-bottom)]">
+								<div
+									className="mx-2.5 mb-3 flex items-center justify-around rounded-[26px] px-1.5 py-2 shadow-[0_16px_32px_rgba(46,31,78,0.35)]"
+									style={{ background: "linear-gradient(175deg, #4B3A76 0%, #3D2E63 100%)" }}
+								>
 									{[
 										{
-											label: "",
+											label: "Home",
 											icon: LayoutDashboard,
 											path: "/salon",
 										},
 										{
-											label: "",
+											label: "Bookings",
 											icon: Calendar,
 											path: "/salon/appointments",
 										},
 										{
-											label: "",
+											label: "Services",
 											icon: Scissors,
 											path: "/salon/services",
 										},
 										{
-											label: "",
+											label: "Payments",
 											icon: CreditCard,
 											path: "/salon/transactions",
 										},
 										{
-											label: "",
+											label: "Clients",
 											icon: Users,
 											path: "/salon/customers",
 										},
@@ -1183,31 +1186,26 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												key={path}
 												type="button"
 												onClick={() => navigate(path)}
-												className="flex flex-col items-center gap-0.5 flex-1 py-2 transition-colors"
+												className={cn(
+													"flex flex-1 flex-col items-center gap-[3px] rounded-2xl px-2 py-[7px] transition-colors",
+													active && "bg-[#F4C84E]",
+												)}
 											>
-												<div
+												<Icon
+													strokeWidth={1.8}
 													className={cn(
-														"flex flex-col items-center gap-0.5",
-														active
-															? "bg-primary rounded-lg px-3 py-2"
-															: "text-muted-foreground",
+														"h-[19px] w-[19px]",
+														active ? "text-[#2E1F4E]" : "text-white/60",
+													)}
+												/>
+												<span
+													className={cn(
+														"text-[9.5px] font-semibold",
+														active ? "text-[#2E1F4E]" : "text-white/60",
 													)}
 												>
-													<Icon
-														className={cn(
-															"w-[22px] h-[22px]",
-															active ? "text-white" : "text-muted-foreground",
-														)}
-													/>
-													<span
-														className={cn(
-															"text-[10px] font-medium",
-															active ? "text-white" : "text-muted-foreground",
-														)}
-													>
-														{label}
-													</span>
-												</div>
+													{label}
+												</span>
 											</button>
 										);
 									})}
