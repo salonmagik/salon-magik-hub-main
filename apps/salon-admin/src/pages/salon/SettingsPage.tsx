@@ -236,6 +236,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		string | null
 	>(null);
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
+	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
 	const claimTenantPromo = useClaimTenantSalesPromo();
 	const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
 	const { data: activeTenantPromo } = useTenantSalesPromo();
@@ -3117,23 +3118,55 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</CardHeader>
 				)}
 				<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
-					<div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-						<div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+					<div
+						className="relative overflow-hidden rounded-xl p-4 sm:p-5"
+						style={{
+							background:
+								"linear-gradient(160deg, #1F1536 0%, #2E1F4E 60%, #3A2660 100%)",
+						}}
+					>
+						{/* Decorative scattered salon icons — same motif as the auth screens */}
+						<div aria-hidden className="pointer-events-none absolute inset-0 select-none overflow-hidden">
+							<svg width="30" height="30" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "10%", right: "8%", opacity: 0.1, transform: "rotate(18deg)" }}>
+								<circle cx="8" cy="22" r="4.5" stroke="white" strokeWidth="2" />
+								<circle cx="8" cy="10" r="4.5" stroke="white" strokeWidth="2" />
+								<line x1="11.5" y1="19.5" x2="27" y2="7" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+								<line x1="11.5" y1="12.5" x2="27" y2="25" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+							</svg>
+							<svg width="20" height="20" viewBox="0 0 32 32" fill="none" className="absolute" style={{ bottom: "12%", left: "4%", opacity: 0.09, transform: "rotate(-12deg)" }}>
+								<rect x="11" y="3" width="10" height="7" rx="2" stroke="white" strokeWidth="2" />
+								<line x1="16" y1="7" x2="16" y2="11" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+								<path d="M11 10 Q9 12 9 15 L9 26 Q9 29 16 29 Q23 29 23 26 L23 15 Q23 12 21 10 Z" stroke="white" strokeWidth="2" />
+							</svg>
+							<svg width="22" height="22" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "38%", left: "2%", opacity: 0.08, transform: "rotate(8deg)" }}>
+								<ellipse cx="16" cy="12" rx="9" ry="10" stroke="white" strokeWidth="2" />
+								<line x1="16" y1="22" x2="16" y2="29" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+								<line x1="11" y1="29" x2="21" y2="29" stroke="white" strokeWidth="2" strokeLinecap="round" />
+							</svg>
+							<svg width="20" height="20" viewBox="0 0 32 32" fill="none" className="absolute" style={{ bottom: "6%", right: "18%", opacity: 0.09, transform: "rotate(-30deg)" }}>
+								<rect x="3" y="8" width="26" height="8" rx="2" stroke="white" strokeWidth="2" />
+								{[7, 11, 15, 19, 23].map((x) => (
+									<line key={x} x1={x} y1="16" x2={x} y2="25" stroke="white" strokeWidth="2" strokeLinecap="round" />
+								))}
+							</svg>
+						</div>
+
+						<div className="relative flex flex-wrap items-center justify-between gap-3 mb-2">
 							<div>
-								<p className="font-serif text-xl capitalize">
+								<p className="font-serif text-xl capitalize text-white">
 									{currentTenant?.plan || "Solo"}
 								</p>
 								<div className="mt-1.5 flex items-center gap-2">
-									<Badge variant="secondary" className="capitalize">
+									<Badge className="capitalize bg-white/15 text-white hover:bg-white/15">
 										{recurringTotal?.breakdown.billing_cycle || "monthly"} billing
 									</Badge>
 									<Badge
 										className={cn(
 											currentTenant?.subscription_status === "active"
-												? "bg-success text-success-foreground"
+												? "bg-success text-success-foreground hover:bg-success"
 												: currentTenant?.subscription_status === "trialing"
-													? "bg-primary text-primary-foreground"
-													: "bg-destructive text-destructive-foreground",
+													? "bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F4C84E]"
+													: "bg-destructive text-destructive-foreground hover:bg-destructive",
 										)}
 									>
 										{currentTenant?.subscription_status?.replace("_", " ") ||
@@ -3143,9 +3176,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</div>
 							<Button
 								type="button"
-								variant="outline"
 								size="sm"
-								className="rounded-full"
+								className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
 								onClick={() =>
 									planConfigSectionRef.current?.scrollIntoView({
 										behavior: "smooth",
@@ -3157,29 +3189,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</Button>
 						</div>
 						{isTrialing && trialEndsAt && (
-							<div className="mt-3">
+							<div className="relative mt-3">
 								<div className="flex items-center justify-between text-sm mb-1">
-									<span className="text-muted-foreground">Trial period</span>
-									<span className="font-medium">
+									<span className="text-white/60">Trial period</span>
+									<span className="font-medium text-white">
 										{daysRemaining} days remaining
 									</span>
 								</div>
 								<Progress
 									value={Math.max(0, 100 - (daysRemaining / 14) * 100)}
-									className="h-2"
+									className="h-2 bg-white/15"
+									indicatorClassName="bg-[#F4C84E]"
 								/>
-								<p className="text-xs text-muted-foreground mt-1">
+								<p className="text-xs text-white/50 mt-1">
 									Ends {format(trialEndsAt, "MMM d, yyyy")}
 								</p>
 							</div>
 						)}
 						{recurringTotal && (
-							<div className="mt-3">
+							<div className="relative mt-3">
 								<div className="flex items-baseline justify-between">
-									<p className="font-serif text-3xl">
+									<p className="font-serif text-3xl text-white">
 										{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}
 									</p>
-									<p className="text-xs text-muted-foreground">
+									<p className="text-xs text-white/60">
 										{isTrialing
 											? trialEndsAt
 												? `starts after trial · ${format(trialEndsAt, "MMM d")}`
@@ -3189,41 +3222,41 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												: "next charge"}
 									</p>
 								</div>
-								<div className="mt-3 space-y-1 border-t border-dashed pt-3 text-sm">
-									<div className="flex items-center justify-between text-muted-foreground">
+								<div className="mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
+									<div className="flex items-center justify-between text-white/60">
 										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
 										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
 									</div>
 									{recurringTotal.breakdown.addon_breakdown.extra_seats > 0 && (
-										<div className="flex items-center justify-between text-muted-foreground">
+										<div className="flex items-center justify-between text-white/60">
 											<span>Extra seats ({recurringTotal.breakdown.addon_breakdown.extra_seats})</span>
 											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.seat_addon_total, recurringTotal.currency)}</span>
 										</div>
 									)}
 									{recurringTotal.breakdown.addon_breakdown.location_addon_total > 0 && (
-										<div className="flex items-center justify-between text-muted-foreground">
+										<div className="flex items-center justify-between text-white/60">
 											<span>Additional locations</span>
 											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.location_addon_total, recurringTotal.currency)}</span>
 										</div>
 									)}
 									{recurringTotal.breakdown.addon_breakdown.staff_operations_enabled && (
-										<div className="flex items-center justify-between text-muted-foreground">
+										<div className="flex items-center justify-between text-white/60">
 											<span>Staff Operations</span>
 											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.staff_operations_total, recurringTotal.currency)}</span>
 										</div>
 									)}
 									{recurringTotal.breakdown.discount > 0 && (
-										<div className="flex items-center justify-between text-success">
+										<div className="flex items-center justify-between text-[#F4C84E]">
 											<span>Promo discount</span>
 											<span>−{formatCurrency(recurringTotal.breakdown.discount, recurringTotal.currency)}</span>
 										</div>
 									)}
-									<div className="flex items-center justify-between border-t pt-2 mt-2 font-medium text-foreground">
+									<div className="flex items-center justify-between border-t border-white/15 pt-2 mt-2 font-medium text-white">
 										<span>Total this cycle</span>
 										<span>{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}</span>
 									</div>
 									{recurringTotal.breakdown.billing_cycle === "annual" && (
-										<p className="pt-1 text-xs text-muted-foreground">
+										<p className="pt-1 text-xs text-white/50">
 											Base plan is billed annually and isn't part of this monthly line — this covers add-ons only.
 										</p>
 									)}
@@ -3271,7 +3304,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</div>
 					</div>
 
-					<div ref={planConfigSectionRef} className="space-y-3 scroll-mt-6">
+					<div ref={planConfigSectionRef} className="scroll-mt-6">
+					<div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+					<div className="space-y-3">
 						<p className="text-sm font-medium">Manage branches & team size</p>
 						<div className="rounded-lg border p-4 space-y-4">
 							<p className="text-sm text-muted-foreground">
@@ -3469,10 +3504,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										: "Update Billing"}
 							</Button>
 						</div>
+					</div>
 
-						<div className="space-y-3">
-							<p className="text-sm font-medium">Add-ons</p>
-							<div className="rounded-lg border p-4 flex items-center justify-between gap-4">
+					<div className="space-y-3">
+						<p className="text-sm font-medium">Add-ons</p>
+						<div className="space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
+							<div className="flex items-center justify-between gap-4">
 								<div>
 									<p className="text-sm font-medium">Staff Operations</p>
 									<p className="mt-0.5 text-xs text-muted-foreground">
@@ -3493,27 +3530,51 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<Badge variant="outline" className="shrink-0">Studio+ only</Badge>
 								)}
 							</div>
-						</div>
 
-						<div className="rounded-lg border p-4">
-							<p className="font-medium">Booking page themes</p>
-							<p className="mt-1 text-sm text-muted-foreground">
-								Preview, purchase, and apply booking page themes from the
-								Booking Settings tab where your banners and booking brand
-								controls live.
-							</p>
+							<div className="flex items-center justify-between gap-4 border-t border-primary/10 pt-3">
+								<div>
+									<p className="text-sm font-medium">Booking page themes</p>
+									<p className="mt-0.5 text-xs text-muted-foreground">
+										Preview, purchase, and apply themes for your booking page.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="shrink-0 gap-1.5 rounded-full"
+									onClick={() => navigate("/salon/themes-settings")}
+								>
+									<Palette className="h-3.5 w-3.5" />
+									Browse themes
+								</Button>
+							</div>
 						</div>
+					</div>
+					</div>
 					</div>
 					<div className="pt-4 border-t space-y-3">
 						<p className="text-sm font-medium">Promo code</p>
 						{subscriptionPromo ? (
-							<div className="flex items-center justify-between rounded-lg bg-success/10 text-success p-3 text-sm font-medium">
-								<span>
-									{subscriptionPromo.code} applied · {subscriptionPromo.campaign_name}
-								</span>
-								<span className="font-normal">
-									{subscriptionPromo.remaining_uses} use{subscriptionPromo.remaining_uses === 1 ? "" : "s"} left
-								</span>
+							<div className="rounded-lg bg-success/10 p-3 text-sm">
+								<div className="flex items-center justify-between font-medium text-success">
+									<span>{subscriptionPromo.code} applied · {subscriptionPromo.campaign_name}</span>
+									<span className="font-normal">
+										{subscriptionPromo.remaining_uses} use{subscriptionPromo.remaining_uses === 1 ? "" : "s"} left
+									</span>
+								</div>
+								<p className="mt-1 text-success/80">
+									{subscriptionPromo.discount_type === "percentage"
+										? `${subscriptionPromo.discount_value}% off`
+										: `${formatCurrency(subscriptionPromo.discount_value, currentTenant?.currency || "NGN")} off`}
+									{" · applies to "}
+									{subscriptionPromo.billing_targets
+										.map((target) => (target === "credits" ? "messaging credits" : "subscription billing"))
+										.join(" and ")}
+									{subscriptionPromo.campaign_ends_at && (
+										<> · valid through {format(new Date(subscriptionPromo.campaign_ends_at), "MMM d, yyyy")}</>
+									)}
+								</p>
 							</div>
 						) : (
 							<div className="space-y-2">
@@ -3571,7 +3632,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							<>
 								<Button
 									className="w-full gap-2"
-									onClick={startSubscriptionCheckout}
+									onClick={() => setUpgradeConfirmOpen(true)}
 									disabled={isStartingSubscriptionCheckout}
 								>
 									{isStartingSubscriptionCheckout ? (
@@ -3589,6 +3650,79 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</>
 						)}
 					</div>
+
+					<Dialog open={upgradeConfirmOpen} onOpenChange={setUpgradeConfirmOpen}>
+						<DialogContent className="sm:max-w-md">
+							<DialogHeader>
+								<DialogTitle>Confirm your upgrade</DialogTitle>
+								<DialogDescription>
+									Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged.
+								</DialogDescription>
+							</DialogHeader>
+							{recurringTotal ? (
+								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
+									<div className="flex items-center justify-between text-muted-foreground">
+										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
+										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
+									</div>
+									{recurringTotal.breakdown.addon_breakdown.extra_seats > 0 && (
+										<div className="flex items-center justify-between text-muted-foreground">
+											<span>Extra seats ({recurringTotal.breakdown.addon_breakdown.extra_seats})</span>
+											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.seat_addon_total, recurringTotal.currency)}</span>
+										</div>
+									)}
+									{recurringTotal.breakdown.addon_breakdown.location_addon_total > 0 && (
+										<div className="flex items-center justify-between text-muted-foreground">
+											<span>Additional locations</span>
+											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.location_addon_total, recurringTotal.currency)}</span>
+										</div>
+									)}
+									{recurringTotal.breakdown.addon_breakdown.staff_operations_enabled && (
+										<div className="flex items-center justify-between text-muted-foreground">
+											<span>Staff Operations</span>
+											<span>{formatCurrency(recurringTotal.breakdown.addon_breakdown.staff_operations_total, recurringTotal.currency)}</span>
+										</div>
+									)}
+									{recurringTotal.breakdown.discount > 0 && (
+										<div className="flex items-center justify-between text-success">
+											<span>Promo discount</span>
+											<span>−{formatCurrency(recurringTotal.breakdown.discount, recurringTotal.currency)}</span>
+										</div>
+									)}
+									<div className="flex items-center justify-between border-t pt-2 mt-2 font-medium text-foreground">
+										<span>Total {recurringTotal.breakdown.billing_cycle === "annual" ? "this month (add-ons)" : "this cycle"}</span>
+										<span>{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}</span>
+									</div>
+								</div>
+							) : (
+								<p className="text-sm text-muted-foreground">
+									Your bill will be calculated from your current plan and add-ons.
+								</p>
+							)}
+							<DialogFooter className="gap-2 sm:gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => setUpgradeConfirmOpen(false)}
+									disabled={isStartingSubscriptionCheckout}
+								>
+									Cancel
+								</Button>
+								<Button
+									type="button"
+									className="gap-2"
+									onClick={() => {
+										setUpgradeConfirmOpen(false);
+										void startSubscriptionCheckout();
+									}}
+									disabled={isStartingSubscriptionCheckout}
+								>
+									{isStartingSubscriptionCheckout && <Loader2 className="h-4 w-4 animate-spin" />}
+									Confirm & Continue to Payment
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
 				</CardContent>
 			</Card>
 		);
