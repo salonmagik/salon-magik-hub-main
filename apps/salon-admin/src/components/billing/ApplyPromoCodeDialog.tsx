@@ -63,6 +63,13 @@ export function ApplyPromoCodeDialog({ open, onOpenChange }: ApplyPromoCodeDialo
           title: "Promo applied!",
           description: `Nice — your trial just got ${bonusData.bonus_days} extra day${bonusData.bonus_days === 1 ? "" : "s"}.`,
         });
+        // Best-effort — billing admins should hear about the extension, but
+        // a notify failure shouldn't undo the bonus that already landed.
+        supabase.functions
+          .invoke("send-trial-extension-notice", {
+            body: { tenantId: currentTenant.id, reason: "promo_bonus", bonusDays: bonusData.bonus_days },
+          })
+          .catch((err) => console.error("Failed to send trial extension notice:", err));
       } else {
         toast({ title: "Promo applied!" });
       }
