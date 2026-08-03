@@ -1538,12 +1538,10 @@ export default function MessagingPage() {
                             {
                               id: "sms" as const,
                               title: "SMS",
-                              helper: import.meta.env.PROD ? "Coming soon" : "Uses credits",
-                              description: import.meta.env.PROD
-                                ? "SMS broadcast is coming soon — stay tuned!"
-                                : "Best for quick reminders and short offers.",
+                              helper: "Uses credits",
+                              description: "Best for quick reminders and short offers.",
                               icon: Phone,
-                              disabled: import.meta.env.PROD,
+                              disabled: false,
                             },
                             {
                               id: "whatsapp",
