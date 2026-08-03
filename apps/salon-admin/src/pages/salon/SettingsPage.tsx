@@ -3498,26 +3498,43 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</p>
 								)}
 
-							<Button
-								className="w-full sm:w-auto"
-								onClick={applyPlanConfiguration}
-								disabled={
-									!planConfigQuote ||
-									planConfigQuote.requires_custom_locations ||
-									isApplyingPlanConfig ||
-									isQuotingPlanConfig ||
-									Boolean(isPlanConfigUnchanged)
-								}
-							>
-								{isApplyingPlanConfig && (
-									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-								)}
-								{isPlanConfigUnchanged
-									? "No changes"
-									: isPlanConfigIncrease
-										? "Pay & Update"
-										: "Update Billing"}
-							</Button>
+							{/* While trialing, the single bottom "Upgrade Now" button is the
+							    only call to action — it already picks up whatever branches/
+							    seats are staged here. Showing a second button in both places
+							    at once ("No changes" + "Upgrade Now") reads as two competing
+							    actions for what's really one decision. Once actually
+							    subscribed, this becomes the only button for plan-config
+							    changes — always visible so the control has a stable anchor,
+							    disabled until there's a real change to submit. */}
+							{!isTrialing && (
+								<>
+									{!isPlanConfigUnchanged && !isPlanConfigIncrease && (
+										<p className="text-xs text-amber-600">
+											Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
+										</p>
+									)}
+									<Button
+										className="w-full sm:w-auto"
+										onClick={applyPlanConfiguration}
+										disabled={
+											!planConfigQuote ||
+											planConfigQuote.requires_custom_locations ||
+											isApplyingPlanConfig ||
+											isQuotingPlanConfig ||
+											Boolean(isPlanConfigUnchanged)
+										}
+									>
+										{isApplyingPlanConfig && (
+											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+										)}
+										{isPlanConfigUnchanged
+											? "No changes to apply"
+											: isPlanConfigIncrease
+												? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
+												: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
+									</Button>
+								</>
+							)}
 						</div>
 					</div>
 
@@ -3647,15 +3664,26 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							<>
 								<Button
 									className="w-full gap-2"
-									onClick={() => setUpgradeConfirmOpen(true)}
-									disabled={isStartingSubscriptionCheckout}
+									onClick={() => {
+										// Branches/seats staged above? Activate on that
+										// configuration directly — applyPlanConfiguration already
+										// redirects to Paystack for first-time payment when needed,
+										// same as the plain confirm-dialog path below. Otherwise
+										// fall back to the base-plan confirm dialog.
+										if (!isPlanConfigUnchanged) {
+											void applyPlanConfiguration();
+										} else {
+											setUpgradeConfirmOpen(true);
+										}
+									}}
+									disabled={isStartingSubscriptionCheckout || isApplyingPlanConfig || isQuotingPlanConfig}
 								>
-									{isStartingSubscriptionCheckout ? (
+									{isStartingSubscriptionCheckout || isApplyingPlanConfig ? (
 										<Loader2 className="w-4 h-4 animate-spin" />
 									) : (
 										<Zap className="w-4 h-4" />
 									)}
-									{isStartingSubscriptionCheckout
+									{isStartingSubscriptionCheckout || isApplyingPlanConfig
 										? "Redirecting..."
 										: "Upgrade Now"}
 								</Button>
