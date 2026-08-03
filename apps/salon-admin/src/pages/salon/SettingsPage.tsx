@@ -165,7 +165,13 @@ function describePlanConfigError(
 	fallback = "Could not price this configuration.",
 ): string {
 	if (!message) return fallback;
-	return PLAN_CONFIG_ERROR_MESSAGES[message] || message;
+	// Postgres RAISE EXCEPTION messages come back prefixed with the SQLSTATE
+	// code (e.g. "P0001: BRANCHES_BELOW_ACTIVE_LOCATIONS"), so an exact-match
+	// lookup against the bare code never hit — match by substring instead.
+	const knownCode = Object.keys(PLAN_CONFIG_ERROR_MESSAGES).find((code) =>
+		message.includes(code),
+	);
+	return (knownCode && PLAN_CONFIG_ERROR_MESSAGES[knownCode]) || message;
 }
 
 interface SettingsPageProps {
@@ -377,7 +383,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				setPlanConfigQuote(null);
 				setPlanConfigQuoteError(
 					describePlanConfigError(
-						error instanceof Error ? error.message : undefined,
+						// Supabase RPC errors are plain PostgrestError objects, not
+						// Error instances — `instanceof Error` was always false here,
+						// so the friendly message text below never actually got used.
+						(error as { message?: string } | null)?.message,
 					),
 				);
 			} finally {
@@ -448,7 +457,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			toast({
 				title: "Update failed",
 				description: describePlanConfigError(
-					error instanceof Error ? error.message : undefined,
+					(error as { message?: string } | null)?.message,
 					"Unable to update your plan configuration right now.",
 				),
 				variant: "destructive",
