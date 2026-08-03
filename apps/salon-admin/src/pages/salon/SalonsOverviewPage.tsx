@@ -231,9 +231,9 @@ export default function SalonsOverviewPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setAddSalonOpen(true)} className="gap-2">
+            <Button onClick={() => setAddSalonOpen(true)} className="hidden lg:flex gap-2">
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Branch</span>
+              Add Branch
             </Button>
           </div>
         </div>
@@ -750,6 +750,16 @@ export default function SalonsOverviewPage() {
             await Promise.all([refetch(), refreshTenants()]);
           }}
         />
+
+        {/* Floating action button — mobile & tablet only */}
+        <button
+          type="button"
+          aria-label="Add branch"
+          onClick={() => setAddSalonOpen(true)}
+          className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
       </div>
     </SalonSidebar>
   );
