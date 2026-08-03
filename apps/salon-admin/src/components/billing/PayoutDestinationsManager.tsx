@@ -145,7 +145,8 @@ export function PayoutDestinationsManager() {
                 <SelectTrigger id="type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bank">Bank Account</SelectItem>
-                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                  {/* Paystack doesn't support mobile money payouts in Nigeria — only Ghana. */}
+                  {country !== "NG" && <SelectItem value="mobile_money">Mobile Money</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
