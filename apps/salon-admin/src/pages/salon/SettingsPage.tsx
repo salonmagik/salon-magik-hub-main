@@ -477,6 +477,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	// Handle top-up success/cancel notifications
 	useEffect(() => {
+		// scope="auto" is the legacy /salon/settings redirector — it's about to
+		// unmount as soon as the scope-redirect effect above fires. Running the
+		// payment-verification calls here races that navigate(): this effect's
+		// own setSearchParams and the redirect's navigate() both fire in the same
+		// commit, and whichever the async verify call's .then() resolves against
+		// is often the already-unmounted instance, so refreshTenants() and
+		// setPaymentSuccessModal() silently no-op — the modal never appears and
+		// the subscription tab shows stale data until a manual reload. Skip here
+		// and let the effect re-run on the stable business/branch-settings
+		// instance once the redirect lands, where state updates actually stick.
+		if (scope === "auto") return;
+
 		const topupStatus = searchParams.get("topup");
 		const subscriptionStatus = searchParams.get("subscription");
 
@@ -668,7 +680,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			newParams.delete("themepurchase");
 			setSearchParams(newParams, { replace: true });
 		}
-	}, [searchParams, setSearchParams, currentTenant?.id]);
+	}, [searchParams, setSearchParams, currentTenant?.id, scope]);
 
 	const handleTabChange = (tabId: string) => {
 		setActiveTab(tabId);
