@@ -18,13 +18,14 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { module: "messaging", path: "/salon/messaging", order: 90 },
   { module: "journal", path: "/salon/cash-tracker", order: 100 },
   { module: "staff", path: "/salon/staff", order: 110 },
+  { module: "billing", path: "/salon/subscription", order: 115 },
   { module: "settings", path: "/salon/settings", order: 120 },
   { module: "settings", path: "/salon/business-settings", order: 121 },
   { module: "settings", path: "/salon/branch-settings", order: 122 },
   { module: "audit_log", path: "/salon/audit-log", order: 130 },
 ];
 
-const HUB_ALLOWED_MODULES = new Set<string>(["salons_overview", "staff", "settings", "audit_log", "payments", "notifications"]);
+const HUB_ALLOWED_MODULES = new Set<string>(["salons_overview", "staff", "settings", "audit_log", "payments", "notifications", "billing"]);
 
 export function isModuleAllowedInContext(
   module: string,
@@ -37,6 +38,12 @@ export function isModuleAllowedInContext(
 
   if (routePath === "/salon/branch-settings") {
     return contextType === "location";
+  }
+
+  // Billing/Subscription is tenant-wide, not per-branch — business hub only,
+  // regardless of role permissions.
+  if (routePath === "/salon/subscription" || module === "billing") {
+    return contextType === "owner_hub";
   }
 
   if (routePath === "/salon/overview/staff" && contextType !== "owner_hub") {

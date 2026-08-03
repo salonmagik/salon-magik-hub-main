@@ -108,7 +108,7 @@ import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
 import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
-type SettingsScope = "auto" | "legacy" | "business" | "branch";
+type SettingsScope = "auto" | "legacy" | "business" | "branch" | "subscription";
 
 interface BranchUnavailabilityWindow {
 	id: string;
@@ -296,15 +296,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "booking", label: "Booking Settings", icon: User },
 				{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 				{ id: "notifications", label: "Notifications", icon: Bell },
-				{ id: "subscription", label: "Subscription", icon: Zap },
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
+		}
+		if (resolvedScope === "subscription") {
+			return [{ id: "subscription", label: "Subscription", icon: Zap }];
 		}
 		return BASE_SETTINGS_TABS;
 	}, [resolvedScope]);
 
 	const [activeTab, setActiveTab] = useState(() => {
+		if (resolvedScope === "subscription") return "subscription";
 		const tab = searchParams.get("tab");
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
@@ -403,8 +406,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							tenantId: currentTenant.id,
 							branches,
 							seats,
-							successUrl: `${window.location.origin}/salon/settings?tab=subscription&planconfig=success`,
-							cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&planconfig=cancelled`,
+							successUrl: `${window.location.origin}/salon/subscription?planconfig=success`,
+							cancelUrl: `${window.location.origin}/salon/subscription?planconfig=cancelled`,
 						},
 					},
 				);
@@ -788,8 +791,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{
 					body: {
 						tenantId: currentTenant.id,
-						successUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=success`,
-						cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=cancelled`,
+						successUrl: `${window.location.origin}/salon/subscription?subscription=success`,
+						cancelUrl: `${window.location.origin}/salon/subscription?subscription=cancelled`,
 					},
 				},
 			);
@@ -838,8 +841,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					body: {
 						tenantId: currentTenant.id,
 						themeKey: "ecommerce",
-						successUrl: `${window.location.origin}/salon/settings?tab=subscription&themepurchase=success`,
-						cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&themepurchase=cancelled`,
+						successUrl: `${window.location.origin}/salon/subscription?themepurchase=success`,
+						cancelUrl: `${window.location.origin}/salon/subscription?themepurchase=cancelled`,
 					},
 				},
 			);
@@ -4022,7 +4025,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		</Card>
 	);
 
-	const isChainScope = resolvedScope === "business" || resolvedScope === "branch";
+	const isChainScope = resolvedScope === "business" || resolvedScope === "branch" || resolvedScope === "subscription";
 
 	const chainTabHeaders: Record<string, { title: string; subtitle: string }> = {
 		profile:

@@ -171,7 +171,7 @@ export function WelcomeModal({
         {
           body: {
             tenantId: currentTenant.id,
-            successUrl: `${origin}/salon/settings?tab=subscription&subscription=success`,
+            successUrl: `${origin}/salon/subscription?subscription=success`,
             cancelUrl: `${origin}/salon/overview`,
             billingCycle: selectedBillingCycle,
           },
