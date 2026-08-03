@@ -38,8 +38,6 @@ const ROLE_NAMES: Record<UserRole, string> = {
   owner: "Owner",
   manager: "Manager",
   supervisor: "Supervisor",
-  receptionist: "Receptionist",
-  staff: "Staff",
 };
 
 const COUNTRY_NAMES: Record<string, string> = {

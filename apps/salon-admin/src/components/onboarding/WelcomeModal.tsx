@@ -234,13 +234,19 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* CTA row */}
+            {/* CTA row — only the owner can reach billing, so only the owner sees Subscribe now */}
             <div className="flex flex-col gap-3 pt-2">
-              <Button className="w-full gap-2" onClick={() => setScreen("subscribe")}>
-                Subscribe now
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" className="w-full" onClick={handleExplore}>
+              {currentRole === "owner" && (
+                <Button className="w-full gap-2" onClick={() => setScreen("subscribe")}>
+                  Subscribe now
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              )}
+              <Button
+                variant={currentRole === "owner" ? "outline" : "default"}
+                className="w-full"
+                onClick={handleExplore}
+              >
                 Start exploring
               </Button>
             </div>

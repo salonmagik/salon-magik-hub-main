@@ -309,16 +309,20 @@ const handler = async (req: Request): Promise<Response> => {
 
       createdUserId = userData.user.id;
 
-      // Create profile
-      const { error: profileError } = await serviceRoleClient.from("profiles").insert({
+      // Upsert, not insert: a DB trigger on auth.users already creates a stub
+      // profiles row for the new user, so a plain insert here hits a
+      // duplicate-key conflict and silently no-ops — the invite's name and
+      // phone never actually land, even though this call reports no error
+      // in the response (only a swallowed console.error). Upsert overwrites
+      // the trigger's stub with the real values from the invitation.
+      const { error: profileError } = await serviceRoleClient.from("profiles").upsert({
         user_id: createdUserId,
         full_name: `${firstName} ${lastName}`,
         phone: phone || null,
-      });
+      }, { onConflict: "user_id" });
 
       if (profileError) {
         console.error("Error creating profile:", profileError);
-        // Profile may be created by trigger, continue
       }
 
       // Create user role
