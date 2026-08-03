@@ -56,12 +56,12 @@ async function sendEmail(
 }
 
 function buildReminderHtml(options: {
-  ownerFirstName: string;
+  recipientFirstName: string;
   planName: string;
   threshold: Threshold["key"];
   loginUrl: string;
 }): { subject: string; html: string } {
-  const { ownerFirstName, planName, threshold, loginUrl } = options;
+  const { recipientFirstName, planName, threshold, loginUrl } = options;
 
   // Human, low-tech copy — no "your subscription status" robot-speak.
   const copy: Record<Threshold["key"], { subject: string; lede: string; body: string }> = {
@@ -84,7 +84,7 @@ function buildReminderHtml(options: {
 
   const c = copy[threshold];
   const content = `
-    ${heading(`Hi ${ownerFirstName},`)}
+    ${heading(`Hi ${recipientFirstName},`)}
     ${paragraph(c.lede)}
     ${paragraph(c.body)}
     ${createButton("Upgrade my plan", loginUrl)}
@@ -140,29 +140,15 @@ serve(async (req) => {
       );
       if (!dueThreshold) continue;
 
-      // Resolve the tenant owner.
-      const { data: ownerRole } = await admin
-        .from("user_roles")
-        .select("user_id")
-        .eq("tenant_id", tenant.id)
-        .eq("role", "owner")
-        .eq("is_active", true)
-        .limit(1)
-        .maybeSingle();
-      if (!ownerRole?.user_id) continue;
+      // Billing admins = owner + any manager/supervisor granted the
+      // "billing" permission. Owner is always included regardless of
+      // role_permissions state.
+      const { data: billingAdmins } = await admin.rpc("get_tenant_billing_admin_user_ids", {
+        p_tenant_id: tenant.id,
+      });
+      if (!billingAdmins || billingAdmins.length === 0) continue;
 
-      const { data: ownerAuth } = await admin.auth.admin.getUserById(ownerRole.user_id);
-      const ownerEmail = ownerAuth?.user?.email;
-      if (!ownerEmail) continue;
-
-      const { data: ownerProfile } = await admin
-        .from("profiles")
-        .select("full_name")
-        .eq("user_id", ownerRole.user_id)
-        .maybeSingle();
-      const ownerFirstName = (ownerProfile?.full_name || "there").split(" ")[0];
-
-      // Resolve a human plan display name.
+      // Resolve a human plan display name once per tenant.
       let planName = "your";
       if (tenant.plan) {
         const { data: planRow } = await admin
@@ -173,28 +159,47 @@ serve(async (req) => {
         planName = planRow?.name || tenant.plan;
       }
 
-      const { subject, html } = buildReminderHtml({
-        ownerFirstName,
-        planName,
-        threshold: dueThreshold.key,
-        loginUrl: `${appOrigin}/salon/settings?tab=subscription`,
-      });
+      let anySent = false;
+      for (const admin_ of billingAdmins as { user_id: string }[]) {
+        const { data: adminAuth } = await admin.auth.admin.getUserById(admin_.user_id);
+        const adminEmail = adminAuth?.user?.email;
+        if (!adminEmail) continue;
 
-      if (resendApiKey) {
-        try {
-          await sendEmail(
-            resendApiKey,
-            buildFromAddress({ fromEmail: resendFromEmail, mode: "product" }),
-            ownerEmail,
-            subject,
-            html,
-          );
-          sentCount += 1;
-        } catch (emailError) {
-          console.error(`[send-trial-expiry-reminders] send failed for tenant ${tenant.id}:`, emailError);
-          continue; // don't mark as sent if the send itself failed
+        const { data: adminProfile } = await admin
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", admin_.user_id)
+          .maybeSingle();
+        const adminFirstName = (adminProfile?.full_name || "there").split(" ")[0];
+
+        const { subject, html } = buildReminderHtml({
+          recipientFirstName: adminFirstName,
+          planName,
+          threshold: dueThreshold.key,
+          loginUrl: `${appOrigin}/salon/settings?tab=subscription`,
+        });
+
+        if (resendApiKey) {
+          try {
+            await sendEmail(
+              resendApiKey,
+              buildFromAddress({ fromEmail: resendFromEmail, mode: "product" }),
+              adminEmail,
+              subject,
+              html,
+            );
+            sentCount += 1;
+            anySent = true;
+          } catch (emailError) {
+            console.error(
+              `[send-trial-expiry-reminders] send failed for tenant ${tenant.id}, admin ${admin_.user_id}:`,
+              emailError,
+            );
+          }
         }
       }
+
+      if (!anySent) continue; // don't mark as sent if every send failed
 
       await admin
         .from("tenants")
