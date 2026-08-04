@@ -94,13 +94,6 @@ Deno.serve(async (req) => {
     }
     const paystackSecretKey = paystackKeyResult.key;
 
-    if ((invoice.tenants as any).payment_setup_status !== "ready") {
-      return new Response(
-        JSON.stringify({ error: "The salon is not ready to accept online payments at this time. Please contact them or try again later." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     // Fetch customer email
     const { data: customer, error: customerError } = await supabase
       .from("customers")

@@ -94,6 +94,7 @@ import { WalletLedger } from "@/components/billing/WalletLedger";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import {
 	useClaimTenantSalesPromo,
 	useTenantSalesPromo,
@@ -319,6 +320,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	});
 
 	const { wallet } = useSalonWallet(currentTenant?.id);
+	// Online booking can't be turned on without a payout account — enforced
+	// at the DB level too (trg_enforce_online_booking_requires_payout), this
+	// just disables the toggle with an explanation instead of a raw DB error.
+	const { destinations: payoutDestinations, isLoading: payoutDestinationsLoading } = usePayoutDestinations(currentTenant?.id);
+	const hasPayoutDestination = payoutDestinations.length > 0;
 
 	// Seed the branches/seats inputs from entitlements, and re-seed whenever
 	// entitlements change (e.g. right after a payment completes) as long as
@@ -2608,9 +2614,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										key: "onlineBookingEnabled" as const,
 										label: "Enable Online Booking",
 										description:
-											"Allow customers to book through the public booking page.",
+											!bookingSettings.onlineBookingEnabled && !hasPayoutDestination
+												? "Set up a payout account in Cashflow & Payouts before turning this on."
+												: "Allow customers to book through the public booking page.",
 										checked: bookingSettings.onlineBookingEnabled,
-										disabled: false,
+										disabled: !bookingSettings.onlineBookingEnabled && !hasPayoutDestination,
 										stateUpdate: (v: boolean) => ({ onlineBookingEnabled: v }),
 										dbUpdate: (v: boolean) => ({ online_booking_enabled: v }),
 									},

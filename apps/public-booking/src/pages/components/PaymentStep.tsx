@@ -30,7 +30,6 @@ interface PaymentStepProps {
   customerEmail?: string;
   tenantId?: string;
   onPaymentModeChange?: (mode: PaymentMode, purseAmount: number, cardAmount: number) => void;
-  isPaymentReady?: boolean;
 }
 
 const PAYSTACK_METHODS: PaymentMethod[] = [
@@ -50,7 +49,6 @@ export function PaymentStep({
   brandColor = "#2563EB",
   purseBalance = 0,
   onPaymentModeChange,
-  isPaymentReady = true,
 }: PaymentStepProps) {
   const [selectedGateway] = useState<PaymentGateway>("paystack");
 
@@ -315,33 +313,22 @@ export function PaymentStep({
       )}
 
       {/* Pay Button */}
-      {!isPaymentReady && paymentMode !== "purse" ? (
-        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-          <div className="flex items-start gap-2">
-            <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <p>
-              The salon is currently unable to accept online payments. Please select store credit if you have enough balance, or contact the salon directly to book.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <Button
-          onClick={onSubmit}
-          disabled={isSubmitting}
-          className="w-full h-12 text-lg text-white border-0"
-          style={{ backgroundColor: brandColor }}
-        >
-          {isSubmitting
-            ? "Processing..."
-            : paymentMode === "purse"
-            ? `Pay ${formatCurrency(totalBeforePurse, currency)}`
-            : paymentMode === "split"
-            ? `Pay ${formatCurrency(cardAmount, currency)}`
-            : `Pay ${formatCurrency(totalBeforePurse, currency)}`}
-        </Button>
-      )}
+      <Button
+        onClick={onSubmit}
+        disabled={isSubmitting}
+        className="w-full h-12 text-lg text-white border-0"
+        style={{ backgroundColor: brandColor }}
+      >
+        {isSubmitting
+          ? "Processing..."
+          : paymentMode === "purse"
+          ? `Pay ${formatCurrency(totalBeforePurse, currency)}`
+          : paymentMode === "split"
+          ? `Pay ${formatCurrency(cardAmount, currency)}`
+          : `Pay ${formatCurrency(totalBeforePurse, currency)}`}
+      </Button>
 
-      {isPaymentReady && paymentMode !== "purse" && (
+      {paymentMode !== "purse" && (
         <p className="text-xs text-center text-muted-foreground">
           You will be redirected to Paystack to complete your payment securely.
         </p>
