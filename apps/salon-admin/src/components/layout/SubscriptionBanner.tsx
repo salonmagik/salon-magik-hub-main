@@ -38,7 +38,7 @@ export function SubscriptionBanner() {
         message: "Your trial has expired. Upgrade now to restore full access.",
         cta: "Upgrade Now",
         variant: "error",
-        path: "/salon/subscription",
+        path: "/salon/settings?tab=subscription",
       });
     } else if (daysLeft <= 7) {
       banners.push({
@@ -47,7 +47,7 @@ export function SubscriptionBanner() {
         message: `Your trial ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Upgrade to continue using Salon Magik.`,
         cta: "Upgrade",
         variant: "warning",
-        path: "/salon/subscription",
+        path: "/salon/settings?tab=subscription",
       });
     }
   }
@@ -60,7 +60,7 @@ export function SubscriptionBanner() {
       message: "Payment failed. Update your billing to avoid service interruption.",
       cta: "Update Billing",
       variant: "error",
-      path: "/salon/subscription",
+      path: "/salon/settings?tab=subscription",
     });
   }
 

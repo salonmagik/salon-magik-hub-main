@@ -108,7 +108,7 @@ import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
 import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
-type SettingsScope = "auto" | "legacy" | "business" | "branch" | "subscription";
+type SettingsScope = "auto" | "legacy" | "business" | "branch";
 
 interface BranchUnavailabilityWindow {
 	id: string;
@@ -165,13 +165,7 @@ function describePlanConfigError(
 	fallback = "Could not price this configuration.",
 ): string {
 	if (!message) return fallback;
-	// Postgres RAISE EXCEPTION messages come back prefixed with the SQLSTATE
-	// code (e.g. "P0001: BRANCHES_BELOW_ACTIVE_LOCATIONS"), so an exact-match
-	// lookup against the bare code never hit — match by substring instead.
-	const knownCode = Object.keys(PLAN_CONFIG_ERROR_MESSAGES).find((code) =>
-		message.includes(code),
-	);
-	return (knownCode && PLAN_CONFIG_ERROR_MESSAGES[knownCode]) || message;
+	return PLAN_CONFIG_ERROR_MESSAGES[message] || message;
 }
 
 interface SettingsPageProps {
@@ -302,18 +296,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "booking", label: "Booking Settings", icon: User },
 				{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 				{ id: "notifications", label: "Notifications", icon: Bell },
+				{ id: "subscription", label: "Subscription", icon: Zap },
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
-		}
-		if (resolvedScope === "subscription") {
-			return [{ id: "subscription", label: "Subscription", icon: Zap }];
 		}
 		return BASE_SETTINGS_TABS;
 	}, [resolvedScope]);
 
 	const [activeTab, setActiveTab] = useState(() => {
-		if (resolvedScope === "subscription") return "subscription";
 		const tab = searchParams.get("tab");
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
@@ -383,10 +374,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				setPlanConfigQuote(null);
 				setPlanConfigQuoteError(
 					describePlanConfigError(
-						// Supabase RPC errors are plain PostgrestError objects, not
-						// Error instances — `instanceof Error` was always false here,
-						// so the friendly message text below never actually got used.
-						(error as { message?: string } | null)?.message,
+						error instanceof Error ? error.message : undefined,
 					),
 				);
 			} finally {
@@ -415,8 +403,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							tenantId: currentTenant.id,
 							branches,
 							seats,
-							successUrl: `${window.location.origin}/salon/subscription?planconfig=success`,
-							cancelUrl: `${window.location.origin}/salon/subscription?planconfig=cancelled`,
+							successUrl: `${window.location.origin}/salon/settings?tab=subscription&planconfig=success`,
+							cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&planconfig=cancelled`,
 						},
 					},
 				);
@@ -457,7 +445,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			toast({
 				title: "Update failed",
 				description: describePlanConfigError(
-					(error as { message?: string } | null)?.message,
+					error instanceof Error ? error.message : undefined,
 					"Unable to update your plan configuration right now.",
 				),
 				variant: "destructive",
@@ -489,18 +477,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	// Handle top-up success/cancel notifications
 	useEffect(() => {
-		// scope="auto" is the legacy /salon/settings redirector — it's about to
-		// unmount as soon as the scope-redirect effect above fires. Running the
-		// payment-verification calls here races that navigate(): this effect's
-		// own setSearchParams and the redirect's navigate() both fire in the same
-		// commit, and whichever the async verify call's .then() resolves against
-		// is often the already-unmounted instance, so refreshTenants() and
-		// setPaymentSuccessModal() silently no-op — the modal never appears and
-		// the subscription tab shows stale data until a manual reload. Skip here
-		// and let the effect re-run on the stable business/branch-settings
-		// instance once the redirect lands, where state updates actually stick.
-		if (scope === "auto") return;
-
 		const topupStatus = searchParams.get("topup");
 		const subscriptionStatus = searchParams.get("subscription");
 
@@ -692,7 +668,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			newParams.delete("themepurchase");
 			setSearchParams(newParams, { replace: true });
 		}
-	}, [searchParams, setSearchParams, currentTenant?.id, scope]);
+	}, [searchParams, setSearchParams, currentTenant?.id]);
 
 	const handleTabChange = (tabId: string) => {
 		setActiveTab(tabId);
@@ -800,8 +776,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{
 					body: {
 						tenantId: currentTenant.id,
-						successUrl: `${window.location.origin}/salon/subscription?subscription=success`,
-						cancelUrl: `${window.location.origin}/salon/subscription?subscription=cancelled`,
+						successUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=success`,
+						cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=cancelled`,
 					},
 				},
 			);
@@ -850,8 +826,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					body: {
 						tenantId: currentTenant.id,
 						themeKey: "ecommerce",
-						successUrl: `${window.location.origin}/salon/subscription?themepurchase=success`,
-						cancelUrl: `${window.location.origin}/salon/subscription?themepurchase=cancelled`,
+						successUrl: `${window.location.origin}/salon/settings?tab=subscription&themepurchase=success`,
+						cancelUrl: `${window.location.origin}/salon/settings?tab=subscription&themepurchase=cancelled`,
 					},
 				},
 			);
@@ -3507,43 +3483,26 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</p>
 								)}
 
-							{/* While trialing, the single bottom "Upgrade Now" button is the
-							    only call to action — it already picks up whatever branches/
-							    seats are staged here. Showing a second button in both places
-							    at once ("No changes" + "Upgrade Now") reads as two competing
-							    actions for what's really one decision. Once actually
-							    subscribed, this becomes the only button for plan-config
-							    changes — always visible so the control has a stable anchor,
-							    disabled until there's a real change to submit. */}
-							{!isTrialing && (
-								<>
-									{!isPlanConfigUnchanged && !isPlanConfigIncrease && (
-										<p className="text-xs text-amber-600">
-											Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
-										</p>
-									)}
-									<Button
-										className="w-full sm:w-auto"
-										onClick={applyPlanConfiguration}
-										disabled={
-											!planConfigQuote ||
-											planConfigQuote.requires_custom_locations ||
-											isApplyingPlanConfig ||
-											isQuotingPlanConfig ||
-											Boolean(isPlanConfigUnchanged)
-										}
-									>
-										{isApplyingPlanConfig && (
-											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-										)}
-										{isPlanConfigUnchanged
-											? "No changes to apply"
-											: isPlanConfigIncrease
-												? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
-												: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
-									</Button>
-								</>
-							)}
+							<Button
+								className="w-full sm:w-auto"
+								onClick={applyPlanConfiguration}
+								disabled={
+									!planConfigQuote ||
+									planConfigQuote.requires_custom_locations ||
+									isApplyingPlanConfig ||
+									isQuotingPlanConfig ||
+									Boolean(isPlanConfigUnchanged)
+								}
+							>
+								{isApplyingPlanConfig && (
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+								)}
+								{isPlanConfigUnchanged
+									? "No changes"
+									: isPlanConfigIncrease
+										? "Pay & Update"
+										: "Update Billing"}
+							</Button>
 						</div>
 					</div>
 
@@ -3673,26 +3632,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							<>
 								<Button
 									className="w-full gap-2"
-									onClick={() => {
-										// Branches/seats staged above? Activate on that
-										// configuration directly — applyPlanConfiguration already
-										// redirects to Paystack for first-time payment when needed,
-										// same as the plain confirm-dialog path below. Otherwise
-										// fall back to the base-plan confirm dialog.
-										if (!isPlanConfigUnchanged) {
-											void applyPlanConfiguration();
-										} else {
-											setUpgradeConfirmOpen(true);
-										}
-									}}
-									disabled={isStartingSubscriptionCheckout || isApplyingPlanConfig || isQuotingPlanConfig}
+									onClick={() => setUpgradeConfirmOpen(true)}
+									disabled={isStartingSubscriptionCheckout}
 								>
-									{isStartingSubscriptionCheckout || isApplyingPlanConfig ? (
+									{isStartingSubscriptionCheckout ? (
 										<Loader2 className="w-4 h-4 animate-spin" />
 									) : (
 										<Zap className="w-4 h-4" />
 									)}
-									{isStartingSubscriptionCheckout || isApplyingPlanConfig
+									{isStartingSubscriptionCheckout
 										? "Redirecting..."
 										: "Upgrade Now"}
 								</Button>
@@ -4062,7 +4010,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		</Card>
 	);
 
-	const isChainScope = resolvedScope === "business" || resolvedScope === "branch" || resolvedScope === "subscription";
+	const isChainScope = resolvedScope === "business" || resolvedScope === "branch";
 
 	const chainTabHeaders: Record<string, { title: string; subtitle: string }> = {
 		profile:

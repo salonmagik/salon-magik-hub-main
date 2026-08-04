@@ -215,7 +215,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
           variant: "error",
           title: "Payment Failed",
           message: "Your payment has failed. Update your billing to avoid service interruption.",
-          cta: { label: "Update Billing", path: "/salon/subscription" },
+          cta: { label: "Update Billing", path: "/salon/settings?tab=subscription" },
           dismissible: false,
           blocking: true,
         });
@@ -235,7 +235,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
             variant: "error",
             title: "Trial Expired",
             message: "Your trial has ended. Upgrade now to restore full access.",
-            cta: { label: "Upgrade Now", path: "/salon/subscription" },
+            cta: { label: "Upgrade Now", path: "/salon/settings?tab=subscription" },
             dismissible: false,
             blocking: true,
           });
@@ -247,7 +247,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
             variant: "warning",
             title: "Trial Ending Soon",
             message: `Your trial ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Upgrade to continue.`,
-            cta: { label: "Upgrade", path: "/salon/subscription" },
+            cta: { label: "Upgrade", path: "/salon/settings?tab=subscription" },
             dismissible: true,
             blocking: false,
           });
@@ -259,7 +259,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
             variant: "warning",
             title: "Trial Ending Very Soon",
             message: `Your trial ends in ${hoursLeft} hour${hoursLeft === 1 ? "" : "s"}. Upgrade now!`,
-            cta: { label: "Upgrade Now", path: "/salon/subscription" },
+            cta: { label: "Upgrade Now", path: "/salon/settings?tab=subscription" },
             dismissible: true,
             blocking: false,
           });

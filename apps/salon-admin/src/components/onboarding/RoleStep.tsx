@@ -1,12 +1,7 @@
 import { cn } from "@shared/utils";
-import { Crown, ShieldCheck, UserCheck, type LucideIcon } from "lucide-react";
+import { Crown, ShieldCheck, UserCheck, ClipboardList, Scissors, type LucideIcon } from "lucide-react";
 
-// Only roles that can administer a business can start onboarding — a tenant
-// created by a receptionist/staff account has no one with billing or team
-// access, and the owner invite silently fails since only owner/manager/
-// supervisor have staff-invite permission by default. Those two roles join
-// an existing tenant via staff invitation instead, never by onboarding one.
-export type UserRole = "owner" | "manager" | "supervisor";
+export type UserRole = "owner" | "manager" | "supervisor" | "receptionist" | "staff";
 
 interface RoleStepProps {
   selectedRole: UserRole | null;
@@ -31,6 +26,18 @@ const ROLES: { id: UserRole; icon: LucideIcon; title: string; description: strin
     icon: UserCheck,
     title: "Supervisor",
     description: "Oversee staff and handle customer issues",
+  },
+  {
+    id: "receptionist",
+    icon: ClipboardList,
+    title: "Receptionist",
+    description: "Book appointments and manage customer check-ins",
+  },
+  {
+    id: "staff",
+    icon: Scissors,
+    title: "Staff",
+    description: "View assigned appointments and update status",
   },
 ];
 

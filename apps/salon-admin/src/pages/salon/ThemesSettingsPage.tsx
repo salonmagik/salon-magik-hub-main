@@ -812,7 +812,7 @@ export default function ThemesSettingsPage() {
         <DialogContent className="z-[200] sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>
-              {themePreviewKey === "ecommerce" ? "E-commerce theme:" : "Default theme:"} Here's how it looks to your customers
+              {themePreviewKey === "ecommerce" ? "E-commerce theme" : "Default theme"} ��� how it looks to your customers
             </DialogTitle>
             <DialogDescription>
               A simulation using your salon's name, brand color, banners, and content.

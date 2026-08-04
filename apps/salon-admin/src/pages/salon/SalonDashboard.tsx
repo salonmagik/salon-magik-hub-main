@@ -359,7 +359,7 @@ export default function SalonDashboard() {
 							variant="outline"
 							size="sm"
 							className="text-xs h-7 px-3 flex-shrink-0"
-							onClick={() => navigate("/salon/subscription")}
+							onClick={() => navigate("/salon/settings?tab=subscription")}
 						>
 							Top up
 						</Button>

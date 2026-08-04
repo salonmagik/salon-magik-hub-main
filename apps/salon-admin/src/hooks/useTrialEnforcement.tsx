@@ -75,8 +75,8 @@ export function useTrialEnforcement() {
       const { data, error } = await supabase.functions.invoke("create-checkout-session", {
         body: {
           tenantId: currentTenant.id,
-          successUrl: `${window.location.origin}/salon/subscription?subscription=success`,
-          cancelUrl: `${window.location.origin}/salon/subscription`,
+          successUrl: `${window.location.origin}/salon/settings?tab=subscription&subscription=success`,
+          cancelUrl: `${window.location.origin}/salon/settings?tab=subscription`,
         },
       });
 

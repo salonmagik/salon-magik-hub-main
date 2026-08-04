@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
 import { Button } from "@ui/button";
 import { Skeleton } from "@ui/skeleton";
-import { LoadingState } from "@ui/loading-state";
 import { Separator } from "@ui/separator";
 import { BookingActions } from "@/components/BookingActions";
 import {
@@ -485,7 +484,7 @@ export default function ClientBookingDetailPage() {
         {isVerifyingPayment && (
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="pt-4 flex items-center gap-3">
-              <LoadingState variant="inline" className="flex-shrink-0 text-primary" />
+              <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin flex-shrink-0" />
               <p className="text-sm font-medium text-primary">Verifying your payment — please wait…</p>
             </CardContent>
           </Card>

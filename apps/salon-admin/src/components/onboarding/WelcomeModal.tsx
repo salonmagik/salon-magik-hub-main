@@ -171,7 +171,7 @@ export function WelcomeModal({
         {
           body: {
             tenantId: currentTenant.id,
-            successUrl: `${origin}/salon/subscription?subscription=success`,
+            successUrl: `${origin}/salon/settings?tab=subscription&subscription=success`,
             cancelUrl: `${origin}/salon/overview`,
             billingCycle: selectedBillingCycle,
           },
@@ -234,19 +234,13 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* CTA row — only the owner can reach billing, so only the owner sees Subscribe now */}
+            {/* CTA row */}
             <div className="flex flex-col gap-3 pt-2">
-              {currentRole === "owner" && (
-                <Button className="w-full gap-2" onClick={() => setScreen("subscribe")}>
-                  Subscribe now
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              )}
-              <Button
-                variant={currentRole === "owner" ? "outline" : "default"}
-                className="w-full"
-                onClick={handleExplore}
-              >
+              <Button className="w-full gap-2" onClick={() => setScreen("subscribe")}>
+                Subscribe now
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" className="w-full" onClick={handleExplore}>
                 Start exploring
               </Button>
             </div>
