@@ -520,7 +520,10 @@ export default function PaymentsPage() {
         {[
           {
             title: "Today's Inflow",
-            value: sharedFormatCurrency(todayRevenueByCurrency[0]?.total ?? 0, todayRevenueByCurrency[0]?.currency ?? currency),
+            value: sharedFormatCurrency(
+              todayRevenueByCurrency[0]?.total ?? 0,
+              todayRevenueByCurrency[0]?.currency ?? currencyForCountry(effectiveCountry, currency)
+            ),
             icon: TrendingUp,
             color: "text-success",
             bg: "bg-success/10",
@@ -541,6 +544,7 @@ export default function PaymentsPage() {
             color: "text-primary",
             bg: "bg-primary/10",
             description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch.",
+            subtitle: availableCountries.length > 1 ? "All branches" : undefined,
           },
         ].map((s) => {
           const Icon = s.icon;
@@ -556,6 +560,9 @@ export default function PaymentsPage() {
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-56 text-xs">{s.description}</TooltipContent>
                     </Tooltip>
+                    {s.subtitle && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">{s.subtitle}</span>
+                    )}
                   </div>
                   <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p>
                 </div>
