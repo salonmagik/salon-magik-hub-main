@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, ShoppingCart, Wallet } from "lucide-react";
+import { Calendar, User, CreditCard, CheckCircle, Gift, ChevronLeft, ChevronRight, ShoppingCart, Wallet, RefreshCw, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +41,8 @@ interface BookingWizardProps {
   services?: PublicService[];
   packages?: PublicPackage[];
   products?: PublicProduct[];
+  /** Re-pulls the catalog from the server. Called on entering Review so prices are re-verified right before payment. */
+  refetchCatalog?: () => Promise<unknown>;
 }
 
 type WizardStep = "cart" | "scheduling" | "booker" | "gifts" | "review" | "payment" | "confirmation";
@@ -151,6 +153,7 @@ export function BookingWizard({
   services = [],
   packages = [],
   products = [],
+  refetchCatalog,
 }: BookingWizardProps) {
   const {
     items,
@@ -164,6 +167,7 @@ export function BookingWizard({
   const [step, setStep] = useState<WizardStep>("cart");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingReference, setBookingReference] = useState<string | null>(null);
+  const [priceUpdatedNotice, setPriceUpdatedNotice] = useState(false);
 
   const [bookerInfo, setBookerInfo] = useState<BookerInfo>({
     firstName: "",
@@ -299,6 +303,7 @@ export function BookingWizard({
   }, [packages, products, services]);
 
   useEffect(() => {
+    let anyPriceChanged = false;
     items.forEach((item) => {
       const source =
         item.type === "service"
@@ -330,17 +335,32 @@ export function BookingWizard({
         item.type === "package" &&
         JSON.stringify(item.serviceIds || []) !== JSON.stringify(nextServiceIds || []);
       const branchNameChanged = branchName !== item.branchName;
+      const nextPrice = typeof source.price === "number" ? source.price : item.price;
+      const priceChanged = nextPrice !== item.price;
 
-      if (branchesChanged || durationChanged || serviceIdsChanged || branchNameChanged) {
+      if (branchesChanged || durationChanged || serviceIdsChanged || branchNameChanged || priceChanged) {
         updateItem(item.id, {
           eligibleBranches: nextBranches,
           durationMinutes: nextDuration,
           serviceIds: nextServiceIds,
           branchName,
+          price: nextPrice,
         });
+        if (priceChanged) anyPriceChanged = true;
       }
     });
+    // Only surface the notice once items already exist to sync against —
+    // skip the very first population of an empty cart.
+    if (anyPriceChanged && items.length > 0) setPriceUpdatedNotice(true);
   }, [catalogLookup, items, updateItem]);
+
+  // Re-pull the catalog on entering Review so prices are re-verified
+  // against the server right before the customer pays, not just whatever
+  // was current when the page first loaded or an item was added to cart.
+  useEffect(() => {
+    if (step === "review") void refetchCatalog?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const stepConfig = useMemo(() => {
     const steps: { key: WizardStep; label: string; icon: React.ReactNode }[] = [
@@ -991,6 +1011,21 @@ export function BookingWizard({
                 sameRecipient={meta.giftsBelongToSamePerson}
                 onSameRecipientChange={(value) => updateMeta({ giftsBelongToSamePerson: value })}
               />
+            )}
+
+            {(step === "review" || step === "payment") && priceUpdatedNotice && (
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-sm text-blue-900">
+                <RefreshCw className="h-4 w-4 mt-0.5 shrink-0" />
+                <p className="flex-1">The salon updated a price since you added this to your cart — your total has been refreshed below.</p>
+                <button
+                  type="button"
+                  onClick={() => setPriceUpdatedNotice(false)}
+                  aria-label="Dismiss"
+                  className="shrink-0 text-blue-900/60 hover:text-blue-900"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             )}
 
             {step === "review" && (

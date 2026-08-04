@@ -128,6 +128,7 @@ function BookingPageContent() {
     products,
     categories,
     isLoading: catalogLoading,
+    refetch: refetchCatalog,
   } = usePublicCatalog(salon?.id, effectiveCountryCode, scopedLocationIds, catalogMode);
 
   const cartScopeKey = `${slug ?? "unknown"}:${effectiveCountryCode ?? "legacy"}`;
@@ -211,6 +212,7 @@ function BookingPageContent() {
         packages={packages}
         products={products}
         categories={categories}
+        refetchCatalog={refetchCatalog}
         storefrontCurrency={storefrontCurrency}
         isCatalogBlocked={isCatalogBlocked}
         scopedLocationIds={scopedLocationIds}
@@ -236,6 +238,7 @@ interface BookingPageWithCartProps {
   packages: PublicPackage[];
   products: PublicProduct[];
   categories: PublicCategory[];
+  refetchCatalog: () => Promise<unknown>;
   storefrontCurrency: string;
   isCatalogBlocked: boolean;
   scopedLocationIds: string[];
@@ -258,6 +261,7 @@ function BookingPageWithCart({
   packages,
   products,
   categories,
+  refetchCatalog,
   storefrontCurrency,
   isCatalogBlocked,
   scopedLocationIds,
@@ -427,6 +431,7 @@ function BookingPageWithCart({
         services={services}
         packages={packages}
         products={products}
+        refetchCatalog={refetchCatalog}
       />
 
       <PaymentStatusDialog
