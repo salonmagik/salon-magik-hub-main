@@ -174,11 +174,15 @@ serve(async (req) => {
       }
       targetUserId = created.user.id;
 
-      const { error: profileError } = await admin.from("profiles").insert({
+      // Upsert: a DB trigger on auth.users already creates a stub profiles
+      // row, so a plain insert here hits a duplicate-key conflict and
+      // silently drops the real name/phone (see send-staff-invitation for
+      // the same fix).
+      const { error: profileError } = await admin.from("profiles").upsert({
         user_id: targetUserId,
         full_name: `${firstName.trim()} ${lastName.trim()}`,
         phone: phone || null,
-      });
+      }, { onConflict: "user_id" });
       if (profileError) console.error("[backoffice-add-tenant-owner] profile insert error:", profileError);
     }
 

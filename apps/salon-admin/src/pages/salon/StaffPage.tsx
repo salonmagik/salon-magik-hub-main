@@ -763,7 +763,7 @@ export default function StaffPage() {
 								variant="outline"
 								className="w-full shrink-0 rounded-full sm:w-auto"
 								onClick={() =>
-									navigate("/salon/business-settings?tab=subscription")
+									navigate("/salon/subscription")
 								}
 							>
 								Upgrade to enable
@@ -1309,7 +1309,7 @@ export default function StaffPage() {
 				type="button"
 				aria-label="Invite staff"
 				onClick={() => setInviteDialogOpen(true)}
-				className="fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
+				className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
 			>
 				<Plus className="h-6 w-6" />
 			</button>

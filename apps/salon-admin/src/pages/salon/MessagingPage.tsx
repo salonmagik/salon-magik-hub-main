@@ -1072,14 +1072,14 @@ export default function MessagingPage() {
   return (
     <SalonSidebar>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-row items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Messaging</h1>
             <p className="mt-1 text-muted-foreground">
               Reach your customers the way they prefer.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
             <Button variant="outline" onClick={() => setHowItWorksOpen(true)}>
               How it works
             </Button>
@@ -1090,7 +1090,7 @@ export default function MessagingPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[220px] sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
           <Card className={compactTintedMetricCardClass.primary}>
             <CardContent className="flex items-start justify-between p-4">
               <div>
@@ -1538,12 +1538,10 @@ export default function MessagingPage() {
                             {
                               id: "sms" as const,
                               title: "SMS",
-                              helper: import.meta.env.PROD ? "Coming soon" : "Uses credits",
-                              description: import.meta.env.PROD
-                                ? "SMS broadcast is coming soon — stay tuned!"
-                                : "Best for quick reminders and short offers.",
+                              helper: "Uses credits",
+                              description: "Best for quick reminders and short offers.",
                               icon: Phone,
-                              disabled: import.meta.env.PROD,
+                              disabled: false,
                             },
                             {
                               id: "whatsapp",
@@ -2179,7 +2177,7 @@ export default function MessagingPage() {
           type="button"
           aria-label="Buy SMS credits"
           onClick={() => setCreditPurchaseDialogOpen(true)}
-          className="lg:hidden fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
+          className="lg:hidden fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
         >
           <Plus className="h-6 w-6" />
         </button>
