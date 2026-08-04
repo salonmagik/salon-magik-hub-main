@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/c
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
+import { LoadingState } from "@ui/loading-state";
 import { Progress } from "@ui/progress";
 import {
   Select,
@@ -221,9 +222,7 @@ export default function SalonsOverviewPage() {
   if (!currentTenant) {
     return (
       <SalonSidebar>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
+        <LoadingState variant="section" />
       </SalonSidebar>
     );
   }
