@@ -72,6 +72,7 @@ import { WithdrawalDialog } from "@/components/billing/WithdrawalDialog";
 import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
+import { currencyForCountry } from "@/lib/countryCurrency";
 import { CustomerBalancesPanel } from "@/components/payments/CustomerBalancesPanel";
 import { DateRangePicker, type DateRangePreset } from "@ui/date-range-picker";
 
@@ -170,6 +171,18 @@ export default function PaymentsPage() {
   const pageTitle = isOwnerHub ? "Cashflow & Payouts" : "Transactions";
   const currency = currentTenant?.currency || "USD";
 
+  // Chain tenants can span more than one country. The page always shows
+  // exactly one country's worth of transactions/accounts — no combined
+  // "all countries" view, since amounts in different currencies can't be
+  // summed. Only shown when the tenant actually has branches in more than
+  // one country; single-country tenants see no change.
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const availableCountries = Array.from(new Set(locations.map((loc) => loc.country))).sort();
+  const effectiveCountry = availableCountries.includes(selectedCountry)
+    ? selectedCountry
+    : (currentTenant?.country && availableCountries.includes(currentTenant.country) ? currentTenant.country : availableCountries[0]) || "";
+  const locationCountryById = new Map(locations.map((loc) => [loc.id, loc.country]));
+
   useEffect(() => {
     const tab = searchParams.get("tab");
     const type = searchParams.get("type");
@@ -205,6 +218,10 @@ export default function PaymentsPage() {
       const txnDate = new Date(txn.created_at);
       if (txnDate < dateRange.start || txnDate > dateRange.end) return false;
     }
+    if (isOwnerHub && effectiveCountry) {
+      const locationId = txn.appointment?.location_id;
+      if (!locationId || locationCountryById.get(locationId) !== effectiveCountry) return false;
+    }
     const matchesSearch =
       txn.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -225,6 +242,54 @@ export default function PaymentsPage() {
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
     return matchesSearch;
   });
+
+  // "Today's Inflow" and pending-refund totals are money — they must respect
+  // the country filter and never sum two currencies together, same as
+  // Business Overview. Store Credit is intentionally excluded: customer
+  // purses/wallets have no country dimension in the schema (one balance per
+  // tenant), so it can't be split by country without a data model change.
+  const appointmentLocationById = new Map(
+    transactions
+      .filter((txn) => txn.appointment)
+      .map((txn) => [txn.appointment!.id, txn.appointment!.location_id])
+  );
+
+  const todayRevenueByCurrency = (() => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const totals = new Map<string, number>();
+    for (const txn of transactions) {
+      if (new Date(txn.created_at) < startOfToday) continue;
+      if (!(txn.type === "payment" || txn.type === "deposit") || txn.status !== "completed") continue;
+      const locationId = txn.appointment?.location_id;
+      if (isOwnerHub && effectiveCountry && (!locationId || locationCountryById.get(locationId) !== effectiveCountry)) continue;
+      const country = locationId ? locationCountryById.get(locationId) : undefined;
+      const txnCurrency = currencyForCountry(country, currency);
+      totals.set(txnCurrency, (totals.get(txnCurrency) || 0) + Number(txn.amount));
+    }
+    return Array.from(totals.entries()).map(([currencyCode, total]) => ({ currency: currencyCode, total }));
+  })();
+
+  const countryFilteredPendingRefunds =
+    !isOwnerHub || !effectiveCountry
+      ? pendingRefunds
+      : pendingRefunds.filter((refund) => {
+          const appointmentId = refund.transaction?.appointment_id;
+          const locationId = appointmentId ? appointmentLocationById.get(appointmentId) : null;
+          return locationId && locationCountryById.get(locationId) === effectiveCountry;
+        });
+
+  const pendingRefundsTotalByCurrency = (() => {
+    const totals = new Map<string, number>();
+    for (const refund of countryFilteredPendingRefunds) {
+      const appointmentId = refund.transaction?.appointment_id;
+      const locationId = appointmentId ? appointmentLocationById.get(appointmentId) : null;
+      const country = locationId ? locationCountryById.get(locationId) : undefined;
+      const refundCurrency = currencyForCountry(country, refund.transaction?.currency || currency);
+      totals.set(refundCurrency, (totals.get(refundCurrency) || 0) + Number(refund.amount));
+    }
+    return Array.from(totals.entries()).map(([currencyCode, total]) => ({ currency: currencyCode, total }));
+  })();
 
   const handleExport = (fileFormat: "csv" | "xlsx") => {
     const data = filteredTransactions.map((txn) => ({
@@ -340,7 +405,7 @@ export default function PaymentsPage() {
               )}
             </div>
             <p className={cn("shrink-0 font-serif text-base font-semibold", isIncoming ? "text-success" : "text-destructive")}>
-              {isIncoming ? "+" : "-"}{formatCurrency(Number(txn.amount))}
+              {isIncoming ? "+" : "-"}{sharedFormatCurrency(Number(txn.amount), txn.currency)}
             </p>
           </div>
 
@@ -425,7 +490,7 @@ export default function PaymentsPage() {
           </div>
           <p className="min-w-0 truncate whitespace-nowrap text-sm">{methodLabels[txn.method] || txn.method}</p>
           <p className={cn("font-serif text-base font-semibold", isIncoming ? "text-success" : "text-destructive")}>
-              {isIncoming ? "+" : "-"}{formatCurrency(Number(txn.amount))}
+              {isIncoming ? "+" : "-"}{sharedFormatCurrency(Number(txn.amount), txn.currency)}
           </p>
           <div className="flex items-center justify-start gap-2">
             <Badge className={cn("rounded-full px-4 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
@@ -453,9 +518,30 @@ export default function PaymentsPage() {
       {/* Stats */}
       <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
         {[
-          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10", description: "Completed payments collected today." },
-          { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg", description: "Refund requests awaiting your approval, across all branches." },
-          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10", description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together." },
+          {
+            title: "Today's Inflow",
+            value: sharedFormatCurrency(todayRevenueByCurrency[0]?.total ?? 0, todayRevenueByCurrency[0]?.currency ?? currency),
+            icon: TrendingUp,
+            color: "text-success",
+            bg: "bg-success/10",
+            description: "Completed payments collected today.",
+          },
+          {
+            title: "Pending Refunds",
+            value: String(countryFilteredPendingRefunds.length),
+            icon: AlertCircle,
+            color: "text-warning-foreground",
+            bg: "bg-warning-bg",
+            description: "Refund requests awaiting your approval, across all branches.",
+          },
+          {
+            title: "Store Credit",
+            value: formatCurrency(stats.totalPurseBalance),
+            icon: Wallet,
+            color: "text-primary",
+            bg: "bg-primary/10",
+            description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch.",
+          },
         ].map((s) => {
           const Icon = s.icon;
           return (
@@ -481,7 +567,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Pending Refunds */}
-      {canCompleteRefunds && pendingRefunds.length > 0 && (
+      {canCompleteRefunds && countryFilteredPendingRefunds.length > 0 && (
         <Card className="border-warning/40 bg-warning-bg/20">
           <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-3">
@@ -490,10 +576,16 @@ export default function PaymentsPage() {
               </div>
               <div className="min-w-0">
                 <p className="font-medium">
-                  {pendingRefunds.length} refund {pendingRefunds.length === 1 ? "request" : "requests"} need review
+                  {countryFilteredPendingRefunds.length} refund {countryFilteredPendingRefunds.length === 1 ? "request" : "requests"} need review
                 </p>
                 <p className="truncate text-sm text-muted-foreground">
-                  {formatCurrency(pendingRefunds.reduce((total, refund) => total + Number(refund.amount), 0))} pending in total
+                  {pendingRefundsTotalByCurrency.map((entry, i) => (
+                    <span key={entry.currency}>
+                      {i > 0 && " + "}
+                      {sharedFormatCurrency(entry.total, entry.currency)}
+                    </span>
+                  ))}{" "}
+                  pending in total
                 </p>
               </div>
             </div>
@@ -702,7 +794,7 @@ export default function PaymentsPage() {
               <CardTitle className="text-base">All Payout Accounts</CardTitle>
               <p className="text-sm text-muted-foreground">Manage bank accounts and mobile money accounts for receiving withdrawals.</p>
             </CardHeader>
-            <CardContent><PayoutDestinationsManager /></CardContent>
+            <CardContent><PayoutDestinationsManager countryFilter={effectiveCountry || undefined} /></CardContent>
           </Card>
         </TabsContent>
 
@@ -845,10 +937,26 @@ export default function PaymentsPage() {
               {isOwnerHub ? "Income, refunds, and payouts across all branches." : "Track transactions, manage refunds, and monitor customer balances."}
             </p>
           </div>
-          <Button onClick={() => setRecordCashOpen(true)} className="hidden h-12 rounded-full px-7 lg:flex">
-            <Banknote className="mr-2 h-4 w-4" />
-            Record cash payment
-          </Button>
+          <div className="flex items-center gap-2">
+            {isOwnerHub && availableCountries.length > 1 && (
+              <Select value={effectiveCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCountries.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button onClick={() => setRecordCashOpen(true)} className="hidden h-12 rounded-full px-7 lg:flex">
+              <Banknote className="mr-2 h-4 w-4" />
+              Record cash payment
+            </Button>
+          </div>
         </div>
 
         {isOwnerHub ? (
@@ -880,7 +988,7 @@ export default function PaymentsPage() {
           <button
             type="button"
             aria-label="Transaction actions"
-            className="fixed bottom-20 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
+            className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
           >
             <Plus className="h-6 w-6" />
           </button>
@@ -1015,7 +1123,7 @@ export default function PaymentsPage() {
                       </Badge>
                     </div>
                     <p className="mt-1 text-sm font-medium">
-                      {formatCurrency(Number(refund.amount))} · {refund.refund_type.replace("_", " ")}
+                      {sharedFormatCurrency(Number(refund.amount), refund.transaction?.currency || currency)} · {refund.refund_type.replace("_", " ")}
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{refund.reason}</p>
                   </div>

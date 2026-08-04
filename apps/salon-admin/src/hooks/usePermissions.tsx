@@ -57,6 +57,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:archive": true,
     "catalog:flag": true,
     promo_trial_bonus: true,
+    billing: true,
   },
   manager: {
     dashboard: true,
@@ -82,6 +83,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:archive": true,
     "catalog:flag": true,
     promo_trial_bonus: true,
+    billing: false,
   },
   supervisor: {
     dashboard: true,
@@ -107,6 +109,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:archive": false,
     "catalog:flag": true,
     promo_trial_bonus: false,
+    billing: false,
   },
   receptionist: {
     dashboard: true,
@@ -132,6 +135,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:archive": false,
     "catalog:flag": false,
     promo_trial_bonus: false,
+    billing: false,
   },
   staff: {
     dashboard: false,
@@ -157,6 +161,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, Record<string, boolean>> 
     "catalog:archive": false,
     "catalog:flag": false,
     promo_trial_bonus: false,
+    billing: false,
   },
 };
 
@@ -184,6 +189,7 @@ export const MODULE_LABELS: Record<string, string> = {
   "catalog:archive": "Archive Catalog Items",
   "catalog:flag": "Flag Catalog Items",
   promo_trial_bonus: "Apply Promo Code / Trial Bonus",
+  billing: "Billing & Subscription",
 };
 
 export function usePermissions() {

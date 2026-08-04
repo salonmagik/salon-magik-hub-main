@@ -819,7 +819,7 @@ export default function CustomersPage() {
 					<button
 						type="button"
 						aria-label="Add or import customers"
-						className="lg:hidden fixed bottom-20 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
+						className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
 					>
 						<Plus className="w-6 h-6" />
 					</button>

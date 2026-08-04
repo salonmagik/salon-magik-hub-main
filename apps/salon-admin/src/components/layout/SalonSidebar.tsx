@@ -295,6 +295,12 @@ const mainNavItems: NavItem[] = [
 		module: "notifications",
 	},
 	{
+		label: "Subscription",
+		icon: Zap,
+		path: "/salon/subscription",
+		module: "billing",
+	},
+	{
 		label: "Settings",
 		icon: Settings,
 		path: "/salon/settings",
@@ -429,7 +435,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
                 { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
                 { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
-                { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
                 { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
                 { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
@@ -446,7 +451,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
               { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
               { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
-              { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
               { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
               { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
@@ -1151,7 +1155,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<nav className="fixed bottom-0 inset-x-0 lg:hidden z-50 pb-[env(safe-area-inset-bottom)]">
 								<div
 									className="mx-2.5 mb-3 flex items-center justify-around rounded-[26px] px-1.5 py-2 shadow-[0_16px_32px_rgba(46,31,78,0.35)]"
-									style={{ background: "linear-gradient(175deg, #4B3A76 0%, #3D2E63 100%)" }}
+									style={{ background: "white" }}
 								>
 									{[
 										{
@@ -1165,7 +1169,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											path: "/salon/appointments",
 										},
 										{
-											label: "",
+											label: "Services",
 											icon: Scissors,
 											path: "/salon/services",
 										},
@@ -1175,7 +1179,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											path: "/salon/transactions",
 										},
 										{
-											label: "Clients",
+											label: "Customers",
 											icon: Users,
 											path: "/salon/customers",
 										},
@@ -1195,13 +1199,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 													strokeWidth={1.8}
 													className={cn(
 														"h-[19px] w-[19px]",
-														active ? "text-[#2E1F4E]" : "text-white/60",
+														active ? "text-[#2E1F4E]" : "text-[#2E1F4E]",
 													)}
 												/>
 												<span
 													className={cn(
 														"text-[9.5px] font-semibold",
-														active ? "text-[#2E1F4E]" : "text-white/60",
+														active ? "text-[#2E1F4E]" : "text-[#2E1F4E]",
 													)}
 												>
 													{label}
