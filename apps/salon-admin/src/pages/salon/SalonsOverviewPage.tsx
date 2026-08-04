@@ -47,6 +47,7 @@ import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatCurrency } from "@shared/currency";
+import { countryName } from "@/lib/countryCurrency";
 import { Link, useNavigate } from "react-router-dom";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 import {
@@ -67,8 +68,10 @@ type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
+  const [selectedCountry, setSelectedCountry] = useState<string>("all");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
+  const [insightCurrency, setInsightCurrency] = useState<string | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
   const [quickActionPopover, setQuickActionPopover] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -102,34 +105,67 @@ export default function SalonsOverviewPage() {
     availableContexts.find((context) => context.type === "location" && context.locationId === activeLocationId)
       ?.label || "Selected branch";
 
+  // Chain tenants can span more than one country/currency — the switcher
+  // only appears when there's actually more than one to switch between.
+  const availableCountries = useMemo(
+    () => Array.from(new Set(locations.map((loc) => loc.country))).sort(),
+    [locations]
+  );
+
+  const filteredLocations = useMemo(
+    () => (selectedCountry === "all" ? locations : locations.filter((loc) => loc.country === selectedCountry)),
+    [locations, selectedCountry]
+  );
+
+  // Revenue never gets summed or ranked across currencies — grouped by
+  // currency first, every money figure derived within its own group.
+  const currencyGroups = useMemo(() => {
+    const map = new Map<string, typeof locations>();
+    for (const loc of filteredLocations) {
+      const group = map.get(loc.currency) || [];
+      group.push(loc);
+      map.set(loc.currency, group);
+    }
+    return map;
+  }, [filteredLocations]);
+
   // Calculate aggregate stats
   const aggregateStats = useMemo(() => {
-    if (!locations.length) return null;
+    if (!filteredLocations.length) return null;
 
-    const totalRevenue = locations.reduce((sum, loc) => sum + loc.revenue, 0);
-    const totalBookings = locations.reduce((sum, loc) => sum + loc.bookingCount, 0);
-    const totalStaffOnline = locations.reduce((sum, loc) => sum + loc.staffOnline, 0);
-    const totalOutstanding = locations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
-    const totalPendingApprovals = locations.reduce((sum, loc) => sum + loc.pendingApprovals, 0);
-    const totalUnpaidBalances = locations.reduce((sum, loc) => sum + loc.unpaidBalances, 0);
-    const avgSatisfaction = locations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / locations.length;
+    const totalBookings = filteredLocations.reduce((sum, loc) => sum + loc.bookingCount, 0);
+    const totalStaffOnline = filteredLocations.reduce((sum, loc) => sum + loc.staffOnline, 0);
+    const totalOutstanding = filteredLocations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
+    const totalPendingApprovals = filteredLocations.reduce((sum, loc) => sum + loc.pendingApprovals, 0);
+    const totalUnpaidBalances = filteredLocations.reduce((sum, loc) => sum + loc.unpaidBalances, 0);
+    const avgSatisfaction =
+      filteredLocations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / filteredLocations.length;
 
-    const bestPerforming = [...locations].sort((a, b) => b.revenue - a.revenue)[0];
-    const worstPerforming = [...locations].sort((a, b) => a.revenue - b.revenue)[0];
+    const revenueByCurrency = Array.from(currencyGroups.entries()).map(([currencyCode, locs]) => ({
+      currency: currencyCode,
+      total: locs.reduce((sum, loc) => sum + loc.revenue, 0),
+    }));
+
+    const bestWorstByCurrency = Array.from(currencyGroups.entries())
+      .filter(([, locs]) => locs.length > 1)
+      .map(([currencyCode, locs]) => ({
+        currency: currencyCode,
+        best: [...locs].sort((a, b) => b.revenue - a.revenue)[0],
+        worst: [...locs].sort((a, b) => a.revenue - b.revenue)[0],
+      }));
 
     return {
-      totalRevenue,
       totalBookings,
       totalStaffOnline,
       totalOutstanding,
       totalPendingApprovals,
       totalUnpaidBalances,
       avgSatisfaction,
-      bestPerforming,
-      worstPerforming,
-      locationCount: locations.length,
+      revenueByCurrency,
+      bestWorstByCurrency,
+      locationCount: filteredLocations.length,
     };
-  }, [locations]);
+  }, [filteredLocations, currencyGroups]);
 
   const branchContexts = availableContexts.filter((c) => c.type === "location");
   const pausedBranchCount = branchContexts.filter((c) => c.isPaused).length;
@@ -178,18 +214,22 @@ export default function SalonsOverviewPage() {
     }
   };
 
-  const currency = currentTenant?.currency || "USD";
   const canViewRevenueAnalytics =
     currentRole === "owner" || (!permissionsLoading && hasPermission("reports"));
   const canShowPerformanceInsights = (aggregateStats?.totalBookings || 0) >= 6;
-  const bestRevenue = aggregateStats?.bestPerforming?.revenue ?? 0;
-  const worstRevenue = aggregateStats?.worstPerforming?.revenue ?? 0;
-  const bestPerformingLocations = canShowPerformanceInsights
-    ? locations.filter((location) => location.revenue === bestRevenue)
-    : [];
-  const needsAttentionLocations = canShowPerformanceInsights
-    ? locations.filter((location) => location.revenue === worstRevenue)
-    : [];
+  const activeBestWorstGroup = aggregateStats?.bestWorstByCurrency.find((g) => g.currency === insightCurrency) || null;
+  const bestPerformingLocations =
+    canShowPerformanceInsights && activeBestWorstGroup
+      ? (currencyGroups.get(activeBestWorstGroup.currency) || []).filter(
+          (location) => location.revenue === activeBestWorstGroup.best.revenue
+        )
+      : [];
+  const needsAttentionLocations =
+    canShowPerformanceInsights && activeBestWorstGroup
+      ? (currencyGroups.get(activeBestWorstGroup.currency) || []).filter(
+          (location) => location.revenue === activeBestWorstGroup.worst.revenue
+        )
+      : [];
   const insightLocations = insightDialogType === "best" ? bestPerformingLocations : needsAttentionLocations;
   const selectedInsightLocation =
     insightLocations.find((location) => location.id === insightLocationId) || insightLocations[0] || null;
@@ -221,6 +261,21 @@ export default function SalonsOverviewPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {availableCountries.length > 1 && (
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All countries</SelectItem>
+                  {availableCountries.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {countryName(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue />
@@ -392,9 +447,20 @@ export default function SalonsOverviewPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">
-                        {formatCurrency(aggregateStats.totalRevenue, currency)}
-                      </div>
+                      {aggregateStats.revenueByCurrency.length > 1 ? (
+                        <div className="space-y-0.5">
+                          {aggregateStats.revenueByCurrency.map((entry) => (
+                            <div key={entry.currency} className="text-lg font-bold">
+                              {formatCurrency(entry.total, entry.currency)}
+                              <span className="ml-1.5 text-xs font-medium text-muted-foreground">{entry.currency}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-bold">
+                          {formatCurrency(aggregateStats.revenueByCurrency[0]?.total ?? 0, aggregateStats.revenueByCurrency[0]?.currency ?? currentTenant?.currency ?? "USD")}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -454,99 +520,111 @@ export default function SalonsOverviewPage() {
               </div>
             )}
 
-            {/* Best & Worst Performers */}
-            {canViewRevenueAnalytics && aggregateStats && aggregateStats.locationCount > 1 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="border-success/30 bg-success/5">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-success flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
-                      Best Performing
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-56 text-xs">
-                          Branch with the highest inflow this period.
-                        </TooltipContent>
-                      </Tooltip>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {canShowPerformanceInsights ? (
-                      <button
-                        type="button"
-                        className="w-full text-left"
-                        onClick={() => {
-                          setInsightDialogType("best");
-                          setInsightLocationId(bestPerformingLocations[0]?.id || null);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-lg">{aggregateStats.bestPerforming.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} inflow
-                            </p>
-                          </div>
-                          <Badge variant="secondary" className="bg-success/10 text-success">
-                            <Star className="w-3 h-3 mr-1" />
-                            Top
-                          </Badge>
-                        </div>
-                      </button>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Not enough data yet. At least 6 transactions are required.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card className="border-warning/30 bg-warning/5">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-warning-foreground flex items-center gap-2">
-                      <TrendingDown className="w-4 h-4" />
-                      Needs Attention
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-56 text-xs">
-                          Branch with the lowest inflow this period — not necessarily a problem, just the one worth a closer look.
-                        </TooltipContent>
-                      </Tooltip>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {canShowPerformanceInsights ? (
-                      <button
-                        type="button"
-                        className="w-full text-left"
-                        onClick={() => {
-                          setInsightDialogType("attention");
-                          setInsightLocationId(needsAttentionLocations[0]?.id || null);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-semibold text-lg">{aggregateStats.worstPerforming.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} inflow
-                            </p>
-                          </div>
-                          <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
-                            <Activity className="w-3 h-3 mr-1" />
-                            Review
-                          </Badge>
-                        </div>
-                      </button>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Not enough data yet. At least 6 transactions are required.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+            {/* Best & Worst Performers — one pair per currency, never ranked across currencies */}
+            {canViewRevenueAnalytics && aggregateStats && aggregateStats.bestWorstByCurrency.length > 0 && (
+              <div className="space-y-4">
+                {aggregateStats.bestWorstByCurrency.map((group) => (
+                  <div key={group.currency} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card className="border-success/30 bg-success/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-success flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4" />
+                          Best Performing
+                          {aggregateStats.bestWorstByCurrency.length > 1 && (
+                            <Badge variant="outline" className="font-normal">{group.currency}</Badge>
+                          )}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Branch with the highest inflow this period, compared against branches billing in the same currency.
+                            </TooltipContent>
+                          </Tooltip>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {canShowPerformanceInsights ? (
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            onClick={() => {
+                              setInsightDialogType("best");
+                              setInsightCurrency(group.currency);
+                              setInsightLocationId(group.best.id);
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-semibold text-lg">{group.best.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatCurrency(group.best.revenue, group.currency)} inflow
+                                </p>
+                              </div>
+                              <Badge variant="secondary" className="bg-success/10 text-success">
+                                <Star className="w-3 h-3 mr-1" />
+                                Top
+                              </Badge>
+                            </div>
+                          </button>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Not enough data yet. At least 6 transactions are required.
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-warning/30 bg-warning/5">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-warning-foreground flex items-center gap-2">
+                          <TrendingDown className="w-4 h-4" />
+                          Needs Attention
+                          {aggregateStats.bestWorstByCurrency.length > 1 && (
+                            <Badge variant="outline" className="font-normal">{group.currency}</Badge>
+                          )}
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Branch with the lowest inflow this period among branches billing in the same currency — not necessarily a problem, just the one worth a closer look.
+                            </TooltipContent>
+                          </Tooltip>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {canShowPerformanceInsights ? (
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            onClick={() => {
+                              setInsightDialogType("attention");
+                              setInsightCurrency(group.currency);
+                              setInsightLocationId(group.worst.id);
+                            }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-semibold text-lg">{group.worst.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {formatCurrency(group.worst.revenue, group.currency)} inflow
+                                </p>
+                              </div>
+                              <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
+                                <Activity className="w-3 h-3 mr-1" />
+                                Review
+                              </Badge>
+                            </div>
+                          </button>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Not enough data yet. At least 6 transactions are required.
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -559,7 +637,7 @@ export default function SalonsOverviewPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {locations.length === 0 ? (
+                {filteredLocations.length === 0 ? (
                   <div className="text-center py-12">
                     <Building2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                     <h3 className="font-medium mb-1">No branches found</h3>
@@ -618,20 +696,23 @@ export default function SalonsOverviewPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {locations.map((location) => (
+                      {filteredLocations.map((location) => (
                         <TableRow key={location.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <MapPin className="w-4 h-4 text-muted-foreground" />
                               <div>
                                 <p className="font-medium">{location.name}</p>
-                                <p className="text-xs text-muted-foreground">{location.city}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {location.city}
+                                  {selectedCountry === "all" && availableCountries.length > 1 && ` · ${location.country}`}
+                                </p>
                               </div>
                             </div>
                           </TableCell>
                           {canViewRevenueAnalytics && (
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(location.revenue, currency)}
+                              {formatCurrency(location.revenue, location.currency)}
                             </TableCell>
                           )}
                           <TableCell className="text-right hidden sm:table-cell">
@@ -729,7 +810,7 @@ export default function SalonsOverviewPage() {
                     <TableRow>
                       <TableCell>{selectedInsightLocation.name}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(selectedInsightLocation.revenue, currency)}
+                        {formatCurrency(selectedInsightLocation.revenue, selectedInsightLocation.currency)}
                       </TableCell>
                       <TableCell className="text-right">{selectedInsightLocation.bookingCount}</TableCell>
                       <TableCell className="text-right">{selectedInsightLocation.outstandingAppointments}</TableCell>

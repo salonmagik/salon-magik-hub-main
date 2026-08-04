@@ -170,6 +170,13 @@ export default function PaymentsPage() {
   const pageTitle = isOwnerHub ? "Cashflow & Payouts" : "Transactions";
   const currency = currentTenant?.currency || "USD";
 
+  // Chain tenants can span more than one country — narrows transactions and
+  // payout accounts to one country/currency at a time. Only shown when the
+  // tenant actually has branches in more than one.
+  const [selectedCountry, setSelectedCountry] = useState<string>("all");
+  const availableCountries = Array.from(new Set(locations.map((loc) => loc.country))).sort();
+  const locationCountryById = new Map(locations.map((loc) => [loc.id, loc.country]));
+
   useEffect(() => {
     const tab = searchParams.get("tab");
     const type = searchParams.get("type");
@@ -204,6 +211,10 @@ export default function PaymentsPage() {
     if (dateRange) {
       const txnDate = new Date(txn.created_at);
       if (txnDate < dateRange.start || txnDate > dateRange.end) return false;
+    }
+    if (selectedCountry !== "all") {
+      const locationId = txn.appointment?.location_id;
+      if (!locationId || locationCountryById.get(locationId) !== selectedCountry) return false;
     }
     const matchesSearch =
       txn.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -702,7 +713,7 @@ export default function PaymentsPage() {
               <CardTitle className="text-base">All Payout Accounts</CardTitle>
               <p className="text-sm text-muted-foreground">Manage bank accounts and mobile money accounts for receiving withdrawals.</p>
             </CardHeader>
-            <CardContent><PayoutDestinationsManager /></CardContent>
+            <CardContent><PayoutDestinationsManager countryFilter={selectedCountry === "all" ? undefined : selectedCountry} /></CardContent>
           </Card>
         </TabsContent>
 
@@ -845,10 +856,27 @@ export default function PaymentsPage() {
               {isOwnerHub ? "Income, refunds, and payouts across all branches." : "Track transactions, manage refunds, and monitor customer balances."}
             </p>
           </div>
-          <Button onClick={() => setRecordCashOpen(true)} className="hidden h-12 rounded-full px-7 lg:flex">
-            <Banknote className="mr-2 h-4 w-4" />
-            Record cash payment
-          </Button>
+          <div className="flex items-center gap-2">
+            {isOwnerHub && availableCountries.length > 1 && (
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All countries</SelectItem>
+                  {availableCountries.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button onClick={() => setRecordCashOpen(true)} className="hidden h-12 rounded-full px-7 lg:flex">
+              <Banknote className="mr-2 h-4 w-4" />
+              Record cash payment
+            </Button>
+          </div>
         </div>
 
         {isOwnerHub ? (
