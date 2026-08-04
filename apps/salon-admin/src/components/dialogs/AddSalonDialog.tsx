@@ -136,7 +136,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
   const goToSubscriptionSettings = () => {
     onOpenChange(false);
-    navigate("/salon/subscription");
+    navigate("/salon/business-settings?tab=subscription");
   };
 
   const createLocationRecord = async () => {

@@ -549,20 +549,6 @@ export default function BackofficeSettingsPage() {
         starts_at: overrideStartsAt,
         ends_at: overrideEndsAt,
       });
-
-      // Best-effort — the override is already live regardless of whether
-      // this notification succeeds.
-      supabase.functions
-        .invoke("send-trial-extension-notice", {
-          body: {
-            tenantId: overrideTenantId.trim(),
-            reason: "gifted_override",
-            overrideStartsAt: new Date(overrideStartsAt).toISOString(),
-            overrideEndsAt: new Date(overrideEndsAt).toISOString(),
-            overrideReason: overrideReason.trim() || undefined,
-          },
-        })
-        .catch((err) => console.error("Failed to send trial extension notice:", err));
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tenant-trial-overrides"] });

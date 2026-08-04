@@ -12,22 +12,14 @@ import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
 import { cn } from "@shared/utils";
 
-interface PayoutDestinationsManagerProps {
-  /** Narrow the list to one country (e.g. from a page-level country switcher). Omit/undefined shows every account. */
-  countryFilter?: string;
-}
-
 // Renders flat — no outer Card — intended to be embedded inside a settings section.
-export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsManagerProps = {}) {
+export function PayoutDestinationsManager() {
   const { currentTenant } = useAuth();
-  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, retrySubaccount } = usePayoutDestinations(currentTenant?.id);
-  const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
+  const { destinations, isLoading, createDestination, deleteDestination, retrySubaccount } = usePayoutDestinations(currentTenant?.id);
 
   const [showForm, setShowForm] = useState(false);
   const tenantCountry: "NG" | "GH" = currentTenant?.country === "GH" ? "GH" : "NG";
-  const [country, setCountry] = useState<"NG" | "GH">(
-    countryFilter === "GH" || countryFilter === "NG" ? countryFilter : tenantCountry
-  );
+  const [country, setCountry] = useState<"NG" | "GH">(tenantCountry);
   const [destinationType, setDestinationType] = useState<"bank" | "mobile_money">("bank");
   const [selectedBank, setSelectedBank] = useState<string>("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -129,9 +121,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
       {/* Empty state — only shown when no destinations and no form */}
       {destinations.length === 0 && !showForm && (
         <p className="text-sm text-muted-foreground py-2">
-          {countryFilter && allDestinations.length > 0
-            ? "No payout accounts for this country yet. Add one below."
-            : "No payout accounts yet. Add one below to enable withdrawals."}
+          No payout accounts yet. Add one below to enable withdrawals.
         </p>
       )}
 
@@ -155,8 +145,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
                 <SelectTrigger id="type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bank">Bank Account</SelectItem>
-                  {/* Paystack doesn't support mobile money payouts in Nigeria — only Ghana. */}
-                  {country !== "NG" && <SelectItem value="mobile_money">Mobile Money</SelectItem>}
+                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
                 </SelectContent>
               </Select>
             </div>

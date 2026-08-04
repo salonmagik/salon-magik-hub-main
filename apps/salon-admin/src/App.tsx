@@ -25,7 +25,6 @@ const ServicesPage = lazy(() => import("./pages/salon/ServicesPage"));
 const SettingsPage = lazy(() => import("./pages/salon/SettingsPage"));
 const BusinessSettingsPage = lazy(() => import("./pages/salon/BusinessSettingsPage"));
 const BranchSettingsPage = lazy(() => import("./pages/salon/BranchSettingsPage"));
-const SubscriptionPage = lazy(() => import("./pages/salon/SubscriptionPage"));
 const PaymentsPage = lazy(() => import("./pages/salon/PaymentsPage"));
 const ReportsPage = lazy(() => import("./pages/salon/ReportsPage"));
 const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
@@ -338,16 +337,6 @@ const App = () => (
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="settings">
                       <BusinessSettingsPage />
-                    </ModuleProtectedRoute>
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/salon/subscription"
-                element={
-                  <ProtectedRoute>
-                    <ModuleProtectedRoute module="billing">
-                      <SubscriptionPage />
                     </ModuleProtectedRoute>
                   </ProtectedRoute>
                 }

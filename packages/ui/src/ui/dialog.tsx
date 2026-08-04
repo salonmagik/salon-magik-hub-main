@@ -36,13 +36,8 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // Centered and sized to content (up to the max-height cap), not
-        // stretched to fill the viewport — a short dialog on a tall phone
-        // screen used to end up mostly empty space between its content and
-        // the close button/footer. overflow-y-auto still kicks in once
-        // content actually exceeds the cap.
-        "fixed left-3 right-3 top-1/2 z-50 grid w-auto max-h-[calc(100vh-1.5rem)] -translate-y-1/2 overflow-y-auto scrollbar-hide gap-5 rounded-[24px] border-0 bg-background p-5 shadow-2xl duration-200",
-        "sm:left-[50%] sm:right-auto sm:top-[50%] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[90vh] sm:p-8",
+        "fixed inset-3 z-50 grid w-auto max-h-[calc(100vh-1.5rem)] overflow-y-auto scrollbar-hide gap-5 rounded-[24px] border-0 bg-background p-5 shadow-2xl duration-200",
+        "sm:inset-auto sm:left-[50%] sm:top-[50%] sm:w-full sm:max-w-lg sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-h-[90vh] sm:p-8",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className,
       )}
