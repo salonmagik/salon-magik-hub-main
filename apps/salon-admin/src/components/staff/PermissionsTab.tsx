@@ -29,7 +29,13 @@ const MODULES = [
   { key: "journal", label: "Cash Tracker", description: "View and manage Cash Tracker entries" },
   { key: "staff", label: "Staff", description: "Manage staff members" },
   { key: "settings", label: "Settings", description: "Manage salon settings" },
+  { key: "billing", label: "Billing & Subscription", description: "Manage plan, billing, and payment info — manager/supervisor only" },
 ];
+
+// Billing is sensitive enough that only manager/supervisor can ever hold it —
+// receptionist/staff can't toggle it on even though the table renders a row
+// for every role.
+const BILLING_ELIGIBLE_ROLES: AppRole[] = ["manager", "supervisor"];
 
 const ROLES: AppRole[] = ["owner", "manager", "supervisor", "receptionist", "staff"];
 
@@ -123,6 +129,8 @@ export function PermissionsTab() {
   const togglePermission = (role: AppRole, module: string) => {
     // Owner permissions cannot be changed
     if (role === "owner") return;
+    // Billing can only ever be granted to manager/supervisor
+    if (module === "billing" && !BILLING_ELIGIBLE_ROLES.includes(role)) return;
 
     setPermissions((prev) =>
       prev.map((p) => {
@@ -250,7 +258,10 @@ export function PermissionsTab() {
                       <Checkbox
                         checked={getPermission(role, module.key)}
                         onCheckedChange={() => togglePermission(role, module.key)}
-                        disabled={role === "owner"} // Owner always has full access
+                        disabled={
+                          role === "owner" || // Owner always has full access
+                          (module.key === "billing" && !BILLING_ELIGIBLE_ROLES.includes(role))
+                        }
                         className="mx-auto"
                       />
                     </td>

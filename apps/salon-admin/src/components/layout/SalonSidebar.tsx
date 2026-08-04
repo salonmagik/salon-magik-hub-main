@@ -295,6 +295,12 @@ const mainNavItems: NavItem[] = [
 		module: "notifications",
 	},
 	{
+		label: "Subscription",
+		icon: Zap,
+		path: "/salon/subscription",
+		module: "billing",
+	},
+	{
 		label: "Settings",
 		icon: Settings,
 		path: "/salon/settings",
@@ -429,7 +435,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
                 { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
                 { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
-                { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
                 { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
                 { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
@@ -446,7 +451,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
               { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
               { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
-              { label: "Subscription", icon: Zap, path: "/salon/business-settings?tab=subscription" },
               { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
               { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },

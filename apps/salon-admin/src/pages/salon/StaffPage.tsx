@@ -763,7 +763,7 @@ export default function StaffPage() {
 								variant="outline"
 								className="w-full shrink-0 rounded-full sm:w-auto"
 								onClick={() =>
-									navigate("/salon/business-settings?tab=subscription")
+									navigate("/salon/subscription")
 								}
 							>
 								Upgrade to enable

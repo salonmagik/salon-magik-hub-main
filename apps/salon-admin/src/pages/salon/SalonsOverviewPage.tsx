@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/c
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
+import { LoadingState } from "@ui/loading-state";
 import { Progress } from "@ui/progress";
 import {
   Select,
@@ -47,6 +48,7 @@ import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatCurrency } from "@shared/currency";
+import { countryName } from "@/lib/countryCurrency";
 import { Link, useNavigate } from "react-router-dom";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 import {
@@ -67,6 +69,7 @@ type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
@@ -102,23 +105,46 @@ export default function SalonsOverviewPage() {
     availableContexts.find((context) => context.type === "location" && context.locationId === activeLocationId)
       ?.label || "Selected branch";
 
-  // Calculate aggregate stats
+  // Chain tenants can span more than one country/currency. The page always
+  // shows exactly one country's worth of branches — no combined "all
+  // countries" view, since revenue in different currencies can't be summed
+  // or ranked together. The switcher only appears when there's actually
+  // more than one country to switch between; single-country tenants (almost
+  // everyone) see no change.
+  const availableCountries = useMemo(
+    () => Array.from(new Set(locations.map((loc) => loc.country))).sort(),
+    [locations]
+  );
+  const effectiveCountry = availableCountries.includes(selectedCountry)
+    ? selectedCountry
+    : (currentTenant?.country && availableCountries.includes(currentTenant.country) ? currentTenant.country : availableCountries[0]) || "";
+
+  const filteredLocations = useMemo(
+    () => (effectiveCountry ? locations.filter((loc) => loc.country === effectiveCountry) : locations),
+    [locations, effectiveCountry]
+  );
+
+  // Calculate aggregate stats — always within the single selected country,
+  // so revenue is always one currency, never summed/ranked across two.
   const aggregateStats = useMemo(() => {
-    if (!locations.length) return null;
+    if (!filteredLocations.length) return null;
 
-    const totalRevenue = locations.reduce((sum, loc) => sum + loc.revenue, 0);
-    const totalBookings = locations.reduce((sum, loc) => sum + loc.bookingCount, 0);
-    const totalStaffOnline = locations.reduce((sum, loc) => sum + loc.staffOnline, 0);
-    const totalOutstanding = locations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
-    const totalPendingApprovals = locations.reduce((sum, loc) => sum + loc.pendingApprovals, 0);
-    const totalUnpaidBalances = locations.reduce((sum, loc) => sum + loc.unpaidBalances, 0);
-    const avgSatisfaction = locations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / locations.length;
+    const totalRevenue = filteredLocations.reduce((sum, loc) => sum + loc.revenue, 0);
+    const totalBookings = filteredLocations.reduce((sum, loc) => sum + loc.bookingCount, 0);
+    const totalStaffOnline = filteredLocations.reduce((sum, loc) => sum + loc.staffOnline, 0);
+    const totalOutstanding = filteredLocations.reduce((sum, loc) => sum + loc.outstandingAppointments, 0);
+    const totalPendingApprovals = filteredLocations.reduce((sum, loc) => sum + loc.pendingApprovals, 0);
+    const totalUnpaidBalances = filteredLocations.reduce((sum, loc) => sum + loc.unpaidBalances, 0);
+    const avgSatisfaction =
+      filteredLocations.reduce((sum, loc) => sum + (loc.customerSatisfaction || 0), 0) / filteredLocations.length;
 
-    const bestPerforming = [...locations].sort((a, b) => b.revenue - a.revenue)[0];
-    const worstPerforming = [...locations].sort((a, b) => a.revenue - b.revenue)[0];
+    const revenueCurrency = filteredLocations[0]?.currency ?? currentTenant?.currency ?? "USD";
+    const bestPerforming = [...filteredLocations].sort((a, b) => b.revenue - a.revenue)[0];
+    const worstPerforming = [...filteredLocations].sort((a, b) => a.revenue - b.revenue)[0];
 
     return {
       totalRevenue,
+      revenueCurrency,
       totalBookings,
       totalStaffOnline,
       totalOutstanding,
@@ -127,9 +153,9 @@ export default function SalonsOverviewPage() {
       avgSatisfaction,
       bestPerforming,
       worstPerforming,
-      locationCount: locations.length,
+      locationCount: filteredLocations.length,
     };
-  }, [locations]);
+  }, [filteredLocations, currentTenant?.currency]);
 
   const branchContexts = availableContexts.filter((c) => c.type === "location");
   const pausedBranchCount = branchContexts.filter((c) => c.isPaused).length;
@@ -178,17 +204,16 @@ export default function SalonsOverviewPage() {
     }
   };
 
-  const currency = currentTenant?.currency || "USD";
   const canViewRevenueAnalytics =
     currentRole === "owner" || (!permissionsLoading && hasPermission("reports"));
   const canShowPerformanceInsights = (aggregateStats?.totalBookings || 0) >= 6;
   const bestRevenue = aggregateStats?.bestPerforming?.revenue ?? 0;
   const worstRevenue = aggregateStats?.worstPerforming?.revenue ?? 0;
   const bestPerformingLocations = canShowPerformanceInsights
-    ? locations.filter((location) => location.revenue === bestRevenue)
+    ? filteredLocations.filter((location) => location.revenue === bestRevenue)
     : [];
   const needsAttentionLocations = canShowPerformanceInsights
-    ? locations.filter((location) => location.revenue === worstRevenue)
+    ? filteredLocations.filter((location) => location.revenue === worstRevenue)
     : [];
   const insightLocations = insightDialogType === "best" ? bestPerformingLocations : needsAttentionLocations;
   const selectedInsightLocation =
@@ -197,9 +222,7 @@ export default function SalonsOverviewPage() {
   if (!currentTenant) {
     return (
       <SalonSidebar>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
+        <LoadingState variant="section" />
       </SalonSidebar>
     );
   }
@@ -221,6 +244,20 @@ export default function SalonsOverviewPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {availableCountries.length > 1 && (
+              <Select value={effectiveCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCountries.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {countryName(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue />
@@ -231,9 +268,9 @@ export default function SalonsOverviewPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setAddSalonOpen(true)} className="gap-2">
+            <Button onClick={() => setAddSalonOpen(true)} className="hidden lg:flex gap-2">
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Add Branch</span>
+              Add Branch
             </Button>
           </div>
         </div>
@@ -393,7 +430,7 @@ export default function SalonsOverviewPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {formatCurrency(aggregateStats.totalRevenue, currency)}
+                        {formatCurrency(aggregateStats.totalRevenue, aggregateStats.revenueCurrency)}
                       </div>
                     </CardContent>
                   </Card>
@@ -486,7 +523,7 @@ export default function SalonsOverviewPage() {
                           <div>
                             <p className="font-semibold text-lg">{aggregateStats.bestPerforming.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.bestPerforming.revenue, currency)} inflow
+                              {formatCurrency(aggregateStats.bestPerforming.revenue, aggregateStats.revenueCurrency)} inflow
                             </p>
                           </div>
                           <Badge variant="secondary" className="bg-success/10 text-success">
@@ -531,7 +568,7 @@ export default function SalonsOverviewPage() {
                           <div>
                             <p className="font-semibold text-lg">{aggregateStats.worstPerforming.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              {formatCurrency(aggregateStats.worstPerforming.revenue, currency)} inflow
+                              {formatCurrency(aggregateStats.worstPerforming.revenue, aggregateStats.revenueCurrency)} inflow
                             </p>
                           </div>
                           <Badge variant="secondary" className="bg-warning/10 text-warning-foreground">
@@ -559,7 +596,7 @@ export default function SalonsOverviewPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {locations.length === 0 ? (
+                {filteredLocations.length === 0 ? (
                   <div className="text-center py-12">
                     <Building2 className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
                     <h3 className="font-medium mb-1">No branches found</h3>
@@ -618,7 +655,7 @@ export default function SalonsOverviewPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {locations.map((location) => (
+                      {filteredLocations.map((location) => (
                         <TableRow key={location.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -631,7 +668,7 @@ export default function SalonsOverviewPage() {
                           </TableCell>
                           {canViewRevenueAnalytics && (
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(location.revenue, currency)}
+                              {formatCurrency(location.revenue, location.currency)}
                             </TableCell>
                           )}
                           <TableCell className="text-right hidden sm:table-cell">
@@ -729,7 +766,7 @@ export default function SalonsOverviewPage() {
                     <TableRow>
                       <TableCell>{selectedInsightLocation.name}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(selectedInsightLocation.revenue, currency)}
+                        {formatCurrency(selectedInsightLocation.revenue, selectedInsightLocation.currency)}
                       </TableCell>
                       <TableCell className="text-right">{selectedInsightLocation.bookingCount}</TableCell>
                       <TableCell className="text-right">{selectedInsightLocation.outstandingAppointments}</TableCell>
@@ -750,6 +787,16 @@ export default function SalonsOverviewPage() {
             await Promise.all([refetch(), refreshTenants()]);
           }}
         />
+
+        {/* Floating action button — mobile & tablet only */}
+        <button
+          type="button"
+          aria-label="Add branch"
+          onClick={() => setAddSalonOpen(true)}
+          className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
       </div>
     </SalonSidebar>
   );

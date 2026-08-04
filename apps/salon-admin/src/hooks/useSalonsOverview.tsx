@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
 import { usePermissions } from "./usePermissions";
+import { currencyForCountry } from "@/lib/countryCurrency";
 import { startOfDay, startOfWeek, startOfMonth, endOfDay } from "date-fns";
 
 export interface LocationPerformance {
@@ -10,6 +11,7 @@ export interface LocationPerformance {
   name: string;
   city: string;
   country: string;
+  currency: string;
   revenue: number;
   bookingCount: number;
   staffOnline: number;
@@ -42,6 +44,7 @@ function getDateRange(range: DateRange): { start: Date; end: Date } {
 
 export function useSalonsOverview(dateRange: DateRange = "week") {
   const { currentTenant } = useAuth();
+  const tenantCurrency = currentTenant?.currency || "USD";
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { scopedLocationIds, hasScope } = useLocationScope();
   const [locations, setLocations] = useState<LocationPerformance[]>([]);
@@ -233,6 +236,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
           name: loc.name,
           city: loc.city,
           country: loc.country,
+          currency: currencyForCountry(loc.country, tenantCurrency),
           revenue,
           bookingCount: locationAppointments.length,
           staffOnline,
@@ -250,7 +254,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
     } finally {
       setIsLoading(false);
     }
-  }, [currentTenant?.id, dateRange, hasPermission, hasScope, permissionsLoading, scopedLocationIds]);
+  }, [currentTenant?.id, dateRange, hasPermission, hasScope, permissionsLoading, scopedLocationIds, tenantCurrency]);
 
   useEffect(() => {
     fetchOverview();

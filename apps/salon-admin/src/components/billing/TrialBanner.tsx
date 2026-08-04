@@ -30,7 +30,7 @@ export function TrialBanner() {
 
   const handleUpgradeClick = () => {
     if (canAccessSettings) {
-      navigate("/salon/settings?tab=subscription");
+      navigate("/salon/subscription");
     } else {
       setShowContactAdmin(true);
     }

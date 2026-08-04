@@ -1072,14 +1072,14 @@ export default function MessagingPage() {
   return (
     <SalonSidebar>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-row items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Messaging</h1>
             <p className="mt-1 text-muted-foreground">
               Reach your customers the way they prefer.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
             <Button variant="outline" onClick={() => setHowItWorksOpen(true)}>
               How it works
             </Button>
@@ -1090,7 +1090,7 @@ export default function MessagingPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[220px] sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
           <Card className={compactTintedMetricCardClass.primary}>
             <CardContent className="flex items-start justify-between p-4">
               <div>
