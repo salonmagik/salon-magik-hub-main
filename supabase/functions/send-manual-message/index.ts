@@ -338,6 +338,7 @@ const handler = async (req: Request): Promise<Response> => {
       channel: message.channel,
       recipient: message.channel === "email" ? message.customer?.email : message.customer?.phone,
       subject: message.subject,
+      content: message.message,
       status: success ? "sent" : "failed",
       sent_at: success ? new Date().toISOString() : null,
       provider,

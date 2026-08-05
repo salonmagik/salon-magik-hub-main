@@ -393,12 +393,13 @@ async function processBulkSMS(
 
     const promises = batch.map(async (customer, index) => {
       const messageRecord = batchMessages[index];
+      let resolvedMessage: string | null = null;
       try {
         if (!customer.phone) {
           throw new Error("Customer has no phone number");
         }
 
-        const resolvedMessage = replaceMessageVars(message, {
+        resolvedMessage = replaceMessageVars(message, {
           customerName: customer.full_name || "Valued Customer",
           salonName: tenant.name,
           bookingLink,
@@ -431,6 +432,7 @@ async function processBulkSMS(
           channel: "sms",
           recipient: customer.phone,
           subject: null,
+          content: resolvedMessage,
           status: "sent",
           sent_at: new Date().toISOString(),
           provider: "arkesel_sms",
@@ -462,6 +464,7 @@ async function processBulkSMS(
           channel: "sms",
           recipient: customer.phone || null,
           subject: null,
+          content: resolvedMessage,
           status: "failed",
           sent_at: new Date().toISOString(),
           provider: "arkesel_sms",
@@ -578,6 +581,7 @@ async function processBulkEmail(
           channel: "email",
           recipient: customer.email,
           subject: resolvedSubject || null,
+          content: resolvedMessage,
           status: "sent",
           sent_at: new Date().toISOString(),
           provider: "resend",
@@ -612,6 +616,7 @@ async function processBulkEmail(
           channel: "email",
           recipient: customer.email || null,
           subject: resolvedSubject || null,
+          content: resolvedMessage,
           status: "failed",
           sent_at: new Date().toISOString(),
           provider: "resend",
