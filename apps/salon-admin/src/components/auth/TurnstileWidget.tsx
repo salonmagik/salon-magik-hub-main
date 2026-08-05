@@ -12,6 +12,7 @@ declare global {
           callback: (token: string) => void;
           "expired-callback"?: () => void;
           "error-callback"?: () => void;
+          size?: "normal" | "flexible" | "compact";
         },
       ) => string;
       reset: (widgetId: string) => void;
@@ -64,6 +65,7 @@ export function TurnstileWidget({ onVerify, onExpire }: TurnstileWidgetProps) {
         callback: onVerify,
         "expired-callback": onExpire,
         "error-callback": onExpire,
+        size: "flexible",
       });
     });
 
@@ -78,5 +80,5 @@ export function TurnstileWidget({ onVerify, onExpire }: TurnstileWidgetProps) {
 
   if (!siteKey) return null;
 
-  return <div id={containerId} />;
+  return <div id={containerId} className="w-full" />;
 }
