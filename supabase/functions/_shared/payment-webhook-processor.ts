@@ -5,7 +5,7 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "./salon-notifications.ts";
-import { buildFromAddress } from "./email-template.ts";
+import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
 
 const STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300;
 
@@ -136,10 +136,10 @@ async function validateTenant(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   context: string
-): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null }> {
+): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null; logo_url?: string | null }> {
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
-    .select("name, currency, platform_percentage_charge")
+    .select("name, currency, platform_percentage_charge, logo_url")
     .eq("id", tenantId)
     .single();
 
@@ -564,8 +564,9 @@ export async function processWebhook(
                               from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail! }),
                               to: authUser.user.email,
                               subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
-                              html: `
-                            <h2>${isDeposit ? "Deposit Received" : "New Paid Booking"}</h2>
+                              html: wrapEmailTemplate(
+                                `
+                            <h2 style="margin:0 0 16px;">${isDeposit ? "Deposit Received" : "New Paid Booking"}</h2>
                             <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
                             <ul>
                               <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
@@ -575,6 +576,8 @@ export async function processWebhook(
                             </ul>
                             <p>Please review the booking in your dashboard.</p>
                           `,
+                                { mode: "salon", salonName: tenant.name, salonLogoUrl: tenant.logo_url ?? undefined },
+                              ),
                             }),
                           });
                         } catch (ownerEmailError) {
@@ -884,7 +887,7 @@ export async function processWebhook(
               if (resendApiKey) {
                 const { data: tenantDetails } = await supabase
                   .from("tenants")
-                  .select("name")
+                  .select("name, logo_url")
                   .eq("id", messagingTenantId)
                   .single();
 
@@ -917,18 +920,21 @@ export async function processWebhook(
                               from: buildFromAddress({ mode: "salon", salonName: tenantDetails.name, fromEmail: resendFromEmail }),
                               to: authUser.user.email,
                               subject: `Messaging Credits Purchased - ${tenantDetails.name}`,
-                              html: `
-                                <h2>Messaging Credits Purchase Confirmation</h2>
-                                <p>Your messaging credits purchase was successful!</p>
-                                <ul>
-                                  <li><strong>Credits Purchased:</strong> ${credits} credits</li>
-                                  <li><strong>Amount Paid:</strong> ${messagingTenant.currency} ${messagingAmount}</li>
-                                  <li><strong>Payment Method:</strong> Paystack</li>
-                                  <li><strong>Transaction Reference:</strong> ${reference}</li>
-                                </ul>
-                                <p>Your new credits have been added to your account and are ready to use for sending messages to your customers.</p>
-                                <p>Thank you for using SalonMagik!</p>
-                              `,
+                              html: wrapEmailTemplate(
+                                `
+                            <h2 style="margin:0 0 16px;">Messaging Credits Purchase Confirmation</h2>
+                            <p>Your messaging credits purchase was successful!</p>
+                            <ul>
+                              <li><strong>Credits Purchased:</strong> ${credits} credits</li>
+                              <li><strong>Amount Paid:</strong> ${messagingTenant.currency} ${messagingAmount}</li>
+                              <li><strong>Payment Method:</strong> Paystack</li>
+                              <li><strong>Transaction Reference:</strong> ${reference}</li>
+                            </ul>
+                            <p>Your new credits have been added to your account and are ready to use for sending messages to your customers.</p>
+                            <p>Thank you for using SalonMagik!</p>
+                          `,
+                                { mode: "salon", salonName: tenantDetails.name, salonLogoUrl: tenantDetails.logo_url ?? undefined },
+                              ),
                             }),
                           });
                         } catch (emailError) {

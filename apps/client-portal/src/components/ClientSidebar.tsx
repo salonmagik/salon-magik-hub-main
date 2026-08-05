@@ -233,6 +233,9 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
                   )}
                 >
                   {item.label}
+                  {isActive(item.path) && (
+                    <span className="absolute bottom-0.5 left-1/2 h-[2px] w-1/2 -translate-x-1/2 rounded-full bg-accent" />
+                  )}
                   {badgeCount > 0 && (
                     <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
                       {badgeCount > 9 ? "9+" : badgeCount}
