@@ -87,6 +87,7 @@ import {
 } from "@/hooks/useReferrals";
 import { supabase } from "@/lib/supabase";
 import { buildPublicBookingUrl } from "@/lib/bookingUrl";
+import { PLAN_TIER_RANK, type PlanId } from "@/lib/pricing";
 import { toast } from "@ui/ui/use-toast";
 import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
@@ -3131,8 +3132,25 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			planConfigQuote &&
 			branchesValue === planConfigQuote.current_allowed_locations &&
 			seatsValue === planConfigQuote.current_allowed_staff;
+		// price_delta alone isn't reliable: it comes back null whenever the
+		// quote requires custom pricing (e.g. a branch count that needs a
+		// manually-configured chain tier), which would otherwise make a real
+		// upgrade look like a "downgrade". Plan tier rank is the source of
+		// truth for direction; price_delta only decides the sign when the
+		// plan itself hasn't changed (e.g. adding seats within the same plan).
+		const currentTierRank = planConfigQuote
+			? PLAN_TIER_RANK[planConfigQuote.current_plan_slug as PlanId]
+			: undefined;
+		const requiredTierRank = planConfigQuote
+			? PLAN_TIER_RANK[planConfigQuote.required_plan_slug as PlanId]
+			: undefined;
 		const isPlanConfigIncrease = Boolean(
-			planConfigQuote && (planConfigQuote.price_delta || 0) > 0,
+			planConfigQuote &&
+				currentTierRank !== undefined &&
+				requiredTierRank !== undefined &&
+				(requiredTierRank !== currentTierRank
+					? requiredTierRank > currentTierRank
+					: (planConfigQuote.price_delta || 0) > 0),
 		);
 
 		return (
@@ -3525,11 +3543,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							    disabled until there's a real change to submit. */}
 							{!isTrialing && (
 								<>
-									{!isPlanConfigUnchanged && !isPlanConfigIncrease && (
-										<p className="text-xs text-amber-600">
-											Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
-										</p>
-									)}
+									{!isPlanConfigUnchanged &&
+										!isPlanConfigIncrease &&
+										!planConfigQuote?.requires_custom_locations && (
+											<p className="text-xs text-amber-600">
+												Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
+											</p>
+										)}
 									<Button
 										className="w-full sm:w-auto"
 										onClick={applyPlanConfiguration}
@@ -3546,9 +3566,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										)}
 										{isPlanConfigUnchanged
 											? "No changes to apply"
-											: isPlanConfigIncrease
-												? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
-												: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
+											: planConfigQuote?.requires_custom_locations
+												? "Contact support to continue"
+												: isPlanConfigIncrease
+													? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
+													: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
 									</Button>
 								</>
 							)}
