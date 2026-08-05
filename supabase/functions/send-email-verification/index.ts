@@ -160,6 +160,37 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
+      // Re-check phone ownership server-side rather than trusting a
+      // client-supplied "verified" flag — a matching used signup OTP token
+      // (user_id null, verify-signup-phone-otp marks it used on success)
+      // within the last 30 minutes is the actual proof, not frontend state.
+      if (!phone) {
+        return new Response(
+          JSON.stringify({ error: "Phone verification is required for signup" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+      const phoneOtpWindow = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: verifiedPhoneToken, error: phoneOtpError } = await supabase
+        .from("phone_otp_tokens")
+        .select("id")
+        .eq("phone", phone)
+        .is("user_id", null)
+        .eq("used", true)
+        .gte("created_at", phoneOtpWindow)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (phoneOtpError) {
+        console.error("[send-email-verification] phone OTP re-check failed:", phoneOtpError);
+      }
+      if (!verifiedPhoneToken) {
+        return new Response(
+          JSON.stringify({ error: "Please verify your phone number before creating your account." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
       // Block reuse of an email/phone already tied to an active salon account,
       // or that only has a *pending* (not yet invited) access request. Invited
       // leads are allowed through to complete their signup.
