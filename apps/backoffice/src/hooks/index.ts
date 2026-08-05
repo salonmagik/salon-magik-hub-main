@@ -13,3 +13,4 @@ export {
 export { useSalesOps } from "./useSalesOps";
 export { useSubscriptionLedger, useTenantBillingActivity, type SubscriptionLedgerRow, type TenantBillingActivityRow } from "./useSubscriptionLedger";
 export { useCommsUsage, useTenantMessageLog, type CommsUsageRow, type TenantMessageLogRow } from "./useCommsUsage";
+export { useFlaggedSignups, type FlaggedSignupRow } from "./useFlaggedSignups";
