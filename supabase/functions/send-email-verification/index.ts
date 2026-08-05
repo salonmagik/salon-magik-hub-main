@@ -143,6 +143,11 @@ const handler = async (req: Request): Promise<Response> => {
           JSON.stringify({ error: "A salon already exists with this phone number. Please sign in." }),
           { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
         );
+      } else if (conflict === "tenant_phone_trial_used") {
+        return new Response(
+          JSON.stringify({ error: "This phone number has already been used for a free trial. Please contact support if you'd like to start another one." }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
       } else if (conflict === "waitlist_pending") {
         return new Response(
           JSON.stringify({ error: "You already have an exclusive access request pending. Please wait for your invitation before signing up." }),
