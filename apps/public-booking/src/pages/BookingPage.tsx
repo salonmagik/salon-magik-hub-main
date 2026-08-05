@@ -1,5 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@ui/ui/use-toast";
+import { ToastAction } from "@ui/toast";
 import {
   usePublicSalon,
   usePublicCatalog,
@@ -130,6 +133,79 @@ function BookingPageContent() {
     isLoading: catalogLoading,
     refetch: refetchCatalog,
   } = usePublicCatalog(salon?.id, effectiveCountryCode, scopedLocationIds, catalogMode);
+
+  // Proactively tell the customer when the salon changes a price while
+  // they're on the page — refreshes the catalog in the background (which
+  // in turn keeps cart items in sync, see BookingWizard's price-sync
+  // effect) and surfaces a persistent toast so it isn't silent. Re-firing
+  // closes the current toast briefly before reopening, per design.
+  const activeToastRef = useRef<{ dismiss: () => void } | null>(null);
+  const notifyPriceChanged = useCallback(() => {
+    const open = () => {
+      activeToastRef.current = toast({
+        title: "Prices just changed",
+        description: "This salon updated a price. Your view is refreshing automatically.",
+        persistent: true,
+        action: (
+          <ToastAction altText="Refresh now" onClick={() => void refetchCatalog()}>
+            Refresh
+          </ToastAction>
+        ),
+      });
+    };
+    if (activeToastRef.current) {
+      activeToastRef.current.dismiss();
+      activeToastRef.current = null;
+      setTimeout(open, 350);
+    } else {
+      open();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchCatalog]);
+
+  useEffect(() => {
+    if (!salon?.id) return;
+    const priceChanged = (payload: { old?: { price?: number }; new?: { price?: number } }) =>
+      payload.old?.price !== undefined && payload.new?.price !== undefined && payload.old.price !== payload.new.price;
+
+    const channel = supabase
+      .channel(`public-booking-catalog-prices-${salon.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "services", filter: `tenant_id=eq.${salon.id}` },
+        (payload) => {
+          if (priceChanged(payload as never)) {
+            void refetchCatalog();
+            notifyPriceChanged();
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "packages", filter: `tenant_id=eq.${salon.id}` },
+        (payload) => {
+          if (priceChanged(payload as never)) {
+            void refetchCatalog();
+            notifyPriceChanged();
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "products", filter: `tenant_id=eq.${salon.id}` },
+        (payload) => {
+          if (priceChanged(payload as never)) {
+            void refetchCatalog();
+            notifyPriceChanged();
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [salon?.id, refetchCatalog, notifyPriceChanged]);
 
   const cartScopeKey = `${slug ?? "unknown"}:${effectiveCountryCode ?? "legacy"}`;
   const storefrontCurrency = getCurrencyForCountryCode(effectiveCountryCode, salon?.currency || "USD");
