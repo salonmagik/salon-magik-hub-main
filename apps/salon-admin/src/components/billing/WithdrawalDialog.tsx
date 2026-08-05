@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
 import { formatCurrency } from "@shared/currency";
@@ -23,7 +24,8 @@ import {
   SelectValue,
 } from "@ui/select";
 import { Alert, AlertDescription } from "@ui/alert";
-import { Loader2, AlertCircle, Wallet } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import { Loader2, AlertCircle, Wallet, Info } from "lucide-react";
 
 interface WithdrawalDialogProps {
   open: boolean;
@@ -36,6 +38,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   const currency = currentTenant?.currency || "NGN";
 
   const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId);
+  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId);
   const { destinations, isLoading: destinationsLoading } = usePayoutDestinations(tenantId);
   const { createWithdrawal } = useWithdrawals(tenantId);
 
@@ -47,6 +50,13 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   // Get minimum withdrawal amount based on currency
   const minWithdrawal = currency === "NGN" ? 1000 : 50;
   const walletBalance = Number(wallet?.balance || 0);
+  // Fall back to the raw wallet balance while availability is still loading
+  // so the dialog doesn't briefly claim $0 is withdrawable.
+  const availableBalance = availability ? availability.available : walletBalance;
+  const pendingBalance = availability?.pending ?? 0;
+  const nextSettlementAt = availability?.nextSettlementAt
+    ? new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })
+    : null;
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -54,8 +64,9 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       setSelectedDestinationId("");
       setAmount("");
       setError("");
+      refetchAvailability();
     }
-  }, [open]);
+  }, [open, refetchAvailability]);
 
   // Validate amount
   const validateAmount = (value: string): string | null => {
@@ -69,8 +80,10 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       return `Minimum withdrawal is ${formatCurrency(minWithdrawal, currency)}`;
     }
 
-    if (numValue > walletBalance) {
-      return `Insufficient balance. Available: ${formatCurrency(walletBalance, currency)}`;
+    if (numValue > availableBalance) {
+      return pendingBalance > 0
+        ? `Only ${formatCurrency(availableBalance, currency)} has cleared and is available to withdraw right now. The rest is still settling.`
+        : `Insufficient balance. Available: ${formatCurrency(availableBalance, currency)}`;
     }
 
     return null;
@@ -152,12 +165,44 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
           <div className="space-y-4 py-4">
             {/* Wallet Balance */}
             <div className="rounded-lg border bg-muted/50 p-4">
-              <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
+              <div className="flex items-center gap-1">
+                <p className="text-sm text-muted-foreground mb-1">Available to Withdraw</p>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-64 text-xs">
+                    Funds that have fully cleared with our payment processor and can be paid out right now.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <p className="text-2xl font-bold">
-                {formatCurrency(walletBalance, currency)}
+                {availabilityLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ) : (
+                  formatCurrency(availableBalance, currency)
+                )}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Minimum withdrawal: {formatCurrency(minWithdrawal, currency)}
+              {pendingBalance > 0 && (
+                <div className="mt-2 flex items-start gap-1 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-start gap-1 cursor-default">
+                        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <p className="text-xs">
+                          {formatCurrency(pendingBalance, currency)} still settling
+                          {nextSettlementAt ? ` — available by ${nextSettlementAt}` : ""}
+                        </p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-64 text-xs">
+                      Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants, not specific to your account.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-2">
+                Total wallet balance: {formatCurrency(walletBalance, currency)} · Minimum withdrawal: {formatCurrency(minWithdrawal, currency)}
               </p>
             </div>
 
@@ -203,7 +248,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
                 value={amount}
                 onChange={(e) => handleAmountChange(e.target.value)}
                 min={minWithdrawal}
-                max={walletBalance}
+                max={availableBalance}
                 step="0.01"
               />
             </div>

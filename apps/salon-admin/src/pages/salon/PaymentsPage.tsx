@@ -61,6 +61,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
 import { supabase } from "@/lib/supabase";
 import { endOfDay, endOfMonth, format, startOfDay, startOfMonth, subDays } from "date-fns";
@@ -162,6 +163,9 @@ export default function PaymentsPage() {
     canManagePayouts ? currentTenant?.id : undefined
   );
   const { wallet, isLoading: walletLoading } = useSalonWallet(
+    canManagePayouts ? currentTenant?.id : undefined
+  );
+  const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
     canManagePayouts ? currentTenant?.id : undefined
   );
   const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
@@ -671,29 +675,49 @@ export default function PaymentsPage() {
     <div className="space-y-4">
       {/* Wallet balance */}
       <Card>
-        <CardContent className="p-5 flex items-center justify-between">
+        <CardContent className="p-5 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-primary/10"><Wallet className="w-6 h-6 text-primary" /></div>
             <div>
               <div className="flex items-center gap-1">
-                <p className="text-sm text-muted-foreground">Payout Balance</p>
+                <p className="text-sm text-muted-foreground">Available to Withdraw</p>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-56 text-xs">
-                    Your salon's own operating balance, available to withdraw. Separate from customer store credit or prepaid funds.
+                    Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
                   </TooltipContent>
                 </Tooltip>
               </div>
-              {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
-                <p className="text-2xl font-semibold mt-0.5">
-                  {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
-                </p>
+              {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
+                <>
+                  <p className="text-2xl font-semibold mt-0.5">
+                    {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                  </p>
+                  {Number(walletAvailability?.pending ?? 0) > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-xs text-amber-700 mt-1 cursor-default">
+                          + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-64 text-xs">
+                        Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
+                        {walletAvailability?.nextSettlementAt
+                          ? ` Available by ${new Date(walletAvailability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`
+                          : ""}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Total wallet balance: {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                  </p>
+                </>
               )}
             </div>
           </div>
-          <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(wallet.balance) <= 0}>
+          <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(walletAvailability?.available ?? wallet.balance) <= 0}>
             Request Withdrawal
           </Button>
         </CardContent>
