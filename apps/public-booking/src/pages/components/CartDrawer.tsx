@@ -169,7 +169,7 @@ export function CartDrawer({
                 className="w-full text-white border-0" 
                 size="lg" 
                 onClick={onCheckout}
-                style={{ backgroundColor: 'var(--brand-color, hsl(220, 91%, 54%))' }}
+                style={{ backgroundColor: 'var(--brand-color, hsl(262, 43%, 21%))' }}
               >
                 Proceed to Checkout
               </Button>

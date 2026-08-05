@@ -19,7 +19,7 @@ export function PaymentStatusDialog({
   open,
   onOpenChange,
   reference,
-  brandColor = "#2563EB",
+  brandColor = "#2E1F4E",
 }: PaymentStatusDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

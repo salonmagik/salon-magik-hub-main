@@ -46,7 +46,7 @@ export function PaymentStep({
   onGatewaySelect,
   onSubmit,
   isSubmitting,
-  brandColor = "#2563EB",
+  brandColor = "#2E1F4E",
   purseBalance = 0,
   onPaymentModeChange,
 }: PaymentStepProps) {

@@ -914,7 +914,7 @@ export function BookingWizard({
     if (open) setStep("cart");
   }, [open]);
 
-  const brandColor = salon.brand_color || "#2563EB";
+  const brandColor = salon.brand_color || "#2E1F4E";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
