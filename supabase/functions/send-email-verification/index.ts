@@ -26,6 +26,32 @@ interface EmailVerificationRequest {
   userId?: string | null;
   origin?: string;
   mode?: "signup" | "resend";
+  captchaToken?: string | null;
+}
+
+const TURNSTILE_SECRET_KEY = Deno.env.get("TURNSTILE_SECRET_KEY");
+
+async function verifyTurnstileToken(token: string | null | undefined, remoteIp: string | null): Promise<boolean> {
+  // No secret configured (e.g. local dev) — CAPTCHA isn't enforced for this
+  // environment, matching the frontend's captchaSiteKeyConfigured gate.
+  if (!TURNSTILE_SECRET_KEY) return true;
+  if (!token) return false;
+
+  try {
+    const body = new URLSearchParams({ secret: TURNSTILE_SECRET_KEY, response: token });
+    if (remoteIp) body.set("remoteip", remoteIp);
+
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = await res.json();
+    return data?.success === true;
+  } catch (err) {
+    console.error("Turnstile verification request failed:", err);
+    return false;
+  }
 }
 
 type AuthUser = {
@@ -85,6 +111,7 @@ const handler = async (req: Request): Promise<Response> => {
       userId,
       origin,
       mode = "resend",
+      captchaToken,
     }: EmailVerificationRequest = await req.json();
 
     if (!email) {
@@ -120,6 +147,15 @@ const handler = async (req: Request): Promise<Response> => {
       if (!password) {
         return new Response(
           JSON.stringify({ error: "Password is required for signup" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
+      const remoteIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+      const captchaOk = await verifyTurnstileToken(captchaToken, remoteIp);
+      if (!captchaOk) {
+        return new Response(
+          JSON.stringify({ error: "CAPTCHA verification failed. Please try again." }),
           { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
         );
       }

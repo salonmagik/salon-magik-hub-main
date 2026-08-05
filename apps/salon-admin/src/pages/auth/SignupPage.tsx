@@ -9,6 +9,7 @@ import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { Checkbox } from "@ui/checkbox";
 import { validateSignup, type SignupField, type SignupFormData } from "@/pages/auth/signup/validation";
 import {
@@ -57,6 +58,7 @@ export default function SignupPage() {
     confirmPassword: "",
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const googleOAuthIntent = readGoogleOAuthIntent();
   const pendingPromoCode = readPendingSalesPromoCode();
 
@@ -192,7 +194,11 @@ export default function SignupPage() {
   ]);
 
   const validation = useMemo(() => validateSignup(formData, acceptTerms), [formData, acceptTerms]);
-  const isFormValid = validation.isValid;
+  // Only require a solved CAPTCHA when the site key is actually configured
+  // for this environment — keeps local dev (no Turnstile keys set) usable
+  // without silently locking out signup.
+  const captchaSiteKeyConfigured = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY);
+  const isFormValid = validation.isValid && (!captchaSiteKeyConfigured || Boolean(captchaToken));
   const hasInteracted = Object.values(touched).some(Boolean);
 
   const markTouched = (field: SignupField) => {
@@ -227,6 +233,7 @@ export default function SignupPage() {
           phone: formData.phone || null,
           password: formData.password,
           origin: window.location.origin,
+          captchaToken,
         },
       });
 
@@ -473,6 +480,11 @@ export default function SignupPage() {
             <p className="text-sm text-destructive">{validation.errors.terms}</p>
           )}
         </div>
+
+        <TurnstileWidget
+          onVerify={setCaptchaToken}
+          onExpire={() => setCaptchaToken(null)}
+        />
 
         <AuthButton
           type="submit"
