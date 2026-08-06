@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
@@ -73,6 +74,7 @@ interface EmailTemplate {
 }
 
 export default function EmailTemplatesPage() {
+  useWalkthroughAutoTrigger("email-templates");
   const queryClient = useQueryClient();
   const { currentTenant } = useAuth();
   const tenantId = currentTenant?.id;
@@ -221,7 +223,7 @@ export default function EmailTemplatesPage() {
               </Card>
             ) : (
               <Tabs defaultValue={categories[0] || "appointments"}>
-                <TabsList>
+                <TabsList data-tour-id="tour-email-template-categories">
                   {categories.map((category) => (
                     <TabsTrigger key={category} value={category} className="capitalize">
                       {category}
@@ -231,7 +233,7 @@ export default function EmailTemplatesPage() {
 
                 {categories.map((category) => (
                   <TabsContent key={category} value={category} className="mt-4">
-                    <Card>
+                    <Card data-tour-id="tour-email-templates-table">
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 capitalize">
                           <Mail className="h-5 w-5" />

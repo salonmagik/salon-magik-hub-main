@@ -118,7 +118,9 @@ export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { currentTenant, canUseOwnerHub } = useAuth();
   const { hasPermission } = usePermissions();
-  const { hasCustomers, hasCatalog } = useWalkthroughDataFlags();
+  // Help's Walkthroughs tab lists everything, so unlike a single trigger
+  // page it always needs both flags regardless of pageNeedsDataFlags.
+  const { hasCustomers, hasCatalog } = useWalkthroughDataFlags(true);
   const { isEnabled: staffOperationsEnabled } = useStaffOperationsAddon();
   const isDesktop = useIsDesktopViewport();
   const navigate = useNavigate();

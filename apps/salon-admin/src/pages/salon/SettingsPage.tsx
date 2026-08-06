@@ -187,7 +187,9 @@ type BookingSettingsSubTab = "booking_config";
 export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
-	useWalkthroughAutoTrigger(scope === "subscription" ? "hub-subscription" : "hub-settings");
+	useWalkthroughAutoTrigger(
+		scope === "subscription" ? "hub-subscription" : scope === "branch" ? "branch-settings" : "hub-settings",
+	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [paymentSuccessModal, setPaymentSuccessModal] = useState<{
 		title: string;
@@ -1901,7 +1903,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	}, [bookingSettings, bookingBaseline]);
 
 	const renderProfileTab = () => (
-		<Card>
+		<Card data-tour-id="tour-settings-profile">
 			<CardContent className="p-6 space-y-6">
 				{resolvedScope !== "branch" && (
 					<div className="flex items-center gap-6">
@@ -2069,7 +2071,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	);
 
 	const renderHoursTab = () => (
-		<Card>
+		<Card data-tour-id="tour-settings-hours">
 			{!isChainScope && (
 				<CardHeader>
 					<CardTitle>Business Hours</CardTitle>
@@ -2373,7 +2375,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 		return (
 			<>
-				<Card>
+				<Card data-tour-id="tour-manage-branches-tab">
 					{!isChainScope && (
 						<CardHeader>
 							<CardTitle>Manage Branches</CardTitle>
@@ -2692,7 +2694,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<div
 									key={item.key}
 									className="flex items-center justify-between py-3 border-b last:border-0"
-									data-tour-id={item.key === "onlineBookingEnabled" ? "tour-enable-booking" : undefined}
+									data-tour-id={
+										{
+											onlineBookingEnabled: "tour-enable-booking",
+											autoConfirmBookings: "tour-auto-confirm-bookings",
+											depositsEnabled: "tour-accept-deposits",
+											allowStaffSelection: "tour-allow-staff-selection",
+											requireStaffSelection: "tour-require-staff-selection",
+											autoAssignStaff: "tour-auto-assign-staff",
+										}[item.key]
+									}
 								>
 									<div>
 										<p className="font-medium">{item.label}</p>
@@ -3319,7 +3330,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
-					<div className="grid gap-4 md:grid-cols-3">
+					<div className="grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
 						<div className="rounded-xl bg-muted/50 p-4">
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Locations</p>
 							<p className="mt-1 font-serif text-2xl">
@@ -3358,7 +3369,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</div>
 					</div>
 
-					<div ref={planConfigSectionRef} className="scroll-mt-6">
+					<div ref={planConfigSectionRef} className="scroll-mt-6" data-tour-id="tour-subscription-seats">
 					<div className="grid gap-4 lg:grid-cols-2 lg:items-start">
 					<div className="space-y-3">
 						<p className="text-sm font-medium">Manage branches & team size</p>
@@ -3581,7 +3592,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</div>
 					</div>
 
-					<div className="space-y-3">
+					<div className="space-y-3" data-tour-id="tour-subscription-addons">
 						<p className="text-sm font-medium">Add-ons</p>
 						<div className="space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
 							<div className="flex items-center justify-between gap-4">
@@ -4120,13 +4131,21 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "booking" && renderBookingTab()}
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
-			{activeTab === "payout-destinations" && <PayoutDestinationsManager />}
+			{activeTab === "payout-destinations" && (
+				<div data-tour-id="tour-payout-destinations">
+					<PayoutDestinationsManager />
+				</div>
+			)}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}
 			{activeTab === "promotions" && renderPromotionsTab()}
 			{activeTab === "notifications" && renderNotificationsTab()}
 			{activeTab === "roles" && renderRolesTab()}
 			{activeTab === "subscription" && renderSubscriptionTab()}
-			{activeTab === "custom-domain" && <CustomDomainManager />}
+			{activeTab === "custom-domain" && (
+				<div data-tour-id="tour-custom-domain">
+					<CustomDomainManager />
+				</div>
+			)}
 			{activeTab === "sessions" && <ActiveSessionsTab />}
 		</>
 	);

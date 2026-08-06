@@ -5,7 +5,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useWalkthroughDataFlags } from "@/hooks/useWalkthroughDataFlags";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { useProductTour, useIsDesktopViewport } from "@/components/onboarding/ProductTourProvider";
-import { getAvailableWalkthroughsForPage, type WalkthroughPageKey } from "@/lib/walkthroughs";
+import { getAvailableWalkthroughsForPage, pageNeedsDataFlags, type WalkthroughPageKey } from "@/lib/walkthroughs";
 
 // Mounted once per trigger page. Two ways a walkthrough starts:
 // 1. First visit — every not-yet-seen walkthrough registered to this page is
@@ -16,7 +16,9 @@ import { getAvailableWalkthroughsForPage, type WalkthroughPageKey } from "@/lib/
 export function useWalkthroughAutoTrigger(pageKey: WalkthroughPageKey) {
   const { currentTenant, canUseOwnerHub } = useAuth();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
-  const { hasCustomers, hasCatalog, isLoading: dataFlagsLoading } = useWalkthroughDataFlags();
+  const { hasCustomers, hasCatalog, isLoading: dataFlagsLoading } = useWalkthroughDataFlags(
+    pageNeedsDataFlags(pageKey),
+  );
   const { isEnabled: staffOperationsEnabled } = useStaffOperationsAddon();
   const { startTour, hasSeenWalkthrough } = useProductTour();
   const isDesktop = useIsDesktopViewport();

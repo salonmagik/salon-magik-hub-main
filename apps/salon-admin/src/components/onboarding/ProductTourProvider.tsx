@@ -36,6 +36,14 @@ export interface ProductTourStepInput {
   title: string;
   content: string;
   placement?: Step["placement"];
+  /**
+   * Override the default 6s target-wait. Use a short value (~1.5s) for
+   * steps whose target is conditionally rendered on the SAME page (no
+   * navigation, no lazy chunk to wait for) — e.g. a checklist card that
+   * only exists while setup is incomplete. Skipping past it should be
+   * near-instant, not a multi-second stall, when it's simply not there.
+   */
+  waitTimeoutMs?: number;
 }
 
 export interface StartTourInput {
@@ -138,17 +146,20 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   const startTour = useCallback(
     ({ steps: input, walkthroughIds }: StartTourInput) => {
       if (input.length === 0) return;
-      const joyrideSteps: Step[] = input.map((step) => ({
-        target: step.target,
-        title: step.title,
-        content: step.content,
-        placement: step.placement || "bottom",
-        beforeTimeout: TARGET_WAIT_TIMEOUT_MS + 2000,
-        before: async () => {
-          navigate(step.path);
-          await waitForTarget(step.target, TARGET_WAIT_TIMEOUT_MS);
-        },
-      }));
+      const joyrideSteps: Step[] = input.map((step) => {
+        const waitMs = step.waitTimeoutMs ?? TARGET_WAIT_TIMEOUT_MS;
+        return {
+          target: step.target,
+          title: step.title,
+          content: step.content,
+          placement: step.placement || "bottom",
+          beforeTimeout: waitMs + 2000,
+          before: async () => {
+            navigate(step.path);
+            await waitForTarget(step.target, waitMs);
+          },
+        };
+      });
       setSteps(joyrideSteps);
       setActiveWalkthroughIds(walkthroughIds);
       setRun(true);

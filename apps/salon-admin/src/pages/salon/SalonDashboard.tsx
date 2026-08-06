@@ -192,7 +192,7 @@ export default function SalonDashboard() {
 		<SalonSidebar>
 			<div className="space-y-6 max-w-[1320px]">
 				{/* ── Page header ────────────────────────────────────────────── */}
-				<div data-tour-id="tour-recap">
+				<div>
 					<h1 className="text-[22px] tracking-tight">Dashboard</h1>
 					<p className="text-[13.5px] text-muted-foreground mt-1">
 						{firstName ? `Welcome back, ${firstName}!` : "Welcome back!"} Here's
@@ -202,7 +202,10 @@ export default function SalonDashboard() {
 
 				{/* ── Checklist ──────────────────────────────────────────────── */}
 				{!isChecklistComplete && isOwnerOrManager && totalCount > 0 && (
-					<div className="bg-white rounded-[22px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] overflow-hidden">
+					<div
+						data-tour-id="tour-setup-checklist"
+						className="bg-white rounded-[22px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] overflow-hidden"
+					>
 						{/* Header row */}
 						<div className="px-[26px] pt-[22px] pb-3">
 							<div className="flex items-center gap-3.5">

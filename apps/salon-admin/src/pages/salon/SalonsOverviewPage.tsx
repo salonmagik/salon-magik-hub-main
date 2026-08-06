@@ -279,7 +279,7 @@ export default function SalonsOverviewPage() {
 
         {/* Quick Actions — hub context only */}
         {activeContextType === "owner_hub" && branchContexts.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour-id="tour-hub-quick-actions">
             {[
                 { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null, description: null as string | null },
                 { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null, description: "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above." },
@@ -590,7 +590,7 @@ export default function SalonsOverviewPage() {
             )}
 
             {/* Branch Breakdown Table */}
-            <Card>
+            <Card data-tour-id="tour-branch-performance">
               <CardHeader>
                 <CardTitle>Branch Performance</CardTitle>
                 <CardDescription>

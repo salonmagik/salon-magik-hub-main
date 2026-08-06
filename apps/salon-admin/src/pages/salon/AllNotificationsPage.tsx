@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Card, CardContent } from "@ui/card";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -34,6 +35,7 @@ const getIconColor = (type: Notification["type"]) => {
 type FilterType = "all" | "unread" | "urgent";
 
 export default function AllNotificationsPage() {
+  useWalkthroughAutoTrigger("all-notifications");
   const navigate = useNavigate();
   const { notifications, isLoading, markAsRead, markAllAsRead } = useNotifications();
   const { activeContextType, setActiveContext, assignedLocationIds } = useAuth();
@@ -84,7 +86,7 @@ export default function AllNotificationsPage() {
         </div>
 
         <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterType)}>
-          <TabsList>
+          <TabsList data-tour-id="tour-notifications-filters">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="unread" className="gap-2">
               Unread
@@ -96,7 +98,7 @@ export default function AllNotificationsPage() {
           </TabsList>
         </Tabs>
 
-        <Card>
+        <Card data-tour-id="tour-notifications-list">
           <CardContent className="p-0 divide-y">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
