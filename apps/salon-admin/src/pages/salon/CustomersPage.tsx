@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Input } from "@ui/input";
@@ -78,6 +79,7 @@ const statusFilters = [
 ];
 
 export default function CustomersPage() {
+  useWalkthroughAutoTrigger("customers");
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [detailCustomer, setDetailCustomer] = useState<Customer | null>(null);
   const [activeFilter, setActiveFilter] = useState("All");
@@ -406,7 +408,11 @@ export default function CustomersPage() {
 							<Download className="mr-2 h-4 w-4" />
 							Import
 						</Button>
-						<Button className="h-12 rounded-full px-7" onClick={() => setCustomerDialogOpen(true)}>
+						<Button
+							className="h-12 rounded-full px-7"
+							data-tour-id="tour-add-customer"
+							onClick={() => setCustomerDialogOpen(true)}
+						>
 							<UserPlus className="mr-2 h-4 w-4" />
 							Add customer
 						</Button>
@@ -582,9 +588,10 @@ export default function CustomersPage() {
 					</div>
 				) : (
 					<div className="space-y-3">
-						{filteredCustomers.map((customer) => (
+						{filteredCustomers.map((customer, customerIndex) => (
 							<Card
 								key={customer.id}
+								data-tour-id={customerIndex === 0 ? "tour-view-customer" : undefined}
 								className="cursor-pointer rounded-[14px] border-border/60 bg-white shadow-sm transition-shadow hover:border-primary/20 hover:shadow-md"
 								onClick={() => setDetailCustomer(customer)}
 							>
@@ -819,6 +826,7 @@ export default function CustomersPage() {
 					<button
 						type="button"
 						aria-label="Add or import customers"
+						data-tour-id="tour-add-customer-mobile"
 						className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
 					>
 						<Plus className="w-6 h-6" />

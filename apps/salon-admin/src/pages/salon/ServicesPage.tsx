@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Input } from "@ui/input";
@@ -115,6 +116,7 @@ interface IntegrityFixTarget {
 }
 
 export default function ServicesPage() {
+  useWalkthroughAutoTrigger("services");
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -856,6 +858,21 @@ export default function ServicesPage() {
 
   const addButtonLabel = getAddButtonLabel();
 
+  const addButtonTourId: string | undefined = (() => {
+    switch (activeTab) {
+      case "services":
+        return "tour-add-service";
+      case "products":
+        return "tour-add-product";
+      case "vouchers":
+        return "tour-add-voucher";
+      case "packages":
+        return "tour-add-package";
+      default:
+        return undefined;
+    }
+  })();
+
   const resourceLimits = useMemo(() => {
     const limits = currentPlan?.limits;
     return {
@@ -1004,7 +1021,7 @@ export default function ServicesPage() {
               (isActiveResourceFull ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span data-tour-id={activeTab === "services" ? "tour-add-service" : undefined}>
+                    <span data-tour-id={addButtonTourId}>
                       <Button disabled className="h-12 rounded-full px-7">
                         <Plus className="w-4 h-4 mr-2" />
                         {addButtonLabel}
@@ -1020,7 +1037,7 @@ export default function ServicesPage() {
                 <Button
                   onClick={handleAddClick}
                   className="h-12 rounded-full px-7"
-                  data-tour-id={activeTab === "services" ? "tour-add-service" : undefined}
+                  data-tour-id={addButtonTourId}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   {addButtonLabel}
@@ -1376,7 +1393,7 @@ export default function ServicesPage() {
           <button
             type="button"
             aria-label="Add a catalog item"
-            data-tour-id="tour-add-service-mobile"
+            data-tour-id="tour-add-catalog-mobile"
             className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
           >
             <Plus className="h-6 w-6" />

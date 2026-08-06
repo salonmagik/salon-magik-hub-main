@@ -18,6 +18,7 @@ import { formatCurrency } from "@shared/currency";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { useLocations } from "@/hooks/useLocations";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { useToast } from "@ui/ui/use-toast";
@@ -47,6 +48,7 @@ const BOOKING_URL_BASE =
   "";
 
 export default function ThemesSettingsPage() {
+  useWalkthroughAutoTrigger("hub-theme");
   const { currentTenant, refreshTenants } = useAuth();
   const { locations } = useLocations();
   const { data: entitlements, refetch: refetchEntitlements } = useTenantEntitlements(currentTenant?.id);
@@ -352,7 +354,7 @@ export default function ThemesSettingsPage() {
             </Badge>
           </div>
 
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-4" data-tour-id="tour-apply-theme">
             {/* ── Default theme card ── */}
             <div className="flex flex-col rounded-xl border bg-card p-3 shadow-sm">
               <div className="mb-2 flex items-center justify-between gap-1">

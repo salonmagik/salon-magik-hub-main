@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomers } from "@/hooks/useCustomers";
 import { useCustomerSegments } from "@/hooks/useCustomerSegments";
@@ -312,6 +313,7 @@ function getMarketLabel(country?: string | null) {
 }
 
 export default function MessagingPage() {
+  useWalkthroughAutoTrigger("messaging");
   const { currentTenant, user, activeContextType, activeLocationId } = useAuth();
   const queryClient = useQueryClient();
   const { customers: rawCustomers } = useCustomers();
@@ -1254,6 +1256,7 @@ export default function MessagingPage() {
                         <button
                           type="button"
                           onClick={() => setAudienceMode("single")}
+                          data-tour-id="tour-message-single"
                           className="flex items-start gap-3 rounded-2xl border bg-background p-4 text-left transition-colors hover:bg-muted/40"
                         >
                           <div className="mt-0.5 rounded-xl bg-muted p-2.5">
@@ -1272,6 +1275,7 @@ export default function MessagingPage() {
                             setAudienceMode("group");
                             scrollToRef(channelSectionRef);
                           }}
+                          data-tour-id="tour-message-group"
                           className="flex items-start gap-3 rounded-2xl border bg-background p-4 text-left transition-colors hover:bg-muted/40"
                         >
                           <div className="mt-0.5 rounded-xl bg-muted p-2.5">

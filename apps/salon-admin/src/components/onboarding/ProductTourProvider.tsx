@@ -38,10 +38,17 @@ export interface ProductTourStepInput {
   placement?: Step["placement"];
 }
 
+export interface StartTourInput {
+  /** Flattened spotlight steps to run, in order — may come from one walkthrough or several concatenated. */
+  steps: ProductTourStepInput[];
+  /** Every walkthrough id represented in `steps`, marked seen together when the run finishes or is skipped. */
+  walkthroughIds: string[];
+}
+
 interface ProductTourContextValue {
-  startTour: (steps: ProductTourStepInput[]) => void;
+  startTour: (input: StartTourInput) => void;
   isTourActive: boolean;
-  hasSeenTour: boolean;
+  hasSeenWalkthrough: (id: string) => boolean;
 }
 
 const ProductTourContext = createContext<ProductTourContextValue | undefined>(undefined);
@@ -100,20 +107,36 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
 
   const [steps, setSteps] = useState<Step[]>([]);
   const [run, setRun] = useState(false);
-  const [hasSeenTour, setHasSeenTour] = useState(() => {
-    if (!user?.id) return false;
-    return localStorage.getItem(tourSeenKey(user.id)) === "true";
+  const [activeWalkthroughIds, setActiveWalkthroughIds] = useState<string[]>([]);
+  const [seenIds, setSeenIds] = useState<Set<string>>(() => {
+    if (!user?.id) return new Set();
+    try {
+      const raw = localStorage.getItem(tourSeenKey(user.id));
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
   });
 
-  const markSeen = useCallback(() => {
-    if (user?.id) {
-      localStorage.setItem(tourSeenKey(user.id), "true");
-    }
-    setHasSeenTour(true);
-  }, [user?.id]);
+  const markSeen = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      setSeenIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.add(id));
+        if (user?.id) {
+          localStorage.setItem(tourSeenKey(user.id), JSON.stringify(Array.from(next)));
+        }
+        return next;
+      });
+    },
+    [user?.id],
+  );
+
+  const hasSeenWalkthrough = useCallback((id: string) => seenIds.has(id), [seenIds]);
 
   const startTour = useCallback(
-    (input: ProductTourStepInput[]) => {
+    ({ steps: input, walkthroughIds }: StartTourInput) => {
       if (input.length === 0) return;
       const joyrideSteps: Step[] = input.map((step) => ({
         target: step.target,
@@ -127,6 +150,7 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
         },
       }));
       setSteps(joyrideSteps);
+      setActiveWalkthroughIds(walkthroughIds);
       setRun(true);
     },
     [navigate],
@@ -138,16 +162,17 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
         setRun(false);
         setSteps([]);
         if (data.status === FINISHED_STATUS || data.status === SKIPPED_STATUS) {
-          markSeen();
+          markSeen(activeWalkthroughIds);
         }
+        setActiveWalkthroughIds([]);
       }
     },
-    [markSeen],
+    [markSeen, activeWalkthroughIds],
   );
 
   const value = useMemo<ProductTourContextValue>(
-    () => ({ startTour, isTourActive: run, hasSeenTour }),
-    [startTour, run, hasSeenTour],
+    () => ({ startTour, isTourActive: run, hasSeenWalkthrough }),
+    [startTour, run, hasSeenWalkthrough],
   );
 
   return (

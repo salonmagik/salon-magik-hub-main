@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import {
 	Card,
@@ -186,6 +187,7 @@ type BookingSettingsSubTab = "booking_config";
 export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
+	useWalkthroughAutoTrigger(scope === "subscription" ? "hub-subscription" : "hub-settings");
 	const [isSaving, setIsSaving] = useState(false);
 	const [paymentSuccessModal, setPaymentSuccessModal] = useState<{
 		title: string;
@@ -3229,6 +3231,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								type="button"
 								size="sm"
 								className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
+								data-tour-id="tour-change-plan"
 								onClick={() =>
 									planConfigSectionRef.current?.scrollIntoView({
 										behavior: "smooth",

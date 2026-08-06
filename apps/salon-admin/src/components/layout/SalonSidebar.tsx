@@ -1103,6 +1103,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										variant="outline"
 										size="icon"
 										className="sm:hidden"
+										data-tour-id="tour-quick-create-mobile"
 										onClick={() => setQuickCreateOpen(true)}
 									>
 										<Plus className="w-4 h-4" />
@@ -1111,6 +1112,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										variant="outline"
 										size="sm"
 										className="hidden sm:flex items-center gap-2"
+										data-tour-id="tour-quick-create"
 										onClick={() => setQuickCreateOpen(true)}
 									>
 										<Plus className="w-4 h-4" />
@@ -1125,6 +1127,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										variant="ghost"
 										size="icon"
 										className="relative"
+										data-tour-id="tour-notifications"
 										onClick={() => setNotificationsOpen(true)}
 									>
 										<Bell className="w-5 h-5" />
@@ -1174,7 +1177,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											path: "/salon/services",
 										},
 										{
-											label: "Payments",
+											label: "Transactions",
 											icon: CreditCard,
 											path: "/salon/transactions",
 										},

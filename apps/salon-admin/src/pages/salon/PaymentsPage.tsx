@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -126,6 +127,7 @@ const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
 };
 
 export default function PaymentsPage() {
+  useWalkthroughAutoTrigger("transactions");
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "all");
@@ -955,7 +957,10 @@ export default function PaymentsPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5">
+        <TabsList
+          data-tour-id="tour-transactions-tabs"
+          className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5"
+        >
           <TabsTrigger value="all" className="shrink-0 rounded-full px-6">All</TabsTrigger>
           <TabsTrigger value="revenue" className="shrink-0 rounded-full px-6"><ArrowUpRight className="mr-2 w-4 h-4" />Inflow</TabsTrigger>
           <TabsTrigger value="refunds" className="shrink-0 rounded-full px-6"><ArrowDownLeft className="mr-2 w-4 h-4" />Refunds</TabsTrigger>
@@ -1041,7 +1046,10 @@ export default function PaymentsPage() {
 
         {isOwnerHub ? (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="scrollbar-hide max-w-full justify-start overflow-x-auto overscroll-x-contain">
+            <TabsList
+              data-tour-id="tour-transactions-tabs"
+              className="scrollbar-hide max-w-full justify-start overflow-x-auto overscroll-x-contain"
+            >
               <TabsTrigger value="all">All Transactions</TabsTrigger>
               <TabsTrigger value="balances">Customer Balances</TabsTrigger>
               {canManagePayouts && (

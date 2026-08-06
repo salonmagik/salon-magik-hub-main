@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLoader } from "@/components/BrandLoader";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -68,6 +69,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
+  useWalkthroughAutoTrigger("hub-overview");
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
@@ -268,7 +270,7 @@ export default function SalonsOverviewPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setAddSalonOpen(true)} className="hidden lg:flex gap-2">
+            <Button onClick={() => setAddSalonOpen(true)} data-tour-id="tour-manage-branches" className="hidden lg:flex gap-2">
               <Plus className="w-4 h-4" />
               Add Branch
             </Button>
@@ -386,7 +388,7 @@ export default function SalonsOverviewPage() {
           <>
             {/* Summary Stats */}
             {aggregateStats && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tour-id="tour-hub-overview">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -793,6 +795,7 @@ export default function SalonsOverviewPage() {
           type="button"
           aria-label="Add branch"
           onClick={() => setAddSalonOpen(true)}
+          data-tour-id="tour-manage-branches-mobile"
           className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
         >
           <Plus className="w-6 h-6" />

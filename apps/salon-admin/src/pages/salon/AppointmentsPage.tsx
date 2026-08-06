@@ -4,6 +4,7 @@ import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addD
 import { supabase } from "@/lib/supabase";
 import { cn } from "@shared/utils";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import {
@@ -165,6 +166,7 @@ const getReviewActionLabel = (appointment: AppointmentWithDetails | CalendarAppo
 };
 
 export default function AppointmentsPage() {
+  useWalkthroughAutoTrigger("appointments");
   const [searchParams, setSearchParams] = useSearchParams();
   const { roles, currentTenant } = useAuth();
   const { createFromAppointment } = useInvoices();
@@ -986,11 +988,20 @@ export default function AppointmentsPage() {
           </div>
           {/* Desktop actions (mobile/tablet use the floating + button) */}
           <div className="hidden lg:flex gap-2 flex-shrink-0">
-            <Button variant="outline" className="rounded-full" onClick={() => setWalkInDialogOpen(true)}>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              data-tour-id="tour-record-walkin"
+              onClick={() => setWalkInDialogOpen(true)}
+            >
               <UserPlus className="w-4 h-4 mr-2" />
               Record walk-ins
             </Button>
-            <Button className="rounded-full bg-foreground text-background hover:bg-foreground/90" onClick={() => setAppointmentDialogOpen(true)}>
+            <Button
+              className="rounded-full bg-foreground text-background hover:bg-foreground/90"
+              data-tour-id="tour-book-appointment"
+              onClick={() => setAppointmentDialogOpen(true)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Book appointment
             </Button>
@@ -1222,6 +1233,7 @@ export default function AppointmentsPage() {
               <div className="flex gap-0.5 bg-muted p-0.5 rounded-[12px] flex-shrink-0">
                 <button
                   onClick={() => setScheduledView("list")}
+                  data-tour-id="tour-list-view"
                   className={cn(
                     "w-[38px] h-[38px] flex items-center justify-center rounded-[9px] transition-all",
                     scheduledView === "list"
@@ -1234,6 +1246,7 @@ export default function AppointmentsPage() {
                 </button>
                 <button
                   onClick={() => setScheduledView("calendar")}
+                  data-tour-id="tour-calendar-view"
                   className={cn(
                     "w-[38px] h-[38px] flex items-center justify-center rounded-[9px] transition-all",
                     scheduledView === "calendar"
@@ -1770,6 +1783,7 @@ export default function AppointmentsPage() {
           <button
             type="button"
             aria-label="Create appointment or walk-in"
+            data-tour-id="tour-book-or-walkin-mobile"
             className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary  text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
           >
             <Plus className="w-6 h-6" />
