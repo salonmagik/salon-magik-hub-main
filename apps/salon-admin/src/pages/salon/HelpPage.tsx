@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,9 +6,8 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import { useWalkthroughDataFlags } from "@/hooks/useWalkthroughDataFlags";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
-import { useIsDesktopViewport } from "@/components/onboarding/ProductTourProvider";
-import { getAvailableWalkthroughsBySection } from "@/lib/walkthroughs";
-import { CHECKLIST_META } from "@/pages/salon/SalonDashboard";
+import { useProductTour, useIsDesktopViewport } from "@/components/onboarding/ProductTourProvider";
+import { getAvailableWalkthroughsBySection, CHECKLIST_META, buildChecklistWalkthroughs } from "@/lib/walkthroughs";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@ui/card";
 import { Button } from "@ui/button";
@@ -109,11 +107,6 @@ interface SupportTicketRow {
   created_at: string;
 }
 
-function buildReplayUrl(path: string, walkthroughId: string) {
-  const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}walkthrough=${encodeURIComponent(walkthroughId)}`;
-}
-
 export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const { currentTenant, canUseOwnerHub } = useAuth();
@@ -123,9 +116,10 @@ export default function HelpPage() {
   const { hasCustomers, hasCatalog } = useWalkthroughDataFlags(true);
   const { isEnabled: staffOperationsEnabled } = useStaffOperationsAddon();
   const isDesktop = useIsDesktopViewport();
-  const navigate = useNavigate();
+  const { startTour } = useProductTour();
 
   const { checklistItems, checklistProgress, isChecklistComplete } = useDashboardStats();
+  const checklistWalkthroughs = useMemo(() => buildChecklistWalkthroughs(checklistItems), [checklistItems]);
 
   const walkthroughSections = getAvailableWalkthroughsBySection({
     hasPermission,
@@ -134,7 +128,8 @@ export default function HelpPage() {
     hasCatalog,
     staffOperationsEnabled,
   });
-  const totalWalkthroughs = walkthroughSections.reduce((sum, s) => sum + s.items.length, 0);
+  const totalWalkthroughs =
+    walkthroughSections.reduce((sum, s) => sum + s.items.length, 0) + checklistWalkthroughs.length;
 
   const { data: supportTickets = [] } = useQuery({
     queryKey: ["salon-support-tickets", currentTenant?.id],
@@ -273,7 +268,7 @@ export default function HelpPage() {
 
               {/* ── Walkthroughs ── */}
               <TabsContent value="walkthroughs" className="mt-6">
-                {walkthroughSections.length === 0 ? (
+                {totalWalkthroughs === 0 ? (
                   <Card>
                     <CardContent className="p-8 text-center text-muted-foreground text-sm">
                       No walkthroughs available for your role yet.
@@ -285,6 +280,18 @@ export default function HelpPage() {
                       <div className="space-y-6">
                         {walkthroughSections.map((section, sectionIndex) => {
                           const SectionIcon = section.sectionIcon;
+                          const isDashboardSection = section.section === "Dashboard";
+                          const showChecklistRow = isDashboardSection && checklistWalkthroughs.length > 0 && hasPermission("dashboard");
+
+                          const sectionSteps = section.items.map((w) => w.buildStep({ isDesktop }));
+                          const sectionIds = section.items.map((w) => w.id);
+                          const checklistSteps = showChecklistRow
+                            ? checklistWalkthroughs.map((w) => w.buildStep({ isDesktop }))
+                            : [];
+                          const checklistIds = showChecklistRow ? checklistWalkthroughs.map((w) => w.id) : [];
+
+                          const playAllCount = sectionSteps.length + checklistSteps.length;
+
                           return (
                             <div key={section.section}>
                               {sectionIndex > 0 && <div className="h-px bg-border -mx-6 mb-6" />}
@@ -292,16 +299,51 @@ export default function HelpPage() {
                                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                                   <SectionIcon className="w-4 h-4 text-primary" />
                                 </div>
-                                <h4 className="font-semibold text-sm">{section.section}</h4>
+                                <h4 className="flex-1 font-semibold text-sm">{section.section}</h4>
+                                {playAllCount > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startTour({
+                                        steps: [...checklistSteps, ...sectionSteps],
+                                        walkthroughIds: [...checklistIds, ...sectionIds],
+                                      })
+                                    }
+                                    className="flex items-center gap-1 text-xs font-semibold text-primary flex-shrink-0 hover:underline"
+                                  >
+                                    <Play className="w-3 h-3" />
+                                    Play all ({playAllCount})
+                                  </button>
+                                )}
                               </div>
                               <div className="space-y-1">
-                                {section.items.map((walkthrough) => {
-                                  const step = walkthrough.buildStep({ isDesktop });
+                                {showChecklistRow && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startTour({ steps: checklistSteps, walkthroughIds: checklistIds })
+                                    }
+                                    className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/60"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">Complete your setup</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {checklistWalkthroughs.length} step{checklistWalkthroughs.length === 1 ? "" : "s"} remaining
+                                      </p>
+                                    </div>
+                                    <span className="flex items-center gap-1 text-xs font-semibold text-primary flex-shrink-0">
+                                      Start
+                                      <ArrowRight className="w-3 h-3" />
+                                    </span>
+                                  </button>
+                                )}
+                                {section.items.map((walkthrough, i) => {
+                                  const step = sectionSteps[i];
                                   return (
                                     <button
                                       key={walkthrough.id}
                                       type="button"
-                                      onClick={() => navigate(buildReplayUrl(step.path, walkthrough.id))}
+                                      onClick={() => startTour({ steps: [step], walkthroughIds: [walkthrough.id] })}
                                       className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted/60"
                                     >
                                       <div className="flex-1 min-w-0">

@@ -5,7 +5,12 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useWalkthroughDataFlags } from "@/hooks/useWalkthroughDataFlags";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { useProductTour, useIsDesktopViewport } from "@/components/onboarding/ProductTourProvider";
-import { getAvailableWalkthroughsForPage, pageNeedsDataFlags, type WalkthroughPageKey } from "@/lib/walkthroughs";
+import {
+  getAvailableWalkthroughsForPage,
+  pageNeedsDataFlags,
+  type WalkthroughPageKey,
+  type WalkthroughExtraEntry,
+} from "@/lib/walkthroughs";
 
 // Mounted once per trigger page. Two ways a walkthrough starts:
 // 1. First visit — every not-yet-seen walkthrough registered to this page is
@@ -13,7 +18,17 @@ import { getAvailableWalkthroughsForPage, pageNeedsDataFlags, type WalkthroughPa
 //    create-product, create-voucher back to back on a brand-new account).
 // 2. Replay from Help — the page was reached via `?walkthrough=<id>`, which
 //    forces just that one id to run regardless of seen state.
-export function useWalkthroughAutoTrigger(pageKey: WalkthroughPageKey) {
+//
+// `extra` lets a page contribute dynamically-built entries alongside the
+// static registry ones (SalonDashboard passes its live, per-tenant setup
+// checklist rows here — those can't be static registry entries since which
+// ones exist depends on what's still incomplete). `extraLoading` holds off
+// the first run until that dynamic data is ready.
+export function useWalkthroughAutoTrigger(
+  pageKey: WalkthroughPageKey,
+  extra: WalkthroughExtraEntry[] = [],
+  extraLoading = false,
+) {
   const { currentTenant, canUseOwnerHub } = useAuth();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { hasCustomers, hasCatalog, isLoading: dataFlagsLoading } = useWalkthroughDataFlags(
@@ -25,15 +40,16 @@ export function useWalkthroughAutoTrigger(pageKey: WalkthroughPageKey) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
-    if (permissionsLoading || dataFlagsLoading || !currentTenant?.id) return;
+    if (permissionsLoading || dataFlagsLoading || extraLoading || !currentTenant?.id) return;
 
-    const pageWalkthroughs = getAvailableWalkthroughsForPage(pageKey, {
+    const registryWalkthroughs = getAvailableWalkthroughsForPage(pageKey, {
       hasPermission,
       canUseOwnerHub,
       hasCustomers,
       hasCatalog,
       staffOperationsEnabled,
     });
+    const pageWalkthroughs = [...registryWalkthroughs, ...extra];
     if (pageWalkthroughs.length === 0) return;
 
     const replayId = searchParams.get("walkthrough");
@@ -64,5 +80,5 @@ export function useWalkthroughAutoTrigger(pageKey: WalkthroughPageKey) {
     // re-running on every searchParams/hasSeenWalkthrough change would
     // re-trigger right after the run's own cleanup navigation/markSeen call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permissionsLoading, dataFlagsLoading, currentTenant?.id, pageKey, isDesktop]);
+  }, [permissionsLoading, dataFlagsLoading, extraLoading, currentTenant?.id, pageKey, isDesktop]);
 }

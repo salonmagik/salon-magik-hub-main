@@ -13,8 +13,95 @@ import {
   Mail,
   FileText,
   Bell,
+  CreditCard,
+  Globe,
+  List,
+  Calendar,
+  Check,
 } from "lucide-react";
 import type { ProductTourStepInput } from "@/components/onboarding/ProductTourProvider";
+
+// ─── Setup checklist metadata ───────────────────────────────────────────────
+// Lives here (not in SalonDashboard.tsx) so both SalonDashboard.tsx and
+// HelpPage.tsx can import it without a circular dependency — both already
+// call useDashboardStats() for their own rendering, so building checklist
+// walkthrough steps from it costs nothing extra.
+export const CHECKLIST_META: Record<
+  string,
+  { icon: ElementType; iconBg: string; iconColor: string; description: string; actionLabel: string; warningTag?: string }
+> = {
+  payments: {
+    icon: CreditCard,
+    iconBg: "bg-destructive-bg",
+    iconColor: "text-destructive",
+    description: "Online deposits can't be settled to you until this is added.",
+    actionLabel: "Set up",
+    warningTag: "Blocks deposits",
+  },
+  booking: {
+    icon: Globe,
+    iconBg: "bg-muted",
+    iconColor: "text-muted-foreground",
+    description: "Let clients book themselves through your link.",
+    actionLabel: "Enable",
+  },
+  products: {
+    icon: List,
+    iconBg: "bg-muted",
+    iconColor: "text-muted-foreground",
+    description: "Sell retail items alongside your services.",
+    actionLabel: "Add",
+  },
+  appointment: {
+    icon: Calendar,
+    iconBg: "bg-muted",
+    iconColor: "text-muted-foreground",
+    description: "See how your calendar comes together.",
+    actionLabel: "Book",
+  },
+  services: {
+    icon: Check,
+    iconBg: "bg-muted",
+    iconColor: "text-muted-foreground",
+    description: "",
+    actionLabel: "Add",
+  },
+  customer: {
+    icon: Check,
+    iconBg: "bg-muted",
+    iconColor: "text-muted-foreground",
+    description: "",
+    actionLabel: "Add",
+  },
+};
+
+export interface WalkthroughExtraEntry {
+  id: string;
+  buildStep: (opts: { isDesktop: boolean }) => ProductTourStepInput;
+}
+
+// One step per still-incomplete checklist row — dynamic because which rows
+// exist depends on this tenant's live setup state, unlike every other
+// walkthrough in the registry.
+export function buildChecklistWalkthroughs(
+  checklistItems: Array<{ id: string; label: string; completed: boolean }>,
+): WalkthroughExtraEntry[] {
+  return checklistItems
+    .filter((item) => !item.completed && CHECKLIST_META[item.id])
+    .map((item) => ({
+      id: `dashboard.checklist.${item.id}`,
+      buildStep: () => ({
+        id: `dashboard.checklist.${item.id}`,
+        path: "/salon",
+        target: `[data-tour-id="tour-checklist-${item.id}"]`,
+        title: item.label,
+        content: CHECKLIST_META[item.id].description || `Finish setting up: ${item.label}.`,
+        // Same-page, conditionally-rendered target — skip past it quickly
+        // rather than stalling for the default 6s if it's not there.
+        waitTimeoutMs: 1500,
+      }),
+    }));
+}
 
 export type WalkthroughDataRequirement = "customers" | "catalog";
 
@@ -61,25 +148,12 @@ export interface WalkthroughDef {
 
 export const WALKTHROUGHS: WalkthroughDef[] = [
   // ── Dashboard ──────────────────────────────────────────────────────────
-  {
-    id: "dashboard.checklist",
-    pageKey: "dashboard",
-    section: "Dashboard",
-    sectionIcon: LayoutGrid,
-    label: "Complete your setup",
-    description: "What's left to finish setting up your salon",
-    permission: "dashboard",
-    buildStep: () => ({
-      id: "dashboard.checklist",
-      path: "/salon",
-      target: '[data-tour-id="tour-setup-checklist"]',
-      title: "Complete your setup",
-      content: "This checklist tracks everything left to finish setting up your salon — it disappears once you're done.",
-      // Same-page, conditionally-rendered target (only shows while setup is
-      // incomplete) — skip past it quickly rather than stalling for 6s.
-      waitTimeoutMs: 1500,
-    }),
-  },
+  // The setup checklist itself is NOT here — its rows are dynamic (which
+  // ones exist depends on what's still incomplete for this tenant), so it's
+  // built at runtime from live useDashboardStats() data. See
+  // buildChecklistWalkthroughs() below, used by SalonDashboard.tsx and
+  // HelpPage.tsx (both already call useDashboardStats for their own
+  // rendering, so this adds no new cost).
   {
     id: "dashboard.quick-create",
     pageKey: "dashboard",
