@@ -1,7 +1,33 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  lazy,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
-import { Joyride, EVENTS, STATUS, type EventData, type Step } from "react-joyride";
+import type { EventData, Step } from "react-joyride";
 import { useAuth } from "@/hooks/useAuth";
+
+// Inlined instead of importing react-joyride's `EVENTS`/`STATUS` consts:
+// react-joyride ships as a single bundled module, so importing anything
+// from it at runtime here would pull the whole library (and its
+// floating-ui dependency) back into the main bundle, defeating the point
+// of lazy-loading ProductTourRenderer below. These two string literals
+// are its actual values (react-joyride/dist/index.mjs).
+const TOUR_END_EVENT = "tour:end";
+const FINISHED_STATUS = "finished";
+const SKIPPED_STATUS = "skipped";
+
+// react-joyride + its tooltip live in their own chunk (see
+// ProductTourRenderer), loaded only once a tour actually starts — this file
+// stays cheap so it can be mounted at the App root for every user without
+// adding to everyone's initial bundle.
+const ProductTourRenderer = lazy(() => import("./ProductTourRenderer"));
 
 export interface ProductTourStepInput {
   id: string;
@@ -19,6 +45,26 @@ interface ProductTourContextValue {
 }
 
 const ProductTourContext = createContext<ProductTourContextValue | undefined>(undefined);
+
+const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
+
+// Matches Tailwind's `lg` breakpoint, which is what the real tour targets
+// (Add Service, Invite Staff) switch on between their desktop button and
+// mobile FAB variants.
+export function useIsDesktopViewport() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(DESKTOP_MEDIA_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const onChange = () => setIsDesktop(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return isDesktop;
+}
 
 function tourSeenKey(userId: string) {
   return `salonmagik.tour.seen.${userId}`;
@@ -88,10 +134,10 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
 
   const handleEvent = useCallback(
     (data: EventData) => {
-      if (data.type === EVENTS.TOUR_END) {
+      if (data.type === TOUR_END_EVENT) {
         setRun(false);
         setSteps([]);
-        if (data.status === STATUS.FINISHED || data.status === STATUS.SKIPPED) {
+        if (data.status === FINISHED_STATUS || data.status === SKIPPED_STATUS) {
           markSeen();
         }
       }
@@ -108,20 +154,9 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
     <ProductTourContext.Provider value={value}>
       {children}
       {steps.length > 0 && (
-        <Joyride
-          steps={steps}
-          run={run}
-          continuous
-          onEvent={handleEvent}
-          locale={{ last: "Done", skip: "Skip tour" }}
-          options={{
-            primaryColor: "#2E1F4E",
-            zIndex: 10000,
-            showProgress: true,
-            skipBeacon: true,
-            buttons: ["back", "close", "skip", "primary"],
-          }}
-        />
+        <Suspense fallback={null}>
+          <ProductTourRenderer steps={steps} run={run} onEvent={handleEvent} />
+        </Suspense>
       )}
     </ProductTourContext.Provider>
   );

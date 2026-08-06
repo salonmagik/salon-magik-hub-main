@@ -1376,6 +1376,7 @@ export default function ServicesPage() {
           <button
             type="button"
             aria-label="Add a catalog item"
+            data-tour-id="tour-add-service-mobile"
             className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
           >
             <Plus className="h-6 w-6" />

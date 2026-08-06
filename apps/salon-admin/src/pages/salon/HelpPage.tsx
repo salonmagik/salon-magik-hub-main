@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
@@ -161,9 +162,13 @@ interface SupportTicketRow {
 
 export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const { currentTenant, currentRole } = useAuth();
+  const { currentTenant } = useAuth();
+  const { hasPermission } = usePermissions();
   const navigate = useNavigate();
-  const canReplayTour = currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor";
+  // Matches the tour's own step-building logic: only show replay if the
+  // account can actually reach at least one of the pages it visits.
+  const canReplayTour =
+    hasPermission("services") || hasPermission("staff") || hasPermission("settings");
 
   const { data: supportTickets = [] } = useQuery({
     queryKey: ["salon-support-tickets", currentTenant?.id],

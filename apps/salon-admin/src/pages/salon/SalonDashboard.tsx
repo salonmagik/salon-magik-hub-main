@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
-import { useProductTour, type ProductTourStepInput } from "@/components/onboarding/ProductTourProvider";
+import {
+  useProductTour,
+  useIsDesktopViewport,
+  type ProductTourStepInput,
+} from "@/components/onboarding/ProductTourProvider";
 import { Button } from "@ui/button";
 import {
   CheckCircle2,
@@ -135,46 +139,77 @@ const ACTIVITY_ICONS: Record<string, React.ElementType> = {
 // ─── Product tour ─────────────────────────────────────────────────────────────
 // Services → Team → Booking page → Recap. Each `path` is where react-joyride's
 // `before` hook navigates before waiting for that page's target to mount.
-const PRODUCT_TOUR_STEPS: ProductTourStepInput[] = [
-  {
-    id: "services",
-    path: "/salon/services?tab=services",
-    target: '[data-tour-id="tour-add-service"]',
-    title: "Add your services",
-    content:
-      "This is where you build your service menu — set prices, durations, and staff assignments so bookings know what to schedule.",
-  },
-  {
-    id: "team",
-    path: "/salon/staff",
-    target: '[data-tour-id="tour-invite-staff"]',
-    title: "Invite your team",
-    content:
-      "Add staff members here and control what they can see and do with role-based permissions.",
-  },
-  {
-    id: "booking",
-    path: "/salon/settings?tab=booking",
-    target: '[data-tour-id="tour-enable-booking"]',
-    title: "Turn on online booking",
-    content:
-      "Flip this on once you've set up payouts, and clients can book themselves through your public booking link.",
-  },
-  {
+//
+// Each step is only included if `hasPermission` says the current account can
+// actually reach that page — Team and Booking are gated behind "staff" and
+// "settings" module access respectively, and not every role has them (a
+// receptionist can't invite staff, for instance). Navigating there anyway
+// would hit ModuleProtectedRoute's redirect, the tour target would never
+// mount, and the step would silently time out and skip — which is exactly
+// what happened before this was permission-aware. Recap always shows if at
+// least one other step ran.
+function buildProductTourSteps(opts: {
+  hasPermission: (module: string) => boolean;
+  isDesktop: boolean;
+}): ProductTourStepInput[] {
+  const steps: ProductTourStepInput[] = [];
+
+  if (opts.hasPermission("services")) {
+    steps.push({
+      id: "services",
+      path: "/salon/services?tab=services",
+      target: opts.isDesktop
+        ? '[data-tour-id="tour-add-service"]'
+        : '[data-tour-id="tour-add-service-mobile"]',
+      title: "Add your services",
+      content: opts.isDesktop
+        ? "This is where you build your service menu — set prices, durations, and staff assignments so bookings know what to schedule."
+        : "Tap here, then choose \"Add service\" to build your service menu.",
+    });
+  }
+
+  if (opts.hasPermission("staff")) {
+    steps.push({
+      id: "team",
+      path: "/salon/staff",
+      target: opts.isDesktop
+        ? '[data-tour-id="tour-invite-staff"]'
+        : '[data-tour-id="tour-invite-staff-mobile"]',
+      title: "Invite your team",
+      content:
+        "Add staff members here and control what they can see and do with role-based permissions.",
+    });
+  }
+
+  if (opts.hasPermission("settings")) {
+    steps.push({
+      id: "booking",
+      path: "/salon/settings?tab=booking",
+      target: '[data-tour-id="tour-enable-booking"]',
+      title: "Turn on online booking",
+      content:
+        "Flip this on once you've set up payouts, and clients can book themselves through your public booking link.",
+    });
+  }
+
+  if (steps.length === 0) return [];
+
+  steps.push({
     id: "recap",
     path: "/salon",
     target: '[data-tour-id="tour-recap"]',
     title: "You're ready to go",
-    content:
-      "That's the essentials — services, team, and booking. You can replay this tour anytime from the Help page.",
+    content: "You can replay this tour anytime from the Help page.",
     placement: "bottom",
-  },
-];
+  });
+
+  return steps;
+}
 
 export default function SalonDashboard() {
   const navigate = useNavigate();
   const { currentTenant, profile, currentRole, activeContextType, setActiveContext, canUseOwnerHub } = useAuth();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const {
     stats,
     upcomingAppointments,
@@ -225,9 +260,16 @@ export default function SalonDashboard() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const { startTour, hasSeenTour } = useProductTour();
+  const isDesktop = useIsDesktopViewport();
 
   useEffect(() => {
-    if (isLoading || !currentTenant?.id || !isOwnerOrManager) return;
+    if (isLoading || permissionsLoading || !currentTenant?.id) return;
+
+    // Built fresh from real permissions each time, not gated on role alone —
+    // a role's default access can be overridden per-user, and the tour must
+    // only ever send someone to a page they can actually reach.
+    const tourSteps = buildProductTourSteps({ hasPermission, isDesktop });
+    if (tourSteps.length === 0) return;
 
     const isReplay = searchParams.get("tour") === "replay";
     if (isReplay) {
@@ -239,18 +281,18 @@ export default function SalonDashboard() {
         },
         { replace: true },
       );
-      startTour(PRODUCT_TOUR_STEPS);
+      startTour(tourSteps);
       return;
     }
 
     if (!hasSeenTour && !isChecklistComplete) {
-      startTour(PRODUCT_TOUR_STEPS);
+      startTour(tourSteps);
     }
     // Only re-evaluate on the signals that decide whether to auto-start; startTour
     // itself is stable, and re-running this on every searchParams change would
     // re-trigger the tour after its own cleanup navigation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, currentTenant?.id, isOwnerOrManager, hasSeenTour, isChecklistComplete]);
+  }, [isLoading, permissionsLoading, currentTenant?.id, hasPermission, isDesktop, hasSeenTour, isChecklistComplete]);
 
   return (
 		<SalonSidebar>
