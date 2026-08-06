@@ -29,11 +29,14 @@ import {
   XCircle,
   AlertTriangle,
   Info,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { startClientBookingPayment } from "@/lib/bookingPayments";
+import { useToast } from "@ui/ui/use-toast";
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   scheduled: { label: "Scheduled", className: "bg-blue-100 text-blue-800" },
@@ -105,6 +108,7 @@ export default function ClientBookingDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { customers, isAuthenticated } = useClientAuth();
+  const { toast } = useToast();
   const [booking, setBooking] = useState<ClientAppointmentWithDetails | null>(null);
   type SiblingBooking = {
     id: string;
@@ -123,6 +127,7 @@ export default function ClientBookingDetailPage() {
   const [isStartingPayment, setIsStartingPayment] = useState(false);
   const [isRespondingToProposal, setIsRespondingToProposal] = useState(false);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [pendingReference, setPendingReference] = useState<string | null>(null);
   const verifyCalledRef = useRef(false);
@@ -439,6 +444,36 @@ export default function ClientBookingDetailPage() {
       console.error("Error starting booking payment:", paymentError);
       setError(paymentError instanceof Error ? paymentError.message : "Failed to start payment");
       setIsStartingPayment(false);
+    }
+  };
+
+  const handleDownloadReceipt = async () => {
+    if (!booking?.id) return;
+
+    setIsDownloadingReceipt(true);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("generate-booking-receipt", {
+        body: { appointmentId: booking.id },
+      });
+
+      if (invokeError) throw invokeError;
+      if (!(data instanceof Blob)) throw new Error("Unexpected response from server");
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receipt-${bookingReference || booking.id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      console.error("Error downloading receipt:", downloadError);
+      toast({
+        title: "Couldn't download receipt",
+        description: downloadError instanceof Error ? downloadError.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingReceipt(false);
     }
   };
 
@@ -878,6 +913,22 @@ export default function ClientBookingDetailPage() {
                   {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
                 </span>
               </div>
+            )}
+
+            {booking.amount_paid > 0 && (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={handleDownloadReceipt}
+                disabled={isDownloadingReceipt}
+              >
+                {isDownloadingReceipt ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {isDownloadingReceipt ? "Preparing receipt..." : "Download Receipt"}
+              </Button>
             )}
 
             {pendingReference && (

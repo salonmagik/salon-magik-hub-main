@@ -1,6 +1,13 @@
 import { paragraph, heading, createInfoBox, wrapEmailTemplate, buildFromAddress } from "./email-template.ts";
+import { buildReceiptPdf } from "./pdf-receipt.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
 
 export interface ReceiptLineItem {
   label: string;
@@ -63,6 +70,36 @@ export async function sendReceiptEmail(options: SendReceiptEmailOptions): Promis
   });
 
   const fromEmail = Deno.env.get("RECEIPTS_FROM_EMAIL") || Deno.env.get("DEFAULT_FROM_EMAIL") || "billing@salonmagik.com";
+  const reference = options.reference || `SUB-${Date.now()}`;
+
+  // Salon Magik's own branding here, not the tenant's — this is Salon Magik
+  // billing the salon, not the salon billing a customer, even though the
+  // email wrapper around it (wrapEmailTemplate above) intentionally stays
+  // "salon" mode so the email itself still feels personalized.
+  let attachments: { filename: string; content: string }[] | undefined;
+  try {
+    const pdfBytes = await buildReceiptPdf({
+      brand: "product",
+      brandName: "Salon Magik",
+      brandSubtitle: "Subscription billing",
+      reference,
+      billedToName: options.salonName,
+      billedToLines: [],
+      paymentLines: [reference],
+      lineItems: options.lineItems,
+      total: options.total,
+      currency: options.currency,
+      statusLabel: "PAID",
+      statusTone: "success",
+      footerThanks: "Thanks for growing with Salon Magik.",
+      footerLines: ["Salon Magik is a product of The Gray Avenue LTD", "billing@salonmagik.com · salonmagik.com"],
+    });
+    attachments = [{ filename: `receipt-${reference}.pdf`, content: encodeBase64(pdfBytes) }];
+  } catch (pdfError) {
+    // A receipt email without its PDF attached is still useful — never let
+    // PDF rendering block the email itself from sending.
+    console.error("sendReceiptEmail: PDF generation failed", pdfError);
+  }
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -76,6 +113,7 @@ export async function sendReceiptEmail(options: SendReceiptEmailOptions): Promis
         to: [options.recipientEmail],
         subject: options.title,
         html: htmlBody,
+        ...(attachments ? { attachments } : {}),
       }),
     });
 

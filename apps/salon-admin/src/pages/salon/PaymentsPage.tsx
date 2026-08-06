@@ -47,8 +47,11 @@ import {
   FileText,
   FileSpreadsheet,
   Info,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import { toast } from "@ui/ui/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -140,6 +143,7 @@ export default function PaymentsPage() {
   const [assigningBranchId, setAssigningBranchId] = useState<string | null>(null);
   const [assignDestId, setAssignDestId] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
@@ -354,6 +358,34 @@ export default function PaymentsPage() {
   };
 
   // Shared transaction row renderer
+  const handleDownloadReceipt = async (appointmentId: string, txnId: string, reference?: string) => {
+    setDownloadingReceiptId(txnId);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("generate-booking-receipt", {
+        body: { appointmentId },
+      });
+
+      if (invokeError) throw invokeError;
+      if (!(data instanceof Blob)) throw new Error("Unexpected response from server");
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receipt-${reference || appointmentId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      console.error("Error downloading receipt:", downloadError);
+      toast({
+        title: "Couldn't download receipt",
+        description: downloadError instanceof Error ? downloadError.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  };
+
   const renderTransactionRow = (txn: typeof filteredTransactions[0], showBranch = false) => {
     const style = statusStyles[txn.status] || statusStyles.pending;
     const isIncoming = txn.type === "payment" || txn.type === "purse_topup" || txn.type === "deposit";
@@ -371,14 +403,16 @@ export default function PaymentsPage() {
         ? "Partially refunded"
         : null;
     const canRefund = (txn.type === "payment" || txn.type === "deposit") && txn.customer_id && remainingRefundAmount > 0 && txn.status === "completed";
+    const canDownloadReceipt = Boolean(txn.appointment_id) && (txn.type === "payment" || txn.type === "deposit") && txn.status === "completed";
     const chip = typeChips[txn.type];
     const serviceNames = txn.appointment?.services
       ?.map((service) => service.service_name)
       .filter(Boolean)
       .join(", ");
     const transactionDescription = [chip?.label, serviceNames].filter(Boolean).join(", ");
+    const isDownloadingThisReceipt = downloadingReceiptId === txn.id;
 
-    const refundAction = canRefund ? (
+    const refundAction = canRefund || canDownloadReceipt ? (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full">
@@ -386,12 +420,27 @@ export default function PaymentsPage() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
-          >
-            {canCompleteRefunds ? "Make refund" : "Request refund"}
-          </DropdownMenuItem>
+          {canDownloadReceipt && (
+            <DropdownMenuItem
+              disabled={isDownloadingThisReceipt}
+              onClick={() => handleDownloadReceipt(txn.appointment_id as string, txn.id)}
+            >
+              {isDownloadingThisReceipt ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Download receipt
+            </DropdownMenuItem>
+          )}
+          {canRefund && (
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
+            >
+              {canCompleteRefunds ? "Make refund" : "Request refund"}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     ) : null;
