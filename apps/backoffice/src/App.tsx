@@ -27,6 +27,7 @@ import CommsPage from "@/pages/CommsPage";
 import SubscriptionLedgerPage from "@/pages/SubscriptionLedgerPage";
 import CommsCreditsPage from "@/pages/CommsCreditsPage";
 import FlaggedSignupsPage from "@/pages/FlaggedSignupsPage";
+import TransactionsPage from "@/pages/TransactionsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -204,6 +205,15 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="flagged_signups">
                   <FlaggedSignupsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/transactions"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="transactions">
+                  <TransactionsPage />
                 </BackofficeProtectedRoute>
               }
           />
