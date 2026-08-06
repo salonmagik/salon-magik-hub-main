@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useProductTour, type ProductTourStepInput } from "@/components/onboarding/ProductTourProvider";
 import { Button } from "@ui/button";
 import {
   CheckCircle2,
@@ -131,6 +132,45 @@ const ACTIVITY_ICONS: Record<string, React.ElementType> = {
   system: Bell,
 };
 
+// ─── Product tour ─────────────────────────────────────────────────────────────
+// Services → Team → Booking page → Recap. Each `path` is where react-joyride's
+// `before` hook navigates before waiting for that page's target to mount.
+const PRODUCT_TOUR_STEPS: ProductTourStepInput[] = [
+  {
+    id: "services",
+    path: "/salon/services?tab=services",
+    target: '[data-tour-id="tour-add-service"]',
+    title: "Add your services",
+    content:
+      "This is where you build your service menu — set prices, durations, and staff assignments so bookings know what to schedule.",
+  },
+  {
+    id: "team",
+    path: "/salon/staff",
+    target: '[data-tour-id="tour-invite-staff"]',
+    title: "Invite your team",
+    content:
+      "Add staff members here and control what they can see and do with role-based permissions.",
+  },
+  {
+    id: "booking",
+    path: "/salon/settings?tab=booking",
+    target: '[data-tour-id="tour-enable-booking"]',
+    title: "Turn on online booking",
+    content:
+      "Flip this on once you've set up payouts, and clients can book themselves through your public booking link.",
+  },
+  {
+    id: "recap",
+    path: "/salon",
+    target: '[data-tour-id="tour-recap"]',
+    title: "You're ready to go",
+    content:
+      "That's the essentials — services, team, and booking. You can replay this tour anytime from the Help page.",
+    placement: "bottom",
+  },
+];
+
 export default function SalonDashboard() {
   const navigate = useNavigate();
   const { currentTenant, profile, currentRole, activeContextType, setActiveContext, canUseOwnerHub } = useAuth();
@@ -183,11 +223,40 @@ export default function SalonDashboard() {
   const completedCount = completedItems.length;
   const totalCount = checklistItems.length;
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { startTour, hasSeenTour } = useProductTour();
+
+  useEffect(() => {
+    if (isLoading || !currentTenant?.id || !isOwnerOrManager) return;
+
+    const isReplay = searchParams.get("tour") === "replay";
+    if (isReplay) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("tour");
+          return next;
+        },
+        { replace: true },
+      );
+      startTour(PRODUCT_TOUR_STEPS);
+      return;
+    }
+
+    if (!hasSeenTour && !isChecklistComplete) {
+      startTour(PRODUCT_TOUR_STEPS);
+    }
+    // Only re-evaluate on the signals that decide whether to auto-start; startTour
+    // itself is stable, and re-running this on every searchParams change would
+    // re-trigger the tour after its own cleanup navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, currentTenant?.id, isOwnerOrManager, hasSeenTour, isChecklistComplete]);
+
   return (
 		<SalonSidebar>
 			<div className="space-y-6 max-w-[1320px]">
 				{/* ── Page header ────────────────────────────────────────────── */}
-				<div>
+				<div data-tour-id="tour-recap">
 					<h1 className="text-[22px] tracking-tight">Dashboard</h1>
 					<p className="text-[13.5px] text-muted-foreground mt-1">
 						{firstName ? `Welcome back, ${firstName}!` : "Welcome back!"} Here's

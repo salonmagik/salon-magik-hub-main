@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +30,7 @@ import {
   Play,
   Video,
   LifeBuoy,
+  Compass,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 
@@ -159,7 +161,9 @@ interface SupportTicketRow {
 
 export default function HelpPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const { currentTenant } = useAuth();
+  const { currentTenant, currentRole } = useAuth();
+  const navigate = useNavigate();
+  const canReplayTour = currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor";
 
   const { data: supportTickets = [] } = useQuery({
     queryKey: ["salon-support-tickets", currentTenant?.id],
@@ -414,6 +418,26 @@ export default function HelpPage() {
                 })}
               </CardContent>
             </Card>
+
+            {/* Replay product tour */}
+            {canReplayTour && (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <Compass className="w-10 h-10 text-primary mx-auto mb-3" />
+                  <h3 className="font-semibold mb-1">Replay the product tour</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Walk through services, team, and booking setup again
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => navigate("/salon?tour=replay")}
+                  >
+                    Start tour
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Contact */}
             <Card className="border-primary/20">

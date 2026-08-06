@@ -2690,6 +2690,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<div
 									key={item.key}
 									className="flex items-center justify-between py-3 border-b last:border-0"
+									data-tour-id={item.key === "onlineBookingEnabled" ? "tour-enable-booking" : undefined}
 								>
 									<div>
 										<p className="font-medium">{item.label}</p>

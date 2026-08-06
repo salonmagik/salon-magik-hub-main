@@ -611,6 +611,7 @@ export default function StaffPage() {
 					<Button
 						onClick={() => setInviteDialogOpen(true)}
 						className="hidden h-11 gap-2 rounded-full px-6 lg:flex"
+						data-tour-id="tour-invite-staff"
 					>
 						<UserPlus className="w-4 h-4" />
 						<span className="hidden sm:inline">Invite Staff</span>

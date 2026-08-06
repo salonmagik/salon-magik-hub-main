@@ -7,6 +7,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
+import { ProductTourProvider } from "@/components/onboarding/ProductTourProvider";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
@@ -162,8 +163,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
+          <ProductTourProvider>
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
               {/* Root - smart redirect based on auth */}
               <Route path="/" element={<RootRoute />} />
 
@@ -449,6 +451,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </ProductTourProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

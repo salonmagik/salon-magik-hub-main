@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -86,6 +87,7 @@ import * as XLSX from "xlsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
+const TAB_VALUES: TabValue[] = ["all", "services", "products", "packages", "vouchers"];
 type ProductSubTab = "inventory" | "fulfillment";
 type ItemType = "service" | "product" | "package" | "voucher";
 type CatalogImportType = "services" | "products";
@@ -120,7 +122,11 @@ export default function ServicesPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importType, setImportType] = useState<CatalogImportType>("services");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<TabValue>("all");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabValue>(() => {
+    const tabFromUrl = searchParams.get("tab");
+    return tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) ? (tabFromUrl as TabValue) : "all";
+  });
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
 
   // Multi-select state - supports mixed selection in "All" tab
@@ -341,6 +347,14 @@ export default function ServicesPage() {
     setActiveTab(tab);
     clearSelection();
   };
+
+  // Sync tab with URL params (e.g. links from the dashboard checklist or the product tour)
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl as TabValue);
+    }
+  }, [searchParams, activeTab]);
 
   // Determine bulk action availability
   const canCreatePackage =
@@ -990,7 +1004,7 @@ export default function ServicesPage() {
               (isActiveResourceFull ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span>
+                    <span data-tour-id={activeTab === "services" ? "tour-add-service" : undefined}>
                       <Button disabled className="h-12 rounded-full px-7">
                         <Plus className="w-4 h-4 mr-2" />
                         {addButtonLabel}
@@ -1003,7 +1017,11 @@ export default function ServicesPage() {
                   </TooltipContent>
                 </Tooltip>
               ) : (
-                <Button onClick={handleAddClick} className="h-12 rounded-full px-7">
+                <Button
+                  onClick={handleAddClick}
+                  className="h-12 rounded-full px-7"
+                  data-tour-id={activeTab === "services" ? "tour-add-service" : undefined}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   {addButtonLabel}
                 </Button>
