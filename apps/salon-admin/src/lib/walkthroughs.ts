@@ -421,6 +421,28 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   },
 
   // ── Messaging ───────────────────────────────────────────────────────────
+  // Deliberately not `requires: "customers"` — the other three entries here
+  // are, so on a brand-new account with zero customers this page would
+  // never trigger any tour at all (getAvailableWalkthroughsForPage filters
+  // all of them out, and useWalkthroughAutoTrigger bails when the list is
+  // empty). This one always fires so first-time visitors get *some*
+  // orientation even before they have anyone to message.
+  {
+    id: "messaging.overview",
+    pageKey: "messaging",
+    section: "Messaging",
+    sectionIcon: MessageSquare,
+    label: "Messaging overview",
+    description: "Broadcasts, templates, delivery history, and settings",
+    permission: "messaging",
+    buildStep: () => ({
+      id: "messaging.overview",
+      path: "/salon/messaging",
+      target: '[data-tour-id="tour-messaging-tabs"]',
+      title: "Messaging",
+      content: "Send broadcasts to your customers, manage email/SMS templates, check delivery history, and configure sender settings — all from here.",
+    }),
+  },
   {
     id: "messaging.single",
     pageKey: "messaging",
