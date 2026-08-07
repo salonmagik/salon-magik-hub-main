@@ -1,4 +1,4 @@
-import { Calendar, Clock, User, Wallet, Gift, Package, Truck, MapPin } from "lucide-react";
+import { Calendar, Clock, User, Wallet, Gift, Package, Truck, MapPin, Info } from "lucide-react";
 import { Separator } from "@ui/separator";
 import { Badge } from "@ui/badge";
 import { RadioGroup, RadioGroupItem } from "@ui/radio-group";
@@ -63,89 +63,77 @@ export function ReviewStep({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <h3 className="font-semibold">Order Summary</h3>
-        {items.map((item) => {
-          const recipient = item.isGift ? giftRecipients[item.id] : undefined;
-          return (
-            <div key={item.id} className="rounded-lg border p-3 space-y-2">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="font-medium">{item.name}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <span className="uppercase">{item.type}</span>
-                    {item.branchName && (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        {item.branchName}
-                      </span>
-                    )}
-                    {item.scheduleMode === "leave_unscheduled" && (
-                      <Badge variant="outline">Leave unscheduled</Badge>
-                    )}
-                    {item.scheduleMode === "schedule_now" && item.scheduledDate && item.scheduledTime && (
-                      <Badge variant="secondary">
-                        {item.scheduledDate} at {item.scheduledTime}
-                      </Badge>
-                    )}
-                    {item.isGift && (
-                      <Badge variant="secondary" className="gap-1">
-                        <Gift className="h-3 w-3" />
-                        Gift
-                      </Badge>
-                    )}
-                    {item.type === "product" && item.fulfillmentType && (
-                      <Badge variant="outline" className="gap-1">
-                        {item.fulfillmentType === "pickup" ? (
-                          <>
-                            <Package className="h-3 w-3" />
-                            Pickup
-                          </>
-                        ) : (
-                          <>
-                            <Truck className="h-3 w-3" />
-                            Delivery
-                          </>
-                        )}
-                      </Badge>
-                    )}
+      <div>
+        <h3 className="font-serif text-lg font-semibold mb-3">Order Summary</h3>
+        <div className="rounded-2xl border border-border divide-y divide-border overflow-hidden">
+          {items.map((item) => {
+            const recipient = item.isGift ? giftRecipients[item.id] : undefined;
+            return (
+              <div key={item.id} className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium">{item.name}</p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1">
+                      <span className="uppercase tracking-wide">{item.type}</span>
+                      {item.branchName && (
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {item.branchName}
+                        </span>
+                      )}
+                      {item.scheduleMode === "leave_unscheduled" && (
+                        <Badge variant="outline" className="rounded-full">Leave unscheduled</Badge>
+                      )}
+                      {item.isGift && (
+                        <Badge className="gap-1 rounded-full bg-accent text-accent-foreground hover:bg-accent border-0 px-2 py-0">
+                          <Gift className="h-3 w-3" />
+                          Gift
+                        </Badge>
+                      )}
+                      {item.type === "product" && item.fulfillmentType && (
+                        <span className="inline-flex items-center gap-1">
+                          {item.fulfillmentType === "pickup" ? <Package className="h-3 w-3" /> : <Truck className="h-3 w-3" />}
+                          {item.fulfillmentType === "pickup" ? "Pickup" : "Delivery"}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  <span className="font-serif font-semibold whitespace-nowrap">
+                    {formatCurrency(item.price * item.quantity, salon.currency)}
+                  </span>
                 </div>
-                <span className="font-semibold">
-                  {formatCurrency(item.price * item.quantity, salon.currency)}
-                </span>
+
+                {item.scheduleMode === "schedule_now" && item.scheduledDate && item.scheduledTime && (
+                  <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {item.scheduledDate}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {item.scheduledTime}
+                    </span>
+                  </div>
+                )}
+
+                {recipient && (
+                  <div className="text-xs text-muted-foreground">
+                    Gift for {recipient.firstName} {recipient.lastName}
+                  </div>
+                )}
               </div>
-
-              {item.scheduleMode === "schedule_now" && item.scheduledDate && item.scheduledTime && (
-                <div className="text-sm text-muted-foreground flex flex-wrap gap-3">
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar className="h-3 w-3" />
-                    {item.scheduledDate}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {item.scheduledTime}
-                  </span>
-                </div>
-              )}
-
-              {recipient && (
-                <div className="text-sm text-muted-foreground">
-                  Gift for {recipient.firstName} {recipient.lastName}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      <div className="rounded-lg border p-4 space-y-2">
-        <h3 className="font-semibold flex items-center gap-2">
+      <div>
+        <h3 className="font-serif text-lg font-semibold mb-3 flex items-center gap-2">
           <User className="h-4 w-4" />
           Your Information
         </h3>
         <div className="text-sm text-muted-foreground">
-          <p>
+          <p className="text-foreground font-medium">
             {bookerInfo.firstName} {bookerInfo.lastName}
           </p>
           <p>{bookerInfo.email}</p>
@@ -183,7 +171,7 @@ export function ReviewStep({
 
       {afterPurse > 0 && !requiresApproval && (
         <div className="space-y-3">
-          <h3 className="font-semibold flex items-center gap-2">
+          <h3 className="font-serif text-lg font-semibold flex items-center gap-2">
             <Wallet className="h-4 w-4" />
             Payment Options
           </h3>
@@ -193,29 +181,43 @@ export function ReviewStep({
             onValueChange={(value) => onPaymentOptionChange(value as PaymentOption)}
             className="space-y-2"
           >
-            <div className="flex items-center space-x-2 rounded-lg border p-3">
+            <label
+              htmlFor="pay-now"
+              className={`flex items-center gap-3 rounded-xl border p-3.5 cursor-pointer transition-colors ${paymentOption === "pay_now" ? "border-[var(--brand-color)]" : "border-border"}`}
+            >
               <RadioGroupItem value="pay_now" id="pay-now" />
-              <Label htmlFor="pay-now" className="flex-1 cursor-pointer">
-                Pay now
-              </Label>
-              <span className="font-medium">{formatCurrency(afterPurse, salon.currency)}</span>
-            </div>
+              <span className="flex-1 text-sm">Pay in full now</span>
+              <span className="font-serif font-semibold">{formatCurrency(afterPurse, salon.currency)}</span>
+            </label>
 
             {depositRequired && (
-              <div className="flex items-center space-x-2 rounded-lg border p-3">
+              <label
+                htmlFor="pay-deposit"
+                className={`flex items-center gap-3 rounded-xl border p-3.5 cursor-pointer transition-colors ${paymentOption === "pay_deposit" ? "border-[var(--brand-color)]" : "border-border"}`}
+              >
                 <RadioGroupItem value="pay_deposit" id="pay-deposit" />
-                <Label htmlFor="pay-deposit" className="flex-1 cursor-pointer">
+                <span className="flex-1 text-sm">
                   Pay deposit now
-                </Label>
-                <span className="font-medium">{formatCurrency(depositAmount, salon.currency)}</span>
-              </div>
+                  <span className="block text-xs text-muted-foreground">
+                    {Math.round((salon.default_deposit_percentage || 0))}% today, rest at the salon
+                  </span>
+                </span>
+                <span className="font-serif font-semibold">{formatCurrency(depositAmount, salon.currency)}</span>
+              </label>
             )}
           </RadioGroup>
+
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-950">
+            <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <p>
+              Paystack will open in a new tab to complete payment. If the payment page does not load, try Safari or disable strict browser privacy shields for the payment tab.
+            </p>
+          </div>
         </div>
       )}
 
       {requiresApproval && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
           <p className="font-medium">Booking approval required</p>
           <p className="mt-1 text-amber-900/90">
             This salon reviews bookings before payment. After you submit, the salon will accept, reschedule, or decline the request. If accepted, you will receive an invoice in your client portal and by email.
@@ -225,27 +227,26 @@ export function ReviewStep({
 
       <Separator />
 
-      <div className="space-y-2 rounded-lg border p-4">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Subtotal</span>
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-sm text-muted-foreground">
+          <span>Subtotal</span>
           <span>{formatCurrency(subtotal, salon.currency)}</span>
         </div>
         {voucherDiscount > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Voucher Discount</span>
-            <span>-{formatCurrency(voucherDiscount, salon.currency)}</span>
+          <div className="flex justify-between text-sm text-success">
+            <span>Voucher discount</span>
+            <span>&minus;{formatCurrency(voucherDiscount, salon.currency)}</span>
           </div>
         )}
         {purseAmount > 0 && (
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Salon Balance</span>
-            <span>-{formatCurrency(purseAmount, salon.currency)}</span>
+          <div className="flex justify-between text-sm text-success">
+            <span>Salon balance</span>
+            <span>&minus;{formatCurrency(purseAmount, salon.currency)}</span>
           </div>
         )}
-        <Separator />
-        <div className="flex justify-between font-semibold">
-          <span>{requiresApproval ? "Amount Due After Approval" : "Amount Due Now"}</span>
-          <span>{formatCurrency(requiresApproval ? afterPurse : amountDueNow, salon.currency)}</span>
+        <div className="flex justify-between items-baseline pt-2.5 mt-1 border-t border-border">
+          <span className="font-medium text-sm">{requiresApproval ? "Amount Due After Approval" : "Amount Due Now"}</span>
+          <span className="font-serif text-xl font-semibold">{formatCurrency(requiresApproval ? afterPurse : amountDueNow, salon.currency)}</span>
         </div>
       </div>
     </div>

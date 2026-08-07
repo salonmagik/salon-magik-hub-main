@@ -514,6 +514,12 @@ export default function ClientBookingDetailPage() {
               {booking.tenant?.name || "Salon"}
             </p>
           </div>
+          {["scheduled", "started", "paused"].includes(booking.status) && (
+            <BookingActions
+              booking={booking}
+              onActionComplete={handleActionComplete}
+            />
+          )}
         </div>
 
         {/* Payment verification banner */}
@@ -749,14 +755,6 @@ export default function ClientBookingDetailPage() {
               </div>
             </CardContent>
           </Card>
-        )}
-
-        {/* Booking Actions */}
-        {["scheduled", "started", "paused"].includes(booking.status) && (
-          <BookingActions 
-            booking={booking} 
-            onActionComplete={handleActionComplete}
-          />
         )}
 
         {/* Date & Time */}

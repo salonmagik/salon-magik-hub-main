@@ -208,7 +208,15 @@ function RecipientForm({
               </button>
               <button
                 type="button"
-                onClick={() => setIdentityMatchDismissed(true)}
+                onClick={() => {
+                  // Just one onUpdate call — the parent's updateRecipient/
+                  // applySharedRecipient close over `recipients` per call,
+                  // so two synchronous calls in the same tick would have
+                  // the second (stale) one clobber the first.
+                  setIdentityMatchDismissed(true);
+                  onUpdate("email", "");
+                  setIdentityMatch(null);
+                }}
                 className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
               >
                 Let me fix this
@@ -434,7 +442,7 @@ export function GiftRecipientsStep({
       <div className="space-y-6">
         <div className="flex items-center gap-2">
           <Gift className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">Gift Recipient</h3>
+          <h3 className="font-serif text-lg font-semibold">Gift Recipient</h3>
         </div>
         <RecipientForm
           recipient={recipients[item.id] || emptyRecipient}
@@ -452,7 +460,7 @@ export function GiftRecipientsStep({
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Gift className="h-5 w-5 text-primary" />
-        <h3 className="font-semibold">Gift Recipients</h3>
+        <h3 className="font-serif text-lg font-semibold">Gift Recipients</h3>
       </div>
 
       <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">

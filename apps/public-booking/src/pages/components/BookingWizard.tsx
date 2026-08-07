@@ -918,46 +918,53 @@ export function BookingWizard({
   }, [open]);
 
   const brandColor = salon.brand_color || "#2E1F4E";
+  const showSidebar = step !== "confirmation";
+  const onReviewOrPayment = step === "review" || step === "payment";
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="max-w-2xl h-[90vh] sm:h-auto sm:max-h-[85vh] flex flex-col p-0 gap-0"
+        className="max-w-2xl lg:max-w-4xl h-[90vh] sm:h-auto sm:max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"
         style={{ "--brand-color": brandColor } as React.CSSProperties}
       >
-        <DialogHeader className="px-6 pt-6 pb-4 shrink-0">
+        <div className={`grid flex-1 min-h-0 ${showSidebar ? "lg:grid-cols-[1fr_300px]" : "lg:grid-cols-1"}`}>
+        <div className="flex flex-col min-h-0 min-w-0">
+        <DialogHeader className="px-6 pt-6 pb-1 shrink-0">
           <DialogDescription className="sr-only">
             Complete your booking by reviewing your cart, schedule, and payment details.
           </DialogDescription>
-          <DialogTitle>Complete Checkout</DialogTitle>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+            Step {currentStepIndex + 1} of {stepConfig.length} &middot; {stepConfig[currentStepIndex]?.label}
+          </div>
+          <DialogTitle className="font-serif text-2xl font-semibold tracking-tight">Complete Checkout</DialogTitle>
         </DialogHeader>
 
-        <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] shrink-0">
-          <div className="flex items-center gap-2 px-4 py-2 min-w-max">
+        <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] shrink-0 mt-3">
+          <div className={`flex items-center gap-1 px-6 pb-4 min-w-max ${showSidebar ? "" : "lg:justify-center lg:w-full"}`}>
             {stepConfig.map((entry, index) => (
-              <div key={entry.key} className="flex items-center gap-2 shrink-0">
+              <div key={entry.key} className="flex items-center gap-1 shrink-0">
                 <div
                   className={`flex items-center gap-1.5 ${step === entry.key
-                    ? "text-primary"
+                    ? "text-foreground"
                     : currentStepIndex > index
                       ? "text-muted-foreground"
                       : "text-muted-foreground/50"
                     }`}
                 >
                   <div
-                    className={`h-7 w-7 rounded-full flex items-center justify-center border-2 shrink-0 ${step === entry.key
-                      ? "text-white border-transparent"
+                    className={`h-7 w-7 rounded-full flex items-center justify-center border shrink-0 transition-transform ${step === entry.key
+                      ? "text-white border-transparent scale-110"
                       : currentStepIndex > index
-                        ? "border-muted-foreground bg-muted"
-                        : "border-muted"
+                        ? "border-transparent bg-success text-success-foreground"
+                        : "border-border bg-muted/60"
                       }`}
                     style={step === entry.key ? { backgroundColor: "var(--brand-color)" } : undefined}
                   >
-                    {entry.icon}
+                    {currentStepIndex > index ? <CheckCircle className="h-3.5 w-3.5" /> : entry.icon}
                   </div>
-                  <span className="text-xs font-medium whitespace-nowrap">{entry.label}</span>
+                  <span className="text-xs font-medium whitespace-nowrap hidden sm:inline">{entry.label}</span>
                 </div>
-                {index < stepConfig.length - 1 && <div className="w-6 h-px bg-muted shrink-0" />}
+                {index < stepConfig.length - 1 && <div className="w-4 h-px bg-border shrink-0" />}
               </div>
             ))}
           </div>
@@ -1082,19 +1089,19 @@ export function BookingWizard({
 
             {step === "confirmation" && (
               <div className="text-center py-8 space-y-4">
-                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                  <CheckCircle className="h-8 w-8 text-primary" />
+                <div className="h-[72px] w-[72px] rounded-full bg-accent flex items-center justify-center mx-auto animate-in zoom-in-50 duration-500">
+                  <CheckCircle className="h-9 w-9 text-accent-foreground" />
                 </div>
-                <h2 className="text-2xl font-bold">{requiresApproval ? "Booking Submitted" : "Booking Confirmed!"}</h2>
-                <p className="text-muted-foreground">
+                <h2 className="font-serif text-[26px] font-semibold tracking-tight">{requiresApproval ? "Booking Submitted" : "Booking Confirmed!"}</h2>
+                <p className="text-muted-foreground max-w-[380px] mx-auto text-[14.5px]">
                   {requiresApproval
                     ? "Your booking has been sent to the salon for review. Payment will only be requested after the salon accepts it."
                     : "Your booking has been successfully submitted."}
                 </p>
                 {bookingReference && (
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground">Reference Number</p>
-                    <p className="text-xl font-mono font-bold">{bookingReference}</p>
+                  <div className="inline-block px-6 py-3 bg-muted rounded-xl border border-dashed border-border">
+                    <p className="text-xs text-muted-foreground mb-1">Reference Number</p>
+                    <p className="font-serif text-lg font-semibold tracking-wide">{bookingReference}</p>
                   </div>
                 )}
                 <p className="text-sm text-muted-foreground">
@@ -1162,6 +1169,59 @@ export function BookingWizard({
             </Button>
           </div>
         )}
+        </div>
+
+        {showSidebar && (
+          <div className="hidden lg:flex flex-col bg-muted/40 border-l border-border p-6 min-h-0 min-w-0 overflow-y-auto">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">Order Summary</h4>
+            <div className="space-y-0 mb-4">
+              {items.map((item) => (
+                <div key={item.id} className="flex gap-3 py-2.5 border-b border-border last:border-0 text-sm">
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate">{item.name}{item.quantity > 1 ? ` ×${item.quantity}` : ""}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {item.type === "service" ? "Service" : item.type === "package" ? "Package" : "Product"}
+                      {item.isGift ? " · Gift" : ""}
+                    </p>
+                  </div>
+                  <div className="font-serif font-semibold whitespace-nowrap">
+                    {formatCurrency(item.price * item.quantity, salon.currency)}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-auto pt-4 space-y-1.5 border-t border-border">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span>{formatCurrency(subtotal, salon.currency)}</span>
+              </div>
+              {onReviewOrPayment && voucherDiscount > 0 && (
+                <div className="flex justify-between text-sm text-success">
+                  <span>Voucher discount</span>
+                  <span>&minus;{formatCurrency(voucherDiscount, salon.currency)}</span>
+                </div>
+              )}
+              {onReviewOrPayment && purseAmount > 0 && (
+                <div className="flex justify-between text-sm text-success">
+                  <span>Salon balance</span>
+                  <span>&minus;{formatCurrency(purseAmount, salon.currency)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline pt-2.5 mt-1 border-t border-border">
+                <span className="font-medium text-sm">{onReviewOrPayment ? (requiresApproval ? "Due After Approval" : "Due Now") : "Total"}</span>
+                <span className="font-serif text-xl font-semibold">
+                  {formatCurrency(onReviewOrPayment ? (requiresApproval ? afterPurse : amountDueNow) : afterVoucher, salon.currency)}
+                </span>
+              </div>
+              {onReviewOrPayment && !requiresApproval && amountDueAtSalon > 0 && (
+                <p className="text-xs text-muted-foreground text-right">
+                  + {formatCurrency(amountDueAtSalon, salon.currency)} due at the salon
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        </div>
       </DialogContent>
     </Dialog>
   );
