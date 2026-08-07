@@ -116,15 +116,21 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   const [steps, setSteps] = useState<Step[]>([]);
   const [run, setRun] = useState(false);
   const [activeWalkthroughIds, setActiveWalkthroughIds] = useState<string[]>([]);
-  const [seenIds, setSeenIds] = useState<Set<string>>(() => {
-    if (!user?.id) return new Set();
+  // Can't read this from a useState lazy initializer: user.id isn't resolved
+  // yet on the very first render (auth loads asynchronously), so that
+  // initializer would run once against an empty/undefined id and never
+  // re-read localStorage once the real id showed up — every walkthrough
+  // would look "unseen" for the rest of the session regardless of history.
+  const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user?.id) return;
     try {
       const raw = localStorage.getItem(tourSeenKey(user.id));
-      return raw ? new Set(JSON.parse(raw)) : new Set();
+      setSeenIds(raw ? new Set(JSON.parse(raw)) : new Set());
     } catch {
-      return new Set();
+      setSeenIds(new Set());
     }
-  });
+  }, [user?.id]);
 
   const markSeen = useCallback(
     (ids: string[]) => {
