@@ -998,7 +998,7 @@ export default function AppointmentsPage() {
               Record walk-ins
             </Button>
             <Button
-              className="rounded-full bg-foreground text-background hover:bg-foreground/90"
+              className="rounded-full"
               data-tour-id="tour-book-appointment"
               onClick={() => setAppointmentDialogOpen(true)}
             >
@@ -1029,162 +1029,162 @@ export default function AppointmentsPage() {
         {/* Tab-Specific Stats Grid */}
         {activeTab === "scheduled" ? (
           <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
-                <Calendar className="w-4 h-4 text-primary" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">{getPresetLabel(dateRangePreset)}</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{scheduledStats.rangeCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">{getPresetLabel(dateRangePreset)}</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rangeCount}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <Calendar className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-4 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-7 h-7 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-amber-500/10">
-                <Clock className="w-4 h-4 text-amber-600" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Amount due</p>
-                {statsLoading ? <Skeleton className="h-6 w-16 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{formatCurrency(scheduledStats.amountDue, currency)}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Amount due</p>
+                {statsLoading ? <Skeleton className="h-6 w-16 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{formatCurrency(scheduledStats.amountDue, currency)}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                <Clock className="h-5 w-5 text-amber-600" />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
-                <Gift className="w-4 h-4 text-primary" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Gifted</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{scheduledStats.giftedCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Gifted</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.giftedCount}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <Gift className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-destructive/10">
-                <XCircle className="w-4 h-4 text-destructive" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Cancelled</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{scheduledStats.cancelledCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Cancelled</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.cancelledCount}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-destructive/10">
+                <XCircle className="h-5 w-5 text-destructive" />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
-                <RotateCcw className="w-4 h-4 text-primary" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Rescheduled</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{scheduledStats.rescheduledCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Rescheduled</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rescheduledCount}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <RotateCcw className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-success/10">
-                <Check className="w-4 h-4 text-success" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Confirmed</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Confirmed</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-success/10">
+                <Check className="h-5 w-5 text-success" />
               </div>
             </div>
           </div>
         ) : activeTab === "unscheduled" ? (
           <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
-                <Calendar className="w-4 h-4 text-primary" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Total</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{unscheduledStats.totalCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Total</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.totalCount}</p>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-success/10">
-                <Check className="w-4 h-4 text-success" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <Calendar className="h-5 w-5 text-primary" />
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Paid</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{unscheduledStats.paidCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Paid</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.paidCount}</p>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-3 px-4 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-7 h-7 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-destructive/10">
-                <XCircle className="w-4 h-4 text-destructive" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-success/10">
+                <Check className="h-5 w-5 text-success" />
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Unpaid</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{unscheduledStats.unpaidCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Unpaid</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.unpaidCount}</p>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-amber-500/10">
-                <Coins className="w-4 h-4 text-amber-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-destructive/10">
+                <XCircle className="h-5 w-5 text-destructive" />
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Partial</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{unscheduledStats.partialCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Partial</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.partialCount}</p>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
-                <Gift className="w-4 h-4 text-primary" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                <Coins className="h-5 w-5 text-amber-600" />
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Gifted</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{unscheduledStats.giftedCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Gifted</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.giftedCount}</p>
                 )}
               </div>
-            </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-muted">
-                <RotateCcw className="w-4 h-4 text-muted-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <Gift className="h-5 w-5 text-primary" />
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Refunded</p>
-                <p className="text-[19px] leading-tight text-muted-foreground">—</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Refunded</p>
+                <p className="mt-1 font-serif text-xl font-semibold text-muted-foreground sm:text-2xl">—</p>
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-muted">
+                <RotateCcw className="h-5 w-5 text-muted-foreground" />
               </div>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-[14px] sm:max-w-sm">
-            <div className="flex items-center gap-3 px-4 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-7 h-7 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-amber-500/10">
-                <ShieldCheck className="w-4 h-4 text-amber-600" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Awaiting review</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{scheduledStats.unconfirmedCount}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Awaiting review</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.unconfirmedCount}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                <ShieldCheck className="h-5 w-5 text-amber-600" />
               </div>
             </div>
-            <div className="flex items-center gap-3 px-5 py-4 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 bg-primary/[0.08]">
-                <Coins className="w-4 h-4 text-primary" />
-              </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
-                <p className="text-xs text-muted-foreground">Review value</p>
-                {statsLoading ? <Skeleton className="h-6 w-16 mt-0.5" /> : (
-                  <p className="text-[19px] leading-tight">{formatCurrency(scheduledStats.unconfirmedValue, currency)}</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">Review value</p>
+                {statsLoading ? <Skeleton className="h-6 w-16 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{formatCurrency(scheduledStats.unconfirmedValue, currency)}</p>
                 )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <Coins className="h-5 w-5 text-primary" />
               </div>
             </div>
           </div>

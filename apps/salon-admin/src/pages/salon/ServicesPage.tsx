@@ -43,6 +43,7 @@ import {
   Undo2,
   Loader2,
   AlertTriangle,
+  Copy,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -124,7 +125,7 @@ export default function ServicesPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importType, setImportType] = useState<CatalogImportType>("services");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabValue>(() => {
     const tabFromUrl = searchParams.get("tab");
     return tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) ? (tabFromUrl as TabValue) : "all";
@@ -344,10 +345,21 @@ export default function ServicesPage() {
     setSelectedTypes(new Set());
   };
 
-  // Clear selection on tab change
+  // Clear selection on tab change. Also keeps the URL's ?tab= in sync —
+  // otherwise a tour/deep-link that landed with ?tab=services in the URL
+  // would leave that param stale after a manual click, and the sync effect
+  // below would keep snapping activeTab back to it on every render.
   const handleTabChange = (tab: TabValue) => {
     setActiveTab(tab);
     clearSelection();
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tab);
+        return next;
+      },
+      { replace: true },
+    );
   };
 
   // Sync tab with URL params (e.g. links from the dashboard checklist or the product tour)
@@ -356,7 +368,8 @@ export default function ServicesPage() {
     if (tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl as TabValue);
     }
-  }, [searchParams, activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Determine bulk action availability
   const canCreatePackage =
@@ -2136,7 +2149,24 @@ function SelectableItemCard({
                 </Tooltip>
               )}
             </div>
-            <h3 className="truncate text-sm font-medium sm:text-base">{item.name}</h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-medium sm:text-base">{item.name}</h3>
+              {item.type === "voucher" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(item.name);
+                    toast({ title: "Copied", description: `Voucher code ${item.name} copied to clipboard.` });
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
             <p className="line-clamp-1 text-xs text-muted-foreground sm:text-sm">
               {item.description || "No description"}
             </p>

@@ -40,6 +40,7 @@ import {
 	DialogTitle,
 } from "@ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@ui/popover";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
 import { TimePicker } from "@ui/time-picker";
 import {
@@ -2809,57 +2810,84 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 											{item.description}
 										</p>
 									</div>
-									<Popover
-										open={pendingToggle?.key === item.key}
-										onOpenChange={(open) => {
-											if (!open) setPendingToggle(null);
-										}}
-									>
-										<PopoverTrigger asChild>
-											<Switch
-												checked={item.checked}
-												disabled={item.disabled || isToggleSaving}
-												onCheckedChange={(v) =>
-													setPendingToggle({
-														key: item.key,
-														value: v,
-														label: item.label,
-														stateUpdate: item.stateUpdate(v),
-														dbUpdate: item.dbUpdate(v),
-													})
-												}
-											/>
-										</PopoverTrigger>
-										<PopoverContent align="end" className="w-64 p-4">
-											<p className="text-sm font-medium">
-												{pendingToggle?.value ? "Turn on" : "Turn off"}{" "}
-												{item.label}?
-											</p>
-											<p className="mt-1 text-xs text-muted-foreground">
-												{item.description}
-											</p>
-											<div className="mt-4 flex justify-end gap-2">
+									{item.key === "onlineBookingEnabled" && item.disabled ? (
+										<HoverCard openDelay={150} closeDelay={100}>
+											<HoverCardTrigger asChild>
+												{/* The Switch below is disabled (pointer-events-none), so this
+												    wrapping span is what actually receives the hover/click that
+												    opens the card explaining why. */}
+												<span tabIndex={0} className="inline-flex cursor-not-allowed">
+													<Switch checked={item.checked} disabled className="pointer-events-none" />
+												</span>
+											</HoverCardTrigger>
+											<HoverCardContent align="end" className="w-72">
+												<p className="text-sm font-medium">Set up payouts first</p>
+												<p className="mt-1 text-xs text-muted-foreground">
+													Online booking needs a payout account so customer payments have somewhere to go. Set one up in Cashflow &amp; Payouts, then come back to turn this on.
+												</p>
 												<Button
 													size="sm"
-													variant="outline"
-													onClick={() => setPendingToggle(null)}
+													className="mt-3 w-full gap-1.5"
+													onClick={() => handleTabChange("payout-destinations")}
 												>
-													Cancel
+													Go to payout
+													<ExternalLink className="h-3.5 w-3.5" />
 												</Button>
-												<Button
-													size="sm"
-													disabled={isToggleSaving}
-													onClick={confirmPendingToggle}
-												>
-													{isToggleSaving ? (
-														<Loader2 className="h-3 w-3 animate-spin" />
-													) : (
-														"Confirm"
-													)}
-												</Button>
-											</div>
-										</PopoverContent>
-									</Popover>
+											</HoverCardContent>
+										</HoverCard>
+									) : (
+										<Popover
+											open={pendingToggle?.key === item.key}
+											onOpenChange={(open) => {
+												if (!open) setPendingToggle(null);
+											}}
+										>
+											<PopoverTrigger asChild>
+												<Switch
+													checked={item.checked}
+													disabled={item.disabled || isToggleSaving}
+													onCheckedChange={(v) =>
+														setPendingToggle({
+															key: item.key,
+															value: v,
+															label: item.label,
+															stateUpdate: item.stateUpdate(v),
+															dbUpdate: item.dbUpdate(v),
+														})
+													}
+												/>
+											</PopoverTrigger>
+											<PopoverContent align="end" className="w-64 p-4">
+												<p className="text-sm font-medium">
+													{pendingToggle?.value ? "Turn on" : "Turn off"}{" "}
+													{item.label}?
+												</p>
+												<p className="mt-1 text-xs text-muted-foreground">
+													{item.description}
+												</p>
+												<div className="mt-4 flex justify-end gap-2">
+													<Button
+														size="sm"
+														variant="outline"
+														onClick={() => setPendingToggle(null)}
+													>
+														Cancel
+													</Button>
+													<Button
+														size="sm"
+														disabled={isToggleSaving}
+														onClick={confirmPendingToggle}
+													>
+														{isToggleSaving ? (
+															<Loader2 className="h-3 w-3 animate-spin" />
+														) : (
+															"Confirm"
+														)}
+													</Button>
+												</div>
+											</PopoverContent>
+										</Popover>
+									)}
 								</div>
 							))}
 						</div>

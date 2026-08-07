@@ -7,7 +7,8 @@ import {
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
-import { Edit, Ban, Trash2, Calendar } from "lucide-react";
+import { Edit, Ban, Trash2, Calendar, Copy } from "lucide-react";
+import { toast } from "@ui/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { format } from "date-fns";
@@ -109,7 +110,21 @@ export function VoucherDetailDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
-            <span className="font-mono">{voucher.code}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-mono">{voucher.code}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  navigator.clipboard.writeText(voucher.code);
+                  toast({ title: "Copied", description: `Voucher code ${voucher.code} copied to clipboard.` });
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            </span>
             <Badge className={getStatusVariant(voucher.status)}>
               {voucher.status}
             </Badge>

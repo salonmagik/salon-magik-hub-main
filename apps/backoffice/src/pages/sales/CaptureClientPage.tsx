@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
-import { MoreHorizontal, Ticket } from "lucide-react";
+import { MoreHorizontal, Ticket, Copy } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { EmptyState } from "@ui/empty-state";
 
@@ -182,7 +182,23 @@ export default function CaptureClientPage() {
               <TableBody>
                 {promoCodes.map((promoCode: any) => (
                   <TableRow key={promoCode.id}>
-                    <TableCell className="font-medium">{promoCode.code}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span>{promoCode.code}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(promoCode.code);
+                            toast.success("Promo code copied");
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
                     <TableCell>{promoCode.target_email}</TableCell>
                     <TableCell>
                       <Tooltip>
