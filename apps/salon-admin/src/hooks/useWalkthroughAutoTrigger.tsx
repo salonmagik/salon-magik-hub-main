@@ -28,6 +28,7 @@ export function useWalkthroughAutoTrigger(
   pageKey: WalkthroughPageKey,
   extra: WalkthroughExtraEntry[] = [],
   extraLoading = false,
+  onComplete?: () => void,
 ) {
   const { currentTenant, canUseOwnerHub } = useAuth();
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
@@ -50,7 +51,10 @@ export function useWalkthroughAutoTrigger(
       staffOperationsEnabled,
     });
     const pageWalkthroughs = [...registryWalkthroughs, ...extra];
-    if (pageWalkthroughs.length === 0) return;
+    if (pageWalkthroughs.length === 0) {
+      onComplete?.();
+      return;
+    }
 
     const replayId = searchParams.get("walkthrough");
     if (replayId) {
@@ -70,11 +74,15 @@ export function useWalkthroughAutoTrigger(
     }
 
     const unseen = pageWalkthroughs.filter((w) => !hasSeenWalkthrough(w.id));
-    if (unseen.length === 0) return;
+    if (unseen.length === 0) {
+      onComplete?.();
+      return;
+    }
 
     startTour({
       steps: unseen.map((w) => w.buildStep({ isDesktop })),
       walkthroughIds: unseen.map((w) => w.id),
+      onComplete,
     });
     // Only re-evaluate on the signals that decide whether to auto-start;
     // re-running on every searchParams/hasSeenWalkthrough change would

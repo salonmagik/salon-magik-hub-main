@@ -124,6 +124,7 @@ export type WalkthroughPageKey =
   | "hub-theme"
   | "branch-settings"
   | "reports"
+  | "hub-switcher"
   | "audit-log"
   | "all-notifications";
 
@@ -579,6 +580,37 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       content: "Compare inflow, bookings, staff online, and outstanding balances across every branch.",
     }),
   },
+
+  // Deliberately its own pageKey, not bundled into "hub-overview" above.
+  // Staff land in the business hub first after onboarding and need to be
+  // pointed at the switcher to reach an actual branch — but that guidance
+  // has to show *after* the hub-overview tour ends, whether the user
+  // finished it or skipped it. Bundling it as one more hub-overview step
+  // wouldn't do that: react-joyride's "Skip" aborts every remaining step in
+  // the run and still marks the whole batch seen, so a skip on step 1 of 4
+  // would permanently mark this step "seen" without ever showing it.
+  // SalonsOverviewPage chains this pageKey's trigger off hub-overview's
+  // onComplete instead.
+  {
+    id: "hub-switcher.switch-to-branch",
+    pageKey: "hub-switcher",
+    section: "Business Hub",
+    sectionIcon: Building2,
+    label: "Switch to a branch",
+    description: "Jump from the business hub into an individual branch",
+    requiresOwnerHub: true,
+    buildStep: ({ isDesktop }) => ({
+      id: "hub-switcher.switch-to-branch",
+      path: "/salon/overview",
+      target: isDesktop ? '[data-tour-id="tour-context-switcher"]' : '[data-tour-id="tour-mobile-menu-toggle"]',
+      title: "Switch to a branch",
+      content: isDesktop
+        ? "Use this switcher any time to jump between the business hub and an individual branch."
+        : "Tap here to open your menu, then use the Switch dropdown at the top to jump to a branch.",
+      waitTimeoutMs: 1500,
+    }),
+  },
+
   {
     id: "hub.booking-enable",
     pageKey: "hub-settings",

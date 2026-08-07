@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -51,6 +52,8 @@ export interface StartTourInput {
   steps: ProductTourStepInput[];
   /** Every walkthrough id represented in `steps`, marked seen together when the run finishes or is skipped. */
   walkthroughIds: string[];
+  /** Fires once this run ends, whether finished or skipped — lets a page chain a follow-up tour. */
+  onComplete?: () => void;
 }
 
 interface ProductTourContextValue {
@@ -149,9 +152,12 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
 
   const hasSeenWalkthrough = useCallback((id: string) => seenIds.has(id), [seenIds]);
 
+  const onCompleteRef = useRef<(() => void) | undefined>(undefined);
+
   const startTour = useCallback(
-    ({ steps: input, walkthroughIds }: StartTourInput) => {
+    ({ steps: input, walkthroughIds, onComplete }: StartTourInput) => {
       if (input.length === 0) return;
+      onCompleteRef.current = onComplete;
       const joyrideSteps: Step[] = input.map((step) => {
         const waitMs = step.waitTimeoutMs ?? TARGET_WAIT_TIMEOUT_MS;
         return {
@@ -182,6 +188,9 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
           markSeen(activeWalkthroughIds);
         }
         setActiveWalkthroughIds([]);
+        const onComplete = onCompleteRef.current;
+        onCompleteRef.current = undefined;
+        onComplete?.();
       }
     },
     [markSeen, activeWalkthroughIds],

@@ -918,6 +918,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</label>
 						<select
 							id="context-switcher"
+							data-tour-id="tour-context-switcher"
 							value={contextValue}
 							onChange={(event) => {
 								void handleContextChange(event.target.value);
@@ -1066,6 +1067,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
 								<button
 									onClick={() => setIsMobileOpen(true)}
+									data-tour-id="tour-mobile-menu-toggle"
 									className="p-2 hover:bg-muted rounded-lg lg:hidden"
 								>
 									<Menu className="w-5 h-5" />

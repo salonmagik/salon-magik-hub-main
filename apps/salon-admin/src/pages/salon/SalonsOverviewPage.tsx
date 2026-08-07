@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandLoader } from "@/components/BrandLoader";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
@@ -72,7 +72,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
-  useWalkthroughAutoTrigger("hub-overview");
+  // "Switch to a branch" guidance needs to run *after* the hub-overview
+  // tour settles, whether it finished or was skipped — see the comment on
+  // hub-switcher.switch-to-branch in walkthroughs.ts for why it can't just
+  // be one more hub-overview step. useWalkthroughAutoTrigger's onComplete
+  // flips this once hub-overview is done (or had nothing to show), which
+  // then lets the hub-switcher trigger's own effect run via extraLoading.
+  const [hubTourSettled, setHubTourSettled] = useState(false);
+  useWalkthroughAutoTrigger(
+    "hub-overview",
+    [],
+    false,
+    useCallback(() => setHubTourSettled(true), []),
+  );
+  useWalkthroughAutoTrigger("hub-switcher", [], !hubTourSettled);
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
