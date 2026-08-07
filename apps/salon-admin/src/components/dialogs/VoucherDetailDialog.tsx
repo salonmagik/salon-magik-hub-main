@@ -157,7 +157,7 @@ export function VoucherDetailDialog({
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Audience</p>
-              <p className="font-semibold">{voucher.access_type === "private" ? "Private customer" : "Public / bearer"}</p>
+              <p className="font-semibold">{voucher.access_type === "private" ? "Private customer" : "General public"}</p>
             </div>
           </div>
 

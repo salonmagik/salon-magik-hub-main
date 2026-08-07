@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
@@ -80,6 +80,7 @@ import {
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
+import { useStaff } from "@/hooks/useStaff";
 import { useNotificationSettings } from "@/hooks/useNotificationSettings";
 import {
 	useMyReferralCodes,
@@ -247,8 +248,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [planConfigQuoteError, setPlanConfigQuoteError] = useState<
 		string | null
 	>(null);
+	const [planConfigQuoteErrorCode, setPlanConfigQuoteErrorCode] = useState<
+		string | null
+	>(null);
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
+	const { staff, refetch: refetchStaff } = useStaff();
+	const [seatReleaseSelected, setSeatReleaseSelected] = useState<Set<string>>(new Set());
+	const [isReleasingSeats, setIsReleasingSeats] = useState(false);
+	const [branchPauseSelected, setBranchPauseSelected] = useState<Set<string>>(new Set());
+	const [isPausingBranches, setIsPausingBranches] = useState(false);
 	const claimTenantPromo = useClaimTenantSalesPromo();
 	const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
 	const { data: activeTenantPromo } = useTenantSalesPromo();
@@ -353,29 +362,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		}
 	}, [entitlements]);
 
-	// Debounced live quote for the branches/seats configuration inputs.
 	// quoteRequestIdRef guards against an older, slower request resolving
 	// after a newer one and clobbering its result/error.
 	const quoteRequestIdRef = useRef(0);
-	useEffect(() => {
-		if (!currentTenant?.id) return;
-		const branches = Number(branchesInput);
-		const seats = Number(seatsInput);
-		if (
-			!Number.isFinite(branches) ||
-			!Number.isFinite(seats) ||
-			branches < 1 ||
-			seats < 0
-		) {
-			setPlanConfigQuote(null);
+	const fetchPlanConfigQuote = useCallback(
+		async (branches: number, seats: number) => {
+			if (!currentTenant?.id) return;
+			setIsQuotingPlanConfig(true);
 			setPlanConfigQuoteError(null);
-			return;
-		}
-
-		setIsQuotingPlanConfig(true);
-		setPlanConfigQuoteError(null);
-		const requestId = ++quoteRequestIdRef.current;
-		const timer = setTimeout(async () => {
+			const requestId = ++quoteRequestIdRef.current;
 			try {
 				const { data, error } = await (supabase.rpc as any)(
 					"compute_plan_configuration",
@@ -389,25 +384,128 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				if (quoteRequestIdRef.current !== requestId) return;
 				setPlanConfigQuote(data?.[0] || null);
 				setPlanConfigQuoteError(null);
+				setPlanConfigQuoteErrorCode(null);
 			} catch (error) {
 				if (quoteRequestIdRef.current !== requestId) return;
+				// Supabase RPC errors are plain PostgrestError objects, not Error
+				// instances — `instanceof Error` was always false here, so the
+				// friendly message text below never actually got used.
+				const rawMessage = (error as { message?: string } | null)?.message;
 				setPlanConfigQuote(null);
-				setPlanConfigQuoteError(
-					describePlanConfigError(
-						// Supabase RPC errors are plain PostgrestError objects, not
-						// Error instances — `instanceof Error` was always false here,
-						// so the friendly message text below never actually got used.
-						(error as { message?: string } | null)?.message,
-					),
+				setPlanConfigQuoteError(describePlanConfigError(rawMessage));
+				setPlanConfigQuoteErrorCode(
+					Object.keys(PLAN_CONFIG_ERROR_MESSAGES).find((code) =>
+						rawMessage?.includes(code),
+					) || null,
 				);
 			} finally {
 				if (quoteRequestIdRef.current === requestId)
 					setIsQuotingPlanConfig(false);
 			}
+		},
+		[currentTenant?.id],
+	);
+
+	// Debounced live quote for the branches/seats configuration inputs.
+	useEffect(() => {
+		if (!currentTenant?.id) return;
+		const branches = Number(branchesInput);
+		const seats = Number(seatsInput);
+		if (
+			!Number.isFinite(branches) ||
+			!Number.isFinite(seats) ||
+			branches < 1 ||
+			seats < 0
+		) {
+			setPlanConfigQuote(null);
+			setPlanConfigQuoteError(null);
+			setPlanConfigQuoteErrorCode(null);
+			return;
+		}
+
+		const timer = setTimeout(() => {
+			void fetchPlanConfigQuote(branches, seats);
 		}, 450);
 
 		return () => clearTimeout(timer);
-	}, [branchesInput, seatsInput, currentTenant?.id]);
+	}, [branchesInput, seatsInput, currentTenant?.id, fetchPlanConfigQuote]);
+
+	const activeStaffForSeatRelease = staff.filter((member) => member.isActive);
+	const activeLocationsForBranchPause = locations.filter(
+		(location) => !location.is_paused,
+	);
+	const seatsOverBy = Math.max(
+		activeStaffForSeatRelease.length - Number(seatsInput),
+		0,
+	);
+	const branchesOverBy = Math.max(
+		activeLocationsForBranchPause.length - Number(branchesInput),
+		0,
+	);
+
+	const handleReleaseSeats = async () => {
+		if (!currentTenant?.id || seatReleaseSelected.size === 0) return;
+		setIsReleasingSeats(true);
+		try {
+			for (const userId of seatReleaseSelected) {
+				const { error } = await (supabase.rpc as any)(
+					"set_staff_active_status",
+					{
+						p_tenant_id: currentTenant.id,
+						p_user_id: userId,
+						p_is_active: false,
+					},
+				);
+				if (error) throw error;
+			}
+			toast({
+				title: "Seats released",
+				description: `${seatReleaseSelected.size} team member${seatReleaseSelected.size === 1 ? "" : "s"} deactivated.`,
+			});
+			setSeatReleaseSelected(new Set());
+			await Promise.all([refetchStaff(), refetchEntitlements()]);
+			void fetchPlanConfigQuote(Number(branchesInput), Number(seatsInput));
+		} catch (error) {
+			toast({
+				variant: "destructive",
+				title: "Couldn't release seats",
+				description:
+					(error as { message?: string })?.message || "Please try again.",
+			});
+		} finally {
+			setIsReleasingSeats(false);
+		}
+	};
+
+	const handlePauseBranches = async () => {
+		if (!currentTenant?.id || branchPauseSelected.size === 0) return;
+		setIsPausingBranches(true);
+		try {
+			const { data, error } = await (supabase.rpc as any)("pause_locations", {
+				p_tenant_id: currentTenant.id,
+				p_location_ids: Array.from(branchPauseSelected),
+				p_reason: "Paused from Settings to reduce branch count for a plan downgrade.",
+			});
+			if (error) throw error;
+			if (!data?.success) throw new Error(data?.message || "Failed to pause branches");
+			toast({
+				title: "Branches paused",
+				description: `${branchPauseSelected.size} branch${branchPauseSelected.size === 1 ? "" : "es"} paused. Their online booking pages and staff assignment are disabled while paused.`,
+			});
+			setBranchPauseSelected(new Set());
+			await Promise.all([refetchLocations(), refetchEntitlements()]);
+			void fetchPlanConfigQuote(Number(branchesInput), Number(seatsInput));
+		} catch (error) {
+			toast({
+				variant: "destructive",
+				title: "Couldn't pause branches",
+				description:
+					(error as { message?: string })?.message || "Please try again.",
+			});
+		} finally {
+			setIsPausingBranches(false);
+		}
+	};
 
 	const applyPlanConfiguration = async () => {
 		if (!currentTenant?.id || !planConfigQuote) return;
@@ -3468,6 +3566,93 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<p className="text-sm text-destructive">
 									{planConfigQuoteError}
 								</p>
+							)}
+
+							{planConfigQuoteErrorCode === "SEATS_BELOW_ACTIVE_STAFF" && (
+								<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-3">
+									<p className="text-sm">
+										Deactivate {seatsOverBy} team member{seatsOverBy === 1 ? "" : "s"} to free up seats, or raise the seat count above.
+									</p>
+									<div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
+										{activeStaffForSeatRelease.map((member) => (
+											<label
+												key={member.userId}
+												className="flex items-center gap-2.5 rounded-md border bg-background p-2 text-sm cursor-pointer"
+											>
+												<input
+													type="checkbox"
+													className="h-4 w-4 rounded border-input"
+													checked={seatReleaseSelected.has(member.userId)}
+													onChange={(e) =>
+														setSeatReleaseSelected((prev) => {
+															const next = new Set(prev);
+															if (e.target.checked) next.add(member.userId);
+															else next.delete(member.userId);
+															return next;
+														})
+													}
+												/>
+												<span className="flex-1">
+													{member.profile?.full_name || member.email || "Unnamed"}
+												</span>
+												<Badge variant="secondary" className="text-xs capitalize">
+													{member.role}
+												</Badge>
+											</label>
+										))}
+									</div>
+									<Button
+										type="button"
+										size="sm"
+										variant="destructive"
+										disabled={seatReleaseSelected.size === 0 || isReleasingSeats}
+										onClick={handleReleaseSeats}
+									>
+										{isReleasingSeats && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+										Deactivate {seatReleaseSelected.size || ""} & retry
+									</Button>
+								</div>
+							)}
+
+							{planConfigQuoteErrorCode === "BRANCHES_BELOW_ACTIVE_LOCATIONS" && (
+								<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-3">
+									<p className="text-sm">
+										Pause {branchesOverBy} branch{branchesOverBy === 1 ? "" : "es"} to free up your branch count, or raise the branch count above. Paused branches stop taking new bookings but existing bookings and data are kept — you can revive them any time.
+									</p>
+									<div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
+										{activeLocationsForBranchPause.map((location) => (
+											<label
+												key={location.id}
+												className="flex items-center gap-2.5 rounded-md border bg-background p-2 text-sm cursor-pointer"
+											>
+												<input
+													type="checkbox"
+													className="h-4 w-4 rounded border-input"
+													checked={branchPauseSelected.has(location.id)}
+													onChange={(e) =>
+														setBranchPauseSelected((prev) => {
+															const next = new Set(prev);
+															if (e.target.checked) next.add(location.id);
+															else next.delete(location.id);
+															return next;
+														})
+													}
+												/>
+												<span className="flex-1">{location.name}</span>
+											</label>
+										))}
+									</div>
+									<Button
+										type="button"
+										size="sm"
+										variant="destructive"
+										disabled={branchPauseSelected.size === 0 || isPausingBranches}
+										onClick={handlePauseBranches}
+									>
+										{isPausingBranches && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+										Pause {branchPauseSelected.size || ""} & retry
+									</Button>
+								</div>
 							)}
 
 							{!isQuotingPlanConfig &&

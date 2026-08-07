@@ -233,7 +233,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Public / bearer</SelectItem>
+                  <SelectItem value="public">General Public</SelectItem>
                   <SelectItem value="private">Private customer</SelectItem>
                 </SelectContent>
               </Select>

@@ -48,6 +48,9 @@ import {
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@ui/ui/use-toast";
+import { Loader2 } from "lucide-react";
 import { formatCurrency } from "@shared/currency";
 import { countryName } from "@/lib/countryCurrency";
 import { Link, useNavigate } from "react-router-dom";
@@ -76,6 +79,8 @@ export default function SalonsOverviewPage() {
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
   const [quickActionPopover, setQuickActionPopover] = useState<string | null>(null);
+  const [pausedBranchesPopoverOpen, setPausedBranchesPopoverOpen] = useState(false);
+  const [revivingLocationId, setRevivingLocationId] = useState<string | null>(null);
   const navigate = useNavigate();
   const {
     currentTenant,
@@ -160,7 +165,31 @@ export default function SalonsOverviewPage() {
   }, [filteredLocations, currentTenant?.currency]);
 
   const branchContexts = availableContexts.filter((c) => c.type === "location");
-  const pausedBranchCount = branchContexts.filter((c) => c.isPaused).length;
+  const pausedBranches = branchContexts.filter((c) => c.isPaused);
+  const pausedBranchCount = pausedBranches.length;
+
+  const handleRevive = async (locationId: string) => {
+    if (!currentTenant?.id) return;
+    setRevivingLocationId(locationId);
+    try {
+      const { data, error } = await (supabase.rpc as any)("revive_location", {
+        p_tenant_id: currentTenant.id,
+        p_location_id: locationId,
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.message || "Failed to revive branch");
+      toast({ title: "Branch revived", description: "This branch is active again." });
+      await refreshTenants();
+    } catch (error: any) {
+      toast({
+        title: "Couldn't revive branch",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRevivingLocationId(null);
+    }
+  };
 
   // Map locations by id for per-action branch filtering
   const locationById = useMemo(() => {
@@ -401,18 +430,51 @@ export default function SalonsOverviewPage() {
                   </CardContent>
                 </Card>
                 {currentRole === "owner" && pausedBranchCount > 0 && (
-                  <Card className="border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
-                        <PauseCircle className="w-3 h-3" />
-                        Paused Branches
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{pausedBranchCount}</div>
-                      <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Tap a paused branch to revive it</p>
-                    </CardContent>
-                  </Card>
+                  <Popover open={pausedBranchesPopoverOpen} onOpenChange={setPausedBranchesPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-left w-full">
+                        <Card className="border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20 transition-colors hover:border-orange-400">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
+                              <PauseCircle className="w-3 h-3" />
+                              Paused Branches
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{pausedBranchCount}</div>
+                            <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Tap to revive a branch</p>
+                          </CardContent>
+                        </Card>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-1" align="start">
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Paused branches</p>
+                      {pausedBranches.map((ctx) => (
+                        <div
+                          key={ctx.locationId}
+                          className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">{ctx.label}</span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 shrink-0 text-xs"
+                            disabled={revivingLocationId === ctx.locationId}
+                            onClick={() => ctx.locationId && handleRevive(ctx.locationId)}
+                          >
+                            {revivingLocationId === ctx.locationId ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              "Revive"
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
                 )}
                 {canViewRevenueAnalytics && (
                   <Card>
