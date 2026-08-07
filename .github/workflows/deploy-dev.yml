@@ -32,7 +32,11 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned instead of "latest" — a recent CLI release regressed
+          # `supabase link`'s API-key schema validation (SchemaError on
+          # inserted_at), breaking every deploy regardless of what's in the
+          # PR. 2.105.0 is verified working against these projects.
+          version: 2.105.0
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
