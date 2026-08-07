@@ -650,6 +650,7 @@ export default function AppointmentsPage() {
     if (!currentTenant?.id || !selectedAppointment || !approvalDialogAction) return;
 
     setApprovalSubmitting(true);
+    const notificationFailures: string[] = [];
     try {
       const nowIso = new Date().toISOString();
 
@@ -717,7 +718,12 @@ export default function AppointmentsPage() {
           );
         }
         if (rescheduledRows.length > 0) {
-          await sendApprovalEmail("reschedule_proposed", rescheduledRows.map((r) => r.id));
+          try {
+            await sendApprovalEmail("reschedule_proposed", rescheduledRows.map((r) => r.id));
+          } catch (emailErr) {
+            console.warn("Reschedule email failed (non-fatal):", emailErr);
+            notificationFailures.push("reschedule");
+          }
         }
 
         // ── Declined ─────────────────────────────────────────────────────────
@@ -735,7 +741,14 @@ export default function AppointmentsPage() {
             await supabase.from("appointments").update({ approval_reason: approvalReasonMap[row.id] } as any).eq("id", row.id).eq("tenant_id", currentTenant.id);
             await createCustomerNotification(row, "Booking item declined", approvalReasonMap[row.id]);
           }
-          await sendApprovalEmail(approvedRows.length > 0 ? "partially_declined" : "declined", declinedRows.map((r) => r.id), approvalMessage || undefined);
+          // Email is best-effort — the decline itself is already saved above,
+          // so a failed notification shouldn't surface as a failed decline.
+          try {
+            await sendApprovalEmail(approvedRows.length > 0 ? "partially_declined" : "declined", declinedRows.map((r) => r.id), approvalMessage || undefined);
+          } catch (emailErr) {
+            console.warn("Decline email failed (non-fatal):", emailErr);
+            notificationFailures.push("decline");
+          }
         }
 
         // ── Cancelled (per-item salon cancel during review) ───────────────────
@@ -789,6 +802,14 @@ export default function AppointmentsPage() {
       setApprovalMessage("");
       setRescheduleInputMap({});
       handleRefetch();
+
+      if (notificationFailures.length > 0) {
+        toast({
+          title: "Saved, but a notification email failed",
+          description: "Your decision was recorded — the customer's in-app notification went out, but the email couldn't be sent. Consider reaching out directly.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       toast({
         title: "Approval update failed",
@@ -1164,7 +1185,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-[14px] sm:max-w-sm">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
             <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
                 <p className="text-xs text-muted-foreground sm:text-sm">Awaiting review</p>
