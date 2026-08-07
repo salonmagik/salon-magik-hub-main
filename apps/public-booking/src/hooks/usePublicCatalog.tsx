@@ -112,5 +112,6 @@ export function usePublicCatalog(
     categories: catalogQuery.data?.categories || [],
     isLoading: catalogQuery.isLoading,
     error: catalogQuery.error,
+    refetch: catalogQuery.refetch,
   };
 }

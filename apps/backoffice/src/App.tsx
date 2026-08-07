@@ -24,6 +24,10 @@ import CampaignsPage from "@/pages/sales/CampaignsPage";
 import CaptureClientPage from "@/pages/sales/CaptureClientPage";
 import ConversionsPage from "@/pages/sales/ConversionsPage";
 import CommsPage from "@/pages/CommsPage";
+import SubscriptionLedgerPage from "@/pages/SubscriptionLedgerPage";
+import CommsCreditsPage from "@/pages/CommsCreditsPage";
+import FlaggedSignupsPage from "@/pages/FlaggedSignupsPage";
+import TransactionsPage from "@/pages/TransactionsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -174,6 +178,42 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="plans">
                   <PlansPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/subscriptions"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="subscriptions">
+                  <SubscriptionLedgerPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/comms-credits"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="comms_credits">
+                  <CommsCreditsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/flagged-signups"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="flagged_signups">
+                  <FlaggedSignupsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/transactions"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="transactions">
+                  <TransactionsPage />
                 </BackofficeProtectedRoute>
               }
           />

@@ -61,26 +61,26 @@ export function validatePhoneByCountry(countryCode: string, localDigits: string)
       "50", "54", "55", "56", "57", "59",
     ];
     if (nationalDigits.length !== 9) {
-      return { isValid: false, expectedLength: 9, error: "Ghana mobile numbers are 9 digits, e.g. 24 123 4567" };
+      return { isValid: false, expectedLength: 9, error: "Invalid length" };
     }
     const ok = GH_MOBILE_PREFIXES.some((p) => nationalDigits.startsWith(p));
     return {
       isValid: ok,
       expectedLength: 9,
-      error: ok ? undefined : "Enter a valid Ghana mobile number (starts with 020, 023, 024, 025, 026, 027, 028, 029, or 050–059)",
+      error: ok ? undefined : "Enter a valid Ghana mobile number",
     };
   }
 
   // Nigeria: 10 national digits with a valid mobile prefix (70/71/80/81/90/91).
   if (normalizedCountryCode === "NG") {
     if (nationalDigits.length !== 10) {
-      return { isValid: false, expectedLength: 10, error: "Nigeria mobile numbers are 10 digits, e.g. 803 123 4567" };
+      return { isValid: false, expectedLength: 10, error: "Invalid length" };
     }
     const ok = /^[789][01]/.test(nationalDigits);
     return {
       isValid: ok,
       expectedLength: 10,
-      error: ok ? undefined : "Enter a valid Nigeria mobile number (starts with 070, 071, 080, 081, 090, or 091)",
+      error: ok ? undefined : "Enter a valid Nigerian mobile number",
     };
   }
 

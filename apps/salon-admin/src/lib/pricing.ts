@@ -33,6 +33,16 @@ export const CHAIN_ADDITIONAL_LOCATIONS: Record<string, Record<Currency, number>
 
 export const TRIAL_DAYS = 14;
 
+// Ordinal rank of each plan tier, lowest to highest. Used to classify a plan
+// change as an upgrade/downgrade independent of price — price_delta alone
+// isn't reliable because it comes back null whenever the quote requires
+// custom pricing (e.g. branch count needing manual chain-tier pricing).
+export const PLAN_TIER_RANK: Record<PlanId, number> = {
+  solo: 1,
+  studio: 2,
+  chain: 3,
+};
+
 // Plan features for display
 export const PLAN_FEATURES: Record<PlanId, string[]> = {
   solo: [

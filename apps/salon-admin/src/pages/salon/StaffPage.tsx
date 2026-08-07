@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@ui/avatar";
@@ -91,6 +92,7 @@ function getInitials(name: string | undefined): string {
 }
 
 export default function StaffPage() {
+  useWalkthroughAutoTrigger("team");
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -611,6 +613,7 @@ export default function StaffPage() {
 					<Button
 						onClick={() => setInviteDialogOpen(true)}
 						className="hidden h-11 gap-2 rounded-full px-6 lg:flex"
+						data-tour-id="tour-invite-staff"
 					>
 						<UserPlus className="w-4 h-4" />
 						<span className="hidden sm:inline">Invite Staff</span>
@@ -778,7 +781,10 @@ export default function StaffPage() {
 
 				{/* Tabs for Staff, Invitations, and Permissions */}
 				<Tabs defaultValue="team">
-					<TabsList className="scrollbar-hide flex h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1 sm:w-fit">
+					<TabsList
+						data-tour-id="tour-staff-tabs"
+						className="scrollbar-hide flex h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1 sm:w-fit"
+					>
 						<TabsTrigger
 							value="team"
 							className="h-10 shrink-0 rounded-full px-5 sm:px-6"
@@ -1309,6 +1315,7 @@ export default function StaffPage() {
 				type="button"
 				aria-label="Invite staff"
 				onClick={() => setInviteDialogOpen(true)}
+				data-tour-id="tour-invite-staff-mobile"
 				className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
 			>
 				<Plus className="h-6 w-6" />

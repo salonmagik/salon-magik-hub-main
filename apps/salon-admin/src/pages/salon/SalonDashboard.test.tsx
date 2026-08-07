@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@ui/tooltip";
+import { ProductTourProvider } from "@/components/onboarding/ProductTourProvider";
 import SalonDashboard from "./SalonDashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
@@ -25,6 +26,7 @@ vi.mock("@tanstack/react-query", async () => {
   return {
     ...(actual as object),
     useQuery: vi.fn().mockReturnValue({ data: null }),
+    useQueryClient: () => ({ invalidateQueries: vi.fn() }),
   };
 });
 
@@ -35,7 +37,9 @@ function renderDashboard() {
   return render(
     <MemoryRouter>
       <TooltipProvider>
-        <SalonDashboard />
+        <ProductTourProvider>
+          <SalonDashboard />
+        </ProductTourProvider>
       </TooltipProvider>
     </MemoryRouter>
   );

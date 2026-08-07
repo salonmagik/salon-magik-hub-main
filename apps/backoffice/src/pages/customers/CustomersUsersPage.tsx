@@ -79,7 +79,7 @@ function useBackofficeUsers() {
 }
 
 export default function CustomersUsersPage() {
-  const { data: users, isLoading } = useBackofficeUsers();
+  const { data: users, isLoading, isError, error } = useBackofficeUsers();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<BackofficeUserRow | null>(null);
 
@@ -125,6 +125,12 @@ export default function CustomersUsersPage() {
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
+            ) : isError ? (
+              <EmptyState
+                icon={UserRound}
+                title="Couldn't load users"
+                description={error instanceof Error ? error.message : "Something went wrong loading this list. Try refreshing."}
+              />
             ) : filteredUsers.length === 0 ? (
               <EmptyState
                 icon={UserRound}

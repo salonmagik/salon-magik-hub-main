@@ -146,12 +146,37 @@ serve(async (req) => {
               useCase: "promotional",
             });
             smsSent++;
+            await supabase.from("message_logs").insert({
+              tenant_id: setting.tenant_id,
+              customer_id: appt.customer_id,
+              channel: "sms",
+              recipient: customer.phone,
+              template_type: "appointment_reminder",
+              status: "sent",
+              sent_at: new Date().toISOString(),
+              provider: "arkesel_sms",
+              initiated_by: "system",
+              credits_used: 0,
+            });
           } catch (err) {
             console.error(
               `SMS reminder failed for appointment ${appt.id}:`,
               err,
             );
             errors++;
+            await supabase.from("message_logs").insert({
+              tenant_id: setting.tenant_id,
+              customer_id: appt.customer_id,
+              channel: "sms",
+              recipient: customer.phone || null,
+              template_type: "appointment_reminder",
+              status: "failed",
+              sent_at: new Date().toISOString(),
+              provider: "arkesel_sms",
+              initiated_by: "system",
+              credits_used: 0,
+              error_message: err instanceof Error ? err.message : "SMS reminder failed",
+            });
           }
         }
 

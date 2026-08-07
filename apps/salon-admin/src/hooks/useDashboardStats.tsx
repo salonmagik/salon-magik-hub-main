@@ -39,7 +39,7 @@ export interface UpcomingAppointment {
   displayStatus: "Confirmed" | "Awaiting deposit" | "In progress" | "Completed" | "Cancelled" | "Unconfirmed";
 }
 
-interface ChecklistItem {
+export interface ChecklistItem {
   id: string;
   label: string;
   completed: boolean;

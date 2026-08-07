@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CreditCard, Building2, Smartphone, Wallet, DollarSign, Info } from "lucide-react";
+import { CreditCard, Wallet, DollarSign } from "lucide-react";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Label } from "@ui/label";
@@ -9,12 +9,6 @@ import { cn } from "@shared/utils";
 
 export type PaymentGateway = "stripe" | "paystack";
 export type PaymentMode = "purse" | "card" | "split";
-
-interface PaymentMethod {
-  id: string;
-  name: string;
-  icon: React.ReactNode;
-}
 
 interface PaymentStepProps {
   amountDue: number;
@@ -30,15 +24,7 @@ interface PaymentStepProps {
   customerEmail?: string;
   tenantId?: string;
   onPaymentModeChange?: (mode: PaymentMode, purseAmount: number, cardAmount: number) => void;
-  isPaymentReady?: boolean;
 }
-
-const PAYSTACK_METHODS: PaymentMethod[] = [
-  { id: "card", name: "Card Payment", icon: <CreditCard className="h-5 w-5" /> },
-  { id: "bank_transfer", name: "Bank Transfer", icon: <Building2 className="h-5 w-5" /> },
-  { id: "ussd", name: "USSD", icon: <Smartphone className="h-5 w-5" /> },
-  { id: "mobile_money", name: "Mobile Money", icon: <Wallet className="h-5 w-5" /> },
-];
 
 export function PaymentStep({
   amountDue,
@@ -47,10 +33,9 @@ export function PaymentStep({
   onGatewaySelect,
   onSubmit,
   isSubmitting,
-  brandColor = "#2563EB",
+  brandColor = "#2E1F4E",
   purseBalance = 0,
   onPaymentModeChange,
-  isPaymentReady = true,
 }: PaymentStepProps) {
   const [selectedGateway] = useState<PaymentGateway>("paystack");
 
@@ -91,16 +76,12 @@ export function PaymentStep({
     }
   };
 
-  const methods = PAYSTACK_METHODS;
-
   const cardAmount = paymentMode === "purse" ? 0 : paymentMode === "split" ? totalBeforePurse - purseAmount : totalBeforePurse;
-  const showGatewaySelection = paymentMode !== "purse";
-  const showPaymentMethods = paymentMode !== "purse";
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-semibold text-lg mb-2">Select Payment Method</h3>
+        <h3 className="font-serif text-lg font-semibold mb-2">Select Payment Method</h3>
       </div>
 
       {/* Payment Mode Selection */}
@@ -113,10 +94,10 @@ export function PaymentStep({
               <button
                 onClick={() => handlePaymentModeChange("purse")}
                 className={cn(
-                  "w-full p-4 rounded-lg border-2 transition-all text-left",
+                  "w-full p-4 rounded-xl border transition-all text-left",
                   paymentMode === "purse"
-                    ? "border-primary bg-primary/5"
-                    : "border-muted hover:border-muted-foreground/30"
+                    ? "border-[var(--brand-color)] bg-[color-mix(in_srgb,var(--brand-color)_6%,transparent)]"
+                    : "border-border hover:border-muted-foreground/30"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -142,10 +123,10 @@ export function PaymentStep({
             <button
               onClick={() => handlePaymentModeChange("card")}
               className={cn(
-                "w-full p-4 rounded-lg border-2 transition-all text-left",
+                "w-full p-4 rounded-xl border transition-all text-left",
                 paymentMode === "card"
-                  ? "border-primary bg-primary/5"
-                  : "border-muted hover:border-muted-foreground/30"
+                  ? "border-[var(--brand-color)] bg-[color-mix(in_srgb,var(--brand-color)_6%,transparent)]"
+                  : "border-border hover:border-muted-foreground/30"
               )}
             >
               <div className="flex items-center justify-between">
@@ -171,10 +152,10 @@ export function PaymentStep({
               <button
                 onClick={() => handlePaymentModeChange("split")}
                 className={cn(
-                  "w-full p-4 rounded-lg border-2 transition-all text-left",
+                  "w-full p-4 rounded-xl border transition-all text-left",
                   paymentMode === "split"
-                    ? "border-primary bg-primary/5"
-                    : "border-muted hover:border-muted-foreground/30"
+                    ? "border-[var(--brand-color)] bg-[color-mix(in_srgb,var(--brand-color)_6%,transparent)]"
+                    : "border-border hover:border-muted-foreground/30"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -232,49 +213,12 @@ export function PaymentStep({
         </div>
       )}
 
-      {/* Gateway Selection */}
-      {showGatewaySelection && (
-        <>
-          <div>
-            <Label className="text-sm text-muted-foreground mb-2 block">
-              Payment Provider
-            </Label>
-            <div className="rounded-lg border-2 border-primary bg-primary/5 p-4 text-left">
-              <div className="flex items-center gap-2 mb-1">
-                <Building2 className="h-5 w-5" />
-                <span className="font-medium">Paystack</span>
-                <Badge variant="secondary" className="text-xs">Active</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">Paystack is the current payment provider for this checkout.</p>
-            </div>
-          </div>
-
-          {/* Available Payment Methods */}
-          {showPaymentMethods && (
-            <div className="space-y-3">
-              <Label className="text-sm text-muted-foreground">Available methods</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {methods.map((method) => (
-                  <div
-                    key={method.id}
-                    className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 text-sm"
-                  >
-                    {method.icon}
-                    <span>{method.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
       {/* Amount Summary */}
       <div className="p-4 rounded-lg bg-muted/50 border space-y-2">
         {paymentMode === "purse" ? (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Paid from Salon Balance</span>
-            <span className="text-2xl font-bold text-primary">
+            <span className="font-serif text-2xl font-semibold" style={{ color: "var(--brand-color)" }}>
               {formatCurrency(totalBeforePurse, currency)}
             </span>
           </div>
@@ -288,7 +232,7 @@ export function PaymentStep({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Card Payment Due</span>
-              <span className="text-2xl font-bold">
+              <span className="font-serif text-2xl font-semibold">
                 {formatCurrency(cardAmount, currency)}
               </span>
             </div>
@@ -296,52 +240,30 @@ export function PaymentStep({
         ) : (
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Amount Due</span>
-            <span className="text-2xl font-bold">
+            <span className="font-serif text-2xl font-semibold">
               {formatCurrency(totalBeforePurse, currency)}
             </span>
           </div>
         )}
       </div>
 
-      {paymentMode !== "purse" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950">
-          <div className="flex items-start gap-2">
-            <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <p>
-              Paystack will open in a new tab. If the payment page does not load, try Safari or disable strict browser privacy shields for the payment tab.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Pay Button */}
-      {!isPaymentReady && paymentMode !== "purse" ? (
-        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-          <div className="flex items-start gap-2">
-            <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <p>
-              The salon is currently unable to accept online payments. Please select store credit if you have enough balance, or contact the salon directly to book.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <Button
-          onClick={onSubmit}
-          disabled={isSubmitting}
-          className="w-full h-12 text-lg text-white border-0"
-          style={{ backgroundColor: brandColor }}
-        >
-          {isSubmitting
-            ? "Processing..."
-            : paymentMode === "purse"
-            ? `Pay ${formatCurrency(totalBeforePurse, currency)}`
-            : paymentMode === "split"
-            ? `Pay ${formatCurrency(cardAmount, currency)}`
-            : `Pay ${formatCurrency(totalBeforePurse, currency)}`}
-        </Button>
-      )}
+      <Button
+        onClick={onSubmit}
+        disabled={isSubmitting}
+        className="w-full h-12 text-lg text-white border-0"
+        style={{ backgroundColor: brandColor }}
+      >
+        {isSubmitting
+          ? "Processing..."
+          : paymentMode === "purse"
+          ? `Pay ${formatCurrency(totalBeforePurse, currency)}`
+          : paymentMode === "split"
+          ? `Pay ${formatCurrency(cardAmount, currency)}`
+          : `Pay ${formatCurrency(totalBeforePurse, currency)}`}
+      </Button>
 
-      {isPaymentReady && paymentMode !== "purse" && (
+      {paymentMode !== "purse" && (
         <p className="text-xs text-center text-muted-foreground">
           You will be redirected to Paystack to complete your payment securely.
         </p>

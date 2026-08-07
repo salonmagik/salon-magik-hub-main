@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import {
 	Card,
@@ -39,6 +40,7 @@ import {
 	DialogTitle,
 } from "@ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@ui/popover";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
 import { TimePicker } from "@ui/time-picker";
 import {
@@ -79,6 +81,7 @@ import {
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocations } from "@/hooks/useLocations";
+import { useStaff } from "@/hooks/useStaff";
 import { useNotificationSettings } from "@/hooks/useNotificationSettings";
 import {
 	useMyReferralCodes,
@@ -87,6 +90,7 @@ import {
 } from "@/hooks/useReferrals";
 import { supabase } from "@/lib/supabase";
 import { buildPublicBookingUrl } from "@/lib/bookingUrl";
+import { PLAN_TIER_RANK, type PlanId } from "@/lib/pricing";
 import { toast } from "@ui/ui/use-toast";
 import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
@@ -94,6 +98,7 @@ import { WalletLedger } from "@/components/billing/WalletLedger";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import {
 	useClaimTenantSalesPromo,
 	useTenantSalesPromo,
@@ -184,6 +189,9 @@ type BookingSettingsSubTab = "booking_config";
 export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
+	useWalkthroughAutoTrigger(
+		scope === "subscription" ? "hub-subscription" : scope === "branch" ? "branch-settings" : "hub-settings",
+	);
 	const [isSaving, setIsSaving] = useState(false);
 	const [paymentSuccessModal, setPaymentSuccessModal] = useState<{
 		title: string;
@@ -241,8 +249,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [planConfigQuoteError, setPlanConfigQuoteError] = useState<
 		string | null
 	>(null);
+	const [planConfigQuoteErrorCode, setPlanConfigQuoteErrorCode] = useState<
+		string | null
+	>(null);
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
+	const { staff, refetch: refetchStaff } = useStaff();
+	const [seatReleaseSelected, setSeatReleaseSelected] = useState<Set<string>>(new Set());
+	const [isReleasingSeats, setIsReleasingSeats] = useState(false);
+	const [branchPauseSelected, setBranchPauseSelected] = useState<Set<string>>(new Set());
+	const [isPausingBranches, setIsPausingBranches] = useState(false);
 	const claimTenantPromo = useClaimTenantSalesPromo();
 	const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
 	const { data: activeTenantPromo } = useTenantSalesPromo();
@@ -319,6 +335,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	});
 
 	const { wallet } = useSalonWallet(currentTenant?.id);
+	// Online booking can't be turned on without a payout account — enforced
+	// at the DB level too (trg_enforce_online_booking_requires_payout), this
+	// just disables the toggle with an explanation instead of a raw DB error.
+	const { destinations: payoutDestinations, isLoading: payoutDestinationsLoading } = usePayoutDestinations(currentTenant?.id);
+	const hasPayoutDestination = payoutDestinations.length > 0;
 
 	// Seed the branches/seats inputs from entitlements, and re-seed whenever
 	// entitlements change (e.g. right after a payment completes) as long as
@@ -342,29 +363,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		}
 	}, [entitlements]);
 
-	// Debounced live quote for the branches/seats configuration inputs.
 	// quoteRequestIdRef guards against an older, slower request resolving
 	// after a newer one and clobbering its result/error.
 	const quoteRequestIdRef = useRef(0);
-	useEffect(() => {
-		if (!currentTenant?.id) return;
-		const branches = Number(branchesInput);
-		const seats = Number(seatsInput);
-		if (
-			!Number.isFinite(branches) ||
-			!Number.isFinite(seats) ||
-			branches < 1 ||
-			seats < 0
-		) {
-			setPlanConfigQuote(null);
+	const fetchPlanConfigQuote = useCallback(
+		async (branches: number, seats: number) => {
+			if (!currentTenant?.id) return;
+			setIsQuotingPlanConfig(true);
 			setPlanConfigQuoteError(null);
-			return;
-		}
-
-		setIsQuotingPlanConfig(true);
-		setPlanConfigQuoteError(null);
-		const requestId = ++quoteRequestIdRef.current;
-		const timer = setTimeout(async () => {
+			const requestId = ++quoteRequestIdRef.current;
 			try {
 				const { data, error } = await (supabase.rpc as any)(
 					"compute_plan_configuration",
@@ -378,25 +385,128 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				if (quoteRequestIdRef.current !== requestId) return;
 				setPlanConfigQuote(data?.[0] || null);
 				setPlanConfigQuoteError(null);
+				setPlanConfigQuoteErrorCode(null);
 			} catch (error) {
 				if (quoteRequestIdRef.current !== requestId) return;
+				// Supabase RPC errors are plain PostgrestError objects, not Error
+				// instances — `instanceof Error` was always false here, so the
+				// friendly message text below never actually got used.
+				const rawMessage = (error as { message?: string } | null)?.message;
 				setPlanConfigQuote(null);
-				setPlanConfigQuoteError(
-					describePlanConfigError(
-						// Supabase RPC errors are plain PostgrestError objects, not
-						// Error instances — `instanceof Error` was always false here,
-						// so the friendly message text below never actually got used.
-						(error as { message?: string } | null)?.message,
-					),
+				setPlanConfigQuoteError(describePlanConfigError(rawMessage));
+				setPlanConfigQuoteErrorCode(
+					Object.keys(PLAN_CONFIG_ERROR_MESSAGES).find((code) =>
+						rawMessage?.includes(code),
+					) || null,
 				);
 			} finally {
 				if (quoteRequestIdRef.current === requestId)
 					setIsQuotingPlanConfig(false);
 			}
+		},
+		[currentTenant?.id],
+	);
+
+	// Debounced live quote for the branches/seats configuration inputs.
+	useEffect(() => {
+		if (!currentTenant?.id) return;
+		const branches = Number(branchesInput);
+		const seats = Number(seatsInput);
+		if (
+			!Number.isFinite(branches) ||
+			!Number.isFinite(seats) ||
+			branches < 1 ||
+			seats < 0
+		) {
+			setPlanConfigQuote(null);
+			setPlanConfigQuoteError(null);
+			setPlanConfigQuoteErrorCode(null);
+			return;
+		}
+
+		const timer = setTimeout(() => {
+			void fetchPlanConfigQuote(branches, seats);
 		}, 450);
 
 		return () => clearTimeout(timer);
-	}, [branchesInput, seatsInput, currentTenant?.id]);
+	}, [branchesInput, seatsInput, currentTenant?.id, fetchPlanConfigQuote]);
+
+	const activeStaffForSeatRelease = staff.filter((member) => member.isActive);
+	const activeLocationsForBranchPause = locations.filter(
+		(location) => !location.is_paused,
+	);
+	const seatsOverBy = Math.max(
+		activeStaffForSeatRelease.length - Number(seatsInput),
+		0,
+	);
+	const branchesOverBy = Math.max(
+		activeLocationsForBranchPause.length - Number(branchesInput),
+		0,
+	);
+
+	const handleReleaseSeats = async () => {
+		if (!currentTenant?.id || seatReleaseSelected.size === 0) return;
+		setIsReleasingSeats(true);
+		try {
+			for (const userId of seatReleaseSelected) {
+				const { error } = await (supabase.rpc as any)(
+					"set_staff_active_status",
+					{
+						p_tenant_id: currentTenant.id,
+						p_user_id: userId,
+						p_is_active: false,
+					},
+				);
+				if (error) throw error;
+			}
+			toast({
+				title: "Seats released",
+				description: `${seatReleaseSelected.size} team member${seatReleaseSelected.size === 1 ? "" : "s"} deactivated.`,
+			});
+			setSeatReleaseSelected(new Set());
+			await Promise.all([refetchStaff(), refetchEntitlements()]);
+			void fetchPlanConfigQuote(Number(branchesInput), Number(seatsInput));
+		} catch (error) {
+			toast({
+				variant: "destructive",
+				title: "Couldn't release seats",
+				description:
+					(error as { message?: string })?.message || "Please try again.",
+			});
+		} finally {
+			setIsReleasingSeats(false);
+		}
+	};
+
+	const handlePauseBranches = async () => {
+		if (!currentTenant?.id || branchPauseSelected.size === 0) return;
+		setIsPausingBranches(true);
+		try {
+			const { data, error } = await (supabase.rpc as any)("pause_locations", {
+				p_tenant_id: currentTenant.id,
+				p_location_ids: Array.from(branchPauseSelected),
+				p_reason: "Paused from Settings to reduce branch count for a plan downgrade.",
+			});
+			if (error) throw error;
+			if (!data?.success) throw new Error(data?.message || "Failed to pause branches");
+			toast({
+				title: "Branches paused",
+				description: `${branchPauseSelected.size} branch${branchPauseSelected.size === 1 ? "" : "es"} paused. Their online booking pages and staff assignment are disabled while paused.`,
+			});
+			setBranchPauseSelected(new Set());
+			await Promise.all([refetchLocations(), refetchEntitlements()]);
+			void fetchPlanConfigQuote(Number(branchesInput), Number(seatsInput));
+		} catch (error) {
+			toast({
+				variant: "destructive",
+				title: "Couldn't pause branches",
+				description:
+					(error as { message?: string })?.message || "Please try again.",
+			});
+		} finally {
+			setIsPausingBranches(false);
+		}
+	};
 
 	const applyPlanConfiguration = async () => {
 		if (!currentTenant?.id || !planConfigQuote) return;
@@ -1892,7 +2002,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	}, [bookingSettings, bookingBaseline]);
 
 	const renderProfileTab = () => (
-		<Card>
+		<Card data-tour-id="tour-settings-profile">
 			<CardContent className="p-6 space-y-6">
 				{resolvedScope !== "branch" && (
 					<div className="flex items-center gap-6">
@@ -2060,7 +2170,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	);
 
 	const renderHoursTab = () => (
-		<Card>
+		<Card data-tour-id="tour-settings-hours">
 			{!isChainScope && (
 				<CardHeader>
 					<CardTitle>Business Hours</CardTitle>
@@ -2364,7 +2474,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 		return (
 			<>
-				<Card>
+				<Card data-tour-id="tour-manage-branches-tab">
 					{!isChainScope && (
 						<CardHeader>
 							<CardTitle>Manage Branches</CardTitle>
@@ -2608,9 +2718,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										key: "onlineBookingEnabled" as const,
 										label: "Enable Online Booking",
 										description:
-											"Allow customers to book through the public booking page.",
+											!bookingSettings.onlineBookingEnabled && !hasPayoutDestination
+												? "Set up a payout account in Cashflow & Payouts before turning this on."
+												: "Allow customers to book through the public booking page.",
 										checked: bookingSettings.onlineBookingEnabled,
-										disabled: false,
+										disabled: !bookingSettings.onlineBookingEnabled && !hasPayoutDestination,
 										stateUpdate: (v: boolean) => ({ onlineBookingEnabled: v }),
 										dbUpdate: (v: boolean) => ({ online_booking_enabled: v }),
 									},
@@ -2681,6 +2793,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<div
 									key={item.key}
 									className="flex items-center justify-between py-3 border-b last:border-0"
+									data-tour-id={
+										{
+											onlineBookingEnabled: "tour-enable-booking",
+											autoConfirmBookings: "tour-auto-confirm-bookings",
+											depositsEnabled: "tour-accept-deposits",
+											allowStaffSelection: "tour-allow-staff-selection",
+											requireStaffSelection: "tour-require-staff-selection",
+											autoAssignStaff: "tour-auto-assign-staff",
+										}[item.key]
+									}
 								>
 									<div>
 										<p className="font-medium">{item.label}</p>
@@ -2688,57 +2810,84 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 											{item.description}
 										</p>
 									</div>
-									<Popover
-										open={pendingToggle?.key === item.key}
-										onOpenChange={(open) => {
-											if (!open) setPendingToggle(null);
-										}}
-									>
-										<PopoverTrigger asChild>
-											<Switch
-												checked={item.checked}
-												disabled={item.disabled || isToggleSaving}
-												onCheckedChange={(v) =>
-													setPendingToggle({
-														key: item.key,
-														value: v,
-														label: item.label,
-														stateUpdate: item.stateUpdate(v),
-														dbUpdate: item.dbUpdate(v),
-													})
-												}
-											/>
-										</PopoverTrigger>
-										<PopoverContent align="end" className="w-64 p-4">
-											<p className="text-sm font-medium">
-												{pendingToggle?.value ? "Turn on" : "Turn off"}{" "}
-												{item.label}?
-											</p>
-											<p className="mt-1 text-xs text-muted-foreground">
-												{item.description}
-											</p>
-											<div className="mt-4 flex justify-end gap-2">
+									{item.key === "onlineBookingEnabled" && item.disabled ? (
+										<HoverCard openDelay={150} closeDelay={100}>
+											<HoverCardTrigger asChild>
+												{/* The Switch below is disabled (pointer-events-none), so this
+												    wrapping span is what actually receives the hover/click that
+												    opens the card explaining why. */}
+												<span tabIndex={0} className="inline-flex cursor-not-allowed">
+													<Switch checked={item.checked} disabled className="pointer-events-none" />
+												</span>
+											</HoverCardTrigger>
+											<HoverCardContent align="end" className="w-72">
+												<p className="text-sm font-medium">Set up payouts first</p>
+												<p className="mt-1 text-xs text-muted-foreground">
+													Online booking needs a payout account so customer payments have somewhere to go. Set one up in Cashflow &amp; Payouts, then come back to turn this on.
+												</p>
 												<Button
 													size="sm"
-													variant="outline"
-													onClick={() => setPendingToggle(null)}
+													className="mt-3 w-full gap-1.5"
+													onClick={() => handleTabChange("payout-destinations")}
 												>
-													Cancel
+													Go to payout
+													<ExternalLink className="h-3.5 w-3.5" />
 												</Button>
-												<Button
-													size="sm"
-													disabled={isToggleSaving}
-													onClick={confirmPendingToggle}
-												>
-													{isToggleSaving ? (
-														<Loader2 className="h-3 w-3 animate-spin" />
-													) : (
-														"Confirm"
-													)}
-												</Button>
-											</div>
-										</PopoverContent>
-									</Popover>
+											</HoverCardContent>
+										</HoverCard>
+									) : (
+										<Popover
+											open={pendingToggle?.key === item.key}
+											onOpenChange={(open) => {
+												if (!open) setPendingToggle(null);
+											}}
+										>
+											<PopoverTrigger asChild>
+												<Switch
+													checked={item.checked}
+													disabled={item.disabled || isToggleSaving}
+													onCheckedChange={(v) =>
+														setPendingToggle({
+															key: item.key,
+															value: v,
+															label: item.label,
+															stateUpdate: item.stateUpdate(v),
+															dbUpdate: item.dbUpdate(v),
+														})
+													}
+												/>
+											</PopoverTrigger>
+											<PopoverContent align="end" className="w-64 p-4">
+												<p className="text-sm font-medium">
+													{pendingToggle?.value ? "Turn on" : "Turn off"}{" "}
+													{item.label}?
+												</p>
+												<p className="mt-1 text-xs text-muted-foreground">
+													{item.description}
+												</p>
+												<div className="mt-4 flex justify-end gap-2">
+													<Button
+														size="sm"
+														variant="outline"
+														onClick={() => setPendingToggle(null)}
+													>
+														Cancel
+													</Button>
+													<Button
+														size="sm"
+														disabled={isToggleSaving}
+														onClick={confirmPendingToggle}
+													>
+														{isToggleSaving ? (
+															<Loader2 className="h-3 w-3 animate-spin" />
+														) : (
+															"Confirm"
+														)}
+													</Button>
+												</div>
+											</PopoverContent>
+										</Popover>
+									)}
 								</div>
 							))}
 						</div>
@@ -3123,8 +3272,25 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			planConfigQuote &&
 			branchesValue === planConfigQuote.current_allowed_locations &&
 			seatsValue === planConfigQuote.current_allowed_staff;
+		// price_delta alone isn't reliable: it comes back null whenever the
+		// quote requires custom pricing (e.g. a branch count that needs a
+		// manually-configured chain tier), which would otherwise make a real
+		// upgrade look like a "downgrade". Plan tier rank is the source of
+		// truth for direction; price_delta only decides the sign when the
+		// plan itself hasn't changed (e.g. adding seats within the same plan).
+		const currentTierRank = planConfigQuote
+			? PLAN_TIER_RANK[planConfigQuote.current_plan_slug as PlanId]
+			: undefined;
+		const requiredTierRank = planConfigQuote
+			? PLAN_TIER_RANK[planConfigQuote.required_plan_slug as PlanId]
+			: undefined;
 		const isPlanConfigIncrease = Boolean(
-			planConfigQuote && (planConfigQuote.price_delta || 0) > 0,
+			planConfigQuote &&
+				currentTierRank !== undefined &&
+				requiredTierRank !== undefined &&
+				(requiredTierRank !== currentTierRank
+					? requiredTierRank > currentTierRank
+					: (planConfigQuote.price_delta || 0) > 0),
 		);
 
 		return (
@@ -3202,6 +3368,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								type="button"
 								size="sm"
 								className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
+								data-tour-id="tour-change-plan"
 								onClick={() =>
 									planConfigSectionRef.current?.scrollIntoView({
 										behavior: "smooth",
@@ -3289,7 +3456,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
-					<div className="grid gap-4 md:grid-cols-3">
+					<div className="grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
 						<div className="rounded-xl bg-muted/50 p-4">
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Locations</p>
 							<p className="mt-1 font-serif text-2xl">
@@ -3328,7 +3495,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</div>
 					</div>
 
-					<div ref={planConfigSectionRef} className="scroll-mt-6">
+					<div ref={planConfigSectionRef} className="scroll-mt-6" data-tour-id="tour-subscription-seats">
 					<div className="grid gap-4 lg:grid-cols-2 lg:items-start">
 					<div className="space-y-3">
 						<p className="text-sm font-medium">Manage branches & team size</p>
@@ -3429,6 +3596,93 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</p>
 							)}
 
+							{planConfigQuoteErrorCode === "SEATS_BELOW_ACTIVE_STAFF" && (
+								<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-3">
+									<p className="text-sm">
+										Deactivate {seatsOverBy} team member{seatsOverBy === 1 ? "" : "s"} to free up seats, or raise the seat count above.
+									</p>
+									<div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
+										{activeStaffForSeatRelease.map((member) => (
+											<label
+												key={member.userId}
+												className="flex items-center gap-2.5 rounded-md border bg-background p-2 text-sm cursor-pointer"
+											>
+												<input
+													type="checkbox"
+													className="h-4 w-4 rounded border-input"
+													checked={seatReleaseSelected.has(member.userId)}
+													onChange={(e) =>
+														setSeatReleaseSelected((prev) => {
+															const next = new Set(prev);
+															if (e.target.checked) next.add(member.userId);
+															else next.delete(member.userId);
+															return next;
+														})
+													}
+												/>
+												<span className="flex-1">
+													{member.profile?.full_name || member.email || "Unnamed"}
+												</span>
+												<Badge variant="secondary" className="text-xs capitalize">
+													{member.role}
+												</Badge>
+											</label>
+										))}
+									</div>
+									<Button
+										type="button"
+										size="sm"
+										variant="destructive"
+										disabled={seatReleaseSelected.size === 0 || isReleasingSeats}
+										onClick={handleReleaseSeats}
+									>
+										{isReleasingSeats && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+										Deactivate {seatReleaseSelected.size || ""} & retry
+									</Button>
+								</div>
+							)}
+
+							{planConfigQuoteErrorCode === "BRANCHES_BELOW_ACTIVE_LOCATIONS" && (
+								<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-3">
+									<p className="text-sm">
+										Pause {branchesOverBy} branch{branchesOverBy === 1 ? "" : "es"} to free up your branch count, or raise the branch count above. Paused branches stop taking new bookings but existing bookings and data are kept — you can revive them any time.
+									</p>
+									<div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
+										{activeLocationsForBranchPause.map((location) => (
+											<label
+												key={location.id}
+												className="flex items-center gap-2.5 rounded-md border bg-background p-2 text-sm cursor-pointer"
+											>
+												<input
+													type="checkbox"
+													className="h-4 w-4 rounded border-input"
+													checked={branchPauseSelected.has(location.id)}
+													onChange={(e) =>
+														setBranchPauseSelected((prev) => {
+															const next = new Set(prev);
+															if (e.target.checked) next.add(location.id);
+															else next.delete(location.id);
+															return next;
+														})
+													}
+												/>
+												<span className="flex-1">{location.name}</span>
+											</label>
+										))}
+									</div>
+									<Button
+										type="button"
+										size="sm"
+										variant="destructive"
+										disabled={branchPauseSelected.size === 0 || isPausingBranches}
+										onClick={handlePauseBranches}
+									>
+										{isPausingBranches && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+										Pause {branchPauseSelected.size || ""} & retry
+									</Button>
+								</div>
+							)}
+
 							{!isQuotingPlanConfig &&
 								planConfigQuote &&
 								!planConfigQuote.requires_custom_locations && (
@@ -3517,11 +3771,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							    disabled until there's a real change to submit. */}
 							{!isTrialing && (
 								<>
-									{!isPlanConfigUnchanged && !isPlanConfigIncrease && (
-										<p className="text-xs text-amber-600">
-											Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
-										</p>
-									)}
+									{!isPlanConfigUnchanged &&
+										!isPlanConfigIncrease &&
+										!planConfigQuote?.requires_custom_locations && (
+											<p className="text-xs text-amber-600">
+												Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
+											</p>
+										)}
 									<Button
 										className="w-full sm:w-auto"
 										onClick={applyPlanConfiguration}
@@ -3538,16 +3794,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										)}
 										{isPlanConfigUnchanged
 											? "No changes to apply"
-											: isPlanConfigIncrease
-												? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
-												: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
+											: planConfigQuote?.requires_custom_locations
+												? "Contact support to continue"
+												: isPlanConfigIncrease
+													? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
+													: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
 									</Button>
 								</>
 							)}
 						</div>
 					</div>
 
-					<div className="space-y-3">
+					<div className="space-y-3" data-tour-id="tour-subscription-addons">
 						<p className="text-sm font-medium">Add-ons</p>
 						<div className="space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
 							<div className="flex items-center justify-between gap-4">
@@ -4086,13 +4344,21 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "booking" && renderBookingTab()}
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
-			{activeTab === "payout-destinations" && <PayoutDestinationsManager />}
+			{activeTab === "payout-destinations" && (
+				<div data-tour-id="tour-payout-destinations">
+					<PayoutDestinationsManager />
+				</div>
+			)}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}
 			{activeTab === "promotions" && renderPromotionsTab()}
 			{activeTab === "notifications" && renderNotificationsTab()}
 			{activeTab === "roles" && renderRolesTab()}
 			{activeTab === "subscription" && renderSubscriptionTab()}
-			{activeTab === "custom-domain" && <CustomDomainManager />}
+			{activeTab === "custom-domain" && (
+				<div data-tour-id="tour-custom-domain">
+					<CustomDomainManager />
+				</div>
+			)}
 			{activeTab === "sessions" && <ActiveSessionsTab />}
 		</>
 	);

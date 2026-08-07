@@ -2507,7 +2507,7 @@ export default function PlansPage() {
                                           {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                                           {isSaving ? "Saving" : "Save"}
                                         </Button>
-                                        {isSuperAdmin && (row.paystack_plan_code_monthly || row.paystack_plan_code_annual) && (
+                                        {isSuperAdmin && (row.paystack_plan_code_monthly || row.paystack_plan_code_annual) && outOfSync && (
                                           <Button
                                             type="button"
                                             variant="outline"

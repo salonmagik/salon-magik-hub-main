@@ -918,6 +918,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</label>
 						<select
 							id="context-switcher"
+							data-tour-id="tour-context-switcher"
 							value={contextValue}
 							onChange={(event) => {
 								void handleContextChange(event.target.value);
@@ -1066,6 +1067,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
 								<button
 									onClick={() => setIsMobileOpen(true)}
+									data-tour-id="tour-mobile-menu-toggle"
 									className="p-2 hover:bg-muted rounded-lg lg:hidden"
 								>
 									<Menu className="w-5 h-5" />
@@ -1103,6 +1105,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										variant="outline"
 										size="icon"
 										className="sm:hidden"
+										data-tour-id="tour-quick-create-mobile"
 										onClick={() => setQuickCreateOpen(true)}
 									>
 										<Plus className="w-4 h-4" />
@@ -1111,6 +1114,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										variant="outline"
 										size="sm"
 										className="hidden sm:flex items-center gap-2"
+										data-tour-id="tour-quick-create"
 										onClick={() => setQuickCreateOpen(true)}
 									>
 										<Plus className="w-4 h-4" />
@@ -1125,6 +1129,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										variant="ghost"
 										size="icon"
 										className="relative"
+										data-tour-id="tour-notifications"
 										onClick={() => setNotificationsOpen(true)}
 									>
 										<Bell className="w-5 h-5" />
@@ -1174,7 +1179,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											path: "/salon/services",
 										},
 										{
-											label: "Payments",
+											label: "Transactions",
 											icon: CreditCard,
 											path: "/salon/transactions",
 										},

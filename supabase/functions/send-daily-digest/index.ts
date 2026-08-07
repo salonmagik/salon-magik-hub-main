@@ -119,6 +119,7 @@ Deno.serve(async (req) => {
         appointmentsResult,
         paymentsResult,
         outstandingResult,
+        newCustomersResult,
         templateResult,
         platformTemplateResult,
       ] = await Promise.all([
@@ -143,6 +144,12 @@ Deno.serve(async (req) => {
           .eq("tenant_id", tenant.id)
           .neq("status", "cancelled"),
         admin
+          .from("customers")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", tenant.id)
+          .gte("created_at", todayStart.toISOString())
+          .lte("created_at", todayEnd.toISOString()),
+        admin
           .from("email_templates")
           .select("subject, body_html, is_active")
           .eq("tenant_id", tenant.id)
@@ -154,9 +161,11 @@ Deno.serve(async (req) => {
       if (appointmentsResult.error) throw appointmentsResult.error;
       if (paymentsResult.error) throw paymentsResult.error;
       if (outstandingResult.error) throw outstandingResult.error;
+      if (newCustomersResult.error) throw newCustomersResult.error;
       if (templateResult.error) throw templateResult.error;
 
       const upcomingAppointmentsCount = appointmentsResult.count || 0;
+      const newCustomersCount = newCustomersResult.count || 0;
       const paymentsReceived = (paymentsResult.data || []).reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
       const outstandingBalances = (outstandingResult.data || []).reduce((sum, appointment) => {
         if (["fully_paid", "refunded_full"].includes(appointment.payment_status)) {
@@ -167,15 +176,31 @@ Deno.serve(async (req) => {
 
       const defaultSubject = "Daily digest for {{salon_name}}";
       const defaultBody = `
-        <h2 style="color: #2E1F4E; margin-bottom: 16px;">Daily Digest</h2>
-        <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Hi {{first_name}},</p>
-        <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Here is your daily summary for {{salon_name}}.</p>
-        <div style="background: #f9fafb; border-radius: 8px; padding: 16px; margin: 24px 0;">
-          <p style="margin: 0 0 8px 0;"><strong>Date:</strong> {{digest_date}}</p>
-          <p style="margin: 0 0 8px 0;"><strong>Upcoming appointments:</strong> {{upcoming_appointments_count}}</p>
-          <p style="margin: 0 0 8px 0;"><strong>Payments received:</strong> {{payments_received}}</p>
-          <p style="margin: 0;"><strong>Outstanding balances:</strong> {{outstanding_balances}}</p>
-        </div>
+        <p style="margin:0 0 6px;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:650;">Daily digest · {{digest_date}}</p>
+        <h2 style="color:#111827;font-size:19px;font-weight:650;margin:0 0 18px;">Good morning, {{first_name}}</h2>
+        <p style="color:#4b5563;font-size:13.5px;line-height:1.6;margin:0 0 20px;">Here's how {{salon_name}} is looking today.</p>
+        <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 10px;margin:0 0 4px -10px;">
+          <tr>
+            <td style="width:50%;background:#f8f6f2;border-radius:9px;padding:14px 16px;">
+              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Revenue today</p>
+              <p style="margin:0;font-size:19px;font-weight:700;color:#158a4a;">{{payments_received}}</p>
+            </td>
+            <td style="width:50%;background:#f8f6f2;border-radius:9px;padding:14px 16px;">
+              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Appointments today</p>
+              <p style="margin:0;font-size:19px;font-weight:700;color:#111827;">{{upcoming_appointments_count}}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="width:50%;background:#f8f6f2;border-radius:9px;padding:14px 16px;">
+              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">New customers</p>
+              <p style="margin:0;font-size:19px;font-weight:700;color:#111827;">{{new_customers_count}}</p>
+            </td>
+            <td style="width:50%;background:#f8f6f2;border-radius:9px;padding:14px 16px;">
+              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Outstanding balance</p>
+              <p style="margin:0;font-size:19px;font-weight:700;color:#b4740e;">{{outstanding_balances}}</p>
+            </td>
+          </tr>
+        </table>
         {{cta_link_button}}
       `;
 
@@ -185,6 +210,7 @@ Deno.serve(async (req) => {
           salon_name: tenant.name || "Salon Magik",
           digest_date: todayStart.toISOString().slice(0, 10),
           upcoming_appointments_count: String(upcomingAppointmentsCount),
+          new_customers_count: String(newCustomersCount),
           payments_received: `${tenant.currency || "USD"} ${paymentsReceived.toFixed(2)}`,
           outstanding_balances: `${tenant.currency || "USD"} ${outstandingBalances.toFixed(2)}`,
           cta_link: `${dashboardBaseUrl}/salon`,

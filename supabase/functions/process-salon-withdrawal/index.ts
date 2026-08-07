@@ -172,11 +172,39 @@ Deno.serve(async (req) => {
     // Check sufficient balance early (before creating withdrawal record)
     if (wallet.balance < amount) {
       return new Response(
-        JSON.stringify({ 
-          error: `Insufficient wallet balance. Available: ${wallet.balance} ${wallet.currency}, Required: ${amount} ${wallet.currency}` 
+        JSON.stringify({
+          error: `Insufficient wallet balance. Available: ${wallet.balance} ${wallet.currency}, Required: ${amount} ${wallet.currency}`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // wallet.balance is credited immediately on charge.success, but Paystack
+    // itself only settles funds to our platform balance on the next business
+    // day. A withdrawal that passes the raw-balance check above can still be
+    // rejected by Paystack for funds that haven't settled yet, which used to
+    // surface as Paystack's opaque "balance not enough" error. Check our own
+    // settlement estimate first so we can give a clear explanation instead.
+    const { data: availabilityRows, error: availabilityError } = await serviceSupabase
+      .rpc("get_salon_wallet_availability", { p_tenant_id: tenantId });
+
+    if (availabilityError) {
+      console.error("Error computing wallet availability:", availabilityError);
+    } else {
+      const availability = availabilityRows?.[0];
+      const availableBalance = Number(availability?.available ?? wallet.balance);
+
+      if (availableBalance < amount) {
+        const settlementNote = availability?.next_settlement_at
+          ? ` The remaining balance is expected to clear by ${new Date(availability.next_settlement_at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}.`
+          : "";
+        return new Response(
+          JSON.stringify({
+            error: `Only ${availableBalance.toFixed(2)} ${wallet.currency} of your ${wallet.balance} ${wallet.currency} balance has cleared with our payment processor and is available to withdraw right now.${settlementNote}`,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const { data: payoutDestination, error: destinationError } = await serviceSupabase

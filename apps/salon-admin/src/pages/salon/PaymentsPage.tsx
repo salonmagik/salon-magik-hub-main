@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -47,8 +48,11 @@ import {
   FileText,
   FileSpreadsheet,
   Info,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import { toast } from "@ui/ui/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,6 +65,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
 import { supabase } from "@/lib/supabase";
 import { endOfDay, endOfMonth, format, startOfDay, startOfMonth, subDays } from "date-fns";
@@ -122,6 +127,7 @@ const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
 };
 
 export default function PaymentsPage() {
+  useWalkthroughAutoTrigger("transactions");
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "all");
@@ -139,6 +145,7 @@ export default function PaymentsPage() {
   const [assigningBranchId, setAssigningBranchId] = useState<string | null>(null);
   const [assignDestId, setAssignDestId] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
+  const [downloadingReceiptId, setDownloadingReceiptId] = useState<string | null>(null);
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { transactions, stats, isLoading, refetch: refetchTransactions } = useTransactions();
@@ -162,6 +169,9 @@ export default function PaymentsPage() {
     canManagePayouts ? currentTenant?.id : undefined
   );
   const { wallet, isLoading: walletLoading } = useSalonWallet(
+    canManagePayouts ? currentTenant?.id : undefined
+  );
+  const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
     canManagePayouts ? currentTenant?.id : undefined
   );
   const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
@@ -350,6 +360,34 @@ export default function PaymentsPage() {
   };
 
   // Shared transaction row renderer
+  const handleDownloadReceipt = async (appointmentId: string, txnId: string, reference?: string) => {
+    setDownloadingReceiptId(txnId);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("generate-booking-receipt", {
+        body: { appointmentId },
+      });
+
+      if (invokeError) throw invokeError;
+      if (!(data instanceof Blob)) throw new Error("Unexpected response from server");
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receipt-${reference || appointmentId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      console.error("Error downloading receipt:", downloadError);
+      toast({
+        title: "Couldn't download receipt",
+        description: downloadError instanceof Error ? downloadError.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingReceiptId(null);
+    }
+  };
+
   const renderTransactionRow = (txn: typeof filteredTransactions[0], showBranch = false) => {
     const style = statusStyles[txn.status] || statusStyles.pending;
     const isIncoming = txn.type === "payment" || txn.type === "purse_topup" || txn.type === "deposit";
@@ -367,14 +405,16 @@ export default function PaymentsPage() {
         ? "Partially refunded"
         : null;
     const canRefund = (txn.type === "payment" || txn.type === "deposit") && txn.customer_id && remainingRefundAmount > 0 && txn.status === "completed";
+    const canDownloadReceipt = Boolean(txn.appointment_id) && (txn.type === "payment" || txn.type === "deposit") && txn.status === "completed";
     const chip = typeChips[txn.type];
     const serviceNames = txn.appointment?.services
       ?.map((service) => service.service_name)
       .filter(Boolean)
       .join(", ");
     const transactionDescription = [chip?.label, serviceNames].filter(Boolean).join(", ");
+    const isDownloadingThisReceipt = downloadingReceiptId === txn.id;
 
-    const refundAction = canRefund ? (
+    const refundAction = canRefund || canDownloadReceipt ? (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full">
@@ -382,12 +422,27 @@ export default function PaymentsPage() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            className="text-destructive"
-            onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
-          >
-            {canCompleteRefunds ? "Make refund" : "Request refund"}
-          </DropdownMenuItem>
+          {canDownloadReceipt && (
+            <DropdownMenuItem
+              disabled={isDownloadingThisReceipt}
+              onClick={() => handleDownloadReceipt(txn.appointment_id as string, txn.id)}
+            >
+              {isDownloadingThisReceipt ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              Download receipt
+            </DropdownMenuItem>
+          )}
+          {canRefund && (
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => { setSelectedTransaction(txn); setRefundDialogOpen(true); }}
+            >
+              {canCompleteRefunds ? "Make refund" : "Request refund"}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     ) : null;
@@ -520,7 +575,10 @@ export default function PaymentsPage() {
         {[
           {
             title: "Today's Inflow",
-            value: sharedFormatCurrency(todayRevenueByCurrency[0]?.total ?? 0, todayRevenueByCurrency[0]?.currency ?? currency),
+            value: sharedFormatCurrency(
+              todayRevenueByCurrency[0]?.total ?? 0,
+              todayRevenueByCurrency[0]?.currency ?? currencyForCountry(effectiveCountry, currency)
+            ),
             icon: TrendingUp,
             color: "text-success",
             bg: "bg-success/10",
@@ -541,6 +599,7 @@ export default function PaymentsPage() {
             color: "text-primary",
             bg: "bg-primary/10",
             description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch.",
+            subtitle: availableCountries.length > 1 ? "All branches" : undefined,
           },
         ].map((s) => {
           const Icon = s.icon;
@@ -556,6 +615,9 @@ export default function PaymentsPage() {
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-56 text-xs">{s.description}</TooltipContent>
                     </Tooltip>
+                    {s.subtitle && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">{s.subtitle}</span>
+                    )}
                   </div>
                   <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p>
                 </div>
@@ -664,29 +726,49 @@ export default function PaymentsPage() {
     <div className="space-y-4">
       {/* Wallet balance */}
       <Card>
-        <CardContent className="p-5 flex items-center justify-between">
+        <CardContent className="p-5 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-primary/10"><Wallet className="w-6 h-6 text-primary" /></div>
             <div>
               <div className="flex items-center gap-1">
-                <p className="text-sm text-muted-foreground">Payout Balance</p>
+                <p className="text-sm text-muted-foreground">Available to Withdraw</p>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-56 text-xs">
-                    Your salon's own operating balance, available to withdraw. Separate from customer store credit or prepaid funds.
+                    Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
                   </TooltipContent>
                 </Tooltip>
               </div>
-              {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
-                <p className="text-2xl font-semibold mt-0.5">
-                  {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
-                </p>
+              {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
+                <>
+                  <p className="text-2xl font-semibold mt-0.5">
+                    {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                  </p>
+                  {Number(walletAvailability?.pending ?? 0) > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <p className="text-xs text-amber-700 mt-1 cursor-default">
+                          + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
+                        </p>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-64 text-xs">
+                        Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
+                        {walletAvailability?.nextSettlementAt
+                          ? ` Available by ${new Date(walletAvailability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`
+                          : ""}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Total wallet balance: {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                  </p>
+                </>
               )}
             </div>
           </div>
-          <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(wallet.balance) <= 0}>
+          <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(walletAvailability?.available ?? wallet.balance) <= 0}>
             Request Withdrawal
           </Button>
         </CardContent>
@@ -875,7 +957,10 @@ export default function PaymentsPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5">
+        <TabsList
+          data-tour-id="tour-transactions-tabs"
+          className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5"
+        >
           <TabsTrigger value="all" className="shrink-0 rounded-full px-6">All</TabsTrigger>
           <TabsTrigger value="revenue" className="shrink-0 rounded-full px-6"><ArrowUpRight className="mr-2 w-4 h-4" />Inflow</TabsTrigger>
           <TabsTrigger value="refunds" className="shrink-0 rounded-full px-6"><ArrowDownLeft className="mr-2 w-4 h-4" />Refunds</TabsTrigger>
@@ -961,7 +1046,10 @@ export default function PaymentsPage() {
 
         {isOwnerHub ? (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="scrollbar-hide max-w-full justify-start overflow-x-auto overscroll-x-contain">
+            <TabsList
+              data-tour-id="tour-transactions-tabs"
+              className="scrollbar-hide max-w-full justify-start overflow-x-auto overscroll-x-contain"
+            >
               <TabsTrigger value="all">All Transactions</TabsTrigger>
               <TabsTrigger value="balances">Customer Balances</TabsTrigger>
               {canManagePayouts && (

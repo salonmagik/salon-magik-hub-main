@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { formatCurrency } from "@shared/currency";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
@@ -12,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 export function SalonWalletCard() {
   const { currentTenant } = useAuth();
   const { wallet, isLoading, error, refetch } = useSalonWallet(currentTenant?.id);
+  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(currentTenant?.id);
   const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
   const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
 
@@ -30,6 +32,7 @@ export function SalonWalletCard() {
     // Refetch wallet balance when dialog closes
     if (!open) {
       refetch();
+      refetchAvailability();
     }
   };
 
@@ -66,21 +69,38 @@ export function SalonWalletCard() {
           <div className="space-y-6">
             <div className="space-y-2">
               <div className="flex items-center gap-1">
-                <p className="text-sm text-muted-foreground">Available Balance</p>
+                <p className="text-sm text-muted-foreground">Available to Withdraw</p>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-56 text-xs">
-                    Your salon's own operating balance, from payouts and top-ups. Separate from customer store credit or prepaid funds.
+                    Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
                   </TooltipContent>
                 </Tooltip>
               </div>
               <p className="text-4xl font-bold">
-                {formatCurrency(Number(wallet?.balance || 0), wallet?.currency)}
+                {availabilityLoading
+                  ? formatCurrency(Number(wallet?.balance || 0), wallet?.currency)
+                  : formatCurrency(availability?.available ?? Number(wallet?.balance || 0), wallet?.currency)}
               </p>
+              {Number(availability?.pending ?? 0) > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs text-amber-700 cursor-default">
+                      + {formatCurrency(availability!.pending, wallet?.currency)} still settling
+                      {availability?.nextSettlementAt
+                        ? ` — by ${new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`
+                        : ""}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-64 text-xs">
+                    Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <p className="text-xs text-muted-foreground">
-                Currency: {wallet?.currency}
+                Total wallet balance: {formatCurrency(Number(wallet?.balance || 0), wallet?.currency)}
               </p>
             </div>
 

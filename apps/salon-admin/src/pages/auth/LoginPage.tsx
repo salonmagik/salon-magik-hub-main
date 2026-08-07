@@ -89,7 +89,16 @@ export default function LoginPage() {
   const googleOAuthIntent = readGoogleOAuthIntent();
   const promoCodeFromUrl = searchParams.get("promo");
   const reviewSessions = searchParams.get("review-sessions") === "true";
-  const postLoginDestination = reviewSessions ? "/salon?review-sessions=true" : "/salon";
+  // Only a same-origin relative path is accepted — anything else (an absolute
+  // URL, or a "//host" protocol-relative one a browser would treat as
+  // absolute) is rejected so this can't be turned into an open redirect via
+  // a crafted ?redirect= link.
+  const redirectParam = searchParams.get("redirect");
+  const safeRedirect =
+    redirectParam && redirectParam.startsWith("/") && !redirectParam.startsWith("//")
+      ? redirectParam
+      : null;
+  const postLoginDestination = safeRedirect || (reviewSessions ? "/salon?review-sessions=true" : "/salon");
   const [lastAuthMethod, setLastAuthMethod] = useState<LastAuthMethod | null>(null);
 
   // Email login state

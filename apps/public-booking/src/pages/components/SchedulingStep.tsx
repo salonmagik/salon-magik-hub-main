@@ -340,7 +340,7 @@ export function SchedulingStep({
   return (
     <Accordion type="multiple" className="w-full space-y-3">
       {items.map((item, index) => (
-        <AccordionItem key={item.id} value={item.id} className="rounded-lg border px-4">
+        <AccordionItem key={item.id} value={item.id} className="rounded-xl border px-4">
           <AccordionTrigger>
             <div className="text-left">
               <p className="font-medium">

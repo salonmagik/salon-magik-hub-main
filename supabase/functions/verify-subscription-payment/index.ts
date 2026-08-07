@@ -186,7 +186,7 @@ serve(async (req) => {
       entity_type: "tenants",
       entity_id: tenantId,
       actor_user_id: user.id,
-      metadata: { reference, currency, intent: "subscription_activation", discount_applied: discountApplied },
+      metadata: { reference, currency, intent: "subscription_activation", discount_applied: discountApplied, amount: (txData?.amount || 0) / 100 },
     });
 
     const receiptEmail = txData?.customer?.email || user.email;

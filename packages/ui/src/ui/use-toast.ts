@@ -10,6 +10,8 @@ type ToasterToast = ToastProps & {
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
+  /** Skips the 5s auto-dismiss — stays until the user closes it or `dismiss()` is called explicitly. */
+  persistent?: boolean;
 };
 
 const actionTypes = {
@@ -126,7 +128,7 @@ export function toast({ ...props }: Omit<ToasterToast, "id">) {
   const update = (props: ToasterToast) => dispatch({ type: "UPDATE_TOAST", toast: { ...props, id } });
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id });
   dispatch({ type: "ADD_TOAST", toast: { ...props, id, open: true } });
-  addToAutoDismissQueue(id);
+  if (!props.persistent) addToAutoDismissQueue(id);
   return { id, dismiss, update };
 }
 

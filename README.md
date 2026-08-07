@@ -116,7 +116,7 @@ Multi-step broadcast wizard:
 
 **Channels**
 - **Email** — powered by Resend; HTML templates with variable interpolation
-- **SMS** — Nigeria via Termii; Ghana via Txtconnect (WhatsApp channel exists in backend but is hidden on prod)
+- **SMS** — Arkesel, both Nigeria and Ghana (WhatsApp channel exists in backend but is hidden on prod)
 
 **Audiences**
 - All customers
@@ -444,21 +444,10 @@ All functions live in `supabase/functions/`.
 - Transactional email delivery for all tenant-facing and client-facing emails
 - HTML templates via `_shared/email-template.ts` with consistent Salon Magik branding
 
-### Termii (SMS — Nigeria)
-- Single and bulk SMS delivery for Nigeria tenants
-- Sender ID approval workflow
-- Message status polling
-
-### Txtconnect (SMS — Ghana)
-- Single and bulk SMS delivery for Ghana tenants (migrated from Termii, May 2026)
-- `POST /sms/send` with Bearer token auth; `GET /sms/getstatus/{msgId}` for status
-- Sender name management (remote approval sync pending Txtconnect endpoint documentation)
-- See `docs/integrations/txtconnect-migration.md` for full migration notes
-
-### Arkesel *(planned)*
-- West African messaging API (SMS, voice, email) with operations in Ghana and Nigeria
-- Integration will follow the `_shared/<provider>-client.ts` pattern used by Termii and Txtconnect
-- Will be wired into the same `send-bulk-message` / `send-manual-message` country-dispatch logic
+### Arkesel (SMS — Nigeria & Ghana)
+- Single and bulk SMS delivery for all tenants, both markets, via `_shared/arkesel-client.ts`
+- Replaced Termii (Nigeria) and Txtconnect (Ghana) entirely — one account, one API key covers both
+- See `docs/integrations/arkesel-migration.md` for the API contract and migration history
 
 ---
 
@@ -601,9 +590,9 @@ pnpm test     # run all test suites
 | `PAYSTACK_SECRET_KEY_GH` | Paystack secret key — Ghana account |
 | `PAYSTACK_WEBHOOK_SECRET_NG` | Webhook signature secret — Nigeria |
 | `PAYSTACK_WEBHOOK_SECRET_GH` | Webhook signature secret — Ghana |
-| `TERMII_API_KEY` | Termii SMS key (Nigeria) |
-| `TXTCONNECT_API_KEY` | Txtconnect SMS key (Ghana) |
-| `TXTCONNECT_API_BASE` | Txtconnect API base URL (optional override) |
+| `ARKESEL_API_KEY_GH` | Arkesel SMS key — Ghana |
+| `ARKESEL_API_KEY_NG_TRANSACTIONAL` | Arkesel SMS key — Nigeria, transactional |
+| `ARKESEL_API_KEY_NG_PROMOTIONAL` | Arkesel SMS key — Nigeria, promotional |
 | `SALON_APP_URL` | `https://app.salonmagik.com` |
 | `BACKOFFICE_APP_URL` | `https://backoffice.salonmagik.com` |
 | `PUBLIC_BOOKING_BASE_DOMAIN` | `salonmagik.com` |

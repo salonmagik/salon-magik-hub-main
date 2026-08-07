@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@ui/tooltip";
+import { ProductTourProvider } from "@/components/onboarding/ProductTourProvider";
 import StaffPage from "./StaffPage";
 import { useStaff } from "@/hooks/useStaff";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
@@ -128,7 +129,9 @@ describe("StaffPage team member modal", () => {
     render(
       <MemoryRouter initialEntries={["/salon/overview/staff"]}>
         <TooltipProvider>
-          <StaffPage />
+          <ProductTourProvider>
+            <StaffPage />
+          </ProductTourProvider>
         </TooltipProvider>
       </MemoryRouter>
     );

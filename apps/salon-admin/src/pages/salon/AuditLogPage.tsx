@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import {
   AUDIT_ACTION_FILTER_OPTIONS,
   getMetadataValue,
@@ -79,6 +80,7 @@ function getActionLabel(log: AuditLogEntry) {
 }
 
 export default function AuditLogPage() {
+  useWalkthroughAutoTrigger("audit-log");
   const { currentTenant } = useAuth();
   const isChainTenant = currentTenant?.plan === "chain";
   const [searchParams, setSearchParams] = useSearchParams();
@@ -164,7 +166,7 @@ export default function AuditLogPage() {
           </Card>
         ) : null}
 
-        <Card className={`${filtersOpen ? "" : "hidden"} sm:block`}>
+        <Card className={`${filtersOpen ? "" : "hidden"} sm:block`} data-tour-id="tour-audit-log-filters">
           <CardHeader className="hidden sm:block pb-4">
             <CardTitle className="text-base flex items-center gap-2">
               <Filter className="w-4 h-4" />
@@ -247,7 +249,7 @@ export default function AuditLogPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-tour-id="tour-audit-log-table">
           <CardHeader>
             <CardTitle>Activity History</CardTitle>
             <CardDescription>Recent activity with business-friendly action labels.</CardDescription>

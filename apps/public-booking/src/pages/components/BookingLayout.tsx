@@ -67,7 +67,7 @@ export function BookingLayout({
 }: BookingLayoutProps) {
   const { getItemCount } = useBookingCart();
   const itemCount = getItemCount();
-  const brandColor = salon?.brand_color || "#111827";
+  const brandColor = salon?.brand_color || "#2E1F4E";
   const isEcommerceTheme = themeKey === "ecommerce";
   const [searchOpen, setSearchOpen] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
