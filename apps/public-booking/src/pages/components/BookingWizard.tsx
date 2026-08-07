@@ -221,24 +221,27 @@ export function BookingWizard({
       if (!bookerInfo.email || !salon.id) return;
 
       try {
-        const { data: customer, error: customerError } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("tenant_id", salon.id)
-          .eq("email", bookerInfo.email)
-          .maybeSingle();
+        // Not .maybeSingle() — this project's PostgREST returns a genuine
+        // 406 for zero matching rows rather than a clean null.
+        const { data: matches, error: customerError } = await supabase
+          .rpc("lookup_booking_customer_match" as never, {
+            p_tenant_id: salon.id,
+            p_email: bookerInfo.email,
+            p_phone: null,
+          } as never) as { data: { customer_id: string; first_name: string | null }[] | null; error: unknown };
+        const match = matches?.[0];
 
-        if (customerError || !customer) {
+        if (customerError || !match) {
           setPurseBalance(0);
           setCustomerId(null);
           return;
         }
 
-        setCustomerId(customer.id);
+        setCustomerId(match.customer_id);
 
         const { data: availableBalance, error: balanceError } = await supabase.rpc(
           "customer_credit_available" as never,
-          { p_tenant_id: salon.id, p_customer_id: customer.id } as never,
+          { p_tenant_id: salon.id, p_customer_id: match.customer_id } as never,
         );
         if (balanceError) throw balanceError;
         setPurseBalance(Number(availableBalance || 0));
@@ -1010,6 +1013,8 @@ export function BookingWizard({
                 onRecipientsChange={setGiftRecipients}
                 sameRecipient={meta.giftsBelongToSamePerson}
                 onSameRecipientChange={(value) => updateMeta({ giftsBelongToSamePerson: value })}
+                tenantId={salon.id}
+                bookerInfo={{ firstName: bookerInfo.firstName, email: bookerInfo.email, phone: bookerInfo.phone }}
               />
             )}
 
