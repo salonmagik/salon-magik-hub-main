@@ -124,7 +124,6 @@ export type WalkthroughPageKey =
   | "hub-theme"
   | "branch-settings"
   | "reports"
-  | "email-templates"
   | "audit-log"
   | "all-notifications";
 
@@ -945,38 +944,6 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       target: '[data-tour-id="tour-reports-segments"]',
       title: "Customer segments",
       content: "See who your customers are — VIPs, big spenders, regulars — and what each group is worth.",
-    }),
-  },
-
-  // ── Email Templates ─────────────────────────────────────────────────────
-  {
-    id: "email-templates.categories",
-    pageKey: "email-templates",
-    section: "Email Templates",
-    sectionIcon: Mail,
-    label: "Template categories",
-    description: "Appointment, payment, account, and marketing emails",
-    buildStep: () => ({
-      id: "email-templates.categories",
-      path: "/salon/email-templates",
-      target: '[data-tour-id="tour-email-template-categories"]',
-      title: "Template categories",
-      content: "Automated emails are grouped by category — appointments, payments, account, and marketing.",
-    }),
-  },
-  {
-    id: "email-templates.table",
-    pageKey: "email-templates",
-    section: "Email Templates",
-    sectionIcon: Mail,
-    label: "Edit a template",
-    description: "Turn templates on/off, preview, or edit the content",
-    buildStep: () => ({
-      id: "email-templates.table",
-      path: "/salon/email-templates",
-      target: '[data-tour-id="tour-email-templates-table"]',
-      title: "Edit a template",
-      content: "Turn a template on or off, preview it, or edit its subject and body.",
     }),
   },
 
