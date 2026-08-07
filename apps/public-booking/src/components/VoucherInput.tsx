@@ -138,13 +138,15 @@ export function VoucherInput({
 
       let customerId: string | null = null;
       if (customerEmail) {
-        const { data: customer } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .eq("email", customerEmail.trim().toLowerCase())
-          .maybeSingle();
-        customerId = customer?.id || null;
+        // Not .maybeSingle() — this project's PostgREST returns a genuine
+        // 406 for zero matching rows rather than a clean null.
+        const { data: matches } = await supabase
+          .rpc("lookup_booking_customer_match" as never, {
+            p_tenant_id: tenantId,
+            p_email: customerEmail.trim().toLowerCase(),
+            p_phone: null,
+          } as never) as { data: { customer_id: string }[] | null };
+        customerId = matches?.[0]?.customer_id || null;
       }
 
       if (voucherRecord.access_type === "private" && voucherRecord.target_customer_id !== customerId) {

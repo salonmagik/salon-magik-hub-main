@@ -6,7 +6,7 @@ export function Toaster(): JSX.Element {
 
   return (
     <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
+      {toasts.map(function ({ id, title, description, action, persistent: _persistent, ...props }) {
         return (
           <Toast key={id} {...props}>
             <div className="grid gap-1">

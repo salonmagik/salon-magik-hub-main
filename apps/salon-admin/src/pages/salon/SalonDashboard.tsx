@@ -1,16 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
+import { CHECKLIST_META, buildChecklistWalkthroughs } from "@/lib/walkthroughs";
 import { Button } from "@ui/button";
 import {
   CheckCircle2,
   ChevronUp,
   ChevronDown,
-  CreditCard,
-  Globe,
-  List,
-  Calendar,
   Check,
   AlertTriangle,
   RefreshCcw,
@@ -20,6 +18,8 @@ import {
   Wallet,
   MessageSquare,
   Info,
+  CreditCard,
+  Calendar,
 } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import type { LapsedClient, UpcomingAppointment } from "@/hooks/useDashboardStats";
@@ -29,56 +29,6 @@ import { Skeleton } from "@ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
-
-// ─── Checklist metadata ────────────────────────────────────────────────────────
-const CHECKLIST_META: Record<
-  string,
-  { icon: React.ElementType; iconBg: string; iconColor: string; description: string; actionLabel: string; warningTag?: string }
-> = {
-  payments: {
-    icon: CreditCard,
-    iconBg: "bg-destructive-bg",
-    iconColor: "text-destructive",
-    description: "Online deposits can't be settled to you until this is added.",
-    actionLabel: "Set up",
-    warningTag: "Blocks deposits",
-  },
-  booking: {
-    icon: Globe,
-    iconBg: "bg-muted",
-    iconColor: "text-muted-foreground",
-    description: "Let clients book themselves through your link.",
-    actionLabel: "Enable",
-  },
-  products: {
-    icon: List,
-    iconBg: "bg-muted",
-    iconColor: "text-muted-foreground",
-    description: "Sell retail items alongside your services.",
-    actionLabel: "Add",
-  },
-  appointment: {
-    icon: Calendar,
-    iconBg: "bg-muted",
-    iconColor: "text-muted-foreground",
-    description: "See how your calendar comes together.",
-    actionLabel: "Book",
-  },
-  services: {
-    icon: Check,
-    iconBg: "bg-muted",
-    iconColor: "text-muted-foreground",
-    description: "",
-    actionLabel: "Add",
-  },
-  customer: {
-    icon: Check,
-    iconBg: "bg-muted",
-    iconColor: "text-muted-foreground",
-    description: "",
-    actionLabel: "Add",
-  },
-};
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<
@@ -183,6 +133,9 @@ export default function SalonDashboard() {
   const completedCount = completedItems.length;
   const totalCount = checklistItems.length;
 
+  const checklistWalkthroughs = useMemo(() => buildChecklistWalkthroughs(checklistItems), [checklistItems]);
+  useWalkthroughAutoTrigger("dashboard", checklistWalkthroughs, isLoading);
+
   return (
 		<SalonSidebar>
 			<div className="space-y-6 max-w-[1320px]">
@@ -197,7 +150,10 @@ export default function SalonDashboard() {
 
 				{/* ── Checklist ──────────────────────────────────────────────── */}
 				{!isChecklistComplete && isOwnerOrManager && totalCount > 0 && (
-					<div className="bg-white rounded-[22px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] overflow-hidden">
+					<div
+						data-tour-id="tour-setup-checklist"
+						className="bg-white rounded-[22px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] overflow-hidden"
+					>
 						{/* Header row */}
 						<div className="px-[26px] pt-[22px] pb-3">
 							<div className="flex items-center gap-3.5">
@@ -263,6 +219,7 @@ export default function SalonDashboard() {
 									return (
 										<div
 											key={item.id}
+											data-tour-id={`tour-checklist-${item.id}`}
 											className="flex items-center gap-3.5 py-[13px] border-t border-black/[0.06]"
 										>
 											<div

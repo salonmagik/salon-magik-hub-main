@@ -39,6 +39,10 @@ import {
   BriefcaseBusiness,
   MessageSquareText,
   Users2,
+  Receipt,
+  Wallet,
+  ShieldAlert,
+  ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
 
@@ -71,6 +75,10 @@ const navItems: NavItem[] = [
     ],
   },
   { href: "/feature-flags", label: "Feature Flags", icon: Flag, pageKey: "feature_flags" },
+  { href: "/subscriptions", label: "Subscriptions & Add-ons", icon: Receipt, pageKey: "subscriptions" },
+  { href: "/comms-credits", label: "Comms Credits & Messages", icon: Wallet, pageKey: "comms_credits" },
+  { href: "/flagged-signups", label: "Flagged Signups", icon: ShieldAlert, pageKey: "flagged_signups" },
+  { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, pageKey: "transactions" },
   { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
   { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
   {

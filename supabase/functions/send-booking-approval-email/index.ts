@@ -39,8 +39,7 @@ type AppointmentRecord = {
     name: string | null;
     currency: string | null;
     logo_url: string | null;
-    email?: string | null;
-    phone?: string | null;
+    contact_phone?: string | null;
   } | null;
   customer: {
     id: string;
@@ -137,14 +136,17 @@ serve(async (req) => {
         proposed_end,
         proposed_message,
         approval_reason,
-        tenant:tenants(id, name, currency, logo_url, email, phone),
+        tenant:tenants(id, name, currency, logo_url, contact_phone),
         customer:customers(id, full_name, email),
         services:appointment_services(service_name),
         products:appointment_products(product_name, quantity)
       `)
       .in("id", body.appointmentIds);
 
-    if (error) throw error;
+    // Postgrest errors are plain objects, not Error instances — throwing them
+    // directly means the outer catch's `instanceof Error` check always fails
+    // and masks the real message behind a generic "Internal server error".
+    if (error) throw new Error(error.message || JSON.stringify(error));
     if (!appointments || appointments.length === 0) {
       return new Response(JSON.stringify({ error: "No appointments found" }), {
         status: 404,
@@ -167,11 +169,7 @@ serve(async (req) => {
     const bookingUrl = `${clientPortalBase}/bookings/${primary.id}`;
     const itemDescription = describeItems(normalizedAppointments);
     const customerFirstName = customer.full_name?.split(" ")[0] || "there";
-    const contactHref = tenant?.email
-      ? `mailto:${tenant.email}`
-      : tenant?.phone
-        ? `tel:${tenant.phone}`
-        : null;
+    const contactHref = tenant?.contact_phone ? `tel:${tenant.contact_phone}` : null;
 
     let subject = "";
     let content = "";

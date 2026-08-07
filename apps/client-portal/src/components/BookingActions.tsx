@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@ui/button";
-import { Card, CardContent } from "@ui/card";
 import {
   Dialog,
   DialogContent,
@@ -179,62 +178,57 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
 
   return (
     <>
-      <Card>
-        <CardContent className="pt-4">
-          <p className="text-sm text-muted-foreground mb-3">Quick Actions</p>
-          <div className="flex flex-wrap gap-2">
-            {canMarkOnMyWay && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleOnMyWay}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Navigation className="h-4 w-4 mr-2" />
-                )}
-                On My Way
-              </Button>
+      <div className="flex flex-wrap gap-2 justify-end">
+        {canMarkOnMyWay && (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleOnMyWay}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Navigation className="h-4 w-4 mr-2" />
             )}
+            On My Way
+          </Button>
+        )}
 
-            {canMarkRunningLate && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveDialog("running-late")}
-              >
-                <Clock className="h-4 w-4 mr-2" />
-                Running Late
-              </Button>
-            )}
+        {canMarkRunningLate && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setActiveDialog("running-late")}
+          >
+            <Clock className="h-4 w-4 mr-2" />
+            Running Late
+          </Button>
+        )}
 
-            {canReschedule && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveDialog("reschedule")}
-              >
-                <CalendarClock className="h-4 w-4 mr-2" />
-                Reschedule
-              </Button>
-            )}
+        {canReschedule && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setActiveDialog("reschedule")}
+          >
+            <CalendarClock className="h-4 w-4 mr-2" />
+            Reschedule
+          </Button>
+        )}
 
-            {canCancel && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => setActiveDialog("cancel")}
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        {canCancel && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={() => setActiveDialog("cancel")}
+          >
+            <XCircle className="h-4 w-4 mr-2" />
+            Cancel
+          </Button>
+        )}
+      </div>
 
       {/* Running Late Dialog */}
       <Dialog open={activeDialog === "running-late"} onOpenChange={(open) => !open && setActiveDialog(null)}>

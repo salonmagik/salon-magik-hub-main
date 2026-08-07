@@ -19,7 +19,9 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      // z-[70]: above SalonSidebar's fixed z-[60] desktop rail — otherwise
+      // the sidebar renders on top of the dialog instead of behind it.
+      "fixed inset-0 z-[70] bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -41,7 +43,7 @@ const DialogContent = React.forwardRef<
         // screen used to end up mostly empty space between its content and
         // the close button/footer. overflow-y-auto still kicks in once
         // content actually exceeds the cap.
-        "fixed left-3 right-3 top-1/2 z-50 grid w-auto max-h-[calc(100vh-1.5rem)] -translate-y-1/2 overflow-y-auto scrollbar-hide gap-5 rounded-[24px] border-0 bg-background p-5 shadow-2xl duration-200",
+        "fixed left-3 right-3 top-1/2 z-[70] grid w-auto max-h-[calc(100vh-1.5rem)] -translate-y-1/2 overflow-y-auto scrollbar-hide gap-5 rounded-[24px] border-0 bg-background p-5 shadow-2xl duration-200",
         "sm:left-[50%] sm:right-auto sm:top-[50%] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[90vh] sm:p-8",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className,

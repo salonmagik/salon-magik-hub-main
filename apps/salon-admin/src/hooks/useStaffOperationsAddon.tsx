@@ -86,6 +86,11 @@ export function useStaffOperationsAddon() {
       if (error) throw error;
       await queryClient.invalidateQueries({ queryKey: ["staff-operations-addon-entitlement", currentTenant?.id] });
       await queryClient.invalidateQueries({ queryKey: ["tenant-runtime-entitlements", currentTenant?.id] });
+      // Without this, the Subscription tab's "Total this cycle" card and
+      // upgrade-confirm dialog keep showing the pre-toggle total for the
+      // rest of the session — the add-on is billed correctly either way,
+      // but looks like an unexplained/hidden charge until a full reload.
+      await queryClient.invalidateQueries({ queryKey: ["tenant-recurring-total", currentTenant?.id] });
       toast({
         title: isEnabled ? "Staff Operations disabled" : "Staff Operations enabled",
         description: isEnabled

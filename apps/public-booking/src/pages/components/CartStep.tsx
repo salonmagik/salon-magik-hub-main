@@ -1,4 +1,4 @@
-import { Trash2, Gift, ShoppingBag } from "lucide-react";
+import { Trash2, Gift, ShoppingBag, Scissors, Package } from "lucide-react";
 import { Button } from "@ui/button";
 import { Separator } from "@ui/separator";
 import { Badge } from "@ui/badge";
@@ -21,6 +21,8 @@ interface CartStepProps {
   onBrowse: () => void;
 }
 
+const TYPE_ICON = { service: Scissors, package: Package, product: ShoppingBag } as const;
+
 export function CartStep({ currency, onBrowse }: CartStepProps) {
   const { items, meta, removeItem, updateItem, updateQuantity, updateMeta, getTotal } = useBookingCart();
   const total = getTotal();
@@ -40,12 +42,12 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-          <ShoppingBag className="h-8 w-8 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-5">
+          <ShoppingBag className="h-7 w-7 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-medium mb-2">Your cart is empty</h3>
-        <p className="text-muted-foreground text-sm mb-6">
+        <h3 className="font-serif text-xl font-semibold mb-2">Your cart is empty</h3>
+        <p className="text-muted-foreground text-sm mb-7">
           Add services, packages, or products to get started
         </p>
         <Button onClick={onBrowse} variant="outline">
@@ -56,173 +58,155 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div>
       {items.map((item, index) => {
         const eligibleBranches = item.eligibleBranches || [];
         const requiresBranchChoice = eligibleBranches.length > 1;
         const singleBranch = eligibleBranches.length === 1 ? eligibleBranches[0] : null;
+        const TypeIcon = TYPE_ICON[item.type as keyof typeof TYPE_ICON] || ShoppingBag;
 
         return (
-          <div key={item.id}>
-            <div className="space-y-3">
-              <div className="flex gap-3">
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="h-16 w-16 rounded-lg object-cover shrink-0"
-                  />
-                ) : (
-                  <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-xs uppercase font-medium shrink-0">
-                    {item.type}
-                  </div>
-                )}
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-medium line-clamp-1">{item.name}</h4>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="outline" className="text-xs uppercase">
-                          {item.type}
-                        </Badge>
-                        {item.isGift && (
-                          <Badge variant="secondary" className="text-xs gap-1">
-                            <Gift className="h-3 w-3" />
-                            Gift
-                          </Badge>
-                        )}
-                        {item.branchName && (
-                          <Badge variant="outline" className="text-xs">
-                            {item.branchName}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <span className="font-semibold whitespace-nowrap">
-                      {formatCurrency(item.price * item.quantity, currency)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-2">
-                    <QuantityControl
-                      quantity={item.quantity}
-                      onIncrement={() => handleQuantityChange(item, 1)}
-                      onDecrement={() => handleQuantityChange(item, -1)}
-                      size="sm"
-                    />
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive"
-                      onClick={() => removeItem(item.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+          <div key={item.id} className={index > 0 ? "pt-6 mt-6 border-t border-border" : ""}>
+            <div className="flex gap-3.5">
+              {item.imageUrl ? (
+                <img
+                  src={item.imageUrl}
+                  alt={item.name}
+                  className="h-16 w-16 rounded-2xl object-cover shrink-0"
+                />
+              ) : (
+                <div
+                  className="h-16 w-16 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{
+                    background: "linear-gradient(155deg, color-mix(in srgb, var(--brand-color, hsl(262 43% 21%)) 92%, black), color-mix(in srgb, var(--brand-color, hsl(262 43% 21%)) 65%, white))",
+                  }}
+                >
+                  <TypeIcon className="h-6 w-6 text-accent" strokeWidth={1.6} />
                 </div>
-              </div>
+              )}
 
-              {(requiresBranchChoice || singleBranch) && (
-                <div className="pl-[76px] space-y-2">
-                  <Label className="text-sm">Service Branch</Label>
-                  {requiresBranchChoice ? (
-                    <Select
-                      value={item.branchId ?? ""}
-                      onValueChange={(value) => updateItem(item.id, { branchId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select branch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {eligibleBranches.map((branch) => (
-                          <SelectItem key={branch.id} value={branch.id}>
-                            {branch.name} - {branch.city}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      {singleBranch?.name} - {singleBranch?.city}
-                    </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <h4 className="font-medium leading-snug line-clamp-1">{item.name}</h4>
+                  <span className="font-serif font-semibold whitespace-nowrap">
+                    {formatCurrency(item.price * item.quantity, currency)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{item.type}</span>
+                  {item.isGift && (
+                    <Badge className="text-[10.5px] gap-1 rounded-full bg-accent text-accent-foreground hover:bg-accent border-0 px-2 py-0">
+                      <Gift className="h-3 w-3" />
+                      Gift
+                    </Badge>
+                  )}
+                  {item.branchName && (
+                    <span className="text-[11px] text-muted-foreground">&middot; {item.branchName}</span>
                   )}
                 </div>
-              )}
 
-              {(item.type === "service" || item.type === "package") && (
-                <div className="pl-[76px] flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
-                  <Checkbox
-                    id={`schedule-${item.id}`}
-                    checked={item.scheduleMode !== "leave_unscheduled"}
-                    onCheckedChange={(checked) =>
-                      updateItem(item.id, {
-                        scheduleMode: checked ? "schedule_now" : "leave_unscheduled",
-                      })
-                    }
+                <div className="flex items-center justify-between mt-3">
+                  <QuantityControl
+                    quantity={item.quantity}
+                    onIncrement={() => handleQuantityChange(item, 1)}
+                    onDecrement={() => handleQuantityChange(item, -1)}
+                    size="sm"
                   />
-                  <div className="space-y-1">
-                    <Label htmlFor={`schedule-${item.id}`} className="cursor-pointer font-medium text-sm">
-                      Schedule now
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {item.scheduleMode === "leave_unscheduled"
-                        ? "This item will skip the scheduling step."
-                        : "This item will appear in the scheduling step."}
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeItem(item.id)}
+                    className="text-xs text-muted-foreground underline underline-offset-2 hover:text-destructive transition-colors"
+                  >
+                    Remove
+                  </button>
                 </div>
-              )}
-
-              <div className="flex items-center gap-2 pl-[76px]">
-                <Checkbox
-                  id={`gift-${item.id}`}
-                  checked={item.isGift}
-                  onCheckedChange={() => toggleGift(item)}
-                />
-                <Label htmlFor={`gift-${item.id}`} className="text-sm cursor-pointer">
-                  This is a gift
-                </Label>
               </div>
-
-              {item.type === "product" && (
-                <div className="pl-[76px]">
-                  <FulfillmentToggle
-                    value={item.fulfillmentType}
-                    onChange={(value) => handleFulfillmentChange(item, value)}
-                  />
-                </div>
-              )}
             </div>
 
-            {index < items.length - 1 && <Separator className="my-4" />}
+            {(requiresBranchChoice || singleBranch) && (
+              <div className="pl-[76px] mt-3.5 space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Branch</Label>
+                {requiresBranchChoice ? (
+                  <Select
+                    value={item.branchId ?? ""}
+                    onValueChange={(value) => updateItem(item.id, { branchId: value })}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Select branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {eligibleBranches.map((branch) => (
+                        <SelectItem key={branch.id} value={branch.id}>
+                          {branch.name} - {branch.city}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">
+                    {singleBranch?.name} - {singleBranch?.city}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(item.type === "service" || item.type === "package") && (
+              <label htmlFor={`schedule-${item.id}`} className="pl-[76px] mt-3 flex items-center gap-2.5 cursor-pointer">
+                <Checkbox
+                  id={`schedule-${item.id}`}
+                  checked={item.scheduleMode !== "leave_unscheduled"}
+                  onCheckedChange={(checked) =>
+                    updateItem(item.id, {
+                      scheduleMode: checked ? "schedule_now" : "leave_unscheduled",
+                    })
+                  }
+                />
+                <span className="text-sm">Schedule now</span>
+                <span className="text-xs text-muted-foreground">
+                  {item.scheduleMode === "leave_unscheduled" ? "— will skip the scheduling step" : ""}
+                </span>
+              </label>
+            )}
+
+            <label htmlFor={`gift-${item.id}`} className="pl-[76px] mt-2.5 flex items-center gap-2.5 cursor-pointer">
+              <Checkbox
+                id={`gift-${item.id}`}
+                checked={item.isGift}
+                onCheckedChange={() => toggleGift(item)}
+              />
+              <span className="text-sm">This is a gift</span>
+            </label>
+
+            {item.type === "product" && (
+              <div className="pl-[76px] mt-3">
+                <FulfillmentToggle
+                  value={item.fulfillmentType}
+                  onChange={(value) => handleFulfillmentChange(item, value)}
+                />
+              </div>
+            )}
           </div>
         );
       })}
 
       {giftItems.length > 1 && (
-        <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+        <label htmlFor="gift-grouping" className="mt-6 pt-6 border-t border-border flex items-start gap-2.5 cursor-pointer">
           <Checkbox
             id="gift-grouping"
             checked={meta.giftsBelongToSamePerson}
             onCheckedChange={(checked) => updateMeta({ giftsBelongToSamePerson: Boolean(checked) })}
           />
-          <div className="space-y-1">
-            <Label htmlFor="gift-grouping" className="cursor-pointer font-medium text-sm">
-              Gifts belong to same person
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Keep this checked to use one recipient form for all gift items.
-            </p>
+          <div>
+            <span className="text-sm block">Gifts belong to same person</span>
+            <span className="text-xs text-muted-foreground">Use one recipient form for all gift items.</span>
           </div>
-        </div>
+        </label>
       )}
 
-      <Separator className="my-4" />
-      <div className="flex items-center justify-between text-lg font-semibold">
-        <span>Total</span>
-        <span>{formatCurrency(total, currency)}</span>
+      <Separator className="mt-6 mb-4" />
+      <div className="flex items-center justify-between">
+        <span className="font-medium">Total</span>
+        <span className="font-serif text-xl font-semibold">{formatCurrency(total, currency)}</span>
       </div>
     </div>
   );

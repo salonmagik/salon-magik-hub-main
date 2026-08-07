@@ -196,9 +196,35 @@ serve(async (req) => {
             .eq("id", customer.id);
 
           emailsSent++;
+          await supabase.from("message_logs").insert({
+            tenant_id: setting.tenant_id,
+            customer_id: customer.id,
+            channel: "email",
+            template_type: "birthday_message",
+            recipient: customer.email,
+            subject,
+            status: "sent",
+            sent_at: now.toISOString(),
+            provider: "resend",
+            initiated_by: "system",
+            credits_used: 0,
+          });
         } catch (err) {
           console.error(`Birthday email failed for customer ${customer.id}:`, err);
           errors++;
+          await supabase.from("message_logs").insert({
+            tenant_id: setting.tenant_id,
+            customer_id: customer.id,
+            channel: "email",
+            template_type: "birthday_message",
+            recipient: customer.email || null,
+            status: "failed",
+            sent_at: now.toISOString(),
+            provider: "resend",
+            initiated_by: "system",
+            credits_used: 0,
+            error_message: err instanceof Error ? err.message : "Birthday email failed",
+          });
         }
       }
     }

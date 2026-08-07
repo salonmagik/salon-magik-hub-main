@@ -2,6 +2,7 @@ import { useState } from "react";
 import { endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns";
 import * as XLSX from "xlsx";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Skeleton } from "@ui/skeleton";
 import {
@@ -133,6 +134,7 @@ function StatChip({ label, value, sub, description, changePercent, prevLabel, ic
 }
 
 export default function ReportsPage() {
+  useWalkthroughAutoTrigger("reports");
   const now = new Date();
   const [period, setPeriod] = useState<"today" | "week" | "month" | "custom">("month");
   const [reportRange, setReportRange] = useState({
@@ -246,7 +248,7 @@ export default function ReportsPage() {
               How your business is doing compared to {stats.prevPeriodLabel.toLowerCase()}.
             </p>
           </div>
-          <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div className="flex w-full items-center gap-2 sm:w-auto" data-tour-id="tour-reports-filters">
             <DateRangePicker
               from={reportRange.start}
               to={reportRange.end}
@@ -273,7 +275,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Stat Chips */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-tour-id="tour-reports-stats">
           <StatChip
             label="Inflow"
             value={fmt(stats.totalRevenue)}
@@ -332,7 +334,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Revenue Chart */}
-        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm" data-tour-id="tour-reports-chart">
           <CardHeader className="px-5 pb-2 pt-5 sm:px-[26px] sm:pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -383,7 +385,7 @@ export default function ReportsPage() {
         </Card>
 
         {/* Top Services + Payment Methods */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2" data-tour-id="tour-reports-breakdowns">
           {/* Top Services */}
           <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
             <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
@@ -479,7 +481,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Staff Performance */}
-        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm" data-tour-id="tour-reports-staff">
           <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
             <div className="flex items-center gap-2">
               <UserCheck className="h-4 w-4 text-muted-foreground" />
@@ -529,7 +531,7 @@ export default function ReportsPage() {
         </Card>
 
         {/* Customer Segments */}
-        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm">
+        <Card className="rounded-[22px] border-[#141014]/[0.06] bg-white shadow-sm" data-tour-id="tour-reports-segments">
           <CardHeader className="px-5 pb-2 pt-5 sm:px-6">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />

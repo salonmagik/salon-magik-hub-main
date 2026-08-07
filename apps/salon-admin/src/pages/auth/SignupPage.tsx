@@ -9,6 +9,7 @@ import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { AuthDivider } from "@/components/auth/AuthDivider";
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 import { Checkbox } from "@ui/checkbox";
 import { validateSignup, type SignupField, type SignupFormData } from "@/pages/auth/signup/validation";
 import {
@@ -57,6 +58,33 @@ export default function SignupPage() {
     confirmPassword: "",
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  // Phone OTP: proves the phone is real and reachable before a trial
+  // account is created (trials deliberately don't require a card, so a
+  // verified phone is one of the few abuse signals available).
+  const [otpSentTo, setOtpSentTo] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [phoneVerifiedFor, setPhoneVerifiedFor] = useState<string | null>(null);
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
+  const [otpCooldownSecondsLeft, setOtpCooldownSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (!otpCooldownUntil) return;
+    const tick = () => {
+      const secondsLeft = Math.max(0, Math.ceil((otpCooldownUntil - Date.now()) / 1000));
+      setOtpCooldownSecondsLeft(secondsLeft);
+      if (secondsLeft <= 0) setOtpCooldownUntil(null);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [otpCooldownUntil]);
+
+  const phoneIsVerified = phoneVerifiedFor !== null && phoneVerifiedFor === formData.phone;
   const googleOAuthIntent = readGoogleOAuthIntent();
   const pendingPromoCode = readPendingSalesPromoCode();
 
@@ -192,7 +220,14 @@ export default function SignupPage() {
   ]);
 
   const validation = useMemo(() => validateSignup(formData, acceptTerms), [formData, acceptTerms]);
-  const isFormValid = validation.isValid;
+  // Only require a solved CAPTCHA when the site key is actually configured
+  // for this environment — keeps local dev (no Turnstile keys set) usable
+  // without silently locking out signup.
+  const captchaSiteKeyConfigured = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY);
+  const isFormValid =
+    validation.isValid &&
+    (!captchaSiteKeyConfigured || Boolean(captchaToken)) &&
+    phoneIsVerified;
   const hasInteracted = Object.values(touched).some(Boolean);
 
   const markTouched = (field: SignupField) => {
@@ -205,6 +240,76 @@ export default function SignupPage() {
     const { name, value } = e.target;
     markTouched(name as SignupField);
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSendPhoneOtp = async () => {
+    if (!formData.phone || validation.errors.phone) return;
+
+    setIsSendingOtp(true);
+    setOtpError("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("send-signup-phone-otp", {
+        body: { phone: formData.phone },
+      });
+
+      if (error || data?.error) {
+        let message = data?.error || error?.message || "Failed to send verification code";
+        if (error && typeof error === "object" && "context" in error && error.context) {
+          try {
+            const parsed = await error.context.json();
+            message = parsed?.error || parsed?.message || message;
+          } catch {
+            // no-op: keep fallback message
+          }
+        }
+        setOtpError(message);
+        return;
+      }
+
+      setOtpSentTo(formData.phone);
+      setOtpCode("");
+      setOtpCooldownUntil(Date.now() + 60 * 1000);
+    } catch {
+      setOtpError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const handleVerifyPhoneOtp = async () => {
+    if (otpCode.length !== 6) return;
+
+    setIsVerifyingOtp(true);
+    setOtpError("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("verify-signup-phone-otp", {
+        body: { phone: formData.phone, otp: otpCode },
+      });
+
+      if (error || data?.error) {
+        let message = data?.error || error?.message || "Invalid or expired code";
+        if (error && typeof error === "object" && "context" in error && error.context) {
+          try {
+            const parsed = await error.context.json();
+            message = parsed?.error || parsed?.message || message;
+          } catch {
+            // no-op: keep fallback message
+          }
+        }
+        setOtpError(message);
+        return;
+      }
+
+      setPhoneVerifiedFor(formData.phone);
+      setOtpSentTo(null);
+      setOtpCode("");
+    } catch {
+      setOtpError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -227,6 +332,7 @@ export default function SignupPage() {
           phone: formData.phone || null,
           password: formData.password,
           origin: window.location.origin,
+          captchaToken,
         },
       });
 
@@ -411,10 +517,77 @@ export default function SignupPage() {
           onChange={(value) => {
             markTouched("phone");
             setFormData((prev) => ({ ...prev, phone: value }));
+            if (value !== otpSentTo) {
+              setOtpSentTo(null);
+              setOtpCode("");
+              setOtpError("");
+            }
           }}
           error={shouldShowError("phone") ? validation.errors.phone : undefined}
-          disabled={isLoading}
+          disabled={isLoading || phoneIsVerified}
         />
+
+        {!phoneIsVerified && validation.errors.phone === undefined && formData.phone && (
+          <div className="space-y-2 -mt-2">
+            {otpSentTo === formData.phone ? (
+              <div className="flex items-end gap-2">
+                <div className="flex-1 space-y-1.5">
+                  <label className="block text-sm font-medium text-foreground">
+                    Enter verification code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="6-digit code"
+                    disabled={isLoading || isVerifyingOtp}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm tracking-widest"
+                  />
+                </div>
+                <AuthButton
+                  type="button"
+                  variant="outline"
+                  className="w-auto shrink-0 h-11 px-4"
+                  disabled={isVerifyingOtp || otpCode.length !== 6 || isLoading}
+                  isLoading={isVerifyingOtp}
+                  onClick={handleVerifyPhoneOtp}
+                >
+                  Verify
+                </AuthButton>
+              </div>
+            ) : (
+              <AuthButton
+                type="button"
+                variant="outline"
+                className="w-auto h-9 px-4 text-sm"
+                disabled={isSendingOtp || isLoading || otpCooldownSecondsLeft > 0}
+                isLoading={isSendingOtp}
+                onClick={handleSendPhoneOtp}
+              >
+                {otpCooldownSecondsLeft > 0 ? `Resend code in ${otpCooldownSecondsLeft}s` : "Send verification code"}
+              </AuthButton>
+            )}
+            {otpError && <p className="text-sm text-destructive">{otpError}</p>}
+            {otpSentTo === formData.phone && !otpError && (
+              <p className="text-xs text-muted-foreground">
+                Code sent to {formData.phone}.{" "}
+                {otpCooldownSecondsLeft > 0 ? (
+                  `Resend in ${otpCooldownSecondsLeft}s`
+                ) : (
+                  <button type="button" className="text-primary hover:underline" onClick={handleSendPhoneOtp} disabled={isSendingOtp}>
+                    Resend code
+                  </button>
+                )}
+              </p>
+            )}
+          </div>
+        )}
+
+        {phoneIsVerified && (
+          <p className="text-sm text-success -mt-2">Phone number verified</p>
+        )}
 
         <AuthInput
           label="Password"
@@ -473,6 +646,11 @@ export default function SignupPage() {
             <p className="text-sm text-destructive">{validation.errors.terms}</p>
           )}
         </div>
+
+        <TurnstileWidget
+          onVerify={setCaptchaToken}
+          onExpire={() => setCaptchaToken(null)}
+        />
 
         <AuthButton
           type="submit"

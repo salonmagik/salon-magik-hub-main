@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import { CalendarOff, Clock, HeartPulse, Leaf, MapPin, Navigation } from "lucide-react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -51,6 +52,7 @@ const statusTone: Record<TimeOffStatus, string> = {
 };
 
 export default function MyShiftPage() {
+  useWalkthroughAutoTrigger("my-shift");
   const { currentTenant, user } = useAuth();
   const { locations, defaultLocationId } = useManageableLocations();
   const { checkIn, isLoading: checkInLoading, checkInAt, checkOut } = useMyCheckIn();
@@ -282,6 +284,7 @@ export default function MyShiftPage() {
                 )}
                 <Button
                   className="w-full rounded-full"
+                  data-tour-id="tour-clock-in"
                   disabled={isCheckingIn || checkInLoading || !selectedLocationId}
                   onClick={handleCheckIn}
                 >

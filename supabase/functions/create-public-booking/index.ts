@@ -240,6 +240,32 @@ serve(async (req) => {
       );
     }
 
+    // This client uses the service role key, so RLS's own is_paused checks
+    // (see 20260806230000_paused_location_enforcement.sql) never run here —
+    // a paused branch must be rejected explicitly, not just relied on to be
+    // absent from what the storefront shows.
+    const requestedLocationIds = Array.from(new Set(items.map((item) => item.locationId).filter(Boolean)));
+    if (requestedLocationIds.length > 0) {
+      const { data: pausedLocations, error: pausedLocationsError } = await supabase
+        .from("locations")
+        .select("id")
+        .in("id", requestedLocationIds)
+        .eq("is_paused", true);
+      if (pausedLocationsError) {
+        console.error("create-public-booking: paused-location check failed", pausedLocationsError);
+        return new Response(
+          JSON.stringify({ error: "Something went wrong. Please try again." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (pausedLocations && pausedLocations.length > 0) {
+        return new Response(
+          JSON.stringify({ error: "This branch isn't currently accepting bookings. Please choose another location." }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // Never trust catalog names, prices, availability, or package contents sent
     // by the browser. Voucher totals and payment amounts are derived from this
     // server-authoritative snapshot.
@@ -927,15 +953,6 @@ serve(async (req) => {
               error: "Paystack payment is not configured. Please contact the salon or try a different payment method."
             }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        if (usePaystack && tenant.payment_setup_status !== 'ready') {
-          return new Response(
-            JSON.stringify({
-              error: "The salon is not ready to accept online payments at this time. Please contact them or try again later."
-            }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandLoader } from "@/components/BrandLoader";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -47,6 +48,9 @@ import {
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@ui/ui/use-toast";
+import { Loader2 } from "lucide-react";
 import { formatCurrency } from "@shared/currency";
 import { countryName } from "@/lib/countryCurrency";
 import { Link, useNavigate } from "react-router-dom";
@@ -68,12 +72,28 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 type DateRange = "today" | "week" | "month";
 
 export default function SalonsOverviewPage() {
+  // "Switch to a branch" guidance needs to run *after* the hub-overview
+  // tour settles, whether it finished or was skipped — see the comment on
+  // hub-switcher.switch-to-branch in walkthroughs.ts for why it can't just
+  // be one more hub-overview step. useWalkthroughAutoTrigger's onComplete
+  // flips this once hub-overview is done (or had nothing to show), which
+  // then lets the hub-switcher trigger's own effect run via extraLoading.
+  const [hubTourSettled, setHubTourSettled] = useState(false);
+  useWalkthroughAutoTrigger(
+    "hub-overview",
+    [],
+    false,
+    useCallback(() => setHubTourSettled(true), []),
+  );
+  useWalkthroughAutoTrigger("hub-switcher", [], !hubTourSettled);
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
   const [quickActionPopover, setQuickActionPopover] = useState<string | null>(null);
+  const [pausedBranchesPopoverOpen, setPausedBranchesPopoverOpen] = useState(false);
+  const [revivingLocationId, setRevivingLocationId] = useState<string | null>(null);
   const navigate = useNavigate();
   const {
     currentTenant,
@@ -158,7 +178,31 @@ export default function SalonsOverviewPage() {
   }, [filteredLocations, currentTenant?.currency]);
 
   const branchContexts = availableContexts.filter((c) => c.type === "location");
-  const pausedBranchCount = branchContexts.filter((c) => c.isPaused).length;
+  const pausedBranches = branchContexts.filter((c) => c.isPaused);
+  const pausedBranchCount = pausedBranches.length;
+
+  const handleRevive = async (locationId: string) => {
+    if (!currentTenant?.id) return;
+    setRevivingLocationId(locationId);
+    try {
+      const { data, error } = await (supabase.rpc as any)("revive_location", {
+        p_tenant_id: currentTenant.id,
+        p_location_id: locationId,
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.message || "Failed to revive branch");
+      toast({ title: "Branch revived", description: "This branch is active again." });
+      await refreshTenants();
+    } catch (error: any) {
+      toast({
+        title: "Couldn't revive branch",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRevivingLocationId(null);
+    }
+  };
 
   // Map locations by id for per-action branch filtering
   const locationById = useMemo(() => {
@@ -268,7 +312,7 @@ export default function SalonsOverviewPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setAddSalonOpen(true)} className="hidden lg:flex gap-2">
+            <Button onClick={() => setAddSalonOpen(true)} data-tour-id="tour-manage-branches" className="hidden lg:flex gap-2">
               <Plus className="w-4 h-4" />
               Add Branch
             </Button>
@@ -277,7 +321,7 @@ export default function SalonsOverviewPage() {
 
         {/* Quick Actions — hub context only */}
         {activeContextType === "owner_hub" && branchContexts.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour-id="tour-hub-quick-actions">
             {[
                 { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null, description: null as string | null },
                 { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null, description: "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above." },
@@ -386,7 +430,7 @@ export default function SalonsOverviewPage() {
           <>
             {/* Summary Stats */}
             {aggregateStats && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tour-id="tour-hub-overview">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
@@ -399,18 +443,51 @@ export default function SalonsOverviewPage() {
                   </CardContent>
                 </Card>
                 {currentRole === "owner" && pausedBranchCount > 0 && (
-                  <Card className="border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
-                        <PauseCircle className="w-3 h-3" />
-                        Paused Branches
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{pausedBranchCount}</div>
-                      <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Tap a paused branch to revive it</p>
-                    </CardContent>
-                  </Card>
+                  <Popover open={pausedBranchesPopoverOpen} onOpenChange={setPausedBranchesPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-left w-full">
+                        <Card className="border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20 transition-colors hover:border-orange-400">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
+                              <PauseCircle className="w-3 h-3" />
+                              Paused Branches
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{pausedBranchCount}</div>
+                            <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Tap to revive a branch</p>
+                          </CardContent>
+                        </Card>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-1" align="start">
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Paused branches</p>
+                      {pausedBranches.map((ctx) => (
+                        <div
+                          key={ctx.locationId}
+                          className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">{ctx.label}</span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 shrink-0 text-xs"
+                            disabled={revivingLocationId === ctx.locationId}
+                            onClick={() => ctx.locationId && handleRevive(ctx.locationId)}
+                          >
+                            {revivingLocationId === ctx.locationId ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              "Revive"
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
                 )}
                 {canViewRevenueAnalytics && (
                   <Card>
@@ -588,7 +665,7 @@ export default function SalonsOverviewPage() {
             )}
 
             {/* Branch Breakdown Table */}
-            <Card>
+            <Card data-tour-id="tour-branch-performance">
               <CardHeader>
                 <CardTitle>Branch Performance</CardTitle>
                 <CardDescription>
@@ -793,6 +870,7 @@ export default function SalonsOverviewPage() {
           type="button"
           aria-label="Add branch"
           onClick={() => setAddSalonOpen(true)}
+          data-tour-id="tour-manage-branches-mobile"
           className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
         >
           <Plus className="w-6 h-6" />

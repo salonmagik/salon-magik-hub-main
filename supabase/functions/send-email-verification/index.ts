@@ -26,6 +26,32 @@ interface EmailVerificationRequest {
   userId?: string | null;
   origin?: string;
   mode?: "signup" | "resend";
+  captchaToken?: string | null;
+}
+
+const TURNSTILE_SECRET_KEY = Deno.env.get("TURNSTILE_SECRET_KEY");
+
+async function verifyTurnstileToken(token: string | null | undefined, remoteIp: string | null): Promise<boolean> {
+  // No secret configured (e.g. local dev) — CAPTCHA isn't enforced for this
+  // environment, matching the frontend's captchaSiteKeyConfigured gate.
+  if (!TURNSTILE_SECRET_KEY) return true;
+  if (!token) return false;
+
+  try {
+    const body = new URLSearchParams({ secret: TURNSTILE_SECRET_KEY, response: token });
+    if (remoteIp) body.set("remoteip", remoteIp);
+
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = await res.json();
+    return data?.success === true;
+  } catch (err) {
+    console.error("Turnstile verification request failed:", err);
+    return false;
+  }
 }
 
 type AuthUser = {
@@ -85,6 +111,7 @@ const handler = async (req: Request): Promise<Response> => {
       userId,
       origin,
       mode = "resend",
+      captchaToken,
     }: EmailVerificationRequest = await req.json();
 
     if (!email) {
@@ -124,6 +151,46 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
+      const remoteIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+      const captchaOk = await verifyTurnstileToken(captchaToken, remoteIp);
+      if (!captchaOk) {
+        return new Response(
+          JSON.stringify({ error: "CAPTCHA verification failed. Please try again." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
+      // Re-check phone ownership server-side rather than trusting a
+      // client-supplied "verified" flag — a matching used signup OTP token
+      // (user_id null, verify-signup-phone-otp marks it used on success)
+      // within the last 30 minutes is the actual proof, not frontend state.
+      if (!phone) {
+        return new Response(
+          JSON.stringify({ error: "Phone verification is required for signup" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+      const phoneOtpWindow = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: verifiedPhoneToken, error: phoneOtpError } = await supabase
+        .from("phone_otp_tokens")
+        .select("id")
+        .eq("phone", phone)
+        .is("user_id", null)
+        .eq("used", true)
+        .gte("created_at", phoneOtpWindow)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (phoneOtpError) {
+        console.error("[send-email-verification] phone OTP re-check failed:", phoneOtpError);
+      }
+      if (!verifiedPhoneToken) {
+        return new Response(
+          JSON.stringify({ error: "Please verify your phone number before creating your account." }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      }
+
       // Block reuse of an email/phone already tied to an active salon account,
       // or that only has a *pending* (not yet invited) access request. Invited
       // leads are allowed through to complete their signup.
@@ -141,6 +208,11 @@ const handler = async (req: Request): Promise<Response> => {
       } else if (conflict === "tenant_phone") {
         return new Response(
           JSON.stringify({ error: "A salon already exists with this phone number. Please sign in." }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
+        );
+      } else if (conflict === "tenant_phone_trial_used") {
+        return new Response(
+          JSON.stringify({ error: "This phone number has already been used for a free trial. Please contact support if you'd like to start another one." }),
           { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
         );
       } else if (conflict === "waitlist_pending") {

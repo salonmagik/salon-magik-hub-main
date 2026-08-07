@@ -7,6 +7,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
+import { ProductTourProvider } from "@/components/onboarding/ProductTourProvider";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
@@ -32,7 +33,6 @@ const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
 const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
 const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
 const MyShiftPage = lazy(() => import("./pages/salon/MyShiftPage"));
-const EmailTemplatesPage = lazy(() => import("./pages/salon/EmailTemplatesPage"));
 const AccessDeniedPage = lazy(() => import("./pages/salon/AccessDeniedPage"));
 const AssignmentPendingPage = lazy(() => import("./pages/salon/AssignmentPendingPage"));
 const AuditLogPage = lazy(() => import("./pages/salon/AuditLogPage"));
@@ -162,8 +162,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Suspense fallback={<RouteLoading />}>
-            <Routes>
+          <ProductTourProvider>
+            <Suspense fallback={<RouteLoading />}>
+              <Routes>
               {/* Root - smart redirect based on auth */}
               <Route path="/" element={<RootRoute />} />
 
@@ -389,14 +390,6 @@ const App = () => (
                 }
               />
               <Route
-                path="/salon/email-templates"
-                element={
-                  <ProtectedRoute>
-                    <EmailTemplatesPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/salon/help"
                 element={
                   <ProtectedRoute>
@@ -449,6 +442,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </ProductTourProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

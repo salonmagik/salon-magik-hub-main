@@ -96,9 +96,16 @@ serve(async (req) => {
         .maybeSingle();
 
       salonName = tenant?.name ?? salonName;
-      const roleLabel = roleRow?.role
-        ? roleRow.role.charAt(0).toUpperCase() + roleRow.role.slice(1)
-        : "Team member";
+      const roleKey = roleRow?.role ?? "";
+      const ROLE_LABELS: Record<string, string> = {
+        owner: "Owner",
+        co_owner: "Co-owner",
+        manager: "Manager",
+        supervisor: "Supervisor",
+        receptionist: "Receptionist",
+        staff: "Staff member",
+      };
+      const roleLabel = ROLE_LABELS[roleKey] ?? "Team member";
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -108,17 +115,105 @@ serve(async (req) => {
 
       const firstName = profile?.full_name?.split(" ")[0] || user.email.split("@")[0];
 
+      // Tailored to what each role can actually see, per usePermissions.tsx's
+      // DEFAULT_ROLE_PERMISSIONS — generic "manage appointments and stay on
+      // top of your day" copy overpromised for roles like staff, which can't
+      // even see the calendar or customer list. co_owner has no live trigger
+      // yet (no such value in the user_roles.role enum) — content is ready
+      // ahead of that feature shipping, per explicit product decision to
+      // still do it later.
+      // path is a real, permission-reachable salon-admin route for that
+      // role (confirmed against usePermissions.tsx's DEFAULT_ROLE_PERMISSIONS
+      // and App.tsx's route/module gates) — carried through login via
+      // ?redirect= so the CTA lands on the promised screen even for a
+      // signed-out click, not just the /salon default.
+      const ROLE_CONTENT: Record<string, { boxTitle: string; lines: string[]; cta: string; path: string }> = {
+        owner: {
+          boxTitle: "As a co-owner, you can:",
+          lines: [
+            "See the full dashboard, reports, and business overview",
+            "Manage the team, settings, and billing alongside the primary owner",
+            "Handle appointments, customers, and payments for any client",
+          ],
+          cta: "Go to Dashboard",
+          path: "/salon",
+        },
+        co_owner: {
+          boxTitle: "As a co-owner, you can:",
+          lines: [
+            "See the full dashboard, reports, and business overview",
+            "Manage the team, settings, and billing alongside the primary owner",
+            "Handle appointments, customers, and payments for any client",
+          ],
+          cta: "Go to Dashboard",
+          path: "/salon",
+        },
+        manager: {
+          boxTitle: "As a Manager, you can:",
+          lines: [
+            "See the full dashboard and daily business overview",
+            "Run and export reports (revenue, appointments, staff performance)",
+            "Manage the team — add staff, adjust schedules, review permissions",
+            "Handle appointments, customers, and payments for any client",
+          ],
+          cta: "Go to Dashboard",
+          path: "/salon",
+        },
+        supervisor: {
+          boxTitle: "As a Supervisor, you can:",
+          lines: [
+            "View and manage the calendar and appointments",
+            "Look up customers and flag or mark them VIP",
+            "Take payments and process checkouts",
+            "Message clients directly from a booking",
+          ],
+          cta: "Go to Calendar",
+          path: "/salon/appointments",
+        },
+        receptionist: {
+          boxTitle: "As a Receptionist, you can:",
+          lines: [
+            "Book and manage appointments on the calendar",
+            "Check in customers and view their booking history",
+            "Take payments at checkout",
+            "Message clients about their upcoming bookings",
+          ],
+          cta: "Go to Bookings",
+          path: "/salon/appointments",
+        },
+        staff: {
+          boxTitle: "What you can do:",
+          lines: [
+            "View and manage the appointments calendar",
+            "Take payment for the services you provide",
+          ],
+          cta: "View Appointments",
+          path: "/salon/appointments",
+        },
+      };
+      const roleContent = ROLE_CONTENT[roleKey] ?? {
+        boxTitle: "Sign in to get started:",
+        lines: ["View your schedule and manage your day-to-day at " + salonName],
+        cta: `Sign in to ${salonName}`,
+        path: "/salon",
+      };
+      const ctaUrl = `${appBaseUrl}/login?redirect=${encodeURIComponent(roleContent.path)}`;
+
       subject = `Welcome to ${salonName}!`;
       emailMode = "salon";
       content = `
         ${heading(`Welcome to ${salonName}, ${firstName}!`)}
         ${paragraph(`You've been added as a <strong>${roleLabel}</strong> at <strong>${salonName}</strong>. Your account is active and ready to go.`)}
         <div style="background: ${EMAIL_STYLES.surfaceColor}; border-radius: 8px; padding: 20px; margin: 24px 0;">
-          <p style="margin: 0 0 12px; font-weight: 600; color: ${EMAIL_STYLES.textColor}; font-size: 15px;">Your role: ${roleLabel}</p>
-          <p style="margin: 0; color: ${EMAIL_STYLES.textMuted}; font-size: 14px;">Sign in to view your schedule, manage appointments, and stay on top of your day.</p>
+          <p style="margin: 0 0 12px; font-weight: 600; color: ${EMAIL_STYLES.textColor}; font-size: 15px;">${roleContent.boxTitle}</p>
+          ${roleContent.lines.map((l) => `
+            <p style="margin: 0 0 8px; color: ${EMAIL_STYLES.textMuted}; font-size: 14px;">
+              <span style="color: #16a34a; font-weight: bold;">✓</span> ${l}
+            </p>
+          `).join("")}
         </div>
         <div style="text-align: center; margin: 32px 0;">
-          ${createButton(`Sign in to ${salonName}`, `${appBaseUrl}/login`)}
+          ${createButton(roleContent.cta, ctaUrl)}
         </div>
         ${paragraph(`If you have any questions, reach out to your manager directly or contact your salon.`)}
         ${smallText(`This email was sent because you were added as a team member at ${salonName}, powered by Salon Magik.`)}

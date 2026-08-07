@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Input } from "@ui/input";
@@ -41,6 +43,7 @@ import {
   Undo2,
   Loader2,
   AlertTriangle,
+  Copy,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
@@ -86,6 +89,7 @@ import * as XLSX from "xlsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
+const TAB_VALUES: TabValue[] = ["all", "services", "products", "packages", "vouchers"];
 type ProductSubTab = "inventory" | "fulfillment";
 type ItemType = "service" | "product" | "package" | "voucher";
 type CatalogImportType = "services" | "products";
@@ -113,6 +117,7 @@ interface IntegrityFixTarget {
 }
 
 export default function ServicesPage() {
+  useWalkthroughAutoTrigger("services");
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
@@ -120,7 +125,11 @@ export default function ServicesPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importType, setImportType] = useState<CatalogImportType>("services");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<TabValue>("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabValue>(() => {
+    const tabFromUrl = searchParams.get("tab");
+    return tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) ? (tabFromUrl as TabValue) : "all";
+  });
   const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
 
   // Multi-select state - supports mixed selection in "All" tab
@@ -336,11 +345,31 @@ export default function ServicesPage() {
     setSelectedTypes(new Set());
   };
 
-  // Clear selection on tab change
+  // Clear selection on tab change. Also keeps the URL's ?tab= in sync —
+  // otherwise a tour/deep-link that landed with ?tab=services in the URL
+  // would leave that param stale after a manual click, and the sync effect
+  // below would keep snapping activeTab back to it on every render.
   const handleTabChange = (tab: TabValue) => {
     setActiveTab(tab);
     clearSelection();
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tab);
+        return next;
+      },
+      { replace: true },
+    );
   };
+
+  // Sync tab with URL params (e.g. links from the dashboard checklist or the product tour)
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl as TabValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Determine bulk action availability
   const canCreatePackage =
@@ -842,6 +871,21 @@ export default function ServicesPage() {
 
   const addButtonLabel = getAddButtonLabel();
 
+  const addButtonTourId: string | undefined = (() => {
+    switch (activeTab) {
+      case "services":
+        return "tour-add-service";
+      case "products":
+        return "tour-add-product";
+      case "vouchers":
+        return "tour-add-voucher";
+      case "packages":
+        return "tour-add-package";
+      default:
+        return undefined;
+    }
+  })();
+
   const resourceLimits = useMemo(() => {
     const limits = currentPlan?.limits;
     return {
@@ -990,7 +1034,7 @@ export default function ServicesPage() {
               (isActiveResourceFull ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span>
+                    <span data-tour-id={addButtonTourId}>
                       <Button disabled className="h-12 rounded-full px-7">
                         <Plus className="w-4 h-4 mr-2" />
                         {addButtonLabel}
@@ -1003,7 +1047,11 @@ export default function ServicesPage() {
                   </TooltipContent>
                 </Tooltip>
               ) : (
-                <Button onClick={handleAddClick} className="h-12 rounded-full px-7">
+                <Button
+                  onClick={handleAddClick}
+                  className="h-12 rounded-full px-7"
+                  data-tour-id={addButtonTourId}
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   {addButtonLabel}
                 </Button>
@@ -1358,6 +1406,7 @@ export default function ServicesPage() {
           <button
             type="button"
             aria-label="Add a catalog item"
+            data-tour-id="tour-add-catalog-mobile"
             className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
           >
             <Plus className="h-6 w-6" />
@@ -2100,7 +2149,24 @@ function SelectableItemCard({
                 </Tooltip>
               )}
             </div>
-            <h3 className="truncate text-sm font-medium sm:text-base">{item.name}</h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-medium sm:text-base">{item.name}</h3>
+              {item.type === "voucher" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(item.name);
+                    toast({ title: "Copied", description: `Voucher code ${item.name} copied to clipboard.` });
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
             <p className="line-clamp-1 text-xs text-muted-foreground sm:text-sm">
               {item.description || "No description"}
             </p>

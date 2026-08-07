@@ -33,7 +33,7 @@ export function SalonHeader({
   const isEcommerceTheme = themeKey === "ecommerce";
 
   if (isEcommerceTheme) {
-    const brandColor = salon.brand_color || "#111827";
+    const brandColor = salon.brand_color || "#2E1F4E";
     const bio = salon.booking_page_bio || "";
 
     const heroHeading = salon.hero_heading || salon.name;
@@ -260,7 +260,7 @@ export function SalonHeader({
       )}
 
       {salon.booking_status_message && (
-        <div className="rounded-lg border bg-muted/40 p-4" style={{ borderColor: "var(--brand-color, #2563EB)" }}>
+        <div className="rounded-lg border bg-muted/40 p-4" style={{ borderColor: "var(--brand-color, #2E1F4E)" }}>
           <p className="text-sm text-muted-foreground">{salon.booking_status_message}</p>
         </div>
       )}

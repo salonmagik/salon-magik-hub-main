@@ -1,4 +1,6 @@
-import { Gift } from "lucide-react";
+import { AlertTriangle, Gift } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import {
   Accordion,
   AccordionContent,
@@ -32,6 +34,13 @@ interface GiftRecipientsStepProps {
   onRecipientsChange: (recipients: Record<string, GiftRecipient>) => void;
   sameRecipient: boolean;
   onSameRecipientChange: (value: boolean) => void;
+  tenantId: string;
+  bookerInfo: { firstName: string; email: string; phone: string };
+}
+
+interface IdentityMatch {
+  type: "self" | "other";
+  firstName: string;
 }
 
 interface RecipientFormProps {
@@ -39,6 +48,48 @@ interface RecipientFormProps {
   onUpdate: (field: string, value: string | boolean) => void;
   selectableCountries: { code: string; name: string }[];
   item?: CartItem;
+  tenantId: string;
+  bookerInfo: { firstName: string; email: string; phone: string };
+}
+
+// Non-blocking — catches the case where a mistyped email/phone happens to
+// already belong to someone (the sender's own account, or another existing
+// customer of this salon), so a gift doesn't silently go to the wrong
+// person. Only the matched first name is shown, never the full identity.
+async function checkIdentityMatch(
+  tenantId: string,
+  bookerInfo: { firstName: string; email: string; phone: string },
+  email: string,
+  phone: string,
+): Promise<IdentityMatch | null> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedPhone = phone.trim();
+  if (!normalizedEmail && !normalizedPhone) return null;
+
+  const bookerEmail = bookerInfo.email.trim().toLowerCase();
+  const bookerPhone = bookerInfo.phone.trim();
+  if (
+    (normalizedEmail && normalizedEmail === bookerEmail) ||
+    (normalizedPhone && normalizedPhone === bookerPhone)
+  ) {
+    return { type: "self", firstName: bookerInfo.firstName || "you" };
+  }
+
+  // Not .maybeSingle() — this project's PostgREST returns a genuine 406 for
+  // zero matching rows rather than a clean null, so a plain array response
+  // (data?.[0]) is the only way to treat "no match" as a non-error case.
+  const { data: matches } = await supabase
+    .rpc("lookup_booking_customer_match" as never, {
+      p_tenant_id: tenantId,
+      p_email: normalizedEmail || null,
+      p_phone: normalizedPhone || null,
+    } as never) as { data: { customer_id: string; first_name: string | null }[] | null };
+  const match = matches?.[0];
+
+  if (match?.first_name) {
+    return { type: "other", firstName: match.first_name };
+  }
+  return null;
 }
 
 const emptyRecipient: GiftRecipient = {
@@ -55,7 +106,32 @@ function RecipientForm({
   onUpdate,
   selectableCountries,
   item,
+  tenantId,
+  bookerInfo,
 }: RecipientFormProps) {
+  const [identityMatch, setIdentityMatch] = useState<IdentityMatch | null>(null);
+  const [identityMatchDismissed, setIdentityMatchDismissed] = useState(false);
+
+  // Debounced on email/phone change rather than onBlur — PhoneInput doesn't
+  // expose a blur handler.
+  useEffect(() => {
+    setIdentityMatchDismissed(false);
+    if (!recipient.email && !recipient.phone) {
+      setIdentityMatch(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const result = await checkIdentityMatch(tenantId, bookerInfo, recipient.email, recipient.phone || "");
+      if (!cancelled) setIdentityMatch(result);
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipient.email, recipient.phone, tenantId]);
+
   const needsDeliveryAddress = item?.type === "product" && item.fulfillmentType === "delivery";
   const inferredCountryCode =
     item?.eligibleBranches?.find((branch) => branch.id === item.branchId)?.country_code ||
@@ -112,6 +188,43 @@ function RecipientForm({
           allowedCountryCodes={selectableCountries.map((country) => country.code)}
         />
       </div>
+
+      {identityMatch && !identityMatchDismissed && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1 space-y-2">
+            <p className="text-sm text-amber-900">
+              {identityMatch.type === "self"
+                ? "This looks like your own email or phone number — did you mean to gift someone else?"
+                : `This looks like ${identityMatch.firstName}'s account — is that who you mean to gift?`}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIdentityMatchDismissed(true)}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+              >
+                Yes, that's right
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Just one onUpdate call — the parent's updateRecipient/
+                  // applySharedRecipient close over `recipients` per call,
+                  // so two synchronous calls in the same tick would have
+                  // the second (stale) one clobber the first.
+                  setIdentityMatchDismissed(true);
+                  onUpdate("email", "");
+                  setIdentityMatch(null);
+                }}
+                className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Let me fix this
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1">
         <Label className="text-xs">Gift Message</Label>
@@ -239,6 +352,8 @@ export function GiftRecipientsStep({
   onRecipientsChange,
   sameRecipient,
   onSameRecipientChange,
+  tenantId,
+  bookerInfo,
 }: GiftRecipientsStepProps) {
   const { data: marketCountries } = useMarketCountries();
   const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
@@ -312,6 +427,8 @@ export function GiftRecipientsStep({
               onUpdate={(field, value) => updateRecipient(item.id, field, value)}
               selectableCountries={selectableCountries}
               item={item}
+              tenantId={tenantId}
+              bookerInfo={bookerInfo}
             />
           </AccordionContent>
         </AccordionItem>
@@ -325,13 +442,15 @@ export function GiftRecipientsStep({
       <div className="space-y-6">
         <div className="flex items-center gap-2">
           <Gift className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">Gift Recipient</h3>
+          <h3 className="font-serif text-lg font-semibold">Gift Recipient</h3>
         </div>
         <RecipientForm
           recipient={recipients[item.id] || emptyRecipient}
           onUpdate={(field, value) => updateRecipient(item.id, field, value)}
           selectableCountries={selectableCountries}
           item={item}
+          tenantId={tenantId}
+          bookerInfo={bookerInfo}
         />
       </div>
     );
@@ -341,7 +460,7 @@ export function GiftRecipientsStep({
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Gift className="h-5 w-5 text-primary" />
-        <h3 className="font-semibold">Gift Recipients</h3>
+        <h3 className="font-serif text-lg font-semibold">Gift Recipients</h3>
       </div>
 
       <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
@@ -374,6 +493,8 @@ export function GiftRecipientsStep({
             onUpdate={applySharedRecipient}
             selectableCountries={selectableCountries}
             item={giftItems[0]}
+            tenantId={tenantId}
+            bookerInfo={bookerInfo}
           />
         </div>
       ) : (
