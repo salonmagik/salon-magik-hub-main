@@ -300,3 +300,48 @@ export async function chargeAuthorization(
     return { success: false, error: message };
   }
 }
+
+export interface PaystackBalanceResult {
+  balance: number | null;
+  currency: string | null;
+  error?: string;
+}
+
+/**
+ * Fetches the platform's live settlement-account balance from Paystack —
+ * the funds actually available to withdraw right now, distinct from the
+ * per-tenant salon wallet balances we track ourselves.
+ *
+ * @param paystackKey - the secret key for the account being checked (see getPaystackKeyForCurrency)
+ */
+export async function getPaystackBalance(paystackKey: string): Promise<PaystackBalanceResult> {
+  try {
+    const res = await fetch("https://api.paystack.co/balance", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.status) {
+      return { balance: null, currency: null, error: data.message || `HTTP ${res.status}` };
+    }
+
+    // data.data is an array of { currency, balance } — balance in the
+    // currency's smallest unit (kobo/pesewas). One entry per currency the
+    // integration settles in; take the first (each of our keys is scoped
+    // to a single currency already).
+    const entry = Array.isArray(data.data) ? data.data[0] : null;
+    if (!entry) {
+      return { balance: null, currency: null, error: "No balance data returned" };
+    }
+
+    return { balance: entry.balance / 100, currency: entry.currency };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error fetching Paystack balance";
+    return { balance: null, currency: null, error: message };
+  }
+}
