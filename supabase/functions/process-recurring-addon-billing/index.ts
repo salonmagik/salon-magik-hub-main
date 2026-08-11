@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, chargeAuthorization } from "../_shared/paystack-helpers.ts";
-import { sendReceiptEmail } from "../_shared/receipts.ts";
+import { sendReceiptEmail, sendPaymentFailedEmail } from "../_shared/receipts.ts";
+import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -88,8 +89,14 @@ Deno.serve(async (req) => {
         if (!chargeResult.success) {
           const retryCount = (tenant.billing_retry_count || 0) + 1;
           const update: Record<string, unknown> = { billing_retry_count: retryCount };
-          if (retryCount > MAX_RETRY_ATTEMPTS) {
+          const stoppedRetrying = retryCount >= MAX_RETRY_ATTEMPTS;
+          if (stoppedRetrying) {
+            // Freeze next_billing_at (null is excluded by the .lte() due-tenants
+            // query above) instead of leaving it in the past — otherwise this
+            // tenant keeps getting picked up and retried forever with the same
+            // dead card, silently, with no email ever sent about it.
             update.subscription_status = "past_due";
+            update.next_billing_at = null;
           } else {
             // Retry on the next daily run rather than waiting a full cycle.
             update.next_billing_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -101,10 +108,24 @@ Deno.serve(async (req) => {
             action: "recurring_addon_billing_failed",
             entity_type: "tenant",
             entity_id: tenant.id,
-            metadata: { error: chargeResult.error, addon_total: addonTotal, currency, retry_count: retryCount },
+            metadata: { error: chargeResult.error, addon_total: addonTotal, currency, retry_count: retryCount, stopped_retrying: stoppedRetrying },
           });
 
-          results.push({ tenantId: tenant.id, status: "charge_failed", error: chargeResult.error, retryCount });
+          if (stoppedRetrying && tenant.paystack_authorization_email) {
+            const emailResult = await sendPaymentFailedEmail({
+              recipientEmail: tenant.paystack_authorization_email,
+              salonName: tenant.name,
+              salonLogoUrl: tenant.logo_url,
+              amount: addonTotal,
+              currency,
+              updatePaymentMethodUrl: `${getSalonAppUrl(req)}/salon/subscription?billing=update_payment_method`,
+            });
+            if (!emailResult.sent) {
+              console.error(`Failed to send payment-failed email for tenant ${tenant.id}:`, emailResult.error);
+            }
+          }
+
+          results.push({ tenantId: tenant.id, status: "charge_failed", error: chargeResult.error, retryCount, stoppedRetrying });
           continue;
         }
 

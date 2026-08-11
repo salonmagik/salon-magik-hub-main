@@ -253,6 +253,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		string | null
 	>(null);
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
+	const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
 	const { staff, refetch: refetchStaff } = useStaff();
 	const [seatReleaseSelected, setSeatReleaseSelected] = useState<Set<string>>(new Set());
@@ -577,6 +578,37 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		}
 	};
 
+	const handleUpdatePaymentMethod = async () => {
+		if (!currentTenant?.id) return;
+		setIsUpdatingPaymentMethod(true);
+		try {
+			const { data, error } = await supabase.functions.invoke(
+				"create-recurring-billing-retry-session",
+				{
+					body: {
+						tenantId: currentTenant.id,
+						successUrl: `${window.location.origin}/salon/subscription?billing=update_payment_method`,
+						cancelUrl: `${window.location.origin}/salon/subscription?billing=update_payment_method_cancelled`,
+					},
+				},
+			);
+			if (error) throw error;
+			if (data?.url) {
+				window.location.href = data.url;
+				return;
+			}
+			throw new Error("Could not start the checkout session.");
+		} catch (error) {
+			toast({
+				title: "Couldn't start payment update",
+				description:
+					(error as { message?: string })?.message || "Please try again.",
+				variant: "destructive",
+			});
+			setIsUpdatingPaymentMethod(false);
+		}
+	};
+
 	// Sync tab with URL params
 	useEffect(() => {
 		const tabFromUrl = searchParams.get("tab");
@@ -748,6 +780,48 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 			const newParams = new URLSearchParams(searchParams);
 			newParams.delete("planconfig");
+			setSearchParams(newParams, { replace: true });
+		}
+
+		const billingRetryStatus = searchParams.get("billing");
+		if (billingRetryStatus === "update_payment_method") {
+			if (!currentTenant?.id) {
+				return;
+			}
+
+			const reference = searchParams.get("reference") || searchParams.get("trxref");
+
+			const cleanParams = new URLSearchParams(searchParams);
+			cleanParams.delete("billing");
+			cleanParams.delete("reference");
+			cleanParams.delete("trxref");
+			setSearchParams(cleanParams, { replace: true });
+
+			if (reference) {
+				supabase.functions
+					.invoke("verify-recurring-billing-retry-session", {
+						body: { reference, tenantId: currentTenant.id },
+					})
+					.then(async ({ error }) => {
+						if (error) {
+							console.error("Billing retry verification error:", error);
+							toast({
+								title: "Could not confirm payment",
+								description: "Contact support if billing doesn't resume shortly.",
+								variant: "destructive",
+							});
+							return;
+						}
+						await refreshTenants();
+						setPaymentSuccessModal({
+							title: "Payment method updated!",
+							description: "Your subscription is active again and billing will continue as normal.",
+						});
+					});
+			}
+		} else if (billingRetryStatus === "update_payment_method_cancelled") {
+			const newParams = new URLSearchParams(searchParams);
+			newParams.delete("billing");
 			setSearchParams(newParams, { replace: true });
 		}
 
@@ -3364,20 +3438,34 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</Badge>
 								</div>
 							</div>
-							<Button
-								type="button"
-								size="sm"
-								className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
-								data-tour-id="tour-change-plan"
-								onClick={() =>
-									planConfigSectionRef.current?.scrollIntoView({
-										behavior: "smooth",
-										block: "center",
-									})
-								}
-							>
-								Change plan
-							</Button>
+							<div className="flex items-center gap-2">
+								{currentTenant?.subscription_status === "past_due" && (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="rounded-full border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+										disabled={isUpdatingPaymentMethod}
+										onClick={handleUpdatePaymentMethod}
+									>
+										{isUpdatingPaymentMethod ? "Redirecting…" : "Update payment method"}
+									</Button>
+								)}
+								<Button
+									type="button"
+									size="sm"
+									className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
+									data-tour-id="tour-change-plan"
+									onClick={() =>
+										planConfigSectionRef.current?.scrollIntoView({
+											behavior: "smooth",
+											block: "center",
+										})
+									}
+								>
+									Change plan
+								</Button>
+							</div>
 						</div>
 						{isTrialing && trialEndsAt && (
 							<div className="relative mt-3">
