@@ -60,6 +60,15 @@ interface ProductTourContextValue {
   startTour: (input: StartTourInput) => void;
   isTourActive: boolean;
   hasSeenWalkthrough: (id: string) => boolean;
+  /**
+   * False until `seenIds` has been read from localStorage for the current
+   * user. ProductTourProvider wraps the whole app, so its own effects run
+   * AFTER page-level effects on mount (React fires child effects before
+   * parent effects) — a page's useWalkthroughAutoTrigger must wait for this
+   * before trusting hasSeenWalkthrough, or it'll see the empty initial Set
+   * and re-launch tours the user already completed, every load.
+   */
+  hasLoadedSeenWalkthroughs: boolean;
 }
 
 const ProductTourContext = createContext<ProductTourContextValue | undefined>(undefined);
@@ -125,6 +134,7 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   // re-read localStorage once the real id showed up — every walkthrough
   // would look "unseen" for the rest of the session regardless of history.
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
+  const [hasLoadedSeenWalkthroughs, setHasLoadedSeenWalkthroughs] = useState(false);
   useEffect(() => {
     if (!user?.id) return;
     try {
@@ -132,6 +142,8 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
       setSeenIds(raw ? new Set(JSON.parse(raw)) : new Set());
     } catch {
       setSeenIds(new Set());
+    } finally {
+      setHasLoadedSeenWalkthroughs(true);
     }
   }, [user?.id]);
 
@@ -197,8 +209,8 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<ProductTourContextValue>(
-    () => ({ startTour, isTourActive: run, hasSeenWalkthrough }),
-    [startTour, run, hasSeenWalkthrough],
+    () => ({ startTour, isTourActive: run, hasSeenWalkthrough, hasLoadedSeenWalkthroughs }),
+    [startTour, run, hasSeenWalkthrough, hasLoadedSeenWalkthroughs],
   );
 
   return (
