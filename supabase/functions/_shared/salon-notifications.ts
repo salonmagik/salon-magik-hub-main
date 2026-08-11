@@ -118,6 +118,7 @@ export async function createTenantNotification(
     entityType?: string | null;
     entityId?: string | null;
     urgent?: boolean;
+    isGifted?: boolean;
   },
 ) {
   const { error } = await supabase.from("notifications").insert({
@@ -128,6 +129,7 @@ export async function createTenantNotification(
     entity_type: input.entityType ?? "appointment",
     entity_id: input.entityId ?? null,
     urgent: input.urgent ?? false,
+    is_gifted: input.isGifted ?? false,
   });
 
   if (error) {

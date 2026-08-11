@@ -12,6 +12,7 @@ export interface Notification {
   description: string;
   read: boolean;
   urgent: boolean;
+  is_gifted: boolean;
   entity_type: string | null;
   entity_id: string | null;
   created_at: string;

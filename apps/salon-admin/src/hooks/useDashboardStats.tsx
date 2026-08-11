@@ -152,7 +152,7 @@ export function useDashboardStats() {
     try {
       let todayAptsQuery = supabase
         .from("appointments")
-        .select(`*, customer:customers(full_name), services:appointment_services(service_name)`)
+        .select(`*, customer:customers!appointments_customer_id_fkey(full_name), services:appointment_services(service_name)`)
         .eq("tenant_id", currentTenant.id)
         .gte("scheduled_start", startOfDay)
         .lte("scheduled_start", endOfDay)
@@ -243,7 +243,7 @@ export function useDashboardStats() {
           : Promise.resolve({ data: [], error: null }),
 
         canViewCustomers
-          ? supabase.from("appointments").select("customer_id, scheduled_start, services:appointment_services(service_name), customer:customers(id, full_name)").eq("tenant_id", currentTenant.id).gte("scheduled_start", ninetyDaysAgo).lt("scheduled_start", fortyFiveDaysAgo).not("status", "eq", "cancelled").order("scheduled_start", { ascending: false })
+          ? supabase.from("appointments").select("customer_id, scheduled_start, services:appointment_services(service_name), customer:customers!appointments_customer_id_fkey(id, full_name)").eq("tenant_id", currentTenant.id).gte("scheduled_start", ninetyDaysAgo).lt("scheduled_start", fortyFiveDaysAgo).not("status", "eq", "cancelled").order("scheduled_start", { ascending: false })
           : Promise.resolve({ data: [], error: null }),
 
         // Trend: last week same calendar day appointment count

@@ -60,7 +60,7 @@ serve(async (req) => {
       const { data: appointments, error: apptError } = await supabase
         .from("appointments")
         .select(
-          "id, tenant_id, customer_id, scheduled_start, last_reminder_sent_at, customers(full_name, email, phone)",
+          "id, tenant_id, customer_id, scheduled_start, last_reminder_sent_at, customers!appointments_customer_id_fkey(full_name, email, phone)",
         )
         .eq("tenant_id", setting.tenant_id)
         .eq("status", "scheduled")

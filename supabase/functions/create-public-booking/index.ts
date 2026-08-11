@@ -6,7 +6,7 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
-import { heading, paragraph, EMAIL_STYLES } from "../_shared/email-template.ts";
+import { heading, paragraph, createButton, EMAIL_STYLES } from "../_shared/email-template.ts";
 import {
   getPaystackKeyForCurrency,
   validateCurrencyMatch,
@@ -532,6 +532,67 @@ serve(async (req) => {
     const approvalRequired = tenant.auto_confirm_bookings === false;
     let allocatedPromotionDiscount = 0;
 
+    // Gift recipients previously got no account and no notification — a
+    // recipient had no customers row, so auth-resolve-identifier correctly
+    // (if confusingly, from their side) reported "no account found" when
+    // they tried to log into the client portal, and the appointment itself
+    // only ever recorded their name as a JSON string, never a real link.
+    // Resolved in a pre-pass (deduped by email, since one cart can gift
+    // several items to the same person) so every gifted appointment created
+    // below can be tagged with a real gift_recipient_customer_id.
+    const giftRecipientsToNotify = new Map<
+      string,
+      { recipient: GiftRecipient; customerId: string; itemNames: string[] }
+    >();
+
+    for (const item of items) {
+      const recipient = item.isGift ? item.giftRecipient : null;
+      if (!recipient?.email) continue;
+
+      const key = normalizeEmail(recipient.email);
+      if (giftRecipientsToNotify.has(key)) continue;
+
+      // Matched by email only (not the AND email+phone match used for the
+      // booker elsewhere in this function) since a gift recipient's phone
+      // is optional.
+      const { data: existingRecipientCustomers, error: lookupError } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("email", key)
+        .neq("status", "deleted")
+        .limit(1);
+
+      if (lookupError) {
+        console.error("Failed to look up customer record for gift recipient:", lookupError);
+        continue;
+      }
+
+      let recipientCustomerId = existingRecipientCustomers?.[0]?.id as string | undefined;
+
+      if (!recipientCustomerId) {
+        const recipientFullName = `${recipient.firstName} ${recipient.lastName}`.trim();
+        const { data: newRecipientCustomer, error: insertError } = await supabase
+          .from("customers")
+          .insert({
+            tenant_id: tenantId,
+            full_name: recipientFullName || "Gift Recipient",
+            email: key,
+            phone: recipient.phone?.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (insertError || !newRecipientCustomer) {
+          console.error("Failed to create customer record for gift recipient:", insertError);
+          continue;
+        }
+        recipientCustomerId = newRecipientCustomer.id;
+      }
+
+      giftRecipientsToNotify.set(key, { recipient, customerId: recipientCustomerId, itemNames: [] });
+    }
+
     for (const [itemIndex, item] of items.entries()) {
       if (!item.locationId) {
         return new Response(
@@ -631,6 +692,10 @@ serve(async (req) => {
       }
 
       const recipient = item.isGift ? item.giftRecipient : null;
+      const recipientEntry = recipient?.email ? giftRecipientsToNotify.get(normalizeEmail(recipient.email)) : undefined;
+      if (recipientEntry) {
+        recipientEntry.itemNames.push(item.name);
+      }
       const deliveryAddress =
         item.type === "product" && item.fulfillmentType === "delivery"
           ? item.isGift
@@ -687,6 +752,7 @@ serve(async (req) => {
           scheduled_end: scheduledEnd,
           is_unscheduled: !scheduledStart,
           is_gifted: item.isGift,
+          gift_recipient_customer_id: recipientEntry?.customerId ?? null,
           status: "scheduled",
           payment_status: "unpaid",
           confirmation_status: approvalRequired ? "pending" : "confirmed",
@@ -833,6 +899,7 @@ serve(async (req) => {
       description: `${customerFullName} placed a booking for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
       entityId: primaryAppointmentId,
       urgent: approvalRequired,
+      isGifted: items.some((item) => item.isGift),
     });
 
     if (customer.email) {
@@ -854,6 +921,43 @@ serve(async (req) => {
             : "") +
           paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
       });
+    }
+
+    // Tell each gift recipient about their gift — their customer record
+    // (and the appointments' gift_recipient_customer_id links to it) was
+    // already created in the pre-pass above, before the appointment loop.
+    if (giftRecipientsToNotify.size > 0) {
+      const clientPortalBase = (
+        Deno.env.get("CLIENT_PORTAL_URL") ||
+        Deno.env.get("MANAGE_BOOKINGS_URL") ||
+        Deno.env.get("BASE_URL") ||
+        "https://app.salonmagik.com"
+      ).replace(/\/+$/, "");
+
+      for (const { recipient, itemNames } of giftRecipientsToNotify.values()) {
+        const recipientEmail = normalizeEmail(recipient.email);
+        const itemsListHtml = itemNames.map((name) => `<li>${name}</li>`).join("");
+        const senderLine = recipient.hideSender
+          ? paragraph("Someone has sent you a gift!")
+          : paragraph(`<strong>${customerFullName}</strong> has sent you a gift!`);
+
+        await sendResendEmail({
+          resendApiKey,
+          fromEmail: resendFromEmail,
+          to: [recipientEmail],
+          subject: `You've been gifted at ${tenant.name}!`,
+          salonName: tenant.name,
+          htmlContent:
+            heading("You've received a gift") +
+            senderLine +
+            paragraph(`They booked the following for you at <strong>${tenant.name}</strong>:`) +
+            `<ul style="padding-left: 20px; color: ${EMAIL_STYLES.textColor};">${itemsListHtml}</ul>` +
+            (recipient.message ? paragraph(`<em>“${recipient.message}”</em>`) : "") +
+            paragraph(`<strong>Booking reference:</strong> ${reference}`) +
+            paragraph(`Log into the client portal with this email address (<strong>${recipientEmail}</strong>) to view your gift and manage your visit.`) +
+            createButton("Log in to view your gift", `${clientPortalBase}/login`),
+        });
+      }
     }
 
     const notificationSettings = await getTenantNotificationSettings(supabase, tenantId);

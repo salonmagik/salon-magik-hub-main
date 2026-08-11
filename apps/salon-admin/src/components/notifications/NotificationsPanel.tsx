@@ -398,11 +398,18 @@ function NotificationItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <h4 className="text-sm font-medium">{notification.title}</h4>
-          {notification.urgent && (
-            <Badge className="bg-destructive text-destructive-foreground text-[10px]">
-              Urgent
-            </Badge>
-          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {notification.is_gifted && (
+              <Badge className="bg-purple-100 text-purple-800 text-[10px]">
+                Gift
+              </Badge>
+            )}
+            {notification.urgent && (
+              <Badge className="bg-destructive text-destructive-foreground text-[10px]">
+                Urgent
+              </Badge>
+            )}
+          </div>
         </div>
         <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
           {notification.description}

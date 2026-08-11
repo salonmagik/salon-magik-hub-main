@@ -54,7 +54,7 @@ export function RecordPaymentDialog({
       setIsLoading(true);
       let query = supabase
         .from("appointments")
-        .select("id, scheduled_start, total_amount, amount_paid, booking_reference, customer:customers(full_name), services:appointment_services(service_name)")
+        .select("id, scheduled_start, total_amount, amount_paid, booking_reference, customer:customers!appointments_customer_id_fkey(full_name), services:appointment_services(service_name)")
         .eq("tenant_id", currentTenant.id)
         .eq("is_unscheduled", false)
         .not("scheduled_start", "is", null)

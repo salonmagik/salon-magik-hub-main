@@ -424,7 +424,7 @@ export default function AppointmentsPage() {
         .from("appointments")
         .select(`
           *,
-          customer:customers(*),
+          customer:customers!appointments_customer_id_fkey(*),
           services:appointment_services(*)
         `)
         .eq("id", appointmentId)

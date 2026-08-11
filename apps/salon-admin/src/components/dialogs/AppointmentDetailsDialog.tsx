@@ -30,7 +30,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
-import type { Enums } from "@supabase-client";
+import type { Enums, Tables } from "@supabase-client";
+import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
 
 type AppointmentStatus = Enums<"appointment_status">;
 
@@ -91,6 +92,8 @@ export function AppointmentDetailsDialog({
   const { currentTenant, roles } = useAuth();
   const [isGifted, setIsGifted] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [giftRecipientCustomer, setGiftRecipientCustomer] = useState<Tables<"customers"> | null>(null);
+  const [giftRecipientDialogOpen, setGiftRecipientDialogOpen] = useState(false);
   const { products, isLoading: productsLoading } = useAppointmentProducts(appointment?.id);
 
   const currency = currentTenant?.currency || "USD";
@@ -112,6 +115,31 @@ export function AppointmentDetailsDialog({
       setIsGifted(appointment.is_gifted || false);
     }
   }, [appointment]);
+
+  useEffect(() => {
+    const recipientId = appointment?.gift_recipient_customer_id;
+    if (!recipientId) {
+      setGiftRecipientCustomer(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from("customers")
+      .select("*")
+      .eq("id", recipientId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Failed to load gift recipient customer:", error);
+          return;
+        }
+        setGiftRecipientCustomer(data);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appointment?.gift_recipient_customer_id]);
 
   if (!appointment) return null;
 
@@ -223,6 +251,7 @@ export function AppointmentDetailsDialog({
     : appointment.customer?.phone;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden sm:max-w-3xl">
         <DialogHeader className="flex-shrink-0 border-b border-border/60 pb-5">
@@ -327,9 +356,19 @@ export function AppointmentDetailsDialog({
                   {bookingMetadata?.gift?.recipient && (
                     <p className="text-muted-foreground">
                       Gift recipient:{" "}
-                      <span className="font-medium text-foreground">
-                        {[bookingMetadata.gift.recipient.firstName, bookingMetadata.gift.recipient.lastName].filter(Boolean).join(" ")}
-                      </span>
+                      {giftRecipientCustomer ? (
+                        <button
+                          type="button"
+                          className="font-medium text-primary underline-offset-2 hover:underline"
+                          onClick={() => setGiftRecipientDialogOpen(true)}
+                        >
+                          {giftRecipientCustomer.full_name}
+                        </button>
+                      ) : (
+                        <span className="font-medium text-foreground">
+                          {[bookingMetadata.gift.recipient.firstName, bookingMetadata.gift.recipient.lastName].filter(Boolean).join(" ")}
+                        </span>
+                      )}
                     </p>
                   )}
                   {bookingMetadata?.delivery_address && (
@@ -546,5 +585,11 @@ export function AppointmentDetailsDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <CustomerDetailDialog
+      open={giftRecipientDialogOpen}
+      onOpenChange={setGiftRecipientDialogOpen}
+      customer={giftRecipientCustomer}
+    />
+    </>
   );
 }

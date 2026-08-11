@@ -75,7 +75,7 @@ export function useCalendarAppointments(options: UseCalendarAppointmentsOptions)
         .from("appointments")
         .select(`
           *,
-          customer:customers(*),
+          customer:customers!appointments_customer_id_fkey(*),
           services:appointment_services(*),
           transactions(id, provider, method, status)
         `)
