@@ -70,7 +70,11 @@ const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.C
         {children}
         <DialogPrimitive.Close
           className={cn(
-            "absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none",
+            // z-20: DialogHeader is position:sticky with z-10 so it stays
+            // pinned above scrolling body content — without a higher
+            // z-index here, that same stacking makes the header paint over
+            // this button and swallow every click on it.
+            "absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none",
             closeButtonClassName,
           )}
         >
