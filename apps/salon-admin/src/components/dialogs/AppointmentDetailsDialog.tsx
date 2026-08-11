@@ -254,7 +254,7 @@ export function AppointmentDetailsDialog({
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] flex-col overflow-hidden sm:max-w-3xl">
-        <DialogHeader className="flex-shrink-0 border-b border-border/60 pb-5">
+        <DialogHeader>
           <DialogTitle className="flex flex-wrap items-center justify-between gap-3 text-2xl">
             <span>Appointment details</span>
             <div className="flex items-center gap-2">
@@ -273,7 +273,7 @@ export function AppointmentDetailsDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
-          <div className="space-y-4 py-1 pr-1">
+          <div className="space-y-4 px-5 py-5 sm:px-8">
             {/* Customer Info */}
             <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#f1eafa] text-primary">
@@ -548,7 +548,7 @@ export function AppointmentDetailsDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-shrink-0 flex-col gap-2 border-t border-border/60 pt-5 sm:flex-row">
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
           <Button variant="outline" className="rounded-full px-6" onClick={() => onOpenChange(false)}>
             Close
           </Button>

@@ -19,6 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "@ui/table";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 export interface TemplateColumn {
   header: string;
@@ -85,7 +87,7 @@ export function ImportDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           {/* Template Download */}
           <div className="p-4 border rounded-lg bg-muted/50">
             <p className="text-sm font-medium mb-2">Need a template?</p>

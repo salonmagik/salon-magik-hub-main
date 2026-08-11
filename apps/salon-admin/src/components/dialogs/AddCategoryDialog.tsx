@@ -5,6 +5,8 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { FolderPlus, Loader2 } from "lucide-react";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface AddCategoryDialogProps {
   open: boolean;
@@ -55,7 +57,8 @@ export function AddCategoryDialog({ open, onOpenChange, onSubmit }: AddCategoryD
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-2">
             <Label>
               Category Name <span className="text-destructive">*</span>
@@ -77,8 +80,9 @@ export function AddCategoryDialog({ open, onOpenChange, onSubmit }: AddCategoryD
               rows={2}
             />
           </div>
+        </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"

@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
 import type { CustomerWithVisitSummary } from "@/hooks/useCustomers";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 type Customer = CustomerWithVisitSummary;
 
@@ -154,7 +155,7 @@ export function SendMessageDialog({ open, onOpenChange, customerId: providedCust
           <DialogTitle>Send a message</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           {/* Customer selector */}
           {!providedCustomerId && (
             <div className="space-y-2">

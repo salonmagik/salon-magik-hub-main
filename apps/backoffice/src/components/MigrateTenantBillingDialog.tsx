@@ -12,6 +12,7 @@ import { Badge } from "@ui/badge";
 import { Loader2, RefreshCcw, TriangleAlert } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface MigrateTenantBillingDialogProps {
   tenant: { id: string; name: string } | null;
@@ -110,6 +111,7 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
           </DialogDescription>
         </DialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         {step === "loading" && (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -155,6 +157,7 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
             )}
           </div>
         )}
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={close} disabled={isConfirming}>

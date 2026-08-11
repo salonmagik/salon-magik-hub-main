@@ -39,6 +39,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Popover, PopoverContent, PopoverTrigger } from "@ui/popover";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
@@ -2654,7 +2655,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								bookings.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="space-y-3">
+						<div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
 							<div className="space-y-2">
 								<Label>Start date & time</Label>
 								<Input
@@ -4057,6 +4058,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged.
 								</DialogDescription>
 							</DialogHeader>
+							<div className={DIALOG_BODY_PADDING}>
 							{recurringTotal ? (
 								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
 									<div className="flex items-center justify-between text-muted-foreground">
@@ -4097,6 +4099,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									Your bill will be calculated from your current plan and add-ons.
 								</p>
 							)}
+							</div>
 							<DialogFooter className="gap-2 sm:gap-2">
 								<Button
 									type="button"

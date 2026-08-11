@@ -12,6 +12,8 @@ import { formatCurrency } from "@shared/currency";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocationScope } from "@/hooks/useLocationScope";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface RecordPaymentDialogProps {
   open: boolean;
@@ -155,7 +157,8 @@ export function RecordPaymentDialog({
           </p>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-2">
             <Label>Booked appointment <span className="text-destructive">*</span></Label>
             <Select
@@ -214,6 +217,7 @@ export function RecordPaymentDialog({
             <Textarea id="cash-notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
 
+        </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting || !selectedAppointment}>

@@ -24,6 +24,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
  import {
    Table,
    TableBody,
@@ -441,7 +443,7 @@ export default function TenantsPage() {
                Set allowed locations and custom amount for {selectedRequest?.tenant?.name || "tenant"}.
              </DialogDescription>
            </DialogHeader>
-           <div className="space-y-3">
+           <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
              <div className="space-y-2">
                <Label>Allowed locations</Label>
                <Input
@@ -508,7 +510,7 @@ export default function TenantsPage() {
            </DialogHeader>
 
            {selectedTenant && (
-             <div className="space-y-4">
+             <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
                <div className="flex flex-wrap items-center gap-2">
                  {getStatusBadge(selectedTenant.subscription_status)}
                  <Badge variant="outline">{selectedTenant.plan}</Badge>

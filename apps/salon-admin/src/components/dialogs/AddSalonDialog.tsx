@@ -28,6 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@ui/select";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface AddSalonDialogProps {
   open: boolean;
@@ -281,7 +283,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4">
+          <div className={DIALOG_BODY_PADDING}>
             <Alert>
               <AlertDescription className="space-y-2 border-l border-warning pl-4">
                 <p className="font-medium">
@@ -321,7 +323,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               This branch would push your chain into the custom 11+ tier.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className={DIALOG_BODY_PADDING}>
             <Alert>
               <AlertDescription>
                 <div className="space-y-2">
@@ -367,7 +369,8 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-2">
             <Label htmlFor="name">Branch Name *</Label>
             <Input
@@ -419,8 +422,9 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             />
           </div>
+        </div>
 
-          <DialogFooter className="pt-4">
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

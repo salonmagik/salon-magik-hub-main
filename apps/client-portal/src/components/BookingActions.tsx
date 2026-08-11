@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import {
   Select,
   SelectContent,
@@ -240,7 +242,7 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="space-y-2">
               <Label>How late will you be?</Label>
               <Select value={lateMinutes} onValueChange={setLateMinutes}>
@@ -289,7 +291,7 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <p className="text-sm text-muted-foreground">
               Self-service rescheduling is coming soon! For now, you can:
             </p>
@@ -334,7 +336,7 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="space-y-2">
               <Label>Reason for cancellation *</Label>
               <Textarea

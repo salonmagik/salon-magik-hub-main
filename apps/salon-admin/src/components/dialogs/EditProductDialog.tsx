@@ -15,6 +15,8 @@ import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 import { getCurrencySymbol } from "@shared/currency";
 import { moveThumbnailToFront } from "@/lib/imageOrder";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface ProductData {
   id: string;
@@ -248,7 +250,7 @@ export function EditProductDialog({ open, onOpenChange, product, onSuccess }: Ed
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-3xl p-5 sm:max-w-2xl sm:p-8">
+      <DialogContent className="max-h-[92vh] rounded-3xl sm:max-w-2xl">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Package className="w-5 h-5 text-primary" />
@@ -259,7 +261,8 @@ export function EditProductDialog({ open, onOpenChange, product, onSuccess }: Ed
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           {isChainTier ? (
             <LocationScopePicker
               locations={scopedLocations}
@@ -361,8 +364,9 @@ export function EditProductDialog({ open, onOpenChange, product, onSuccess }: Ed
               disabled={isSubmitting}
             />
           </div>
+        </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"

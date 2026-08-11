@@ -2,6 +2,7 @@ import { Wrench } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { useBanners } from "./BannerContext";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 export function MaintenanceBannerModal() {
   const { maintenanceBannerSetting, maintenanceModalOpen, closeMaintenanceModal } = useBanners();
@@ -21,6 +22,7 @@ export function MaintenanceBannerModal() {
           </DialogTitle>
         </DialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         <div className="space-y-4 text-sm">
           {scheduledAt && (
             <div className="rounded-lg bg-muted px-4 py-3">
@@ -48,6 +50,7 @@ export function MaintenanceBannerModal() {
           <Button className="w-full" onClick={closeMaintenanceModal}>
             Got it
           </Button>
+        </div>
         </div>
       </DialogContent>
     </Dialog>

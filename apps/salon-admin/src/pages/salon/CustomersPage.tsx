@@ -41,6 +41,7 @@ import { FlagCustomerDialog } from "@/components/dialogs/FlagCustomerDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Textarea } from "@ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
@@ -913,6 +914,7 @@ export default function CustomersPage() {
 							{inactiveDaysThreshold} days.
 						</DialogDescription>
 					</DialogHeader>
+					<div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
 					<div className="flex items-center gap-3">
 						<Input
 							type="number"
@@ -951,7 +953,7 @@ export default function CustomersPage() {
 							Trigger reactivation
 						</Button>
 					</div>
-					<div className="max-h-[420px] space-y-2 overflow-auto pt-2">
+					<div className="max-h-[420px] space-y-2 overflow-auto">
 						{inactiveCustomers.length === 0 && (
 							<p className="text-sm text-muted-foreground">
 								No inactive customers found for this threshold.
@@ -1005,6 +1007,7 @@ export default function CustomersPage() {
 							</Card>
 						))}
 					</div>
+					</div>
 				</DialogContent>
 			</Dialog>
 
@@ -1021,7 +1024,7 @@ export default function CustomersPage() {
 						</DialogDescription>
 					</DialogHeader>
 
-					<div className="grid gap-4 md:grid-cols-2">
+					<div className={cn(DIALOG_BODY_PADDING, "grid gap-4 md:grid-cols-2")}>
 						<div className="space-y-3">
 							<div className="space-y-2">
 								<p className="text-sm font-medium">Channel</p>

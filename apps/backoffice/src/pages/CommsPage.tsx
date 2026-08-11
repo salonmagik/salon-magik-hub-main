@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/c
 import { Badge } from "@ui/badge";
 import { Button } from "@ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
@@ -259,6 +261,7 @@ export default function CommsPage() {
             <DialogHeader>
               <DialogTitle>{editorState.id ? "Edit Template" : "New Template"}</DialogTitle>
             </DialogHeader>
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Label</Label>
@@ -360,6 +363,7 @@ export default function CommsPage() {
                 checked={editorState.is_active}
                 onCheckedChange={(checked) => setEditorState((current) => ({ ...current, is_active: checked }))}
               />
+            </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditorOpen(false)}>

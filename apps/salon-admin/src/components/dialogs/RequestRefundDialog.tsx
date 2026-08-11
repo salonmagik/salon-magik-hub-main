@@ -17,6 +17,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 type RefundType = "store_credit" | "offline";
 type Stage = "form" | "confirm" | "submitting" | "success" | "error";
@@ -167,7 +168,7 @@ export function RequestRefundDialog({
     }}>
       <DialogContent className="sm:max-w-lg">
         {stage === "success" ? (
-          <div className="py-8 text-center">
+          <div className={cn(DIALOG_BODY_PADDING, "text-center")}>
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10">
               <CheckCircle2 className="h-7 w-7 text-success" />
             </div>
@@ -184,7 +185,7 @@ export function RequestRefundDialog({
             <Button className="mt-6 w-full" onClick={close}>Done</Button>
           </div>
         ) : stage === "error" ? (
-          <div className="py-6 text-center">
+          <div className={cn(DIALOG_BODY_PADDING, "text-center")}>
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
               <TriangleAlert className="h-7 w-7 text-destructive" />
             </div>
@@ -218,14 +219,14 @@ export function RequestRefundDialog({
             </DialogHeader>
 
             {stage === "submitting" ? (
-              <div className="flex flex-col items-center justify-center py-14">
+              <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center justify-center")}>
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="mt-3 text-sm text-muted-foreground">
                   {mode === "complete" ? "Recording refund…" : "Sending request…"}
                 </p>
               </div>
             ) : stage === "confirm" ? (
-              <div className="space-y-4 py-3">
+              <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
                 <div className="rounded-xl border bg-surface p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Amount</span>
@@ -251,7 +252,7 @@ export function RequestRefundDialog({
                 )}
               </div>
             ) : (
-              <div className="space-y-5 py-3">
+              <div className={cn(DIALOG_BODY_PADDING, "space-y-5")}>
                 <div className="grid grid-cols-2 gap-3 rounded-xl border bg-surface p-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Transaction</p>

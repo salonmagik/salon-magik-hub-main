@@ -3,6 +3,7 @@ import { useClientAuth } from "@/hooks";
 import { supabase } from "@/lib/supabase";
 import { UserCircle2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
@@ -108,6 +109,7 @@ export function ConfirmDetailsModal() {
           <DialogTitle className="font-serif text-xl">Let's make sure we've got you right</DialogTitle>
         </DialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         <p className="text-sm text-muted-foreground">
           One of your salons added these details when you first booked. Take a second to confirm they're right, or fix anything that isn't.
         </p>
@@ -171,6 +173,7 @@ export function ConfirmDetailsModal() {
           >
             {isSkipping ? "..." : "Skip for now"}
           </button>
+        </div>
         </div>
       </DialogContent>
     </Dialog>

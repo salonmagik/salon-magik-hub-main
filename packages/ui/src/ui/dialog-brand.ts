@@ -25,3 +25,42 @@ export const BRAND_DIALOG_STYLE: CSSProperties = {
   ["--border" as string]: "262 28% 34%",
   ["--input" as string]: "262 28% 34%",
 };
+
+// The footer stays on the app's plain light surface (not the brand-plum
+// fill above) — only its buttons get retinted: a "positive" action reads
+// gold (the same --accent already used everywhere else), a Cancel/Close
+// reads as a soft lavender-glass outline instead of the default neutral
+// gray. Any <Button> dropped into a DialogFooter/AlertDialogFooter picks
+// these up automatically since Button's variants are just --primary /
+// --input read through CSS custom properties — no per-dialog class needed.
+//
+// Button's outline variant hovers to --accent, which is gold app-wide —
+// right for most secondary actions, wrong for a dismissive one (Cancel
+// hovering gold reads as if it were the positive choice). Every dialog's
+// outline button is that dismissive action, so --accent is retinted here
+// to the same pale-pink/dark-red pairing --destructive-bg already uses
+// elsewhere, rather than touching the global gold accent everyone else
+// still relies on outside of dialogs.
+export const FOOTER_ACCENT_STYLE: CSSProperties = {
+  ["--primary" as string]: "42 89% 63%",
+  ["--primary-foreground" as string]: "262 46% 15%",
+  ["--input" as string]: "262 45% 88%",
+  ["--border" as string]: "262 45% 88%",
+  ["--ring" as string]: "42 89% 63%",
+  ["--accent" as string]: "0 93% 94%",
+  ["--accent-foreground" as string]: "0 70% 35%",
+};
+
+// DialogContent carries zero padding so DialogHeader/DialogFooter can
+// bleed full-width with no escape trick needed (see dialog.tsx). Anything
+// else — the field content between them — needs this applied to its own
+// wrapper instead. For a dialog that wraps its fields *and* DialogFooter
+// in one <form> (needed for a type="submit" button to work), put this on
+// a div around just the fields, leaving DialogFooter as an unpadded
+// sibling of that div, still inside the same <form>:
+//
+//   <form onSubmit={...}>
+//     <div className={DIALOG_BODY_PADDING}>{/* fields */}</div>
+//     <DialogFooter>...</DialogFooter>
+//   </form>
+export const DIALOG_BODY_PADDING = "px-5 pt-5 pb-5 sm:px-8 sm:pt-7 sm:pb-8 space-y-4";

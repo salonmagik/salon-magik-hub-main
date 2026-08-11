@@ -8,9 +8,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -189,7 +191,7 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-3">
             <Label className="flex items-center gap-2">
               <Ticket className="h-4 w-4" />
@@ -361,7 +363,7 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
           )}
         </div>
 
-        <div className="flex justify-end gap-3">
+        <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
             Cancel
           </Button>
@@ -378,7 +380,7 @@ export function CreditPurchaseDialog({ open, onOpenChange }: CreditPurchaseDialo
               "Purchase"
             )}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

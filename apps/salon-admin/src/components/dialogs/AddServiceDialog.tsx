@@ -18,6 +18,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { ImageUploadZone } from "@/components/catalog/ImageUploadZone";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { AddCategoryDialog } from "./AddCategoryDialog";
 import { getCurrencySymbol } from "@shared/currency";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
@@ -166,22 +168,23 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 bg-white p-5 shadow-2xl sm:max-h-[92vh] sm:max-w-[560px] sm:p-[34px]">
-        <DialogHeader className="mb-7 flex flex-row items-center gap-3.5 pr-10 text-left">
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 sm:max-h-[92vh] sm:max-w-[560px]">
+        <DialogHeader className="flex flex-row items-center gap-3.5 pr-10 text-left">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#f2eefa]">
             <Scissors className="h-5 w-5 text-[#2e1f4e]" />
           </div>
           <div className="min-w-0">
-            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px] text-[#141014]">
+            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px]">
               Add service
             </DialogTitle>
-            <DialogDescription className="mt-0.5 text-[13px] text-[#141014]/60">
+            <DialogDescription className="mt-0.5 text-[13px]">
               Create a new service offering
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-[18px]">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-[18px]")}>
           {isChainTier && (
             <LocationScopePicker
               locations={scopedLocations}
@@ -312,21 +315,22 @@ export function AddServiceDialog({ open, onOpenChange, onSuccess }: AddServiceDi
               dropzoneClassName="min-h-[132px] rounded-[14px] border-[1.5px] border-[#141014]/10 bg-white p-7 hover:border-[#2e1f4e]/40 hover:bg-[#fbf9f6]"
             />
           </div>
+        </div>
 
-          <DialogFooter className="flex flex-col-reverse gap-2 pt-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
+          <DialogFooter className="flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="h-11 w-full rounded-full border-[#141014]/10 px-5 text-[14.5px] font-medium shadow-none hover:bg-[#f1ece3] min-[480px]:w-auto"
+              className="h-11 w-full rounded-full px-5 text-[14.5px] font-medium shadow-none min-[480px]:w-auto"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={isSubmitting || !isFormValid}
-              className="h-11 w-full rounded-full bg-[#141014] px-5 text-[14.5px] font-medium text-white hover:bg-[#2e1f4e] min-[480px]:w-auto"
+              className="h-11 w-full rounded-full px-5 text-[14.5px] font-medium min-[480px]:w-auto"
             >
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Create service

@@ -83,6 +83,7 @@ import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 import * as XLSX from "xlsx";
@@ -1587,18 +1588,18 @@ export default function ServicesPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 p-5 shadow-2xl sm:max-h-[88vh] sm:max-w-[640px] sm:p-[34px]">
+        <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 rounded-[22px] border-0 sm:max-h-[88vh] sm:max-w-[640px]">
           <DialogHeader className="space-y-1.5 text-left">
-            <DialogTitle className="font-serif text-[24px] font-medium tracking-[-0.3px] text-[#141014]">
+            <DialogTitle className="font-serif text-[24px] font-medium tracking-[-0.3px]">
               Bin
             </DialogTitle>
-            <DialogDescription className="text-[14px] leading-5 text-[#141014]/60">
+            <DialogDescription className="text-[14px] leading-5">
               Restore deleted services, products, packages, and vouchers within 7 days.
             </DialogDescription>
-            <div className="pt-1 text-[13px] text-[#141014]/60">Total: {binItems.length}</div>
+            <div className="pt-1 text-[13px] text-muted-foreground">Total: {binItems.length}</div>
           </DialogHeader>
 
-          <div className={cn("mt-[18px] space-y-[18px]", isBinBusy && "pointer-events-none opacity-60")}>
+          <div className={cn(DIALOG_BODY_PADDING, isBinBusy && "pointer-events-none opacity-60")}>
           {!binLoading && binItems.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-2.5">
               <div className="flex shrink-0 items-center gap-2">

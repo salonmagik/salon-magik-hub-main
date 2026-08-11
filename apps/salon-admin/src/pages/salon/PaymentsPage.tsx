@@ -24,6 +24,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Label } from "@ui/label";
 import {
   CreditCard,
@@ -1114,7 +1115,7 @@ export default function PaymentsPage() {
       <Dialog open={!!assigningBranchId} onOpenChange={(o) => { if (!o) { setAssigningBranchId(null); setAssignDestId(""); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Assign Payout Account to Branch</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <p className="text-sm text-muted-foreground">Select which payout account should receive withdrawals for this branch.</p>
             {destinations.length === 0 ? (
               <p className="text-sm text-muted-foreground italic">No payout accounts configured yet. Add one in Accounts first.</p>
@@ -1135,7 +1136,7 @@ export default function PaymentsPage() {
               </div>
             )}
           </div>
-          <DialogFooter className="pt-4">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setAssigningBranchId(null)}>Cancel</Button>
             <Button onClick={handleAssignDestination} disabled={!assignDestId || isAssigning}>
               {isAssigning ? "Saving…" : "Assign Account"}
@@ -1190,7 +1191,7 @@ export default function PaymentsPage() {
               Review {pendingRefunds.length} pending {pendingRefunds.length === 1 ? "request" : "requests"} without interrupting the transaction list.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[min(32rem,65vh)] space-y-3 overflow-y-auto overscroll-contain pr-1">
+          <div className={cn(DIALOG_BODY_PADDING, "max-h-[min(32rem,65vh)] space-y-3 overflow-y-auto overscroll-contain")}>
             {pendingRefunds.length === 0 ? (
               <div className="rounded-xl border border-dashed py-10 text-center">
                 <CheckCircle className="mx-auto h-8 w-8 text-success" />

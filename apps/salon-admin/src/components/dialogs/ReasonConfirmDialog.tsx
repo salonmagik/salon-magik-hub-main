@@ -13,6 +13,7 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Loader2 } from "lucide-react";
 import { cn } from "@shared/utils";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface ReasonConfirmDialogProps {
   open: boolean;
@@ -65,8 +66,9 @@ export function ReasonConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         {itemsList && itemsList.length > 0 && (
-          <div className="my-2 max-h-32 overflow-y-auto">
+          <div className="mb-2 max-h-32 overflow-y-auto">
             <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
               {itemsList.map((item, index) => (
                 <li key={index}>{item}</li>
@@ -75,7 +77,7 @@ export function ReasonConfirmDialog({
           </div>
         )}
 
-        <div className="py-4 space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="reason">
             {reasonLabel}
             {reasonRequired && <span className="text-destructive ml-1">*</span>}
@@ -87,6 +89,7 @@ export function ReasonConfirmDialog({
             onChange={(e) => setReason(e.target.value)}
             rows={3}
           />
+        </div>
         </div>
 
         <AlertDialogFooter>

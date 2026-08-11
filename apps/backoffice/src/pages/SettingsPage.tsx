@@ -18,6 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Alert, AlertDescription, AlertTitle } from "@ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Checkbox } from "@ui/checkbox";
@@ -1737,7 +1739,7 @@ export default function BackofficeSettingsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               {pendingKillSwitchState && (
                 <div className="space-y-2">
                   <Label>Reason (required)</Label>
@@ -1800,7 +1802,7 @@ export default function BackofficeSettingsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5" />

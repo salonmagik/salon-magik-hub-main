@@ -7,6 +7,7 @@ import { Input } from "@ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Loader2, MessageSquareText, TriangleAlert, CircleDollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
@@ -235,6 +236,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
               To: <span className="text-foreground font-medium">{openMessage?.recipient}</span>
             </DialogTitle>
           </DialogHeader>
+          <div className={DIALOG_BODY_PADDING}>
           {openMessage?.subject && (
             <p className="font-serif text-lg font-semibold">{openMessage.subject}</p>
           )}
@@ -248,6 +250,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
           {openMessage?.error_message && (
             <p className="text-xs text-red-600">{openMessage.error_message}</p>
           )}
+          </div>
         </DialogContent>
       </Dialog>
     </>

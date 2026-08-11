@@ -17,6 +17,7 @@ import { Input } from "@ui/input";
 import { Alert, AlertDescription } from "@ui/alert";
 import { Loader2, AlertCircle, Wallet, Plus, TrendingUp } from "lucide-react";
 import { cn } from "@shared/utils";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface TopUpDialogProps {
   open: boolean;
@@ -144,11 +145,11 @@ export function TopUpDialog({ open, onOpenChange }: TopUpDialogProps) {
         </DialogHeader>
 
         {isLoadingData ? (
-          <div className="flex items-center justify-center py-8">
+          <div className={cn(DIALOG_BODY_PADDING, "flex items-center justify-center")}>
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="space-y-4 py-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             {/* Current Wallet Balance */}
             <div className="rounded-lg border bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground mb-1">Current Balance</p>

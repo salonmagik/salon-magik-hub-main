@@ -14,6 +14,8 @@ import { useInvoices, type InvoiceWithItems, type UpdateInvoiceData } from "@/ho
 import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface InvoiceManagementDialogProps {
   open: boolean;
@@ -261,7 +263,7 @@ export function InvoiceManagementDialog({
         </DialogHeader>
 
         <ScrollArea className="max-h-[60vh]">
-          <div className="space-y-6 pr-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-6")}>
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
@@ -367,7 +368,7 @@ export default function ClientRefundsPage() {
             <DialogTitle>Claim gift voucher</DialogTitle>
             <p className="text-sm text-muted-foreground">The full remaining value is added to your balance at the issuing salon.</p>
           </DialogHeader>
-          <div className="space-y-4 py-3">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="space-y-2">
               <Label htmlFor="voucher-code">Voucher code</Label>
               <Input id="voucher-code" value={voucherCode} onChange={(event) => setVoucherCode(event.target.value.toUpperCase())} className="font-mono uppercase" />

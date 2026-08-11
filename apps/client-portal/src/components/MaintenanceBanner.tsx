@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { X, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Button } from "@ui/button";
 
 interface MaintenanceBannerSetting {
@@ -109,6 +110,7 @@ export function MaintenanceBanner() {
             </DialogTitle>
           </DialogHeader>
 
+          <div className={DIALOG_BODY_PADDING}>
           <div className="space-y-4 text-sm">
             {scheduledAt && (
               <div className="rounded-lg bg-muted px-4 py-3">
@@ -136,6 +138,7 @@ export function MaintenanceBanner() {
             <Button className="w-full" onClick={() => setModalOpen(false)}>
               Got it
             </Button>
+          </div>
           </div>
         </DialogContent>
       </Dialog>

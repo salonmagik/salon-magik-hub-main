@@ -16,6 +16,8 @@ import { Alert, AlertDescription } from "@ui/alert";
 import { Mail, Loader2, Info, AlertTriangle, Bold, Italic, Underline, List, ListOrdered, Link2, Minus, RectangleHorizontal } from "lucide-react";
 import { useEmailTemplates, type TemplateType, defaultTemplates, templateTypeLabels } from "@/hooks/useEmailTemplates";
 import { htmlToEditableText, prettifyTokenLabel, replaceTemplateTokens, textToBasicEmailHtml, wrapSelection } from "@/components/messaging/templateEditorUtils";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface EditTemplateDialogProps {
   open: boolean;
@@ -206,7 +208,7 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
           </div>
         </DialogHeader>
 
-        <div className="mt-4 space-y-4.5">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4.5")}>
           {/* Active Toggle */}
           <div className="flex items-center justify-between">
             <Label htmlFor="is-active">Enable this template</Label>
@@ -303,7 +305,7 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
           </div>
         </div>
 
-        <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
           <Button type="button" variant="ghost" onClick={handleResetToDefault} disabled={isSubmitting}>
             Reset to Default
           </Button>

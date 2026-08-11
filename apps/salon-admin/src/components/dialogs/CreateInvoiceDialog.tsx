@@ -13,6 +13,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@supabase-client";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 type Service = Tables<"services">;
 type Product = Tables<"products">;
@@ -226,7 +228,7 @@ export function CreateInvoiceDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className={cn(DIALOG_BODY_PADDING, "space-y-6")}>
           {/* Error Message */}
           {errorMessage && (
             <Alert variant="destructive">

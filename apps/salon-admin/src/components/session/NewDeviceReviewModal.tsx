@@ -14,6 +14,8 @@ import { Badge } from "@ui/badge";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@ui/ui/use-toast";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 const MAX_DEVICES_PER_USER = 2;
 
@@ -119,7 +121,9 @@ export function NewDeviceReviewModal({ open, onClose }: Props) {
               The session has been successfully revoked. Your account is secure.
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={onClose} className="w-full">Done</Button>
+          <div className={DIALOG_BODY_PADDING}>
+            <Button onClick={onClose} className="w-full">Done</Button>
+          </div>
         </DialogContent>
       </Dialog>
     );
@@ -139,6 +143,7 @@ export function NewDeviceReviewModal({ open, onClose }: Props) {
               This will immediately sign out that device. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          <div className={DIALOG_BODY_PADDING}>
           {session && (
             <div className="rounded-lg bg-muted p-4 text-sm space-y-1.5">
               <div className="flex items-center gap-2">
@@ -170,6 +175,7 @@ export function NewDeviceReviewModal({ open, onClose }: Props) {
               {revokeMutation.isPending ? "Ending…" : "End session"}
             </Button>
           </div>
+          </div>
         </DialogContent>
       </Dialog>
     );
@@ -190,6 +196,7 @@ export function NewDeviceReviewModal({ open, onClose }: Props) {
           </DialogDescription>
         </DialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         {isLoading ? (
           <p className="text-sm text-muted-foreground py-4 text-center">Loading sessions…</p>
         ) : (
@@ -245,6 +252,7 @@ export function NewDeviceReviewModal({ open, onClose }: Props) {
         <Button variant="ghost" className="w-full" onClick={onClose}>
           {atCapacity ? "I'll do this later" : "This was me — dismiss"}
         </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

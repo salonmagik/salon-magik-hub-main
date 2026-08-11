@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
 import { DateRangePicker, type DateRangePreset as PickerDateRangePreset } from "@ui/date-range-picker";
 import { TimePicker } from "@ui/time-picker";
@@ -1872,14 +1873,14 @@ export default function AppointmentsPage() {
       />
 
       <Dialog open={!!notesAppointment} onOpenChange={(open) => !open && setNotesAppointment(null)}>
-        <DialogContent className="rounded-3xl p-5 sm:max-w-xl sm:p-8">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">
               Notes for {notesAppointment?.customer?.full_name || "customer"}
             </DialogTitle>
             <DialogDescription>Appointment notes, newest first</DialogDescription>
           </DialogHeader>
-          <div className="mt-3 max-h-[60vh] overflow-y-auto overscroll-contain">
+          <div className={cn(DIALOG_BODY_PADDING, "max-h-[60vh] overflow-y-auto overscroll-contain")}>
             {notesAppointment?.notes ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1924,7 +1925,7 @@ export default function AppointmentsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={DIALOG_BODY_PADDING}>
             {approvalDialogAction === "reschedule" ? (
               <>
                 <div className="space-y-3">

@@ -5,6 +5,8 @@ import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { CheckCircle2, Loader2, RotateCcw, TriangleAlert, XCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 type Stage = "reason" | "confirm" | "submitting" | "success" | "error";
 
@@ -52,7 +54,7 @@ export function RejectRefundDialog({
     <Dialog open={open} onOpenChange={(next) => stage !== "submitting" && onOpenChange(next)}>
       <DialogContent className="sm:max-w-md">
         {stage === "success" || stage === "error" ? (
-          <div className="py-8 text-center">
+          <div className={cn(DIALOG_BODY_PADDING, "text-center")}>
             <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${stage === "success" ? "bg-success/10" : "bg-destructive/10"}`}>
               {stage === "success"
                 ? <CheckCircle2 className="h-7 w-7 text-success" />
@@ -74,7 +76,7 @@ export function RejectRefundDialog({
             </div>
           </div>
         ) : stage === "submitting" ? (
-          <div className="flex flex-col items-center py-14">
+          <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center")}>
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="mt-3 text-sm text-muted-foreground">Rejecting request…</p>
           </div>
@@ -91,7 +93,7 @@ export function RejectRefundDialog({
                   : "Give the staff member and customer a clear reason for this decision."}
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
+            <div className={DIALOG_BODY_PADDING}>
               {stage === "reason" ? (
                 <div className="space-y-2">
                   <Label htmlFor="refund-rejection-reason">Reason</Label>
