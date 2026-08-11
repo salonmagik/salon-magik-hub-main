@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@shared/utils";
+import { BRAND_DIALOG_STYLE } from "./dialog-brand";
 
 const Dialog: typeof DialogPrimitive.Root = DialogPrimitive.Root;
 
@@ -29,44 +30,82 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
-const DialogContent = React.forwardRef<
-  React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        // Centered and sized to content (up to the max-height cap), not
-        // stretched to fill the viewport — a short dialog on a tall phone
-        // screen used to end up mostly empty space between its content and
-        // the close button/footer. overflow-y-auto still kicks in once
-        // content actually exceeds the cap.
-        "fixed left-3 right-3 top-1/2 z-[70] grid w-auto max-h-[calc(100vh-1.5rem)] -translate-y-1/2 overflow-y-auto scrollbar-hide gap-5 rounded-[24px] border-0 bg-background p-5 shadow-2xl duration-200",
-        "sm:left-[50%] sm:right-auto sm:top-[50%] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[90vh] sm:p-8",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground opacity-70 ring-offset-background transition-colors hover:bg-muted hover:text-foreground hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
-        <X className="h-5 w-5" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+interface DialogContentProps extends React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> {
+  // Most dialogs have a DialogHeader, which the close button sits on top of
+  // (so it defaults to a light color). The handful that don't need a dark
+  // variant instead — see PaymentSuccessModal / ImageCarousel / QuickCreateDialog.
+  closeButtonClassName?: string;
+}
+
+const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
+  ({ className, children, closeButtonClassName, ...props }, ref) => (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          // Centered and sized to content (up to the max-height cap), not
+          // stretched to fill the viewport — a short dialog on a tall phone
+          // screen used to end up mostly empty space between its content and
+          // the close button/footer. overflow-y-auto still kicks in once
+          // content actually exceeds the cap.
+          //
+          // The top/bottom brand-plum border is permanent — every dialog
+          // keeps the purple "sandwich" frame even when it has no
+          // DialogHeader/DialogFooter. When one IS present, it bleeds via
+          // negative margin right up against this border so the two merge
+          // into one solid purple band instead of reading as separate.
+          "fixed left-3 right-3 top-1/2 z-[70] grid w-auto max-h-[calc(100vh-1.5rem)] -translate-y-1/2 overflow-y-auto scrollbar-hide gap-5 rounded-[24px] border-0 border-t-[6px] border-b-[6px] border-t-[#2E1F4E] border-b-[#2E1F4E] bg-background p-5 shadow-2xl duration-200",
+          "sm:left-[50%] sm:right-auto sm:top-[50%] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[90vh] sm:p-8",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close
+          className={cn(
+            "absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none",
+            closeButtonClassName,
+          )}
+        >
+          <X className="h-5 w-5" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  ),
+);
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
-const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)} {...props} />
+// Bleeds edge-to-edge to the top corners of DialogContent (cancelling its
+// padding via negative margin) and fills with the same brand-plum the
+// product-tour tooltip uses. Sticky so it stays pinned at the top of the
+// dialog's own scroll area — only the content between header and footer
+// scrolls underneath it, the purple frame never moves.
+const DialogHeader = ({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "dark sticky top-0 z-10 -mx-5 -mt-5 rounded-t-[18px] bg-background px-5 pb-4 pt-5 text-foreground sm:-mx-8 sm:-mt-8 sm:px-8 sm:pb-5 sm:pt-7",
+      "flex flex-col space-y-1.5 text-center sm:text-left",
+      className,
+    )}
+    style={{ ...BRAND_DIALOG_STYLE, ...style }}
+    {...props}
+  />
 );
 DialogHeader.displayName = "DialogHeader";
 
-const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)} {...props} />
+const DialogFooter = ({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn(
+      "dark sticky bottom-0 z-10 -mx-5 -mb-5 rounded-b-[18px] bg-background px-5 pb-5 pt-4 text-foreground sm:-mx-8 sm:-mb-8 sm:px-8 sm:pb-7 sm:pt-5",
+      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      className,
+    )}
+    style={{ ...BRAND_DIALOG_STYLE, ...style }}
+    {...props}
+  />
 );
 DialogFooter.displayName = "DialogFooter";
 
