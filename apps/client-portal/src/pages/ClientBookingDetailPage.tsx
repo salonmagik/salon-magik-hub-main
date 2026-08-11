@@ -134,54 +134,54 @@ export default function ClientBookingDetailPage() {
 
   const customerIds = customers.map((c) => c.id);
 
-  useEffect(() => {
-    async function fetchBooking() {
-      if (!isAuthenticated || !id || customerIds.length === 0) {
-        setIsLoading(false);
-        return;
-      }
+  const refetchBookingAndSiblings = async () => {
+    if (!id || customerIds.length === 0) return;
 
-      try {
-        const { data, error: fetchError } = await supabase
-          .from("appointments")
-          .select(`
-            *,
-            services:appointment_services(*),
-            products:appointment_products(*),
-            tenant:tenants(*),
-            location:locations(*)
-          `)
-          .eq("id", id)
-          .in("customer_id", customerIds)
-          .single();
+    const { data, error: fetchError } = await supabase
+      .from("appointments")
+      .select(`
+        *,
+        services:appointment_services(*),
+        products:appointment_products(*),
+        tenant:tenants(*),
+        location:locations(*)
+      `)
+      .eq("id", id)
+      .in("customer_id", customerIds)
+      .single();
 
-        if (fetchError) throw fetchError;
-        const nextBooking = data as ClientApprovalBooking;
-        setBooking(nextBooking);
-
-        const bookingReference = nextBooking.booking_reference;
-        if (bookingReference) {
-          const { data: siblings } = await supabase
-            .from("appointments")
-            .select("id, status, scheduled_start, total_amount, amount_paid, payment_status, approval_status, location_id, location:locations(id, name, phone)")
-            .eq("booking_reference", bookingReference)
-            .in("customer_id", customerIds)
-            .neq("id", id)
-            .order("scheduled_start", { ascending: true, nullsFirst: false });
-
-          setRelatedBookings((siblings as unknown as SiblingBooking[]) || []);
-        } else {
-          setRelatedBookings([]);
-        }
-      } catch (err) {
-        console.error("Error fetching booking:", err);
-        setError("Booking not found or access denied");
-      } finally {
-        setIsLoading(false);
-      }
+    if (fetchError) {
+      console.error("Error fetching booking:", fetchError);
+      setError("Booking not found or access denied");
+      return;
     }
 
-    fetchBooking();
+    const nextBooking = data as ClientApprovalBooking;
+    setBooking(nextBooking);
+
+    const bookingReference = nextBooking.booking_reference;
+    if (bookingReference) {
+      const { data: siblings } = await supabase
+        .from("appointments")
+        .select("id, status, scheduled_start, total_amount, amount_paid, payment_status, approval_status, location_id, location:locations(id, name, phone)")
+        .eq("booking_reference", bookingReference)
+        .in("customer_id", customerIds)
+        .neq("id", id)
+        .order("scheduled_start", { ascending: true, nullsFirst: false });
+
+      setRelatedBookings((siblings as unknown as SiblingBooking[]) || []);
+    } else {
+      setRelatedBookings([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !id || customerIds.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    refetchBookingAndSiblings().finally(() => setIsLoading(false));
   }, [id, isAuthenticated, customerIds.join(",")]);
 
   // After a Paystack redirect (?reference= or ?trxref=), verify the payment and refetch.
@@ -213,15 +213,9 @@ export default function ClientBookingDetailPage() {
         console.error("Payment verification failed:", err);
       } finally {
         setIsVerifyingPayment(false);
-        // Refetch the booking to reflect the updated payment status
-        if (id) {
-          const { data } = await supabase
-            .from("appointments")
-            .select(`*, services:appointment_services(*), products:appointment_products(*), tenant:tenants(*), location:locations(*)`)
-            .eq("id", id)
-            .single();
-          if (data) setBooking(data as ClientAppointmentWithDetails);
-        }
+        // Refetch the booking AND its siblings so a multi-item checkout's
+        // "Complete Payment" button doesn't stay visible on stale sibling data.
+        await refetchBookingAndSiblings();
         // Strip Paystack params from the URL without a page reload
         const clean = new URLSearchParams(location.search);
         clean.delete("reference");
@@ -261,14 +255,7 @@ export default function ClientBookingDetailPage() {
       if (data?.verified) {
         setPaymentVerified(true);
         setPendingReference(null);
-        if (id) {
-          const { data: refreshed } = await supabase
-            .from("appointments")
-            .select(`*, services:appointment_services(*), products:appointment_products(*), tenant:tenants(*), location:locations(*)`)
-            .eq("id", id)
-            .single();
-          if (refreshed) setBooking(refreshed as ClientAppointmentWithDetails);
-        }
+        await refetchBookingAndSiblings();
       }
     } catch (err) {
       console.error("Check payment status failed:", err);
@@ -278,21 +265,7 @@ export default function ClientBookingDetailPage() {
   };
 
   const handleActionComplete = async () => {
-    // Refetch booking after action
-    if (!id) return;
-    const { data } = await supabase
-      .from("appointments")
-      .select(`
-        *,
-        services:appointment_services(*),
-        products:appointment_products(*),
-        tenant:tenants(*),
-        location:locations(*)
-      `)
-      .eq("id", id)
-      .single();
-    
-    if (data) setBooking(data as ClientAppointmentWithDetails);
+    await refetchBookingAndSiblings();
   };
 
   if (isLoading) {

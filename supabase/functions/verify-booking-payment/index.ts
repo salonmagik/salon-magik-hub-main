@@ -148,7 +148,7 @@ serve(async (req) => {
 
     const { data: appointments } = await supabase
       .from("appointments")
-      .select("id, total_amount, payment_status, customer_id, tenant_id")
+      .select("id, total_amount, amount_paid, payment_status, customer_id, tenant_id")
       .in("id", appointmentIds)
       .in("customer_id", customerIds);
 
@@ -164,7 +164,6 @@ serve(async (req) => {
       return json({ verified: true, alreadyProcessed: true });
     }
 
-    const paymentStatus = isDeposit ? "deposit_paid" : "fully_paid";
     const totalAppointmentAmount = appointments.reduce(
       (sum, a) => sum + Number(a.total_amount || 0),
       0,
@@ -188,9 +187,16 @@ serve(async (req) => {
         allocated = Number((amountInMajor * proportion).toFixed(2));
       }
 
+      // This transaction's amount is added to whatever was already paid (e.g. an
+      // earlier deposit) — never overwritten — so a follow-up "pay the balance"
+      // charge can't silently erase a prior payment on the same appointment.
+      const cumulativePaid = Number((Number(apt.amount_paid || 0) + allocated).toFixed(2));
+      const isNowFullyPaid = cumulativePaid >= Number(apt.total_amount || 0);
+      const nextPaymentStatus = isNowFullyPaid ? "fully_paid" : isDeposit ? "deposit_paid" : apt.payment_status;
+
       await supabase
         .from("appointments")
-        .update({ payment_status: paymentStatus, amount_paid: allocated, updated_at: now })
+        .update({ payment_status: nextPaymentStatus, amount_paid: cumulativePaid, updated_at: now })
         .eq("id", apt.id);
     }
 

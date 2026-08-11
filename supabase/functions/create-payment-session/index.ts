@@ -176,6 +176,53 @@ Deno.serve(async (req) => {
     let payableAmount = amount;
     let appliedPromo: Record<string, unknown> | null = null;
 
+    // Never trust a client-supplied amount for an appointment payment: recompute
+    // the real outstanding balance server-side from the appointment rows
+    // themselves, and refuse to open a new Paystack session for a booking that's
+    // already fully settled. This is what stops a stale "Complete Payment"
+    // button (or a directly-edited request) from creating a second real charge,
+    // or a charge for an arbitrary amount, against the same booking.
+    if (intentType === "appointment_payment") {
+      const targetAppointmentIds = (body.appointmentIds && body.appointmentIds.length > 0
+        ? body.appointmentIds
+        : appointmentId
+          ? [appointmentId]
+          : []
+      ).filter((value): value is string => typeof value === "string" && value.length > 0);
+
+      if (targetAppointmentIds.length === 0) {
+        return jsonResponse({ error: "No appointment specified for payment" }, 400);
+      }
+
+      const { data: targetAppointments, error: targetAppointmentsError } = await supabase
+        .from("appointments")
+        .select("id, tenant_id, status, total_amount, amount_paid, payment_status")
+        .in("id", targetAppointmentIds)
+        .eq("tenant_id", tenantId);
+
+      if (targetAppointmentsError) {
+        console.error("Error validating appointments for payment:", targetAppointmentsError);
+        return jsonResponse({ error: "Failed to validate booking" }, 500);
+      }
+
+      if (!targetAppointments || targetAppointments.length !== targetAppointmentIds.length) {
+        return jsonResponse({ error: "Booking not found" }, 404);
+      }
+
+      const outstanding = targetAppointments.reduce((sum, apt) => {
+        if (apt.status === "cancelled") return sum;
+        if (["fully_paid", "refunded_full"].includes(apt.payment_status)) return sum;
+        return sum + Math.max(Number(apt.total_amount || 0) - Number(apt.amount_paid || 0), 0);
+      }, 0);
+      const roundedOutstanding = Number(outstanding.toFixed(2));
+
+      if (roundedOutstanding <= 0) {
+        return jsonResponse({ error: "This booking is already fully paid." }, 409);
+      }
+
+      payableAmount = roundedOutstanding;
+    }
+
     if (intentType === "messaging_credit_purchase") {
       const { data: promoData, error: promoError } = await (supabase.rpc as any)("get_tenant_sales_promo_summary", {
         p_tenant_id: tenantId,
@@ -226,7 +273,7 @@ Deno.serve(async (req) => {
       .insert({
         tenant_id: tenantId,
         appointment_id: appointmentId || null,
-        amount: amount,
+        amount: payableAmount,
         currency: effectiveCurrency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
