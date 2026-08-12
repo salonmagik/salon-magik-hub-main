@@ -721,7 +721,6 @@ export function BookingWizard({
         requestBody.paymentIsDeposit = paymentOption === "pay_deposit";
         requestBody.paymentSuccessUrl = window.location.href;
         requestBody.paymentCancelUrl = window.location.href;
-        requestBody.preferredPaymentGateway = selectedGateway;
 
         // For split payment, pass purse info to be handled in webhook
         // This handles two scenarios:

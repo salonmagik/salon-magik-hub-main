@@ -22,7 +22,6 @@ interface PaymentRequest {
   isDeposit?: boolean;
   successUrl: string;
   cancelUrl: string;
-  preferredGateway?: "stripe" | "paystack"; // Allow user to select gateway
   intentType?: "appointment_payment" | "customer_purse_topup" | "salon_purse_topup" | "invoice_payment" | "messaging_credit_purchase";
   customerId?: string;
   invoiceId?: string;
@@ -59,7 +58,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const authHeader = req.headers.get("Authorization");
 
@@ -75,7 +73,6 @@ Deno.serve(async (req) => {
       isDeposit,
       successUrl,
       cancelUrl,
-      preferredGateway,
       intentType = "appointment_payment",
       customerId,
       invoiceId,
@@ -248,23 +245,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country) ||
-      ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
-    const usePaystack = preferredGateway
-      ? preferredGateway === "paystack"
-      : isPaystackRegion;
-
     // Get currency-specific Paystack key
-    let paystackSecretKey: string | null = null;
-    if (usePaystack) {
-      const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
-      if (paystackKeyResult.error || !paystackKeyResult.key) {
-        return jsonResponse({
-          error: paystackKeyResult.error || "Paystack not configured for this currency"
-        }, 500);
-      }
-      paystackSecretKey = paystackKeyResult.key;
+    const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+    if (paystackKeyResult.error || !paystackKeyResult.key) {
+      return jsonResponse({
+        error: paystackKeyResult.error || "Paystack not configured for this currency"
+      }, 500);
     }
+    const paystackSecretKey = paystackKeyResult.key;
 
     const reference = `sm_${appointmentId?.substring(0, 8) || Date.now().toString().substring(0, 8)}_${Date.now()}`;
 
@@ -277,10 +265,10 @@ Deno.serve(async (req) => {
         currency: effectiveCurrency.toUpperCase(),
         customer_email: customerEmail,
         customer_name: customerName,
-        gateway: usePaystack ? "paystack" : "stripe",
+        gateway: "paystack",
         is_deposit: isDeposit || false,
         status: "pending",
-        paystack_reference: usePaystack ? reference : null,
+        paystack_reference: reference,
         intent_type: intentType,
         metadata: {
           appointment_ids: body.appointmentIds || [appointmentId],
@@ -294,125 +282,62 @@ Deno.serve(async (req) => {
       console.error("Error creating payment intent:", intentError);
     }
 
-    let checkoutUrl: string;
+    const amountInMinorUnits = Math.round(payableAmount * 100);
 
-    if (usePaystack) {
-      if (!paystackSecretKey) {
-        return jsonResponse({ error: "Paystack not configured" }, 500);
-      }
-
-      const amountInMinorUnits = Math.round(payableAmount * 100);
-
-      const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${paystackSecretKey}`,
-          "Content-Type": "application/json",
+    const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${paystackSecretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: customerEmail,
+        amount: amountInMinorUnits,
+        currency: effectiveCurrency.toUpperCase(),
+        reference: reference,
+        callback_url: successUrl,
+        metadata: {
+          appointment_ids: body.appointmentIds || [appointmentId],
+          appointment_id: appointmentId || null,
+          payment_intent_id: paymentIntent?.id,
+          tenant_id: tenantId,
+          is_deposit: isDeposit || false,
+          customer_name: customerName,
+          intent_type: intentType,
+          customer_id: customerId || null,
+          invoice_id: invoiceId || null,
+          credits: credits || null,
+          promo_redemption_id: appliedPromo?.redemption_id || null,
+          promo_code_id: appliedPromo?.promo_code_id || null,
         },
-        body: JSON.stringify({
-          email: customerEmail,
-          amount: amountInMinorUnits,
-          currency: effectiveCurrency.toUpperCase(),
-          reference: reference,
-          callback_url: successUrl,
-          metadata: {
-            appointment_ids: body.appointmentIds || [appointmentId],
-            appointment_id: appointmentId || null,
-            payment_intent_id: paymentIntent?.id,
-            tenant_id: tenantId,
-            is_deposit: isDeposit || false,
-            customer_name: customerName,
-            intent_type: intentType,
-            customer_id: customerId || null,
-            invoice_id: invoiceId || null,
-            credits: credits || null,
-            promo_redemption_id: appliedPromo?.redemption_id || null,
-            promo_code_id: appliedPromo?.promo_code_id || null,
-          },
-        }),
-      });
+      }),
+    });
 
-      const paystackData = await paystackResponse.json();
+    const paystackData = await paystackResponse.json();
 
-      if (!paystackResponse.ok || !paystackData.status) {
-        console.error("Paystack error:", paystackData);
-        return jsonResponse({ error: paystackData.message || "Failed to initialize Paystack transaction" }, 400);
-      }
-
-      if (paymentIntent?.id) {
-        await supabase
-          .from("payment_intents")
-          .update({
-            paystack_access_code: paystackData.data.access_code,
-            status: "processing",
-          })
-          .eq("id", paymentIntent.id);
-      }
-
-      checkoutUrl = paystackData.data.authorization_url;
-    } else {
-      if (!stripeSecretKey) {
-        return jsonResponse({ error: "Stripe not configured" }, 500);
-      }
-
-      const amountInCents = Math.round(payableAmount * 100);
-
-      const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${stripeSecretKey}`,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          "mode": "payment",
-          "payment_method_types[0]": "card",
-          "line_items[0][price_data][currency]": effectiveCurrency.toLowerCase(),
-          "line_items[0][price_data][product_data][name]": description || "Appointment Payment",
-          "line_items[0][price_data][unit_amount]": amountInCents.toString(),
-          "line_items[0][quantity]": "1",
-          "customer_email": customerEmail,
-          "success_url": `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
-          "cancel_url": cancelUrl,
-          "metadata[appointment_id]": appointmentId || "",
-          "metadata[appointment_ids]": JSON.stringify(body.appointmentIds || (appointmentId ? [appointmentId] : [])),
-          "metadata[payment_intent_id]": paymentIntent?.id || "",
-          "metadata[tenant_id]": tenantId,
-          "metadata[is_deposit]": isDeposit ? "true" : "false",
-          "metadata[intent_type]": intentType,
-          "metadata[customer_id]": customerId || "",
-          "metadata[invoice_id]": invoiceId || "",
-          "metadata[credits]": credits?.toString() || "",
-          "metadata[promo_redemption_id]": String(appliedPromo?.redemption_id || ""),
-          "metadata[promo_code_id]": String(appliedPromo?.promo_code_id || ""),
-        }),
-      });
-
-      const stripeData = await stripeResponse.json();
-
-      if (!stripeResponse.ok) {
-        console.error("Stripe error:", stripeData);
-        return jsonResponse({ error: stripeData.error?.message || "Failed to create Stripe session" }, 400);
-      }
-
-      if (paymentIntent?.id) {
-        await supabase
-          .from("payment_intents")
-          .update({
-            stripe_session_id: stripeData.id,
-            status: "processing",
-          })
-          .eq("id", paymentIntent.id);
-      }
-
-      checkoutUrl = stripeData.url;
+    if (!paystackResponse.ok || !paystackData.status) {
+      console.error("Paystack error:", paystackData);
+      return jsonResponse({ error: paystackData.message || "Failed to initialize Paystack transaction" }, 400);
     }
+
+    if (paymentIntent?.id) {
+      await supabase
+        .from("payment_intents")
+        .update({
+          paystack_access_code: paystackData.data.access_code,
+          status: "processing",
+        })
+        .eq("id", paymentIntent.id);
+    }
+
+    const checkoutUrl = paystackData.data.authorization_url;
 
     return jsonResponse({
       checkoutUrl,
       paymentUrl: checkoutUrl,
-      gateway: usePaystack ? "paystack" : "stripe",
+      gateway: "paystack",
       paymentIntentId: paymentIntent?.id,
-      reference: usePaystack ? reference : undefined,
+      reference,
       appliedPromo,
     }, 200);
   } catch (error) {

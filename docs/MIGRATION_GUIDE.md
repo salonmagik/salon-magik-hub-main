@@ -172,7 +172,6 @@ Go to **Settings → Edge Functions → Secrets** and add:
 |-------------|-------|-------------|
 | `RESEND_API_KEY` | `re_...` | From resend.com dashboard |
 | `RESEND_FROM_EMAIL` | `noreply@salonmagik.com` | Verified sender |
-| `STRIPE_SECRET_KEY` | `sk_live_...` | From Stripe dashboard |
 | `PAYSTACK_SECRET_KEY` | `sk_live_...` | From Paystack dashboard |
 
 Note: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are automatically available in Edge Functions.
@@ -444,7 +443,7 @@ Before going live, verify:
 - [ ] Edge functions deployed and responding
 - [ ] Storage uploads working
 - [ ] Email sending works (staff invitations, password reset)
-- [ ] Payment webhooks configured (Stripe/Paystack)
+- [ ] Payment webhooks configured (Paystack)
 - [ ] Wildcard subdomain resolves salon slugs correctly
 
 ---

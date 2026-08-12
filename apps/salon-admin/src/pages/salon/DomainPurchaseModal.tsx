@@ -143,7 +143,7 @@ export function DomainPurchaseModal({
           <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             {purchaseResult.checkout_url ? (
               <div className="p-4 bg-muted/50 rounded-lg text-sm">
-                <p className="mb-4">Please complete your payment securely via Stripe.</p>
+                <p className="mb-4">Please complete your payment securely to finish your domain purchase.</p>
                 <Button 
                   className="w-full" 
                   onClick={() => window.location.href = purchaseResult.checkout_url}

@@ -7,11 +7,9 @@ import {
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
 
-const STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300;
-
 export interface WebhookEvent {
   type: string;
-  gateway: "stripe" | "paystack";
+  gateway: "paystack";
   data: {
     paymentIntentId?: string;
     appointmentId?: string;
@@ -183,60 +181,6 @@ async function validateWalletCurrency(
   }
 }
 
-// Verify Stripe webhook signature using HMAC SHA256
-export async function verifyStripeSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): Promise<boolean> {
-  try {
-    const parts = signature.split(",").reduce((acc, part) => {
-      const [key, value] = part.split("=");
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
-
-    const timestamp = parts["t"];
-    const expectedSig = parts["v1"];
-
-    if (!timestamp || !expectedSig) {
-      console.error("Invalid Stripe signature format");
-      return false;
-    }
-
-    // Check timestamp is within 5 minutes
-    const timestampAge = Math.floor(Date.now() / 1000) - parseInt(timestamp);
-    if (timestampAge > STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS) {
-      console.error("Stripe webhook timestamp too old");
-      return false;
-    }
-
-    // Compute expected signature
-    const signedPayload = `${timestamp}.${payload}`;
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(signedPayload)
-    );
-    const computedSig = Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    return computedSig === expectedSig;
-  } catch (error) {
-    console.error("Stripe signature verification error:", error);
-    return false;
-  }
-}
-
 // Verify Paystack webhook signature using HMAC SHA512
 export async function verifyPaystackSignature(
   payload: string,
@@ -274,7 +218,7 @@ const sendTransactionAlerts = async (input: {
   currency?: string | null;
   customerName?: string | null;
   amount: number;
-  gateway: "stripe" | "paystack";
+  gateway: "paystack";
   title: string;
   description: string;
   entityId?: string | null;

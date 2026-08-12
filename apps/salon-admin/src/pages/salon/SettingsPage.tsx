@@ -3205,7 +3205,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<p className="font-medium">Payments are processed securely</p>
 									<p className="text-sm text-muted-foreground">
 										All online payments are processed through{" "}
-										{isPaystack ? "Paystack" : "Stripe"} via Salon Magik.
+										Paystack via Salon Magik.
 									</p>
 								</div>
 							</div>
