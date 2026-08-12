@@ -69,9 +69,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (dest.destination_type !== "bank") {
+    if (dest.destination_type !== "bank" && dest.destination_type !== "mobile_money") {
       return new Response(
-        JSON.stringify({ error: "Subaccounts are only for bank destinations" }),
+        JSON.stringify({ error: "Unsupported destination type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -91,10 +91,13 @@ Deno.serve(async (req) => {
     }
 
     try {
+      const settlementBank = dest.destination_type === "bank" ? dest.bank_code! : dest.momo_provider!.toUpperCase();
+      const accountNumber = dest.destination_type === "bank" ? dest.account_number! : dest.momo_number!;
+
       const subaccountData = await createPaystackSubaccount(dest.currency, {
         business_name: tenant.name || `Salon ${dest.tenant_id}`,
-        settlement_bank: dest.bank_code!,
-        account_number: dest.account_number!,
+        settlement_bank: settlementBank,
+        account_number: accountNumber,
         percentage_charge: tenant.platform_percentage_charge || 10,
         primary_contact_email: user.email,
       });

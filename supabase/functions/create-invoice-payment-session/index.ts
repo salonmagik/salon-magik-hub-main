@@ -144,17 +144,26 @@ Deno.serve(async (req) => {
     // let processingFeeAmount = 0;
     // const processingFeeRate = 0.01;
 
-    const { data: payoutDest } = await supabase
+    const { data: payoutDest, error: payoutDestError } = await supabase
       .from("salon_payout_destinations")
       .select("paystack_subaccount_code")
       .eq("tenant_id", invoice.tenant_id)
       .eq("is_default", true)
-      .single();
+      .maybeSingle();
+
+    if (payoutDestError) {
+      console.error("Error looking up default payout destination:", payoutDestError);
+    }
 
     if (payoutDest?.paystack_subaccount_code) {
       storeSubaccountCode = payoutDest.paystack_subaccount_code;
       // processingFeeAmount = parseFloat((invoice.total * processingFeeRate).toFixed(2));
       // customerChargedAmount = invoice.total + processingFeeAmount;
+    } else {
+      console.error("No usable payout subaccount for tenant — invoice payment will NOT split to the salon.", {
+        tenantId: invoice.tenant_id,
+        hasDestinationRow: !!payoutDest,
+      });
     }
 
     // Convert amount to minor units (e.g. kobo for NGN)

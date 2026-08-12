@@ -270,12 +270,12 @@ function DestinationRow({ destination, onDelete, onRetry }: DestinationRowProps)
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium text-sm">{isBank ? destination.bank_name : destination.momo_provider}</p>
             {destination.is_default && <Badge variant="secondary" className="text-xs">Default</Badge>}
-            {isBank && isReady && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">Active</Badge>}
+            {isReady && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">Active</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">{destination.account_name}</p>
           <p className="text-sm font-mono text-muted-foreground">{isBank ? destination.account_number : destination.momo_number}</p>
           <p className="text-xs text-muted-foreground">{destination.country} · {destination.currency}</p>
-          {isBank && hasError && (
+          {hasError && (
             <div className="mt-2 flex items-center justify-between rounded-md bg-destructive/10 p-3">
               <div className="flex items-start gap-2">
                 <XCircle className="h-4 w-4 text-destructive mt-0.5" />

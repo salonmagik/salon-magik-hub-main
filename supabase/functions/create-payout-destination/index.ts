@@ -214,10 +214,54 @@ Deno.serve(async (req) => {
       }
 
       paystackRecipientCode = paystackData.data.recipient_code;
+
+      // Mobile money subaccounts use the same /subaccount endpoint as bank
+      // accounts — settlement_bank takes the momo network's Paystack bank
+      // code and account_number takes the phone number, mirroring the
+      // recipient call just above. Previously this branch stopped after
+      // creating the recipient, so no momo destination ever got a
+      // subaccount and every booking split for it silently fell through
+      // to the platform's own account.
+      try {
+        const subaccountData = await createPaystackSubaccount(currency.toUpperCase(), {
+          business_name: tenant.name || `Salon ${tenantId}`,
+          settlement_bank: momoProvider!.toUpperCase(),
+          account_number: momoNumber!,
+          percentage_charge: tenant.platform_percentage_charge || 0.5,
+          primary_contact_email: user.email,
+        });
+
+        paystackSubaccountCode = subaccountData.subaccount_code;
+        paystackSubaccountId = subaccountData.id;
+        paystackSubaccountActive = subaccountData.active;
+        tenantPaymentStatus = "ready";
+      } catch (err: any) {
+        console.error("Error creating momo subaccount:", err);
+        paystackSubaccountError = err.message || "Unknown error creating subaccount";
+        tenantPaymentStatus = "failed";
+        tenantPaymentError = paystackSubaccountError;
+      }
     }
 
-    // If isDefault=true, unset is_default on all other destinations for tenant
-    if (isDefault) {
+    // A tenant's first-ever destination always becomes default, regardless
+    // of what the client sent — otherwise a salon that adds one payout
+    // account without ticking "default" ends up with zero default rows,
+    // and every booking silently falls through to the platform's own
+    // Paystack account with nothing to signal why.
+    const { count: existingDestinationCount, error: countError } = await serviceSupabase
+      .from("salon_payout_destinations")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId);
+
+    if (countError) {
+      console.error("Error counting existing payout destinations:", countError);
+      // Not fatal — fall back to whatever the client sent for isDefault.
+    }
+
+    const effectiveIsDefault = isDefault || existingDestinationCount === 0;
+
+    // If effectiveIsDefault, unset is_default on all other destinations for tenant
+    if (effectiveIsDefault) {
       const { error: unsetError } = await serviceSupabase
         .from("salon_payout_destinations")
         .update({ is_default: false })
@@ -248,7 +292,7 @@ Deno.serve(async (req) => {
         paystack_subaccount_id: paystackSubaccountId,
         paystack_subaccount_active: paystackSubaccountActive,
         paystack_subaccount_error: paystackSubaccountError,
-        is_default: isDefault,
+        is_default: effectiveIsDefault,
       })
       .select()
       .single();
@@ -261,19 +305,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Update tenant's payment_setup_status
-    if (destinationType === "bank") {
-      const { error: tenantUpdateError } = await serviceSupabase
-        .from("tenants")
-        .update({
-          payment_setup_status: tenantPaymentStatus,
-          payment_setup_error: tenantPaymentError,
-        })
-        .eq("id", tenantId);
+    // Update tenant's payment_setup_status — both destination types now
+    // attempt subaccount creation, so both need this reflected.
+    const { error: tenantUpdateError } = await serviceSupabase
+      .from("tenants")
+      .update({
+        payment_setup_status: tenantPaymentStatus,
+        payment_setup_error: tenantPaymentError,
+      })
+      .eq("id", tenantId);
 
-      if (tenantUpdateError) {
-        console.error("Error updating tenant payment status:", tenantUpdateError);
-      }
+    if (tenantUpdateError) {
+      console.error("Error updating tenant payment status:", tenantUpdateError);
     }
 
     return new Response(

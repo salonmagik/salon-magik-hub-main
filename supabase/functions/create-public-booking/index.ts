@@ -1066,17 +1066,32 @@ serve(async (req) => {
         // const processingFeeRate = 0.01;
 
         if (usePaystack) {
-          const { data: payoutDest } = await supabase
+          const { data: payoutDest, error: payoutDestError } = await supabase
             .from("salon_payout_destinations")
             .select("paystack_subaccount_code")
             .eq("tenant_id", tenantId)
             .eq("is_default", true)
-            .single();
+            .maybeSingle();
+
+          if (payoutDestError) {
+            console.error("Error looking up default payout destination:", payoutDestError);
+          }
 
           if (payoutDest?.paystack_subaccount_code) {
             storeSubaccountCode = payoutDest.paystack_subaccount_code;
             // processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
             // customerChargedAmount = paymentAmount + processingFeeAmount;
+          } else {
+            // No default destination, or it has no subaccount yet — the
+            // charge will still go through, but undivided into Salon
+            // Magik's own Paystack account instead of splitting to the
+            // salon. That used to happen silently; log it loudly so it
+            // shows up in function logs instead of only in a bank
+            // statement weeks later.
+            console.error("No usable payout subaccount for tenant — booking payment will NOT split to the salon.", {
+              tenantId,
+              hasDestinationRow: !!payoutDest,
+            });
           }
         }
 

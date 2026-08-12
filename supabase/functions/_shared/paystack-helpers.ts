@@ -148,25 +148,34 @@ export interface CreateSubaccountPayload {
   primary_contact_name?: string;
   primary_contact_phone?: string;
   metadata?: string;
+  /**
+   * Defaults to "auto" — Paystack pays the settlement account directly,
+   * ~1 business day after a charge clears. Previously hardcoded to
+   * "manual" with nothing anywhere that ever triggered a manual release,
+   * so split funds accumulated on Paystack with no way to reach the
+   * salon. Pass "manual" explicitly only for a salon that has opted into
+   * on-demand payout via the platform's own wallet/withdrawal flow.
+   */
+  settlement_schedule?: "auto" | "weekly" | "monthly" | "manual";
 }
 
 /**
  * Helper to call the Paystack API and create a subaccount.
- * Forces settlement_schedule to "manual" based on requirements.
  */
 export async function createPaystackSubaccount(
   currency: string,
   payload: CreateSubaccountPayload
 ) {
   const { key, error: keyError } = getPaystackKeyForCurrency(currency);
-  
+
   if (keyError || !key) {
     throw new Error(keyError || "Failed to get Paystack key");
   }
 
+  const settlementSchedule = payload.settlement_schedule || "auto";
   console.log('Creating Paystack subaccount with payload:', {
     ...payload,
-    settlement_schedule: "manual",
+    settlement_schedule: settlementSchedule,
   });
   const response = await fetch("https://api.paystack.co/subaccount", {
     method: "POST",
@@ -176,7 +185,7 @@ export async function createPaystackSubaccount(
     },
     body: JSON.stringify({
       ...payload,
-      settlement_schedule: "manual",
+      settlement_schedule: settlementSchedule,
     }),
   });
 
