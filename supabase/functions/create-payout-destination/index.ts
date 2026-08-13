@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, createPaystackSubaccount } from "../_shared/paystack-helpers.ts";
+import { getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +125,7 @@ Deno.serve(async (req) => {
       );
     }
     const paystackSecretKey = paystackKeyResult.key;
+    const feeSettings = await getPaymentFeeSettings(serviceSupabase);
 
     // Create Paystack recipient
     let paystackRecipientCode: string;
@@ -171,7 +173,7 @@ Deno.serve(async (req) => {
           business_name: tenant.name || `Salon ${tenantId}`,
           settlement_bank: bankCode!,
           account_number: accountNumber!,
-          percentage_charge: tenant.platform_percentage_charge || 0.5, // make sure percentage is in right format 0.5 is 0.5%
+          percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent, // make sure percentage is in right format 0.5 is 0.5%
           primary_contact_email: user.email,
         });
 
@@ -227,7 +229,7 @@ Deno.serve(async (req) => {
           business_name: tenant.name || `Salon ${tenantId}`,
           settlement_bank: momoProvider!.toUpperCase(),
           account_number: momoNumber!,
-          percentage_charge: tenant.platform_percentage_charge || 0.5,
+          percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent,
           primary_contact_email: user.email,
         });
 

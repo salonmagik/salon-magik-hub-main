@@ -12,6 +12,7 @@ import {
   validateCurrencyMatch,
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
+import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -203,7 +204,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff, payment_setup_status")
+      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff, payment_setup_status, platform_percentage_charge, platform_service_charge_borne_by_customer")
       .eq("id", tenantId)
       .eq("online_booking_enabled", true)
       .single();
@@ -1033,9 +1034,6 @@ serve(async (req) => {
         });
 
         let storeSubaccountCode: string | null = null;
-        // let customerChargedAmount = paymentAmount;
-        // let processingFeeAmount = 0;
-        // const processingFeeRate = 0.01;
 
         {
           const { data: payoutDest, error: payoutDestError } = await supabase
@@ -1051,8 +1049,6 @@ serve(async (req) => {
 
           if (payoutDest?.paystack_subaccount_code) {
             storeSubaccountCode = payoutDest.paystack_subaccount_code;
-            // processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
-            // customerChargedAmount = paymentAmount + processingFeeAmount;
           } else {
             // No default destination, or it has no subaccount yet — the
             // charge will still go through, but undivided into Salon
@@ -1069,6 +1065,15 @@ serve(async (req) => {
 
         const primaryAppointmentId = createdAppointmentIds[0];
         const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
+
+        const feeSettings = await getPaymentFeeSettings(supabase);
+        const bookingCharge = computeBookingCharge({
+          servicePrice: paymentAmount,
+          platformServiceChargePercent: Number(tenant.platform_percentage_charge ?? feeSettings.defaultPlatformServiceChargePercent),
+          customerFacingFeePercent: feeSettings.customerFacingFeePercent,
+          serviceChargeBorneByCustomer: Boolean(tenant.platform_service_charge_borne_by_customer),
+          hasSubaccount: Boolean(storeSubaccountCode),
+        });
 
         // Store payment intent
         const { data: paymentIntent, error: paymentIntentError } = await supabase
@@ -1087,6 +1092,10 @@ serve(async (req) => {
             intent_type: "appointment_payment",
             metadata: {
               appointment_ids: createdAppointmentIds,
+              service_amount: paymentAmount,
+              platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
+              customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
+              amount_charged_to_paystack: bookingCharge.amountToChargePaystack,
             },
           })
           .select("id")
@@ -1104,12 +1113,13 @@ serve(async (req) => {
 
         {
           // Create Paystack transaction
-          const amountInMinorUnits = Math.round(paymentAmount * 100);
+          const amountInMinorUnits = Math.round(bookingCharge.amountToChargePaystack * 100);
 
           console.log("Creating Paystack transaction with split payment metadata:", {
             splitPurseAmount,
             splitCustomerId,
-            hasMetadata: !!(splitPurseAmount && splitCustomerId)
+            hasMetadata: !!(splitPurseAmount && splitCustomerId),
+            bookingCharge,
           });
 
           const paystackPayload: any = {
@@ -1131,15 +1141,17 @@ serve(async (req) => {
                 split_customer_id: splitCustomerId,
               } : {}),
               service_amount: paymentAmount,
-              // processing_fee_rate: processingFeeRate,
-              // processing_fee_amount: processingFeeAmount,
-              // customer_charged_amount: customerChargedAmount,
+              platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
+              customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
               store_subaccount_code: storeSubaccountCode || "",
             },
           };
 
           if (storeSubaccountCode) {
             paystackPayload.subaccount = storeSubaccountCode;
+            if (bookingCharge.transactionChargeMinor > 0) {
+              paystackPayload.transaction_charge = bookingCharge.transactionChargeMinor;
+            }
           }
 
           console.log('Paystack payment initiation', paystackPayload)

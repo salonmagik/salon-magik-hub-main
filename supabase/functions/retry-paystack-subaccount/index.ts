@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, createPaystackSubaccount } from "../_shared/paystack-helpers.ts";
+import { getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -93,12 +94,13 @@ Deno.serve(async (req) => {
     try {
       const settlementBank = dest.destination_type === "bank" ? dest.bank_code! : dest.momo_provider!.toUpperCase();
       const accountNumber = dest.destination_type === "bank" ? dest.account_number! : dest.momo_number!;
+      const feeSettings = await getPaymentFeeSettings(serviceSupabase);
 
       const subaccountData = await createPaystackSubaccount(dest.currency, {
         business_name: tenant.name || `Salon ${dest.tenant_id}`,
         settlement_bank: settlementBank,
         account_number: accountNumber,
-        percentage_charge: tenant.platform_percentage_charge || 10,
+        percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent,
         primary_contact_email: user.email,
       });
 
