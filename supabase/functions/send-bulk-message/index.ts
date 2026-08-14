@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -316,6 +317,17 @@ const handler = async (req: Request): Promise<Response> => {
         creditsPerMessage * smsSegments,
         result
       );
+
+      const { data: creditsAfterBulk } = await supabase
+        .from("communication_credits")
+        .select("balance")
+        .eq("tenant_id", tenant.id)
+        .maybeSingle();
+      if (creditsAfterBulk) {
+        await checkAndAlertLowSmsBalance(supabase, tenant.id, creditsAfterBulk.balance, {
+          resendApiKey: Deno.env.get("RESEND_API_KEY"),
+        });
+      }
     } else if (channel === "email") {
       // Email: Process in batches of 10 to avoid timeouts
       await processBulkEmail(

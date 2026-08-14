@@ -4,6 +4,7 @@ import {
   validateCurrencyMatch,
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
+import { getSmsCreditPricing, findSmsCreditTier } from "../_shared/sms-credit-pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -220,7 +221,17 @@ Deno.serve(async (req) => {
       payableAmount = roundedOutstanding;
     }
 
+    let effectiveCredits = credits;
     if (intentType === "messaging_credit_purchase") {
+      // Never trust a client-supplied credit count or price — look up the
+      // real tier (bundle price + Arkesel cost + margin) server-side.
+      const pricing = await getSmsCreditPricing(supabase);
+      const tier = findSmsCreditTier(pricing, effectiveCurrency, amount);
+      if (!tier) {
+        return jsonResponse({ error: "Invalid bundle price for this currency" }, 400);
+      }
+      effectiveCredits = tier.credits;
+
       const { data: promoData, error: promoError } = await (supabase.rpc as any)("get_tenant_sales_promo_summary", {
         p_tenant_id: tenantId,
         p_surface: "credits",
@@ -306,7 +317,7 @@ Deno.serve(async (req) => {
           intent_type: intentType,
           customer_id: customerId || null,
           invoice_id: invoiceId || null,
-          credits: credits || null,
+          credits: effectiveCredits || null,
           promo_redemption_id: appliedPromo?.redemption_id || null,
           promo_code_id: appliedPromo?.promo_code_id || null,
         },
