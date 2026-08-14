@@ -3248,47 +3248,51 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</CardContent>
 				</Card>
 
-				<Card>
-					<CardHeader>
-						<CardTitle>When do you get paid?</CardTitle>
-						<CardDescription>
-							Choose whether Paystack pays your bank directly, or your earnings build up as a salon balance you withdraw yourself.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="grid gap-3 sm:grid-cols-2">
-						<button
-							type="button"
-							disabled={payoutModeSaving}
-							onClick={() => updatePayoutMode("automatic")}
-							className={`rounded-xl border p-4 text-left transition-colors ${
-								payoutMode === "automatic" ? "border-primary bg-primary/5" : "hover:border-primary/40"
-							}`}
-						>
-							<Zap className="mb-3 h-5 w-5 text-primary" />
-							<p className="text-sm font-medium">Automatic</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								Paystack pays your bank directly — about 1 business day after each payment clears (a Friday payment clears Monday).
-							</p>
-						</button>
-						<button
-							type="button"
-							disabled={payoutModeSaving}
-							onClick={() => updatePayoutMode("on_demand")}
-							className={`rounded-xl border p-4 text-left transition-colors ${
-								payoutMode === "on_demand" ? "border-primary bg-primary/5" : "hover:border-primary/40"
-							}`}
-						>
-							<Wallet className="mb-3 h-5 w-5 text-primary" />
-							<p className="text-sm font-medium">On-demand</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								Cleared payments build up in your salon balance. Withdraw whenever you like from Payouts.
-							</p>
-						</button>
-					</CardContent>
-				</Card>
+				{renderPayoutModeCard()}
 			</div>
 		);
 	};
+
+	const renderPayoutModeCard = () => (
+		<Card>
+			<CardHeader>
+				<CardTitle>When do you get paid?</CardTitle>
+				<CardDescription>
+					Choose whether Paystack pays your bank directly, or your earnings build up as a salon balance you withdraw yourself.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="grid gap-3 sm:grid-cols-2">
+				<button
+					type="button"
+					disabled={payoutModeSaving}
+					onClick={() => updatePayoutMode("automatic")}
+					className={`rounded-xl border p-4 text-left transition-colors ${
+						payoutMode === "automatic" ? "border-primary bg-primary/5" : "hover:border-primary/40"
+					}`}
+				>
+					<Zap className="mb-3 h-5 w-5 text-primary" />
+					<p className="text-sm font-medium">Automatic</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						Paystack pays your bank directly — about 1 business day after each payment clears (a Friday payment clears Monday).
+					</p>
+				</button>
+				<button
+					type="button"
+					disabled={payoutModeSaving}
+					onClick={() => updatePayoutMode("on_demand")}
+					className={`rounded-xl border p-4 text-left transition-colors ${
+						payoutMode === "on_demand" ? "border-primary bg-primary/5" : "hover:border-primary/40"
+					}`}
+				>
+					<Wallet className="mb-3 h-5 w-5 text-primary" />
+					<p className="text-sm font-medium">On-demand</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						Cleared payments build up in your salon balance. Withdraw whenever you like from Payouts.
+					</p>
+				</button>
+			</CardContent>
+		</Card>
+	);
 
 	const renderRolesTab = () => {
 		const roles = [
@@ -4477,8 +4481,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
 			{activeTab === "payout-destinations" && (
-				<div data-tour-id="tour-payout-destinations">
+				<div data-tour-id="tour-payout-destinations" className="space-y-6">
 					<PayoutDestinationsManager />
+					{renderPayoutModeCard()}
 				</div>
 			)}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}

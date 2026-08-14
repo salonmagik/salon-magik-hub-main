@@ -1020,8 +1020,8 @@ export default function AppointmentsPage() {
               Manage upcoming bookings and stay on top of today's schedule.
             </p>
           </div>
-          {/* Desktop actions (mobile/tablet use the floating + button) */}
-          <div className="hidden lg:flex gap-2 flex-shrink-0">
+          {/* Copy booking link — visible on every viewport, not just desktop */}
+          <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
             <Tooltip>
               <TooltipTrigger asChild>
                 {isOnlineBookingEnabled ? (
@@ -1030,7 +1030,7 @@ export default function AppointmentsPage() {
                     Copy booking link
                   </Button>
                 ) : (
-                  <a href="/salon/business-settings?tab=payments">
+                  <a href="/salon/business-settings?tab=payout-destinations">
                     <Button variant="outline" className="rounded-full">
                       <Link2 className="w-4 h-4 mr-2" />
                       Copy booking link
@@ -1041,9 +1041,11 @@ export default function AppointmentsPage() {
               <TooltipContent className="max-w-64 text-xs">
                 {isOnlineBookingEnabled
                   ? "Copy your salon's public booking page link."
-                  : "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payments settings."}
+                  : "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payout Destinations settings."}
               </TooltipContent>
             </Tooltip>
+            {/* Desktop actions (mobile/tablet use the floating + button) */}
+            <div className="hidden lg:flex gap-2">
             <Button
               variant="outline"
               className="rounded-full"
@@ -1061,6 +1063,7 @@ export default function AppointmentsPage() {
               <Plus className="w-4 h-4 mr-2" />
               Book appointment
             </Button>
+            </div>
           </div>
         </div>
 
