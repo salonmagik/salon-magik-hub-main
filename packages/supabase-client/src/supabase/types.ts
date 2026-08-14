@@ -5352,6 +5352,8 @@ export type Database = {
           paystack_subaccount_error: string | null
           paystack_subaccount_id: number | null
           paystack_subaccount_status: string | null
+          paystack_subaccount_verification_checked_at: string | null
+          paystack_subaccount_verified: boolean
           settlement_schedule: string
           tenant_id: string
         }
@@ -5375,6 +5377,8 @@ export type Database = {
           paystack_subaccount_error?: string | null
           paystack_subaccount_id?: number | null
           paystack_subaccount_status?: string | null
+          paystack_subaccount_verification_checked_at?: string | null
+          paystack_subaccount_verified?: boolean
           settlement_schedule?: string
           tenant_id: string
         }
@@ -5398,6 +5402,8 @@ export type Database = {
           paystack_subaccount_error?: string | null
           paystack_subaccount_id?: number | null
           paystack_subaccount_status?: string | null
+          paystack_subaccount_verification_checked_at?: string | null
+          paystack_subaccount_verified?: boolean
           settlement_schedule?: string
           tenant_id?: string
         }
@@ -7191,11 +7197,13 @@ export type Database = {
           pay_at_salon_enabled: boolean
           payment_setup_error: string | null
           payment_setup_status: Database["public"]["Enums"]["payment_setup_status"]
+          payout_mode: string
           paystack_authorization_code: string | null
           paystack_authorization_email: string | null
           paystack_customer_code: string | null
           plan: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge: number
+          platform_service_charge_borne_by_customer: boolean
           require_staff_selection: boolean
           show_contact_on_booking: boolean | null
           slot_capacity_default: number
@@ -7256,11 +7264,13 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           payment_setup_error?: string | null
           payment_setup_status?: Database["public"]["Enums"]["payment_setup_status"]
+          payout_mode?: string
           paystack_authorization_code?: string | null
           paystack_authorization_email?: string | null
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge?: number
+          platform_service_charge_borne_by_customer?: boolean
           require_staff_selection?: boolean
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
@@ -7321,11 +7331,13 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           payment_setup_error?: string | null
           payment_setup_status?: Database["public"]["Enums"]["payment_setup_status"]
+          payout_mode?: string
           paystack_authorization_code?: string | null
           paystack_authorization_email?: string | null
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge?: number
+          platform_service_charge_borne_by_customer?: boolean
           require_staff_selection?: boolean
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
@@ -8710,6 +8722,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      backoffice_update_payment_fee_settings: {
+        Args: {
+          p_challenge_id: string
+          p_customer_facing_fee_percentage: number
+          p_default_platform_service_charge_percentage: number
+          p_reason: string
+        }
+        Returns: Json
+      }
       backoffice_update_plan_with_features: {
         Args: {
           p_description: string
@@ -9197,6 +9218,7 @@ export type Database = {
         Returns: {
           amount: number
           appointment_id: string
+          charges: number
           created_at: string
           currency: string
           customer_id: string
@@ -9767,6 +9789,8 @@ export type Database = {
         | "pos"
         | "transfer"
         | "purse"
+        | "ussd"
+        | "qr"
       payment_setup_status:
         | "pending_bank_account"
         | "subaccount_pending"
@@ -9781,7 +9805,7 @@ export type Database = {
         | "refunded_full"
       payout_destination_type: "bank" | "mobile_money"
       refund_status: "pending" | "approved" | "rejected" | "completed"
-      refund_type: "original_method" | "store_credit" | "offline"
+      refund_type: "original_method" | "store_credit" | "offline" | "paystack"
       service_status: "active" | "inactive" | "archived"
       subscription_plan: "solo" | "studio" | "chain"
       subscription_status:
@@ -9965,6 +9989,8 @@ export const Constants = {
         "pos",
         "transfer",
         "purse",
+        "ussd",
+        "qr",
       ],
       payment_setup_status: [
         "pending_bank_account",
@@ -9982,7 +10008,7 @@ export const Constants = {
       ],
       payout_destination_type: ["bank", "mobile_money"],
       refund_status: ["pending", "approved", "rejected", "completed"],
-      refund_type: ["original_method", "store_credit", "offline"],
+      refund_type: ["original_method", "store_credit", "offline", "paystack"],
       service_status: ["active", "inactive", "archived"],
       subscription_plan: ["solo", "studio", "chain"],
       subscription_status: [

@@ -136,10 +136,10 @@ async function validateTenant(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   context: string
-): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null; logo_url?: string | null }> {
+): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null; logo_url?: string | null; payout_mode?: string | null }> {
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
-    .select("name, currency, platform_percentage_charge, logo_url")
+    .select("name, currency, platform_percentage_charge, logo_url, payout_mode")
     .eq("id", tenantId)
     .single();
 
@@ -583,36 +583,44 @@ export async function processWebhook(
               }
 
               try {
-                // Validate salon wallet currency matches tenant currency
-                await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
+                // "Automatic" salons get paid straight to their bank by
+                // Paystack's own settlement — their money never touches the
+                // internal wallet. Only "on_demand" salons accumulate a
+                // withdrawable balance here.
+                if (tenant.payout_mode === "on_demand") {
+                  // Validate salon wallet currency matches tenant currency
+                  await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
-                // Only gateway funds become immediately withdrawable. Paid
-                // customer-balance grants settle when the appointment completes;
-                // salon-issued store credit never increases payout balance.
-                const totalAmountForSalon = actualServiceAmount;
+                  // Only gateway funds become immediately withdrawable. Paid
+                  // customer-balance grants settle when the appointment completes;
+                  // salon-issued store credit never increases payout balance.
+                  const totalAmountForSalon = actualServiceAmount;
 
-                let finalCreditAmount = totalAmountForSalon;
-                if (tenant.platform_percentage_charge) {
-                   finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
-                }
+                  let finalCreditAmount = totalAmountForSalon;
+                  if (tenant.platform_percentage_charge) {
+                     finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
+                  }
 
-                console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
+                  console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
 
-                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                  p_tenant_id: primaryAppointment.tenant_id,
-                  p_entry_type: "salon_purse_credit_booking",
-                  p_reference_type: "appointment",
-                  p_reference_id: primaryAppointment.id,
-                  p_amount: finalCreditAmount,
-                  p_currency: tenant.currency,
-                  p_idempotency_key: `booking_${reference}`,
-                  p_gateway_reference: reference,
-                });
+                  const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                    p_tenant_id: primaryAppointment.tenant_id,
+                    p_entry_type: "salon_purse_credit_booking",
+                    p_reference_type: "appointment",
+                    p_reference_id: primaryAppointment.id,
+                    p_amount: finalCreditAmount,
+                    p_currency: tenant.currency,
+                    p_idempotency_key: `booking_${reference}`,
+                    p_gateway_reference: reference,
+                  });
 
-                if (creditError) {
-                  console.error("Error crediting salon purse:", creditError);
+                  if (creditError) {
+                    console.error("Error crediting salon purse:", creditError);
+                  } else {
+                    console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  }
                 } else {
-                  console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  console.log(`Tenant ${primaryAppointment.tenant_id} is on automatic payout — skipping internal wallet credit, Paystack settles directly.`);
                 }
               } catch (purseError) {
                 console.error("Exception crediting salon purse:", purseError);
@@ -746,27 +754,31 @@ export async function processWebhook(
                 console.error("Error updating invoice:", invoiceUpdateError);
               }
 
-              // Validate salon wallet currency matches tenant currency
-              await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
+              if (invoiceTenant.payout_mode === "on_demand") {
+                // Validate salon wallet currency matches tenant currency
+                await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
-              let finalCreditAmount = actualServiceAmount;
-              if (invoiceTenant.platform_percentage_charge) {
-                 finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
-              }
+                let finalCreditAmount = actualServiceAmount;
+                if (invoiceTenant.platform_percentage_charge) {
+                   finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
+                }
 
-              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                p_tenant_id: tenantId,
-                p_entry_type: "salon_purse_credit_invoice",
-                p_reference_type: "invoice",
-                p_reference_id: invoiceId,
-                p_amount: finalCreditAmount,
-                p_currency: invoiceTenant.currency,
-                p_idempotency_key: `invoice_${reference}`,
-                p_gateway_reference: reference,
-              });
+                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                  p_tenant_id: tenantId,
+                  p_entry_type: "salon_purse_credit_invoice",
+                  p_reference_type: "invoice",
+                  p_reference_id: invoiceId,
+                  p_amount: finalCreditAmount,
+                  p_currency: invoiceTenant.currency,
+                  p_idempotency_key: `invoice_${reference}`,
+                  p_gateway_reference: reference,
+                });
 
-              if (creditError) {
-                console.error("Error crediting salon purse for invoice:", creditError);
+                if (creditError) {
+                  console.error("Error crediting salon purse for invoice:", creditError);
+                }
+              } else {
+                console.log(`Tenant ${tenantId} is on automatic payout — skipping internal wallet credit for invoice payment.`);
               }
             } catch (invoiceError) {
               console.error("Exception processing invoice payment:", invoiceError);

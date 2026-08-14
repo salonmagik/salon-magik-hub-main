@@ -68,6 +68,7 @@ import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
+import { usePayoutMode } from "@/hooks/usePayoutMode";
 import { supabase } from "@/lib/supabase";
 import { endOfDay, endOfMonth, format, startOfDay, startOfMonth, subDays } from "date-fns";
 import { cn } from "@shared/utils";
@@ -177,6 +178,7 @@ export default function PaymentsPage() {
   const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
     canManagePayouts ? currentTenant?.id : undefined
   );
+  const { payoutMode } = usePayoutMode();
   const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
     canManagePayouts ? currentTenant?.id : undefined
   );
@@ -749,7 +751,7 @@ export default function PaymentsPage() {
                   <p className="text-2xl font-semibold mt-0.5">
                     {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
                   </p>
-                  {Number(walletAvailability?.pending ?? 0) > 0 && (
+                  {payoutMode === "on_demand" && Number(walletAvailability?.pending ?? 0) > 0 && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <p className="text-xs text-amber-700 mt-1 cursor-default">
@@ -763,6 +765,11 @@ export default function PaymentsPage() {
                           : ""}
                       </TooltipContent>
                     </Tooltip>
+                  )}
+                  {payoutMode === "automatic" && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      You're on automatic payouts — booking payments go straight to your bank, about 1 business day after each one clears.
+                    </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
                     Total wallet balance: {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}

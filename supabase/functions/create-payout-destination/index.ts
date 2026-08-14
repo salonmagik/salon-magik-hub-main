@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     // Fetch tenant details for subaccount creation
     const { data: tenant, error: tenantError } = await serviceSupabase
       .from("tenants")
-      .select("name, platform_percentage_charge")
+      .select("name, platform_percentage_charge, payout_mode")
       .eq("id", tenantId)
       .single();
 
@@ -175,6 +175,7 @@ Deno.serve(async (req) => {
           account_number: accountNumber!,
           percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent, // make sure percentage is in right format 0.5 is 0.5%
           primary_contact_email: user.email,
+          settlement_schedule: tenant.payout_mode === "on_demand" ? "manual" : "auto",
         });
 
         paystackSubaccountCode = subaccountData.subaccount_code;
@@ -231,6 +232,7 @@ Deno.serve(async (req) => {
           account_number: momoNumber!,
           percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent,
           primary_contact_email: user.email,
+          settlement_schedule: tenant.payout_mode === "on_demand" ? "manual" : "auto",
         });
 
         paystackSubaccountCode = subaccountData.subaccount_code;
@@ -293,6 +295,7 @@ Deno.serve(async (req) => {
         paystack_subaccount_code: paystackSubaccountCode,
         paystack_subaccount_id: paystackSubaccountId,
         paystack_subaccount_active: paystackSubaccountActive,
+        settlement_schedule: paystackSubaccountCode ? (tenant.payout_mode === "on_demand" ? "manual" : "auto") : null,
         paystack_subaccount_error: paystackSubaccountError,
         is_default: effectiveIsDefault,
       })

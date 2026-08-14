@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     // Fetch tenant details
     const { data: tenant, error: tenantError } = await serviceSupabase
       .from("tenants")
-      .select("name, platform_percentage_charge")
+      .select("name, platform_percentage_charge, payout_mode")
       .eq("id", dest.tenant_id)
       .single();
 
@@ -96,12 +96,14 @@ Deno.serve(async (req) => {
       const accountNumber = dest.destination_type === "bank" ? dest.account_number! : dest.momo_number!;
       const feeSettings = await getPaymentFeeSettings(serviceSupabase);
 
+      const settlementSchedule = tenant.payout_mode === "on_demand" ? "manual" : "auto";
       const subaccountData = await createPaystackSubaccount(dest.currency, {
         business_name: tenant.name || `Salon ${dest.tenant_id}`,
         settlement_bank: settlementBank,
         account_number: accountNumber,
         percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent,
         primary_contact_email: user.email,
+        settlement_schedule: settlementSchedule,
       });
 
       // Update destination
@@ -112,6 +114,7 @@ Deno.serve(async (req) => {
           paystack_subaccount_id: subaccountData.id,
           paystack_subaccount_active: subaccountData.active,
           paystack_subaccount_error: null,
+          settlement_schedule: settlementSchedule,
         })
         .eq("id", destinationId);
 
