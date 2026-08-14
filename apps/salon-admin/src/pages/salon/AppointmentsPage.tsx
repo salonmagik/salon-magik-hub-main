@@ -1026,14 +1026,12 @@ export default function AppointmentsPage() {
               <TooltipTrigger asChild>
                 {isOnlineBookingEnabled ? (
                   <Button variant="outline" className="rounded-full" onClick={handleCopyBookingLink}>
-                    <Link2 className="w-4 h-4 mr-2" />
-                    Copy booking link
+                    <Link2 className="w-4 h-4" />
                   </Button>
                 ) : (
                   <a href="/salon/business-settings?tab=payout-destinations">
                     <Button variant="outline" className="rounded-full">
-                      <Link2 className="w-4 h-4 mr-2" />
-                      Copy booking link
+                      <Link2 className="w-4 h-4" />
                     </Button>
                   </a>
                 )}
