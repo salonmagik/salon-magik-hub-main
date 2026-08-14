@@ -30,6 +30,7 @@ import {
   User,
   Clock,
   PauseCircle,
+  Wallet,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -471,7 +472,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         };
       }
       if (item.path === "/salon/transactions" && activeContextType === "owner_hub") {
-        return { ...item, label: "Cashflow & Payouts" };
+        return {
+          ...item,
+          label: "Cashflow & Payouts",
+          children: [
+            { label: "Cashflow", icon: CreditCard, path: "/salon/transactions?tab=all" },
+            { label: "Payouts", icon: Wallet, path: "/salon/transactions?tab=payouts" },
+          ],
+        };
       }
       return item;
     });
