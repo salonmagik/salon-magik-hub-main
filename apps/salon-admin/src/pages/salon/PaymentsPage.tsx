@@ -97,6 +97,8 @@ const methodLabels: Record<string, string> = {
   pos: "POS",
   transfer: "Transfer",
   purse: "Store Credit",
+  ussd: "USSD",
+  qr: "QR",
 };
 
 const statusStyles: Record<string, { bg: string; text: string; icon: any }> = {

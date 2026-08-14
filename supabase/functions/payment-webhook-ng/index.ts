@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
         reference?: string;
         status?: string;
         amount?: number;
+        channel?: string;
         metadata?: {
           appointment_id?: string;
           appointment_ids?: string;
@@ -136,6 +137,7 @@ Deno.serve(async (req) => {
         invoiceId: metadata?.invoice_id,
         credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
         amount: data.amount ? data.amount / 100 : undefined,
+        channel: data.channel,
         status: data.status,
         reference: data.reference,
         isDeposit: metadata?.is_deposit === true || metadata?.is_deposit === "true",

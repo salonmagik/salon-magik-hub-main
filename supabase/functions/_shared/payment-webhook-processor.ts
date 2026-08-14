@@ -6,6 +6,7 @@ import {
   sendResendEmail,
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
+import { mapPaystackChannelToPaymentMethod } from "./paystack-helpers.ts";
 
 export interface WebhookEvent {
   type: string;
@@ -21,6 +22,7 @@ export interface WebhookEvent {
     amount?: number;
     serviceAmount?: number;
     processingFeeAmount?: number;
+    channel?: string;
     status?: string;
     reference?: string;
     isDeposit?: boolean;
@@ -269,9 +271,10 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
 
       const actualServiceAmount = serviceAmount ?? amount;
+      const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
 
       // Subscription activation: payment was initiated from the upgrade/trial flow.
       // Activate the tenant immediately — Paystack handles recurring billing from here.
@@ -410,15 +413,19 @@ export async function processWebhook(
                 }
               }
 
-              // Create transaction record for card payment (grouped with purse if split payment)
+              // Create transaction record (grouped with purse if split payment).
+              // amount here is the true service price, not what Paystack
+              // actually charged the customer's card (which includes
+              // Paystack's own processing fee and Salon Magik's fees) — see
+              // actualServiceAmount above.
               await supabase.from("transactions").insert({
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
                 appointment_id: primaryAppointment.id,
                 type: isDeposit ? "deposit" : "payment",
-                amount,
+                amount: actualServiceAmount,
                 currency: tenant?.currency || "USD",
-                method: "card",
+                method: paymentMethod,
                 provider: event.gateway,
                 provider_reference: reference,
                 status: "completed",
@@ -428,11 +435,11 @@ export async function processWebhook(
 
               // Calculate total payment including purse for notifications
               const totalPaymentAmount = splitPurseAmount && splitPurseAmount > 0
-                ? amount + splitPurseAmount
-                : amount;
+                ? actualServiceAmount + splitPurseAmount
+                : actualServiceAmount;
               const paymentDescription = splitPurseAmount && splitPurseAmount > 0
-                ? `${tenant?.currency || ""} ${amount} (card) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
-                : `${tenant?.currency || ""} ${amount}`;
+                ? `${tenant?.currency || ""} ${actualServiceAmount} (${paymentMethod}) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
+                : `${tenant?.currency || ""} ${actualServiceAmount}`;
 
               await sendTransactionAlerts({
                 tenantId: primaryAppointment.tenant_id,
@@ -451,10 +458,10 @@ export async function processWebhook(
                   ${splitPurseAmount && splitPurseAmount > 0 ? `
                     <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Payment Breakdown:</strong></p>
                     <ul style="color: #4b5563; font-size: 16px; line-height: 1.6;">
-                      <li>Card payment: ${tenant?.currency || "USD"} ${amount}</li>
+                      <li>${paymentMethod} payment: ${tenant?.currency || "USD"} ${actualServiceAmount}</li>
                       <li>Store credit: ${tenant?.currency || "USD"} ${splitPurseAmount}</li>
                     </ul>
-                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>`}
+                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${actualServiceAmount}</p>`}
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
                 `,
@@ -514,7 +521,7 @@ export async function processWebhook(
                             <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
                             <ul>
                               <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
-                              <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
+                              <li><strong>Amount Paid:</strong> ${tenant.currency} ${actualServiceAmount}</li>
                               <li><strong>Gateway:</strong> ${event.gateway}</li>
                               <li><strong>Appointments:</strong> ${appointments.length}</li>
                             </ul>

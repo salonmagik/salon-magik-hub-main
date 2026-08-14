@@ -136,6 +136,32 @@ export function getCountryForCurrency(currency: string): string | null {
 }
 
 /**
+ * Maps Paystack's real payment channel (from a transaction's `channel`
+ * field, on both the webhook payload and the verify response) to our
+ * payment_method enum. Every transaction used to be recorded as "card"
+ * regardless of how the customer actually paid; Paystack tells us the real
+ * channel, we just weren't reading it.
+ */
+export function mapPaystackChannelToPaymentMethod(channel: string | null | undefined): string {
+  switch (channel) {
+    case "card":
+      return "card";
+    case "bank":
+    case "bank_transfer":
+    case "eft":
+      return "transfer";
+    case "mobile_money":
+      return "mobile_money";
+    case "ussd":
+      return "ussd";
+    case "qr":
+      return "qr";
+    default:
+      return "card";
+  }
+}
+
+/**
  * Payload for creating a Paystack subaccount.
  */
 export interface CreateSubaccountPayload {
