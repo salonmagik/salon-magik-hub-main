@@ -62,6 +62,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import {
   Popover,
   PopoverContent,
@@ -801,7 +803,7 @@ export default function SalonsOverviewPage() {
                 Review branch-level transaction performance for this period.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
               {insightLocations.length > 1 && (
                 <div className="flex flex-wrap gap-2">
                   {insightLocations.map((location) => (

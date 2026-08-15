@@ -1,6 +1,8 @@
 import { type ReactNode } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Button } from "@ui/button";
 
 export interface PaymentSuccessModalProps {
@@ -30,7 +32,7 @@ export function PaymentSuccessModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-sm">
-        <div className="flex flex-col items-center gap-4 pt-2 pb-1 text-center">
+        <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center gap-4")}>
           {/* Concentric circles + check */}
           <div className="flex h-24 w-24 items-center justify-center rounded-full bg-green-50">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">

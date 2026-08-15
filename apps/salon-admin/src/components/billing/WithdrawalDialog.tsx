@@ -26,6 +26,8 @@ import {
 import { Alert, AlertDescription } from "@ui/alert";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { Loader2, AlertCircle, Wallet, Info } from "lucide-react";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface WithdrawalDialogProps {
   open: boolean;
@@ -158,11 +160,11 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
         </DialogHeader>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-8">
+          <div className={cn(DIALOG_BODY_PADDING, "flex items-center justify-center")}>
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="space-y-4 py-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             {/* Wallet Balance */}
             <div className="rounded-lg border bg-muted/50 p-4">
               <div className="flex items-center gap-1">

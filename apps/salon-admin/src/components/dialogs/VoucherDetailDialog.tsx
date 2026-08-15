@@ -1,9 +1,12 @@
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
@@ -131,7 +134,7 @@ export function VoucherDetailDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           {/* Balance Overview */}
           <div className="p-4 bg-muted rounded-lg">
             <div className="flex items-baseline justify-between mb-2">
@@ -214,36 +217,34 @@ export function VoucherDetailDialog({
             )}
           </div>
 
-          <Separator />
-
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="flex-1" onClick={onEdit}>
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
-            
-            {canManage && voucher.status === "active" && (
-              <Button
-                variant="outline"
-                onClick={onDiscontinue}
-              >
-                <Ban className="w-4 h-4 mr-2" />
-                Discontinue
-              </Button>
-            )}
-            
-            {canManage && voucher.balance === voucher.amount && (
-              <Button
-                variant="outline"
-                className="text-destructive hover:text-destructive"
-                onClick={onDelete}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
         </div>
+
+        <DialogFooter className="flex-row items-center gap-2 sm:justify-start">
+          <Button variant="outline" className="flex-1" onClick={onEdit}>
+            <Edit className="w-4 h-4 mr-2" />
+            Edit
+          </Button>
+
+          {canManage && voucher.status === "active" && (
+            <Button
+              variant="outline"
+              onClick={onDiscontinue}
+            >
+              <Ban className="w-4 h-4 mr-2" />
+              Discontinue
+            </Button>
+          )}
+
+          {canManage && voucher.balance === voucher.amount && (
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

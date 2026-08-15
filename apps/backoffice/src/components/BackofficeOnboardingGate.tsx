@@ -21,6 +21,8 @@ import {
 } from "@ui/dialog";
 import { useToast } from "@ui/ui/use-toast";
 import { CheckCircle2, Copy, Eye, EyeOff, X } from "lucide-react";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 const BACKOFFICE_2FA_REMINDER_DISMISSED_KEY = "backoffice_2fa_reminder_dismissed";
 
@@ -235,7 +237,8 @@ export function BackofficeOnboardingGate() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
 
-              <form onSubmit={handlePasswordChange} className="space-y-4">
+              <form onSubmit={handlePasswordChange}>
+              <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">New password</label>
                   <div className="relative">
@@ -293,6 +296,7 @@ export function BackofficeOnboardingGate() {
                 </div>
 
                 {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+              </div>
 
                 <AlertDialogFooter>
                   <Button type="submit" disabled={!canSubmitPassword} className="w-full">
@@ -340,7 +344,7 @@ export function BackofficeOnboardingGate() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             {otpauthUrl && (
               <div className="rounded-md bg-muted p-4 text-center">
                 <div className="flex justify-center">

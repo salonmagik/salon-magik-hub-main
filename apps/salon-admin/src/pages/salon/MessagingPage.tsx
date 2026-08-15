@@ -21,6 +21,7 @@ import { Badge } from "@ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Alert, AlertDescription } from "@ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
@@ -2109,7 +2110,7 @@ export default function MessagingPage() {
                 Send a message to one customer or a whole group in just a few clicks.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 text-sm text-muted-foreground">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-4 text-sm text-muted-foreground")}>
               <div className="rounded-2xl border bg-muted/20 p-3.5">
                 <div className="font-medium text-foreground">Pick who should receive this</div>
                 <div className="mt-1">Choose one specific customer or a group segment like VIPs, inactive customers, or everyone.</div>
@@ -2134,7 +2135,7 @@ export default function MessagingPage() {
                 Each salon can keep up to 3 reusable broadcast templates.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-2")}>
               <Label htmlFor="reusable-template-name">Template name</Label>
               <Input
                 id="reusable-template-name"

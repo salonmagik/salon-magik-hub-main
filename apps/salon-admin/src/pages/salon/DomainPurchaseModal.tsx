@@ -13,6 +13,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import {
   Select,
   SelectContent,
@@ -138,10 +140,10 @@ export function DomainPurchaseModal({
               Your order for {domain} has been placed.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             {purchaseResult.checkout_url ? (
               <div className="p-4 bg-muted/50 rounded-lg text-sm">
-                <p className="mb-4">Please complete your payment securely via Stripe.</p>
+                <p className="mb-4">Please complete your payment securely to finish your domain purchase.</p>
                 <Button 
                   className="w-full" 
                   onClick={() => window.location.href = purchaseResult.checkout_url}
@@ -194,7 +196,8 @@ export function DomainPurchaseModal({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
@@ -375,8 +378,9 @@ export function DomainPurchaseModal({
                 )}
               />
             </div>
+          </div>
 
-            <DialogFooter className="mt-6">
+            <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>

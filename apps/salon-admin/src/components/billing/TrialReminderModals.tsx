@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTrialEnforcement } from "@/hooks/useTrialEnforcement";
 import { usePromoTrialBonusEligibility } from "@/hooks/usePromoTrialBonus";
 import { usePermissions } from "@/hooks/usePermissions";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 type Threshold = "7d" | "3d" | "24h";
 
@@ -107,16 +108,17 @@ export function TrialReminderModals() {
           <DialogTitle className="font-serif text-xl">{c.title}</DialogTitle>
         </DialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         <p className="text-sm text-muted-foreground">{c.body}</p>
 
         {showPromoMention && (
-          <div className="rounded-[10px] bg-primary/10 px-3.5 py-3 text-[13px] text-primary">
+          <div className="mt-4 rounded-[10px] bg-primary/10 px-3.5 py-3 text-[13px] text-primary">
             🎁 Got a promo code? Apply it now for{" "}
             <b className="font-semibold">+{promoConfig.bonusDays} extra trial days</b> on top of your plan.
           </div>
         )}
 
-        <div className="flex flex-col gap-2 pt-2">
+        <div className="flex flex-col gap-2 pt-4">
           <Button onClick={handleUpgrade} disabled={isLoading} className="w-full">
             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Upgrade my plan
@@ -128,6 +130,7 @@ export function TrialReminderModals() {
           >
             {activeThreshold === "24h" ? "I understand" : "Remind me later"}
           </button>
+        </div>
         </div>
       </DialogContent>
     </Dialog>

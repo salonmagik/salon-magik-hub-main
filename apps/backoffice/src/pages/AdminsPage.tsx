@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import {
   useBackofficeAuth,
   useBackofficeUsers,
@@ -445,7 +447,7 @@ export default function AdminsPage() {
                       Invite a team member and assign a role.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-2">
+                  <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
                     <label className="flex items-center gap-2 text-sm">
                       <Checkbox
                         checked={newIsSalesAgent}
@@ -751,7 +753,7 @@ export default function AdminsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
               <div className="space-y-2">
                 <Label>Role Name</Label>
                 <Input value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="e.g. Sales Operator" />
@@ -832,7 +834,7 @@ export default function AdminsPage() {
                 Assign a role for {permissionsUser ? buildMemberName(permissionsUser) : "member"}.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-2")}>
               <Label>Role</Label>
               <Select value={selectedPermissionsRoleId} onValueChange={setSelectedPermissionsRoleId}>
                 <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
@@ -861,7 +863,7 @@ export default function AdminsPage() {
                 Update profile and KYC for {selectedTeamMember ? buildMemberName(selectedTeamMember) : "team member"}.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Country</Label>
@@ -942,6 +944,7 @@ export default function AdminsPage() {
             <DialogHeader>
               <DialogTitle>KYC</DialogTitle>
             </DialogHeader>
+            <div className={DIALOG_BODY_PADDING}>
             {selectedAgentProfile ? (
               <div className="space-y-2 text-sm">
                 <p><span className="font-medium">Document type:</span> {selectedKycRow?.national_id_type || "Not set"}</p>
@@ -958,6 +961,7 @@ export default function AdminsPage() {
             ) : (
               <p className="text-sm text-muted-foreground">No profile found for this member.</p>
             )}
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -966,6 +970,7 @@ export default function AdminsPage() {
             <DialogHeader>
               <DialogTitle>Conversions & Commissions</DialogTitle>
             </DialogHeader>
+            <div className={DIALOG_BODY_PADDING}>
             {selectedAgentProfile ? (
               <Tabs defaultValue="redemptions">
                 <TabsList>
@@ -994,6 +999,7 @@ export default function AdminsPage() {
             ) : (
               <p className="text-sm text-muted-foreground">No profile found for this member.</p>
             )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>

@@ -137,7 +137,7 @@ serve(async (req) => {
         proposed_message,
         approval_reason,
         tenant:tenants(id, name, currency, logo_url, contact_phone),
-        customer:customers(id, full_name, email),
+        customer:customers!appointments_customer_id_fkey(id, full_name, email),
         services:appointment_services(service_name),
         products:appointment_products(product_name, quantity)
       `)

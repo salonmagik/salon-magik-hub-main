@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { cn } from "@shared/utils";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { InviteStaffDialog } from "@/components/dialogs/InviteStaffDialog";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { useStaff, type StaffMember } from "@/hooks/useStaff";
@@ -1421,7 +1422,7 @@ export default function StaffPage() {
 			/>
 
 			<Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-				<DialogContent className="max-h-[90vh] overflow-y-auto rounded-[22px] border-0 p-5 shadow-2xl sm:max-w-[680px] sm:p-8 sm:px-[34px]">
+				<DialogContent className="max-h-[90vh] rounded-[22px] border-0 sm:max-w-[680px]">
 					<DialogHeader className="pr-8 text-left">
 						<DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px]">
 							Team member
@@ -1430,6 +1431,7 @@ export default function StaffPage() {
 							View details and edit profile, locations, role, and permissions.
 						</DialogDescription>
 					</DialogHeader>
+					<div className={DIALOG_BODY_PADDING}>
 					<Tabs
 						value={memberDialogTab}
 						onValueChange={(value) =>
@@ -1766,7 +1768,8 @@ export default function StaffPage() {
 							)}
 						</TabsContent>
 					</Tabs>
-					<DialogFooter className="gap-2 pt-1">
+					</div>
+					<DialogFooter className="gap-2">
 						<Button
 							variant="outline"
 							className="h-11 rounded-full border-black/10 px-5"

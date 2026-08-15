@@ -40,6 +40,8 @@ import { useToast } from "@ui/ui/use-toast";
 import { AuthPhoneInput } from "@/components/auth/AuthPhoneInput";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 import { getFunctionErrorMessage } from "@shared/function-errors";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
@@ -348,7 +350,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
 
         {cropUrl ? (
           /* ── Crop view ── */
-          <div className="flex flex-col items-center gap-4 py-1">
+          <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center gap-4")}>
             <p className="text-xs text-muted-foreground">Drag to reposition · scroll to zoom</p>
             <div
               className="relative overflow-hidden rounded-full border-2 border-primary cursor-grab active:cursor-grabbing select-none"
@@ -407,7 +409,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
           </div>
         ) : (
           /* ── Tabs view ── */
-          <Tabs defaultValue="profile" className="w-full">
+          <Tabs defaultValue="profile" className={cn(DIALOG_BODY_PADDING, "w-full")}>
             <TabsList className="w-full mb-4">
               <TabsTrigger value="profile" className="flex-1">Profile</TabsTrigger>
               <TabsTrigger value="sessions" className="flex-1 gap-1.5">

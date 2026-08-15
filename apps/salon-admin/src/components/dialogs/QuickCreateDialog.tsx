@@ -102,7 +102,10 @@ export function QuickCreateDialog({ open, onOpenChange }: QuickCreateDialogProps
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto p-5 sm:max-w-[580px] sm:p-7">
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto p-5 sm:max-w-[580px] sm:p-7"
+          closeButtonClassName="text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+        >
           {/* Header */}
           <div className="mb-5">
             <DialogTitle className="text-[28px] font-bold tracking-tight text-foreground leading-tight">

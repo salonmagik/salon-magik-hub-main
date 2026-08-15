@@ -9,6 +9,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Button } from "@ui/button";
 import { Label } from "@ui/label";
 import { Input } from "@ui/input";
@@ -161,7 +163,7 @@ export function PurseTopupDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-6")}>
           {/* Predefined amounts */}
           <div className="space-y-2">
             <Label>Select Amount</Label>

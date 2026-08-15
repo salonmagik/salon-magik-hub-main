@@ -6,12 +6,13 @@ import {
   getTenantNotificationSettings,
   sendResendEmail,
 } from "../_shared/salon-notifications.ts";
-import { heading, paragraph, EMAIL_STYLES } from "../_shared/email-template.ts";
+import { heading, paragraph, createButton, EMAIL_STYLES } from "../_shared/email-template.ts";
 import {
   getPaystackKeyForCurrency,
   validateCurrencyMatch,
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
+import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -82,7 +83,6 @@ interface BookingRequest {
   paymentIsDeposit?: boolean;
   paymentSuccessUrl?: string;
   paymentCancelUrl?: string;
-  preferredPaymentGateway?: "stripe" | "paystack";
   // Split payment fields
   splitPurseAmount?: number;
   splitCustomerId?: string;
@@ -182,7 +182,6 @@ serve(async (req) => {
       paymentIsDeposit = false,
       paymentSuccessUrl,
       paymentCancelUrl,
-      preferredPaymentGateway,
       splitPurseAmount,
       splitCustomerId,
       processPursePayment = false,
@@ -193,7 +192,6 @@ serve(async (req) => {
       createPaymentSession,
       paymentAmount,
       paymentCurrency,
-      preferredPaymentGateway,
       paymentSuccessUrl
     });
 
@@ -206,7 +204,7 @@ serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff, payment_setup_status")
+      .select("id, name, online_booking_enabled, auto_confirm_bookings, currency, country, allow_staff_selection, require_staff_selection, auto_assign_staff, payment_setup_status, platform_percentage_charge, platform_service_charge_borne_by_customer")
       .eq("id", tenantId)
       .eq("online_booking_enabled", true)
       .single();
@@ -532,6 +530,67 @@ serve(async (req) => {
     const approvalRequired = tenant.auto_confirm_bookings === false;
     let allocatedPromotionDiscount = 0;
 
+    // Gift recipients previously got no account and no notification — a
+    // recipient had no customers row, so auth-resolve-identifier correctly
+    // (if confusingly, from their side) reported "no account found" when
+    // they tried to log into the client portal, and the appointment itself
+    // only ever recorded their name as a JSON string, never a real link.
+    // Resolved in a pre-pass (deduped by email, since one cart can gift
+    // several items to the same person) so every gifted appointment created
+    // below can be tagged with a real gift_recipient_customer_id.
+    const giftRecipientsToNotify = new Map<
+      string,
+      { recipient: GiftRecipient; customerId: string; itemNames: string[] }
+    >();
+
+    for (const item of items) {
+      const recipient = item.isGift ? item.giftRecipient : null;
+      if (!recipient?.email) continue;
+
+      const key = normalizeEmail(recipient.email);
+      if (giftRecipientsToNotify.has(key)) continue;
+
+      // Matched by email only (not the AND email+phone match used for the
+      // booker elsewhere in this function) since a gift recipient's phone
+      // is optional.
+      const { data: existingRecipientCustomers, error: lookupError } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("email", key)
+        .neq("status", "deleted")
+        .limit(1);
+
+      if (lookupError) {
+        console.error("Failed to look up customer record for gift recipient:", lookupError);
+        continue;
+      }
+
+      let recipientCustomerId = existingRecipientCustomers?.[0]?.id as string | undefined;
+
+      if (!recipientCustomerId) {
+        const recipientFullName = `${recipient.firstName} ${recipient.lastName}`.trim();
+        const { data: newRecipientCustomer, error: insertError } = await supabase
+          .from("customers")
+          .insert({
+            tenant_id: tenantId,
+            full_name: recipientFullName || "Gift Recipient",
+            email: key,
+            phone: recipient.phone?.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (insertError || !newRecipientCustomer) {
+          console.error("Failed to create customer record for gift recipient:", insertError);
+          continue;
+        }
+        recipientCustomerId = newRecipientCustomer.id;
+      }
+
+      giftRecipientsToNotify.set(key, { recipient, customerId: recipientCustomerId, itemNames: [] });
+    }
+
     for (const [itemIndex, item] of items.entries()) {
       if (!item.locationId) {
         return new Response(
@@ -631,6 +690,10 @@ serve(async (req) => {
       }
 
       const recipient = item.isGift ? item.giftRecipient : null;
+      const recipientEntry = recipient?.email ? giftRecipientsToNotify.get(normalizeEmail(recipient.email)) : undefined;
+      if (recipientEntry) {
+        recipientEntry.itemNames.push(item.name);
+      }
       const deliveryAddress =
         item.type === "product" && item.fulfillmentType === "delivery"
           ? item.isGift
@@ -687,6 +750,7 @@ serve(async (req) => {
           scheduled_end: scheduledEnd,
           is_unscheduled: !scheduledStart,
           is_gifted: item.isGift,
+          gift_recipient_customer_id: recipientEntry?.customerId ?? null,
           status: "scheduled",
           payment_status: "unpaid",
           confirmation_status: approvalRequired ? "pending" : "confirmed",
@@ -833,6 +897,7 @@ serve(async (req) => {
       description: `${customerFullName} placed a booking for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
       entityId: primaryAppointmentId,
       urgent: approvalRequired,
+      isGifted: items.some((item) => item.isGift),
     });
 
     if (customer.email) {
@@ -854,6 +919,43 @@ serve(async (req) => {
             : "") +
           paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
       });
+    }
+
+    // Tell each gift recipient about their gift — their customer record
+    // (and the appointments' gift_recipient_customer_id links to it) was
+    // already created in the pre-pass above, before the appointment loop.
+    if (giftRecipientsToNotify.size > 0) {
+      const clientPortalBase = (
+        Deno.env.get("CLIENT_PORTAL_URL") ||
+        Deno.env.get("MANAGE_BOOKINGS_URL") ||
+        Deno.env.get("BASE_URL") ||
+        "https://app.salonmagik.com"
+      ).replace(/\/+$/, "");
+
+      for (const { recipient, itemNames } of giftRecipientsToNotify.values()) {
+        const recipientEmail = normalizeEmail(recipient.email);
+        const itemsListHtml = itemNames.map((name) => `<li>${name}</li>`).join("");
+        const senderLine = recipient.hideSender
+          ? paragraph("Someone has sent you a gift!")
+          : paragraph(`<strong>${customerFullName}</strong> has sent you a gift!`);
+
+        await sendResendEmail({
+          resendApiKey,
+          fromEmail: resendFromEmail,
+          to: [recipientEmail],
+          subject: `You've been gifted at ${tenant.name}!`,
+          salonName: tenant.name,
+          htmlContent:
+            heading("You've received a gift") +
+            senderLine +
+            paragraph(`They booked the following for you at <strong>${tenant.name}</strong>:`) +
+            `<ul style="padding-left: 20px; color: ${EMAIL_STYLES.textColor};">${itemsListHtml}</ul>` +
+            (recipient.message ? paragraph(`<em>“${recipient.message}”</em>`) : "") +
+            paragraph(`<strong>Booking reference:</strong> ${reference}`) +
+            paragraph(`Log into the client portal with this email address (<strong>${recipientEmail}</strong>) to view your gift and manage your visit.`) +
+            createButton("Log in to view your gift", `${clientPortalBase}/login`),
+        });
+      }
     }
 
     const notificationSettings = await getTenantNotificationSettings(supabase, tenantId);
@@ -893,7 +995,6 @@ serve(async (req) => {
     if (!approvalRequired && createPaymentSession && paymentAmount && paymentAmount > 0) {
       try {
         console.log("Creating payment session...");
-        const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
 
         // Determine effective currency with fallback
         const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, tenant.currency);
@@ -914,80 +1015,65 @@ serve(async (req) => {
           );
         }
 
-        // Determine gateway based on preference or region
-        const isPaystackRegion = ["NG", "GH", "Nigeria", "Ghana"].includes(tenant.country || "") ||
-          ["NGN", "GHS"].includes(effectiveCurrency.toUpperCase());
-        const usePaystack = preferredPaymentGateway
-          ? preferredPaymentGateway === "paystack"
-          : isPaystackRegion;
-
-        // Get currency-specific Paystack key if needed
-        let paystackSecretKey: string | null = null;
-        if (usePaystack) {
-          const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
-          if (paystackKeyResult.error || !paystackKeyResult.key) {
-            return new Response(
-              JSON.stringify({
-                error: paystackKeyResult.error || "Paystack not configured for this currency"
-              }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          paystackSecretKey = paystackKeyResult.key;
+        // Get currency-specific Paystack key
+        const paystackKeyResult = getPaystackKeyForCurrency(effectiveCurrency);
+        if (paystackKeyResult.error || !paystackKeyResult.key) {
+          return new Response(
+            JSON.stringify({
+              error: paystackKeyResult.error || "Paystack not configured for this currency"
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
+        const paystackSecretKey = paystackKeyResult.key;
 
         console.log("Payment gateway selection:", {
-          usePaystack,
-          isPaystackRegion,
-          preferredPaymentGateway,
           hasPaystackKey: !!paystackSecretKey,
-          hasStripeKey: !!stripeSecretKey,
           tenantCountry: tenant.country,
           effectiveCurrency
         });
 
-        // Validate that we have the required secret key for the selected gateway
-        if (usePaystack && !paystackSecretKey) {
-          return new Response(
-            JSON.stringify({
-              error: "Paystack payment is not configured. Please contact the salon or try a different payment method."
-            }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
         let storeSubaccountCode: string | null = null;
-        // let customerChargedAmount = paymentAmount;
-        // let processingFeeAmount = 0;
-        // const processingFeeRate = 0.01;
 
-        if (usePaystack) {
-          const { data: payoutDest } = await supabase
+        {
+          const { data: payoutDest, error: payoutDestError } = await supabase
             .from("salon_payout_destinations")
             .select("paystack_subaccount_code")
             .eq("tenant_id", tenantId)
             .eq("is_default", true)
-            .single();
+            .maybeSingle();
+
+          if (payoutDestError) {
+            console.error("Error looking up default payout destination:", payoutDestError);
+          }
 
           if (payoutDest?.paystack_subaccount_code) {
             storeSubaccountCode = payoutDest.paystack_subaccount_code;
-            // processingFeeAmount = parseFloat((paymentAmount * processingFeeRate).toFixed(2));
-            // customerChargedAmount = paymentAmount + processingFeeAmount;
+          } else {
+            // No default destination, or it has no subaccount yet — the
+            // charge will still go through, but undivided into Salon
+            // Magik's own Paystack account instead of splitting to the
+            // salon. That used to happen silently; log it loudly so it
+            // shows up in function logs instead of only in a bank
+            // statement weeks later.
+            console.error("No usable payout subaccount for tenant — booking payment will NOT split to the salon.", {
+              tenantId,
+              hasDestinationRow: !!payoutDest,
+            });
           }
-        }
-
-        if (!usePaystack && !stripeSecretKey) {
-          console.error("Stripe key not configured but Stripe was selected");
-          return new Response(
-            JSON.stringify({
-              error: "Stripe payment is not configured. Please contact the salon or try a different payment method."
-            }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
         }
 
         const primaryAppointmentId = createdAppointmentIds[0];
         const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
+
+        const feeSettings = await getPaymentFeeSettings(supabase);
+        const bookingCharge = computeBookingCharge({
+          servicePrice: paymentAmount,
+          platformServiceChargePercent: Number(tenant.platform_percentage_charge ?? feeSettings.defaultPlatformServiceChargePercent),
+          customerFacingFeePercent: feeSettings.customerFacingFeePercent,
+          serviceChargeBorneByCustomer: Boolean(tenant.platform_service_charge_borne_by_customer),
+          hasSubaccount: Boolean(storeSubaccountCode),
+        });
 
         // Store payment intent
         const { data: paymentIntent, error: paymentIntentError } = await supabase
@@ -999,13 +1085,17 @@ serve(async (req) => {
             currency: effectiveCurrency.toUpperCase(),
             customer_email: customer.email,
             customer_name: `${customer.firstName} ${customer.lastName}`,
-            gateway: usePaystack ? "paystack" : "stripe",
+            gateway: "paystack",
             is_deposit: paymentIsDeposit,
             status: "pending",
-            paystack_reference: usePaystack ? sessionReference : null,
+            paystack_reference: sessionReference,
             intent_type: "appointment_payment",
             metadata: {
               appointment_ids: createdAppointmentIds,
+              service_amount: paymentAmount,
+              platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
+              customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
+              amount_charged_to_paystack: bookingCharge.amountToChargePaystack,
             },
           })
           .select("id")
@@ -1021,14 +1111,15 @@ serve(async (req) => {
           );
         }
 
-        if (usePaystack && paystackSecretKey) {
+        {
           // Create Paystack transaction
-          const amountInMinorUnits = Math.round(paymentAmount * 100);
+          const amountInMinorUnits = Math.round(bookingCharge.amountToChargePaystack * 100);
 
           console.log("Creating Paystack transaction with split payment metadata:", {
             splitPurseAmount,
             splitCustomerId,
-            hasMetadata: !!(splitPurseAmount && splitCustomerId)
+            hasMetadata: !!(splitPurseAmount && splitCustomerId),
+            bookingCharge,
           });
 
           const paystackPayload: any = {
@@ -1050,15 +1141,17 @@ serve(async (req) => {
                 split_customer_id: splitCustomerId,
               } : {}),
               service_amount: paymentAmount,
-              // processing_fee_rate: processingFeeRate,
-              // processing_fee_amount: processingFeeAmount,
-              // customer_charged_amount: customerChargedAmount,
+              platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
+              customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
               store_subaccount_code: storeSubaccountCode || "",
             },
           };
 
           if (storeSubaccountCode) {
             paystackPayload.subaccount = storeSubaccountCode;
+            if (bookingCharge.transactionChargeMinor > 0) {
+              paystackPayload.transaction_charge = bookingCharge.transactionChargeMinor;
+            }
           }
 
           console.log('Paystack payment initiation', paystackPayload)
@@ -1104,67 +1197,6 @@ serve(async (req) => {
             return new Response(
               JSON.stringify({
                 error: errorMessage
-              }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-        } else if (!usePaystack && stripeSecretKey) {
-          // Create Stripe checkout session
-          const amountInCents = Math.round(paymentAmount * 100);
-          const stripeResponse = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${stripeSecretKey}`,
-              "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: new URLSearchParams({
-              "mode": "payment",
-              "payment_method_types[0]": "card",
-              "line_items[0][price_data][currency]": (paymentCurrency || tenant.currency || "USD").toLowerCase(),
-              "line_items[0][price_data][product_data][name]": paymentDescription || "Booking Payment",
-              "line_items[0][price_data][unit_amount]": amountInCents.toString(),
-              "line_items[0][quantity]": "1",
-              "customer_email": customer.email,
-              "success_url": `${paymentSuccessUrl}?session_id={CHECKOUT_SESSION_ID}`,
-              "cancel_url": paymentCancelUrl || paymentSuccessUrl || "",
-              "metadata[appointment_id]": primaryAppointmentId,
-              "metadata[appointment_ids]": JSON.stringify(createdAppointmentIds),
-              "metadata[payment_intent_id]": paymentIntent?.id || "",
-              "metadata[tenant_id]": tenantId,
-              "metadata[is_deposit]": paymentIsDeposit ? "true" : "false",
-              "metadata[intent_type]": "appointment_payment",
-              ...(splitPurseAmount && splitCustomerId ? {
-                "metadata[split_purse_amount]": splitPurseAmount.toString(),
-                "metadata[split_customer_id]": splitCustomerId,
-              } : {}),
-            }),
-          });
-
-          const stripeData = await stripeResponse.json();
-          console.log("Stripe API response:", {
-            ok: stripeResponse.ok,
-            status: stripeResponse.status,
-            data: stripeData
-          });
-
-          if (stripeResponse.ok) {
-            // Update payment intent with session ID
-            if (paymentIntent?.id) {
-              await supabase
-                .from("payment_intents")
-                .update({
-                  stripe_session_id: stripeData.id,
-                  status: "processing",
-                })
-                .eq("id", paymentIntent.id);
-            }
-            checkoutUrl = stripeData.url;
-            paymentGateway = "stripe";
-          } else {
-            console.error("Stripe payment session creation failed:", stripeData);
-            return new Response(
-              JSON.stringify({
-                error: `Payment initialization failed: ${stripeData.error?.message || "Unknown error"}`
               }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );

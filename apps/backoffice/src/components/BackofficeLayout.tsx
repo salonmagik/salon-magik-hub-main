@@ -43,6 +43,8 @@ import {
   Wallet,
   ShieldAlert,
   ArrowLeftRight,
+  Percent,
+  BadgeCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -79,6 +81,8 @@ const navItems: NavItem[] = [
   { href: "/comms-credits", label: "Comms Credits & Messages", icon: Wallet, pageKey: "comms_credits" },
   { href: "/flagged-signups", label: "Flagged Signups", icon: ShieldAlert, pageKey: "flagged_signups" },
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, pageKey: "transactions" },
+  { href: "/fees-margins", label: "Fees & Margins", icon: Percent, pageKey: "payment_fee_settings" },
+  { href: "/verification-queue", label: "Verification Queue", icon: BadgeCheck, pageKey: "verification_queue" },
   { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
   { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
   {

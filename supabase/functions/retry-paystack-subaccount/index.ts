@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, createPaystackSubaccount } from "../_shared/paystack-helpers.ts";
+import { getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,9 +70,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (dest.destination_type !== "bank") {
+    if (dest.destination_type !== "bank" && dest.destination_type !== "mobile_money") {
       return new Response(
-        JSON.stringify({ error: "Subaccounts are only for bank destinations" }),
+        JSON.stringify({ error: "Unsupported destination type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -79,7 +80,7 @@ Deno.serve(async (req) => {
     // Fetch tenant details
     const { data: tenant, error: tenantError } = await serviceSupabase
       .from("tenants")
-      .select("name, platform_percentage_charge")
+      .select("name, platform_percentage_charge, payout_mode")
       .eq("id", dest.tenant_id)
       .single();
 
@@ -91,12 +92,18 @@ Deno.serve(async (req) => {
     }
 
     try {
+      const settlementBank = dest.destination_type === "bank" ? dest.bank_code! : dest.momo_provider!.toUpperCase();
+      const accountNumber = dest.destination_type === "bank" ? dest.account_number! : dest.momo_number!;
+      const feeSettings = await getPaymentFeeSettings(serviceSupabase);
+
+      const settlementSchedule = tenant.payout_mode === "on_demand" ? "manual" : "auto";
       const subaccountData = await createPaystackSubaccount(dest.currency, {
         business_name: tenant.name || `Salon ${dest.tenant_id}`,
-        settlement_bank: dest.bank_code!,
-        account_number: dest.account_number!,
-        percentage_charge: tenant.platform_percentage_charge || 10,
+        settlement_bank: settlementBank,
+        account_number: accountNumber,
+        percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent,
         primary_contact_email: user.email,
+        settlement_schedule: settlementSchedule,
       });
 
       // Update destination
@@ -107,6 +114,7 @@ Deno.serve(async (req) => {
           paystack_subaccount_id: subaccountData.id,
           paystack_subaccount_active: subaccountData.active,
           paystack_subaccount_error: null,
+          settlement_schedule: settlementSchedule,
         })
         .eq("id", destinationId);
 

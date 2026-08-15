@@ -39,6 +39,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Popover, PopoverContent, PopoverTrigger } from "@ui/popover";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@ui/tabs";
@@ -99,6 +100,7 @@ import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinatio
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
+import { usePayoutMode } from "@/hooks/usePayoutMode";
 import {
 	useClaimTenantSalesPromo,
 	useTenantSalesPromo,
@@ -253,6 +255,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		string | null
 	>(null);
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
+	const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
 	const { staff, refetch: refetchStaff } = useStaff();
 	const [seatReleaseSelected, setSeatReleaseSelected] = useState<Set<string>>(new Set());
@@ -339,6 +342,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	// at the DB level too (trg_enforce_online_booking_requires_payout), this
 	// just disables the toggle with an explanation instead of a raw DB error.
 	const { destinations: payoutDestinations, isLoading: payoutDestinationsLoading } = usePayoutDestinations(currentTenant?.id);
+	const { payoutMode, isSaving: payoutModeSaving, updatePayoutMode } = usePayoutMode();
 	const hasPayoutDestination = payoutDestinations.length > 0;
 
 	// Seed the branches/seats inputs from entitlements, and re-seed whenever
@@ -577,6 +581,37 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		}
 	};
 
+	const handleUpdatePaymentMethod = async () => {
+		if (!currentTenant?.id) return;
+		setIsUpdatingPaymentMethod(true);
+		try {
+			const { data, error } = await supabase.functions.invoke(
+				"create-recurring-billing-retry-session",
+				{
+					body: {
+						tenantId: currentTenant.id,
+						successUrl: `${window.location.origin}/salon/subscription?billing=update_payment_method`,
+						cancelUrl: `${window.location.origin}/salon/subscription?billing=update_payment_method_cancelled`,
+					},
+				},
+			);
+			if (error) throw error;
+			if (data?.url) {
+				window.location.href = data.url;
+				return;
+			}
+			throw new Error("Could not start the checkout session.");
+		} catch (error) {
+			toast({
+				title: "Couldn't start payment update",
+				description:
+					(error as { message?: string })?.message || "Please try again.",
+				variant: "destructive",
+			});
+			setIsUpdatingPaymentMethod(false);
+		}
+	};
+
 	// Sync tab with URL params
 	useEffect(() => {
 		const tabFromUrl = searchParams.get("tab");
@@ -748,6 +783,48 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 			const newParams = new URLSearchParams(searchParams);
 			newParams.delete("planconfig");
+			setSearchParams(newParams, { replace: true });
+		}
+
+		const billingRetryStatus = searchParams.get("billing");
+		if (billingRetryStatus === "update_payment_method") {
+			if (!currentTenant?.id) {
+				return;
+			}
+
+			const reference = searchParams.get("reference") || searchParams.get("trxref");
+
+			const cleanParams = new URLSearchParams(searchParams);
+			cleanParams.delete("billing");
+			cleanParams.delete("reference");
+			cleanParams.delete("trxref");
+			setSearchParams(cleanParams, { replace: true });
+
+			if (reference) {
+				supabase.functions
+					.invoke("verify-recurring-billing-retry-session", {
+						body: { reference, tenantId: currentTenant.id },
+					})
+					.then(async ({ error }) => {
+						if (error) {
+							console.error("Billing retry verification error:", error);
+							toast({
+								title: "Could not confirm payment",
+								description: "Contact support if billing doesn't resume shortly.",
+								variant: "destructive",
+							});
+							return;
+						}
+						await refreshTenants();
+						setPaymentSuccessModal({
+							title: "Payment method updated!",
+							description: "Your subscription is active again and billing will continue as normal.",
+						});
+					});
+			}
+		} else if (billingRetryStatus === "update_payment_method_cancelled") {
+			const newParams = new URLSearchParams(searchParams);
+			newParams.delete("billing");
 			setSearchParams(newParams, { replace: true });
 		}
 
@@ -2580,7 +2657,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								bookings.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="space-y-3">
+						<div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
 							<div className="space-y-2">
 								<Label>Start date & time</Label>
 								<Input
@@ -3130,7 +3207,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<p className="font-medium">Payments are processed securely</p>
 									<p className="text-sm text-muted-foreground">
 										All online payments are processed through{" "}
-										{isPaystack ? "Paystack" : "Stripe"} via Salon Magik.
+										Paystack via Salon Magik.
 									</p>
 								</div>
 							</div>
@@ -3170,9 +3247,52 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						<PayoutDestinationsManager />
 					</CardContent>
 				</Card>
+
+				{renderPayoutModeCard()}
 			</div>
 		);
 	};
+
+	const renderPayoutModeCard = () => (
+		<Card>
+			<CardHeader>
+				<CardTitle>When do you get paid?</CardTitle>
+				<CardDescription>
+					Choose whether Paystack pays your bank directly, or your earnings build up as a salon balance you withdraw yourself.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="grid gap-3 sm:grid-cols-2">
+				<button
+					type="button"
+					disabled={payoutModeSaving}
+					onClick={() => updatePayoutMode("automatic")}
+					className={`rounded-xl border p-4 text-left transition-colors ${
+						payoutMode === "automatic" ? "border-primary bg-primary/5" : "hover:border-primary/40"
+					}`}
+				>
+					<Zap className="mb-3 h-5 w-5 text-primary" />
+					<p className="text-sm font-medium">Automatic</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						Paystack pays your bank directly — about 1 business day after each payment clears (a Friday payment clears Monday).
+					</p>
+				</button>
+				<button
+					type="button"
+					disabled={payoutModeSaving}
+					onClick={() => updatePayoutMode("on_demand")}
+					className={`rounded-xl border p-4 text-left transition-colors ${
+						payoutMode === "on_demand" ? "border-primary bg-primary/5" : "hover:border-primary/40"
+					}`}
+				>
+					<Wallet className="mb-3 h-5 w-5 text-primary" />
+					<p className="text-sm font-medium">On-demand</p>
+					<p className="mt-1 text-xs text-muted-foreground">
+						Cleared payments build up in your salon balance. Withdraw whenever you like from Payouts.
+					</p>
+				</button>
+			</CardContent>
+		</Card>
+	);
 
 	const renderRolesTab = () => {
 		const roles = [
@@ -3364,20 +3484,34 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</Badge>
 								</div>
 							</div>
-							<Button
-								type="button"
-								size="sm"
-								className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
-								data-tour-id="tour-change-plan"
-								onClick={() =>
-									planConfigSectionRef.current?.scrollIntoView({
-										behavior: "smooth",
-										block: "center",
-									})
-								}
-							>
-								Change plan
-							</Button>
+							<div className="flex items-center gap-2">
+								{currentTenant?.subscription_status === "past_due" && (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="rounded-full border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+										disabled={isUpdatingPaymentMethod}
+										onClick={handleUpdatePaymentMethod}
+									>
+										{isUpdatingPaymentMethod ? "Redirecting…" : "Update payment method"}
+									</Button>
+								)}
+								<Button
+									type="button"
+									size="sm"
+									className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
+									data-tour-id="tour-change-plan"
+									onClick={() =>
+										planConfigSectionRef.current?.scrollIntoView({
+											behavior: "smooth",
+											block: "center",
+										})
+									}
+								>
+									Change plan
+								</Button>
+							</div>
 						</div>
 						{isTrialing && trialEndsAt && (
 							<div className="relative mt-3">
@@ -3969,6 +4103,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged.
 								</DialogDescription>
 							</DialogHeader>
+							<div className={DIALOG_BODY_PADDING}>
 							{recurringTotal ? (
 								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
 									<div className="flex items-center justify-between text-muted-foreground">
@@ -4009,6 +4144,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									Your bill will be calculated from your current plan and add-ons.
 								</p>
 							)}
+							</div>
 							<DialogFooter className="gap-2 sm:gap-2">
 								<Button
 									type="button"
@@ -4345,8 +4481,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
 			{activeTab === "payout-destinations" && (
-				<div data-tour-id="tour-payout-destinations">
+				<div data-tour-id="tour-payout-destinations" className="space-y-6">
 					<PayoutDestinationsManager />
+					{renderPayoutModeCard()}
 				</div>
 			)}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}

@@ -15,6 +15,8 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@ui/ui/use-toast";
 import { usePromoTrialBonusConfig } from "@/hooks/usePromoTrialBonus";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface ApplyPromoCodeDialogProps {
   open: boolean;
@@ -95,7 +97,7 @@ export function ApplyPromoCodeDialog({ open, onOpenChange }: ApplyPromoCodeDialo
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-2">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-2")}>
           <Label htmlFor="promo-code">Promo code</Label>
           <Input
             id="promo-code"

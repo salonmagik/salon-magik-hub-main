@@ -12,13 +12,14 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Alert, AlertDescription } from "@ui/alert";
-import { CheckCircle2, CircleDollarSign, Loader2, RotateCcw, TriangleAlert, WalletCards } from "lucide-react";
+import { CheckCircle2, CircleDollarSign, CreditCard, Loader2, RotateCcw, TriangleAlert, WalletCards } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
-type RefundType = "store_credit" | "offline";
+type RefundType = "store_credit" | "offline" | "paystack";
 type Stage = "form" | "confirm" | "submitting" | "success" | "error";
 
 interface RefundTransaction {
@@ -31,6 +32,8 @@ interface RefundTransaction {
   status: string;
   type: string;
   currency: string;
+  provider?: string | null;
+  provider_reference?: string | null;
   customer?: { id: string; full_name: string } | null;
 }
 
@@ -70,6 +73,13 @@ export function RequestRefundDialog({
   const currency = transaction?.currency || currentTenant?.currency || "USD";
   const isApproval = Boolean(request);
   const actionLabel = mode === "complete" ? "Make refund" : "Request refund";
+  // Real money-movement via Paystack is only offered as an immediate,
+  // owner/manager-executed action (mode "complete", not approving a
+  // pre-existing request whose destination was already chosen) on a
+  // transaction that actually went through Paystack — not for staff-initiated
+  // requests, and not for cash/purse transactions with nothing to refund
+  // through Paystack.
+  const canRefundViaPaystack = mode === "complete" && !isApproval && transaction?.provider === "paystack" && Boolean(transaction?.provider_reference);
 
   useEffect(() => {
     if (!open || !transaction) return;
@@ -129,7 +139,18 @@ export function RequestRefundDialog({
     setErrorMessage("");
 
     try {
-      if (mode === "complete") {
+      if (mode === "complete" && refundType === "paystack") {
+        const { data, error } = await supabase.functions.invoke("refund-via-paystack", {
+          body: {
+            transactionId: transaction.id,
+            amount: numericAmount,
+            reason: reason.trim(),
+            requestId: request?.id || null,
+          },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+      } else if (mode === "complete") {
         const { error } = await supabase.rpc("complete_transaction_refund" as never, {
           p_transaction_id: transaction.id,
           p_amount: numericAmount,
@@ -167,7 +188,7 @@ export function RequestRefundDialog({
     }}>
       <DialogContent className="sm:max-w-lg">
         {stage === "success" ? (
-          <div className="py-8 text-center">
+          <div className={cn(DIALOG_BODY_PADDING, "text-center")}>
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-success/10">
               <CheckCircle2 className="h-7 w-7 text-success" />
             </div>
@@ -178,13 +199,15 @@ export function RequestRefundDialog({
               {mode === "complete"
                 ? refundType === "store_credit"
                   ? `${formatCurrency(numericAmount, currency)} is now available in ${transaction.customer?.full_name || "the customer"}'s salon balance.`
-                  : `${formatCurrency(numericAmount, currency)} has been recorded as refunded outside Salon Magik.`
+                  : refundType === "paystack"
+                    ? `${formatCurrency(numericAmount, currency)} has been refunded to the customer's card via Paystack.`
+                    : `${formatCurrency(numericAmount, currency)} has been recorded as refunded outside Salon Magik.`
                 : "An owner or manager can now review this request. The requested amount is reserved from further refunds."}
             </DialogDescription>
             <Button className="mt-6 w-full" onClick={close}>Done</Button>
           </div>
         ) : stage === "error" ? (
-          <div className="py-6 text-center">
+          <div className={cn(DIALOG_BODY_PADDING, "text-center")}>
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
               <TriangleAlert className="h-7 w-7 text-destructive" />
             </div>
@@ -218,14 +241,14 @@ export function RequestRefundDialog({
             </DialogHeader>
 
             {stage === "submitting" ? (
-              <div className="flex flex-col items-center justify-center py-14">
+              <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center justify-center")}>
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="mt-3 text-sm text-muted-foreground">
                   {mode === "complete" ? "Recording refund…" : "Sending request…"}
                 </p>
               </div>
             ) : stage === "confirm" ? (
-              <div className="space-y-4 py-3">
+              <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
                 <div className="rounded-xl border bg-surface p-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Amount</span>
@@ -234,7 +257,11 @@ export function RequestRefundDialog({
                   <div className="mt-3 flex items-center justify-between border-t pt-3">
                     <span className="text-sm text-muted-foreground">Destination</span>
                     <span className="text-sm font-medium">
-                      {refundType === "store_credit" ? "Customer salon balance" : "Cash / transfer outside Salon Magik"}
+                      {refundType === "store_credit"
+                        ? "Customer salon balance"
+                        : refundType === "paystack"
+                          ? "Back to the customer's card via Paystack"
+                          : "Cash / transfer outside Salon Magik"}
                     </span>
                   </div>
                   <div className="mt-3 border-t pt-3">
@@ -251,7 +278,7 @@ export function RequestRefundDialog({
                 )}
               </div>
             ) : (
-              <div className="space-y-5 py-3">
+              <div className={cn(DIALOG_BODY_PADDING, "space-y-5")}>
                 <div className="grid grid-cols-2 gap-3 rounded-xl border bg-surface p-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Transaction</p>
@@ -267,7 +294,21 @@ export function RequestRefundDialog({
 
                 <div className="space-y-2">
                   <Label>Refund destination</Label>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className={cn("grid gap-3", canRefundViaPaystack ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+                    {canRefundViaPaystack && (
+                      <button
+                        type="button"
+                        onClick={() => setRefundType("paystack")}
+                        className={cn(
+                          "rounded-xl border p-4 text-left transition-colors",
+                          refundType === "paystack" ? "border-primary bg-primary/5" : "hover:border-primary/40",
+                        )}
+                      >
+                        <CreditCard className="mb-3 h-5 w-5 text-primary" />
+                        <p className="text-sm font-medium">Refund via Paystack</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Goes back to the customer's card. Not always possible — depends on Paystack's own settlement state.</p>
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={isApproval}

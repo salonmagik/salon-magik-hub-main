@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@ui/textarea";
 import { Badge } from "@ui/badge";
 import { toast } from "@ui/ui/use-toast";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 type LeaveType = "annual" | "sick" | "compassionate";
 type Policy = { leave_type: LeaveType; allowance_days: number };
@@ -305,7 +307,7 @@ export function TimeOffTab({
       <Dialog open={recordOpen} onOpenChange={setRecordOpen}>
         <DialogContent className="rounded-[22px] sm:max-w-[540px]">
           <DialogHeader><DialogTitle className="font-serif text-xl">Set time off</DialogTitle><DialogDescription>Record approved leave and reserve it from the team member’s allowance.</DialogDescription></DialogHeader>
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div><Label>Team member</Label><Select value={staffId} onValueChange={setStaffId}><SelectTrigger className="mt-1.5 h-12"><SelectValue placeholder="Select team member" /></SelectTrigger><SelectContent>{staff.map((member) => <SelectItem key={member.userId} value={member.userId}>{staffNames.get(member.userId)}</SelectItem>)}</SelectContent></Select></div>
             <div><Label>Leave type</Label><Select value={leaveType} onValueChange={(value) => setLeaveType(value as LeaveType)}><SelectTrigger className="mt-1.5 h-12"><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(leaveMeta) as LeaveType[]).map((type) => <SelectItem key={type} value={type}>{leaveMeta[type].label}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="leave-start">Starts</Label><Input id="leave-start" type="date" className="mt-1.5 h-12" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} /></div><div><Label htmlFor="leave-end">Ends</Label><Input id="leave-end" type="date" min={startsOn} className="mt-1.5 h-12" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} /></div></div>
@@ -319,7 +321,7 @@ export function TimeOffTab({
       <Dialog open={policyOpen} onOpenChange={setPolicyOpen}>
         <DialogContent className="rounded-[22px] sm:max-w-[500px]">
           <DialogHeader><DialogTitle className="font-serif text-xl">Default time-off limits</DialogTitle><DialogDescription>Set the number of days available to each staff member per calendar year.</DialogDescription></DialogHeader>
-          <div className="space-y-3">{(Object.keys(leaveMeta) as LeaveType[]).map((type) => <div key={type} className="flex items-center justify-between gap-4"><Label htmlFor={`policy-${type}`}>{leaveMeta[type].label}</Label><Input id={`policy-${type}`} type="number" min={0} className="h-11 w-28" value={policyDraft[type]} onChange={(event) => setPolicyDraft((current) => ({ ...current, [type]: Number(event.target.value) }))} /></div>)}</div>
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>{(Object.keys(leaveMeta) as LeaveType[]).map((type) => <div key={type} className="flex items-center justify-between gap-4"><Label htmlFor={`policy-${type}`}>{leaveMeta[type].label}</Label><Input id={`policy-${type}`} type="number" min={0} className="h-11 w-28" value={policyDraft[type]} onChange={(event) => setPolicyDraft((current) => ({ ...current, [type]: Number(event.target.value) }))} /></div>)}</div>
           <DialogFooter><Button variant="outline" className="rounded-full" onClick={() => setPolicyOpen(false)}>Cancel</Button><Button className="rounded-full" disabled={policyMutation.isPending} onClick={() => policyMutation.mutate()}>Save limits</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -332,11 +334,13 @@ export function TimeOffTab({
               Let {rejectTarget ? staffNames.get(rejectTarget.user_id) || "the team member" : "them"} know why, if you'd like.
             </DialogDescription>
           </DialogHeader>
+          <div className={DIALOG_BODY_PADDING}>
           <Textarea
             value={rejectionReason}
             onChange={(event) => setRejectionReason(event.target.value)}
             placeholder="Reason (optional)"
           />
+          </div>
           <DialogFooter>
             <Button variant="outline" className="rounded-full" onClick={() => setRejectTarget(null)}>
               Cancel

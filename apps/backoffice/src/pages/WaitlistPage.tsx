@@ -38,6 +38,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@ui/alert-dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { Loader2, MoreHorizontal, Check, X, Mail, Clock, Users, Globe, UserCheck } from "lucide-react";
@@ -447,7 +449,7 @@ export default function WaitlistPage() {
                 Add an optional reason for rejection.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <div className="space-y-2 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-2")}>
               <Label htmlFor="reject-reason">Reason</Label>
               <Textarea
                 id="reject-reason"

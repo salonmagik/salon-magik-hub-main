@@ -136,6 +136,32 @@ export function getCountryForCurrency(currency: string): string | null {
 }
 
 /**
+ * Maps Paystack's real payment channel (from a transaction's `channel`
+ * field, on both the webhook payload and the verify response) to our
+ * payment_method enum. Every transaction used to be recorded as "card"
+ * regardless of how the customer actually paid; Paystack tells us the real
+ * channel, we just weren't reading it.
+ */
+export function mapPaystackChannelToPaymentMethod(channel: string | null | undefined): string {
+  switch (channel) {
+    case "card":
+      return "card";
+    case "bank":
+    case "bank_transfer":
+    case "eft":
+      return "transfer";
+    case "mobile_money":
+      return "mobile_money";
+    case "ussd":
+      return "ussd";
+    case "qr":
+      return "qr";
+    default:
+      return "card";
+  }
+}
+
+/**
  * Payload for creating a Paystack subaccount.
  */
 export interface CreateSubaccountPayload {
@@ -148,25 +174,34 @@ export interface CreateSubaccountPayload {
   primary_contact_name?: string;
   primary_contact_phone?: string;
   metadata?: string;
+  /**
+   * Defaults to "auto" — Paystack pays the settlement account directly,
+   * ~1 business day after a charge clears. Previously hardcoded to
+   * "manual" with nothing anywhere that ever triggered a manual release,
+   * so split funds accumulated on Paystack with no way to reach the
+   * salon. Pass "manual" explicitly only for a salon that has opted into
+   * on-demand payout via the platform's own wallet/withdrawal flow.
+   */
+  settlement_schedule?: "auto" | "weekly" | "monthly" | "manual";
 }
 
 /**
  * Helper to call the Paystack API and create a subaccount.
- * Forces settlement_schedule to "manual" based on requirements.
  */
 export async function createPaystackSubaccount(
   currency: string,
   payload: CreateSubaccountPayload
 ) {
   const { key, error: keyError } = getPaystackKeyForCurrency(currency);
-  
+
   if (keyError || !key) {
     throw new Error(keyError || "Failed to get Paystack key");
   }
 
+  const settlementSchedule = payload.settlement_schedule || "auto";
   console.log('Creating Paystack subaccount with payload:', {
     ...payload,
-    settlement_schedule: "manual",
+    settlement_schedule: settlementSchedule,
   });
   const response = await fetch("https://api.paystack.co/subaccount", {
     method: "POST",
@@ -176,7 +211,7 @@ export async function createPaystackSubaccount(
     },
     body: JSON.stringify({
       ...payload,
-      settlement_schedule: "manual",
+      settlement_schedule: settlementSchedule,
     }),
   });
 
@@ -298,5 +333,50 @@ export async function chargeAuthorization(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error charging authorization";
     return { success: false, error: message };
+  }
+}
+
+export interface PaystackBalanceResult {
+  balance: number | null;
+  currency: string | null;
+  error?: string;
+}
+
+/**
+ * Fetches the platform's live settlement-account balance from Paystack —
+ * the funds actually available to withdraw right now, distinct from the
+ * per-tenant salon wallet balances we track ourselves.
+ *
+ * @param paystackKey - the secret key for the account being checked (see getPaystackKeyForCurrency)
+ */
+export async function getPaystackBalance(paystackKey: string): Promise<PaystackBalanceResult> {
+  try {
+    const res = await fetch("https://api.paystack.co/balance", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.status) {
+      return { balance: null, currency: null, error: data.message || `HTTP ${res.status}` };
+    }
+
+    // data.data is an array of { currency, balance } — balance in the
+    // currency's smallest unit (kobo/pesewas). One entry per currency the
+    // integration settles in; take the first (each of our keys is scoped
+    // to a single currency already).
+    const entry = Array.isArray(data.data) ? data.data[0] : null;
+    if (!entry) {
+      return { balance: null, currency: null, error: "No balance data returned" };
+    }
+
+    return { balance: entry.balance / 100, currency: entry.currency };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error fetching Paystack balance";
+    return { balance: null, currency: null, error: message };
   }
 }

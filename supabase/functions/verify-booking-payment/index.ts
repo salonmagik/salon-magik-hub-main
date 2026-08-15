@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, mapPaystackChannelToPaymentMethod } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -117,9 +117,16 @@ serve(async (req) => {
     }
 
     const txData = paystackData.data;
-    // Paystack sends amounts in minor units (kobo / pesewas)
-    const amountInMajor = Number(txData.amount) / 100;
     const txMetadata: Record<string, unknown> = txData.metadata || {};
+    // txData.amount is what Paystack actually charged the customer's card —
+    // it includes Paystack's own processing fee and Salon Magik's fees on
+    // top of the true service price. metadata.service_amount is the true
+    // price the same way the webhook path already reads it; fall back to
+    // the charged amount only for transactions predating that metadata.
+    const amountInMajor = txMetadata.service_amount
+      ? Number(txMetadata.service_amount)
+      : Number(txData.amount) / 100;
+    const paymentMethod = mapPaystackChannelToPaymentMethod(txData.channel);
 
     // Resolve appointment IDs from the transaction metadata
     const appointmentIds = parseAppointmentIds(
@@ -148,7 +155,7 @@ serve(async (req) => {
 
     const { data: appointments } = await supabase
       .from("appointments")
-      .select("id, total_amount, payment_status, customer_id, tenant_id")
+      .select("id, total_amount, amount_paid, payment_status, customer_id, tenant_id")
       .in("id", appointmentIds)
       .in("customer_id", customerIds);
 
@@ -164,12 +171,12 @@ serve(async (req) => {
       return json({ verified: true, alreadyProcessed: true });
     }
 
-    const paymentStatus = isDeposit ? "deposit_paid" : "fully_paid";
     const totalAppointmentAmount = appointments.reduce(
       (sum, a) => sum + Number(a.total_amount || 0),
       0,
     );
     const now = new Date().toISOString();
+    let primaryPaymentStatus = appointments[0]?.payment_status;
 
     for (let i = 0; i < appointments.length; i++) {
       const apt = appointments[i];
@@ -188,9 +195,20 @@ serve(async (req) => {
         allocated = Number((amountInMajor * proportion).toFixed(2));
       }
 
+      // This transaction's amount is added to whatever was already paid (e.g. an
+      // earlier deposit) — never overwritten — so a follow-up "pay the balance"
+      // charge can't silently erase a prior payment on the same appointment.
+      const cumulativePaid = Number((Number(apt.amount_paid || 0) + allocated).toFixed(2));
+      const isNowFullyPaid = cumulativePaid >= Number(apt.total_amount || 0);
+      const nextPaymentStatus = isNowFullyPaid ? "fully_paid" : isDeposit ? "deposit_paid" : apt.payment_status;
+
+      if (i === 0) {
+        primaryPaymentStatus = nextPaymentStatus;
+      }
+
       await supabase
         .from("appointments")
-        .update({ payment_status: paymentStatus, amount_paid: allocated, updated_at: now })
+        .update({ payment_status: nextPaymentStatus, amount_paid: cumulativePaid, updated_at: now })
         .eq("id", apt.id);
     }
 
@@ -215,7 +233,7 @@ serve(async (req) => {
         type: isDeposit ? "deposit" : "payment",
         amount: amountInMajor,
         currency,
-        method: "card",
+        method: paymentMethod,
         provider: "paystack",
         provider_reference: reference,
         paystack_reference: reference,
@@ -228,7 +246,7 @@ serve(async (req) => {
 
     return json({
       verified: true,
-      paymentStatus,
+      paymentStatus: primaryPaymentStatus,
       appointmentIds: appointments.map((a) => a.id),
     });
   } catch (error: unknown) {

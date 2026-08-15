@@ -28,6 +28,8 @@ import {
   Landmark,
   Wallet,
   Gauge,
+  Hash,
+  QrCode,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -53,6 +55,8 @@ const METHOD_META: Record<string, { label: string; icon: typeof CreditCard }> = 
   pos: { label: "POS", icon: Landmark },
   transfer: { label: "Transfer", icon: Landmark },
   purse: { label: "Store credit", icon: Wallet },
+  ussd: { label: "USSD", icon: Hash },
+  qr: { label: "QR", icon: QrCode },
 };
 
 const STATUS_META: Record<string, string> = {
@@ -356,6 +360,7 @@ export default function TransactionsPage() {
                     <TableHead>Method</TableHead>
                     <TableHead>Provider</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Charges</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -397,6 +402,9 @@ export default function TransactionsPage() {
                         <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "—"}</TableCell>
                         <TableCell className={`text-right tabular-nums font-semibold ${row.type === "refund" ? "text-destructive" : ""}`}>
                           {row.type === "refund" ? "-" : ""}{formatMoney(row.amount, row.currency)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                          {row.charges ? formatMoney(row.charges, row.currency) : "—"}
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs font-medium capitalize ${STATUS_META[row.status] || ""}`}>
@@ -477,6 +485,10 @@ export default function TransactionsPage() {
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Method</span>
                   <span className="font-medium">{METHOD_META[selected.method]?.label || selected.method}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b text-sm">
+                  <span className="text-muted-foreground">Charges (platform + customer fee)</span>
+                  <span className="font-medium">{selected.charges ? formatMoney(selected.charges, selected.currency) : "—"}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Provider</span>

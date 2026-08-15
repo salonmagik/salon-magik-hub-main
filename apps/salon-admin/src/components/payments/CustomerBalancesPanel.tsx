@@ -13,6 +13,8 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 const BALANCE_STAT_COPY: Record<string, string> = {
   "Customer balances": "Total available balance across all customers — paid funds plus salon-issued store credit, minus anything reserved for upcoming bookings.",
@@ -133,18 +135,18 @@ export function CustomerBalancesPanel({ canAdjust }: { canAdjust: boolean }) {
       <Dialog open={Boolean(selectedCustomerId)} onOpenChange={(open) => !open && close()}>
         <DialogContent className="sm:max-w-md">
           {stage === "success" || stage === "error" ? (
-            <div className="py-8 text-center">
+            <div className={cn(DIALOG_BODY_PADDING, "text-center")}>
               <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${stage === "success" ? "bg-success/10" : "bg-destructive/10"}`}><Gift className={`h-7 w-7 ${stage === "success" ? "text-success" : "text-destructive"}`} /></div>
               <DialogTitle>{stage === "success" ? "Store credit added" : "Credit wasn’t added"}</DialogTitle>
               <p className="mt-2 text-sm text-muted-foreground">{stage === "success" ? `${selected?.customer?.full_name}'s salon balance has been updated.` : errorMessage}</p>
               <Button className="mt-6 w-full" onClick={close}>Done</Button>
             </div>
           ) : stage === "submitting" ? (
-            <div className="flex flex-col items-center py-14"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Adding store credit…</p></div>
+            <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center")}><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="mt-3 text-sm text-muted-foreground">Adding store credit…</p></div>
           ) : (
             <>
               <DialogHeader><DialogTitle>{stage === "confirm" ? "Confirm store credit" : "Add store credit"}</DialogTitle><p className="text-sm text-muted-foreground">{selected?.customer?.full_name}</p></DialogHeader>
-              <div className="space-y-4 py-4">
+              <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
                 {stage === "form" ? <>
                   <div className="space-y-2"><Label>Amount</Label><Input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} /></div>
                   <div className="space-y-2"><Label>Reason</Label><Textarea rows={3} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Goodwill, loyalty reward, or balance correction…" /></div>

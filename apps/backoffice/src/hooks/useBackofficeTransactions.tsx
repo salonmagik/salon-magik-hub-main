@@ -10,6 +10,7 @@ export interface BackofficeTransactionRow {
   type: string;
   method: string;
   amount: number;
+  charges: number | null;
   currency: string;
   provider: string | null;
   provider_reference: string | null;

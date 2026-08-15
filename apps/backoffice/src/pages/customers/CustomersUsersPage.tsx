@@ -14,6 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
 import { Loader2, Search, UserRound, Eye } from "lucide-react";
 import { format } from "date-fns";
@@ -203,7 +205,7 @@ export default function CustomersUsersPage() {
           </DialogHeader>
 
           {selectedUser && (
-            <div className="space-y-4">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
               <div className="grid gap-3 sm:grid-cols-2">
                 {[
                   { label: "Email", value: selectedUser.email || "Not set" },

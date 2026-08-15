@@ -28,6 +28,8 @@ import SubscriptionLedgerPage from "@/pages/SubscriptionLedgerPage";
 import CommsCreditsPage from "@/pages/CommsCreditsPage";
 import FlaggedSignupsPage from "@/pages/FlaggedSignupsPage";
 import TransactionsPage from "@/pages/TransactionsPage";
+import FeesMarginsPage from "@/pages/FeesMarginsPage";
+import VerificationQueuePage from "@/pages/VerificationQueuePage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -178,6 +180,24 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="plans">
                   <PlansPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/fees-margins"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="payment_fee_settings">
+                  <FeesMarginsPage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/verification-queue"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="verification_queue">
+                  <VerificationQueuePage />
                 </BackofficeProtectedRoute>
               }
           />

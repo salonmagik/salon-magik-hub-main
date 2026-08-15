@@ -31,6 +31,7 @@ import {
 } from "@/hooks/useSMSTemplates";
 import { cn } from "@shared/utils";
 import { replaceTemplateTokens } from "@/components/messaging/templateEditorUtils";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface EditSMSTemplateDialogProps {
   open: boolean;
@@ -141,7 +142,7 @@ export function EditSMSTemplateDialog({
           </div>
         </DialogHeader>
 
-        <div className="mt-4 space-y-4.5">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4.5")}>
           {/* Active Toggle */}
           <div className="flex items-center justify-between rounded-2xl border bg-muted/40 p-3">
             <div>
@@ -281,7 +282,7 @@ export function EditSMSTemplateDialog({
           </div>
         </div>
 
-        <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
           <Button
             type="button"
             variant="ghost"
