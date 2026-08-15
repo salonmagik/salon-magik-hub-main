@@ -18,6 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Alert, AlertDescription, AlertTitle } from "@ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Checkbox } from "@ui/checkbox";
@@ -30,8 +32,9 @@ import {
   SelectValue,
 } from "@ui/select";
 import { toast } from "sonner";
-import { AlertTriangle, Calendar, Gift, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff, Info } from "lucide-react";
+import { AlertTriangle, Calendar, Gift, Globe2, Lock, Megaphone, Power, RefreshCw, ShieldAlert, ShieldCheck, ShieldOff, Info, Wallet } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import { formatCurrency } from "@shared/currency";
 import type { Json } from "@/lib/supabase";
 
 type LegalStatus = "planned" | "legal_approved" | "active" | "paused";
@@ -394,6 +397,23 @@ export default function BackofficeSettingsPage() {
       if (error) throw error;
       type BalanceEntry = { sms_balance: number | null; main_balance: string | null; error?: string };
       return data as { gh: BalanceEntry; ng_transactional: BalanceEntry; ng_promotional: BalanceEntry };
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const {
+    data: paystackBalance,
+    isLoading: paystackBalanceLoading,
+    refetch: refetchPaystackBalance,
+    isRefetching: paystackBalanceRefetching,
+  } = useQuery({
+    queryKey: ["paystack-balance"],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke("get-paystack-balance");
+      if (error) throw error;
+      type BalanceEntry = { balance: number | null; currency: string | null; error?: string };
+      return data as { ng: BalanceEntry; gh: BalanceEntry };
     },
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -1443,6 +1463,67 @@ export default function BackofficeSettingsPage() {
                 )}
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-1.5">
+                      <Wallet className="h-4 w-4" />
+                      Paystack Balance
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-56 text-xs">
+                          Live settlement balance on our Paystack accounts, fetched in real time — funds available to withdraw right now. Separate from tenant salon wallets.
+                        </TooltipContent>
+                      </Tooltip>
+                    </CardTitle>
+                    <CardDescription>Available to withdraw, per country account.</CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refetchPaystackBalance()}
+                    disabled={paystackBalanceLoading || paystackBalanceRefetching}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${paystackBalanceRefetching ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {paystackBalanceLoading ? (
+                  <p className="text-sm text-muted-foreground">Fetching balances…</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {(
+                      [
+                        { key: "ng", label: "Nigeria (NG)" },
+                        { key: "gh", label: "Ghana (GH)" },
+                      ] as const
+                    ).map(({ key, label }) => {
+                      const entry = paystackBalance?.[key];
+                      return (
+                        <div key={key} className="rounded-lg border p-4">
+                          <p className="text-sm text-muted-foreground">{label}</p>
+                          {entry?.error ? (
+                            <p className="mt-1 text-sm text-destructive">{entry.error}</p>
+                          ) : (
+                            <p className="mt-1 text-2xl font-semibold tabular-nums">
+                              {entry?.balance != null && entry.currency
+                                ? formatCurrency(entry.balance, entry.currency)
+                                : "—"}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="markets" className="space-y-6">
@@ -1658,7 +1739,7 @@ export default function BackofficeSettingsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               {pendingKillSwitchState && (
                 <div className="space-y-2">
                   <Label>Reason (required)</Label>
@@ -1721,7 +1802,7 @@ export default function BackofficeSettingsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5" />

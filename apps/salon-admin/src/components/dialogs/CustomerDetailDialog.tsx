@@ -8,6 +8,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -345,7 +346,7 @@ export function CustomerDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-x-hidden overflow-y-auto rounded-[24px] border-0 p-5 shadow-2xl sm:max-w-xl sm:p-8">
+      <DialogContent className="max-h-[92vh] overflow-x-hidden rounded-[24px] border-0 sm:max-w-xl">
         <DialogHeader>
           <DialogDescription className="sr-only">
             Customer profile, engagement summary, appointments, notes, and transaction history.
@@ -399,7 +400,8 @@ export function CustomerDetailDialog({
           </div>
         </DialogHeader>
 
-          <Tabs defaultValue="overview" className="mt-4 min-w-0">
+        <div className={DIALOG_BODY_PADDING}>
+          <Tabs defaultValue="overview" className="min-w-0">
             <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1">
               <TabsTrigger value="overview" className="h-10 shrink-0 rounded-full px-6">Overview</TabsTrigger>
               <TabsTrigger value="appointments" className="h-10 shrink-0 rounded-full px-6">Appointments</TabsTrigger>
@@ -1001,7 +1003,8 @@ export function CustomerDetailDialog({
               )}
             </TabsContent>
           </Tabs>
-        </DialogContent>
+        </div>
+      </DialogContent>
 
         {/* Send Message Dialog */}
         <SendMessageDialog

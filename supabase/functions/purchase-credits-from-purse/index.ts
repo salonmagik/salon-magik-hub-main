@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getSmsCreditPricing, findSmsCreditTier } from "../_shared/sms-credit-pricing.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,47 +8,7 @@ const corsHeaders = {
 
 interface PurchaseRequest {
   tenantId: string;
-  packageId?: string;
-  customCredits?: number;
-  customAmount?: number;
-}
-
-interface CreditPackage {
-  credits: number;
-  priceNGN: number;
-  priceGHS: number;
-}
-
-const CREDIT_PACKAGES: Record<string, CreditPackage> = {
-  pack_50: { credits: 50, priceNGN: 3500, priceGHS: 60 },
-  pack_100: { credits: 100, priceNGN: 6500, priceGHS: 108 },
-  pack_250: { credits: 250, priceNGN: 15000, priceGHS: 240 },
-  pack_500: { credits: 500, priceNGN: 27000, priceGHS: 420 },
-};
-
-const MIN_CUSTOM_CREDITS = 10;
-const MAX_CUSTOM_CREDITS = 1000;
-
-// Tier-based pricing for custom credits (based on PRD pricing structure)
-function calculateCustomCreditPrice(credits: number, currency: string): number {
-  let ratePerCredit: number;
-  
-  // Determine rate based on tier
-  if (credits <= 50) {
-    // Pack 50 rate: NGN 70/credit, GHS 1.20/credit
-    ratePerCredit = currency === 'NGN' ? 70 : currency === 'GHS' ? 1.20 : 0.10;
-  } else if (credits <= 100) {
-    // Pack 100 rate: NGN 65/credit, GHS 1.08/credit
-    ratePerCredit = currency === 'NGN' ? 65 : currency === 'GHS' ? 1.08 : 0.09;
-  } else if (credits <= 250) {
-    // Pack 250 rate: NGN 60/credit, GHS 0.96/credit
-    ratePerCredit = currency === 'NGN' ? 60 : currency === 'GHS' ? 0.96 : 0.08;
-  } else {
-    // Pack 500+ rate: NGN 54/credit, GHS 0.84/credit
-    ratePerCredit = currency === 'NGN' ? 54 : currency === 'GHS' ? 0.84 : 0.07;
-  }
-  
-  return Math.round(credits * ratePerCredit);
+  bundlePrice: number;
 }
 
 function calculateDiscountedAmount(
@@ -99,20 +60,12 @@ Deno.serve(async (req) => {
     }
 
     const body: PurchaseRequest = await req.json();
-    const { tenantId, packageId, customCredits, customAmount } = body;
+    const { tenantId, bundlePrice } = body;
 
     // Validate required fields
-    if (!tenantId) {
+    if (!tenantId || !bundlePrice) {
       return new Response(
-        JSON.stringify({ error: "Missing required field: tenantId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Must provide either packageId OR customCredits+customAmount
-    if (!packageId && (!customCredits || !customAmount)) {
-      return new Response(
-        JSON.stringify({ error: "Must provide either packageId or customCredits with customAmount" }),
+        JSON.stringify({ error: "Missing required field: tenantId, bundlePrice" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -139,33 +92,24 @@ Deno.serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    
+
     wallet = walletData;
 
-    if (packageId) {
-      // Validate packageId
-      const creditPackage = CREDIT_PACKAGES[packageId];
-      if (!creditPackage) {
-        return new Response(
-          JSON.stringify({ error: `Invalid packageId. Valid options: ${Object.keys(CREDIT_PACKAGES).join(", ")}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      credits = creditPackage.credits;
-      amount = wallet.currency === "GHS" ? creditPackage.priceGHS : creditPackage.priceNGN;
-    } else {
-      // Custom credits
-      if (customCredits < MIN_CUSTOM_CREDITS || customCredits > MAX_CUSTOM_CREDITS) {
-        return new Response(
-          JSON.stringify({ error: `Custom credits must be between ${MIN_CUSTOM_CREDITS} and ${MAX_CUSTOM_CREDITS}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      credits = customCredits;
-      amount = customAmount;
+    // Never trust a client-supplied credit count or price — look up the
+    // real tier (bundle price + Arkesel cost + margin) server-side. This
+    // previously took customAmount straight from the request body with no
+    // re-validation at all.
+    const pricing = await getSmsCreditPricing(serviceSupabase);
+    const tier = findSmsCreditTier(pricing, wallet.currency, Number(bundlePrice));
+    if (!tier) {
+      return new Response(
+        JSON.stringify({ error: "Invalid bundle price for this currency" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    credits = tier.credits;
+    amount = tier.bundlePrice;
 
     const { data: promoData, error: promoError } = await (serviceSupabase.rpc as any)("get_tenant_sales_promo_summary", {
       p_tenant_id: tenantId,
@@ -260,6 +204,7 @@ Deno.serve(async (req) => {
         .from("communication_credits")
         .update({
           balance: existingCredits.balance + credits,
+          low_balance_alerted_at: null,
         })
         .eq("tenant_id", tenantId);
 

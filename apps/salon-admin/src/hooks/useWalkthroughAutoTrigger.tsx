@@ -36,12 +36,18 @@ export function useWalkthroughAutoTrigger(
     pageNeedsDataFlags(pageKey),
   );
   const { isEnabled: staffOperationsEnabled } = useStaffOperationsAddon();
-  const { startTour, hasSeenWalkthrough } = useProductTour();
+  const { startTour, hasSeenWalkthrough, hasLoadedSeenWalkthroughs } = useProductTour();
   const isDesktop = useIsDesktopViewport();
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     if (permissionsLoading || dataFlagsLoading || extraLoading || !currentTenant?.id) return;
+    // Wait for hasSeenWalkthrough's backing state to actually load from
+    // localStorage — see hasLoadedSeenWalkthroughs' doc comment. Without
+    // this, a fast-resolving permissions/tenant load lets this effect run
+    // while seenIds is still its empty initial Set, so every walkthrough
+    // looks unseen and the tour replays even though it's already recorded.
+    if (!hasLoadedSeenWalkthroughs) return;
 
     const registryWalkthroughs = getAvailableWalkthroughsForPage(pageKey, {
       hasPermission,
@@ -88,5 +94,5 @@ export function useWalkthroughAutoTrigger(
     // re-running on every searchParams/hasSeenWalkthrough change would
     // re-trigger right after the run's own cleanup navigation/markSeen call.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permissionsLoading, dataFlagsLoading, extraLoading, currentTenant?.id, pageKey, isDesktop]);
+  }, [permissionsLoading, dataFlagsLoading, extraLoading, currentTenant?.id, pageKey, isDesktop, hasLoadedSeenWalkthroughs]);
 }

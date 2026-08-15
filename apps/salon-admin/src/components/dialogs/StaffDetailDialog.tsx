@@ -1,4 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@ui/avatar";
@@ -50,7 +52,7 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
           <DialogTitle>Team Member Details</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-6")}>
           {/* Profile Header */}
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16">

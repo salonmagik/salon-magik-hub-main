@@ -67,7 +67,7 @@ serve(async (req) => {
         customer_id,
         scheduled_start,
         location:locations(name, address, city),
-        customer:customers(id, user_id, full_name, email),
+        customer:customers!appointments_customer_id_fkey(id, user_id, full_name, email),
         services:appointment_services(service_name),
         tenant:tenants(name, logo_url)
       `)

@@ -69,7 +69,7 @@ serve(async (req) => {
         purse_amount_used, amount_paid, payment_status,
         services:appointment_services(service_name, price, duration_minutes, created_at),
         products:appointment_products(product_name, quantity, total_price),
-        customer:customers(id, user_id, full_name, email, phone),
+        customer:customers!appointments_customer_id_fkey(id, user_id, full_name, email, phone),
         tenant:tenants(id, name, currency),
         location:locations(name, address, city)
       `)

@@ -19,6 +19,8 @@ import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 import { getCurrencySymbol } from "@shared/currency";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { useCustomers } from "@/hooks/useCustomers";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface AddVoucherDialogProps {
   open: boolean;
@@ -184,7 +186,7 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[2rem] border-0 p-5 shadow-2xl sm:max-w-3xl sm:p-10">
+      <DialogContent className="max-h-[92vh] rounded-[2rem] border-0 sm:max-w-3xl">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <Gift className="w-5 h-5 text-primary" />
@@ -197,7 +199,8 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Voucher type</Label>
@@ -389,8 +392,9 @@ export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDi
               placeholder="No expiry"
             />
           </div>
+        </div>
 
-          <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             <Button
               type="button"
               variant="outline"

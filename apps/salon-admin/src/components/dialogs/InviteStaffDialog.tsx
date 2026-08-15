@@ -23,6 +23,8 @@ import { UserPlus, Mail, User, Loader2, Send } from "lucide-react";
 import { toast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface InviteStaffDialogProps {
   open: boolean;
@@ -128,7 +130,7 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto rounded-[22px] border-0 p-5 shadow-2xl sm:max-w-[520px] sm:p-8 sm:px-[34px]">
+      <DialogContent className="max-h-[92vh] rounded-[22px] border-0 sm:max-w-[520px]">
         <DialogHeader className="flex flex-row items-center gap-3.5 pr-8 text-left">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#f7e5e5]">
             <UserPlus className="h-5 w-5 text-[#a23b3b]" />
@@ -143,7 +145,8 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-[18px]">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-[18px]")}>
           {seatMessage && (
             <div
               className={`rounded-[14px] px-[18px] py-3.5 text-sm ${
@@ -261,8 +264,9 @@ export function InviteStaffDialog({ open, onOpenChange, onSuccess }: InviteStaff
               {roleOptions.find((r) => r.value === formData.role)?.description}
             </p>
           </div>
+        </div>
 
-          <DialogFooter className="flex flex-col-reverse gap-2 pt-1 sm:flex-row">
+          <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button
               type="button"
               variant="outline"

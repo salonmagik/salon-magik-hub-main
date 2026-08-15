@@ -22,6 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { MoreHorizontal, Ticket, Copy } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { EmptyState } from "@ui/empty-state";
@@ -280,7 +282,7 @@ export default function CaptureClientPage() {
             {selectedPromoCode ? (() => {
               const { campaign, redemption, campaignEnded, codeExpired, invalidated, remainingUses } = getPromoMeta(selectedPromoCode);
               return (
-                <div className="space-y-3 text-sm">
+                <div className={cn(DIALOG_BODY_PADDING, "space-y-3 text-sm")}>
                   <div><span className="text-muted-foreground">Code:</span> <span className="font-medium">{selectedPromoCode.code}</span></div>
                   <div><span className="text-muted-foreground">Email:</span> <span className="font-medium">{selectedPromoCode.target_email}</span></div>
                   <div><span className="text-muted-foreground">Campaign:</span> <span className="font-medium">{campaign?.name || "Unknown"}</span></div>

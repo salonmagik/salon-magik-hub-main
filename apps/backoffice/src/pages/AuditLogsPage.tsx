@@ -23,6 +23,8 @@ import {
   TableRow,
 } from "@ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { EmptyState } from "@ui/empty-state";
 import { FileText } from "lucide-react";
 
@@ -303,7 +305,7 @@ export default function AuditLogsPage() {
             <DialogTitle>Audit Log Details</DialogTitle>
           </DialogHeader>
           {selectedLog && (
-            <div className="space-y-3 text-sm">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3 text-sm")}>
               <div><strong>ID:</strong> <span className="font-mono">{selectedLog.id}</span></div>
               <div><strong>Action:</strong> {selectedLog.action}</div>
               <div><strong>Entity:</strong> {selectedLog.entity_type}</div>

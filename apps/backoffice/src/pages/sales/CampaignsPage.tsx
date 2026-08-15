@@ -20,6 +20,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 export default function CampaignsPage() {
   const { campaignsQuery, createCampaign, toggleCampaign } = useSalesOps();
@@ -67,7 +69,7 @@ export default function CampaignsPage() {
                 <DialogTitle>Create Campaign</DialogTitle>
                 <DialogDescription>Define discount period and optional trial extension.</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className={cn(DIALOG_BODY_PADDING, "grid gap-4 md:grid-cols-2")}>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Name</Label>
                   <Input value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)} placeholder="Q1 Annual Push" />

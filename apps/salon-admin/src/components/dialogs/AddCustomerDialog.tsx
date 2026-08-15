@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { COUNTRIES } from "@shared/countries";
 import { toast } from "@ui/ui/use-toast";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface AddCustomerDialogProps {
   open: boolean;
@@ -202,7 +203,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto scrollbar-hide rounded-[2rem] border-0 p-5 shadow-2xl sm:max-w-2xl sm:p-10">
+      <DialogContent className="max-h-[92vh] rounded-[2rem] border-0 sm:max-w-2xl">
         <DialogHeader className="flex flex-row items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/10">
             <User className="w-5 h-5 text-primary" />
@@ -221,32 +222,34 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
         {/* Step 1: identity */}
         {step === "identity" && (
-          <div className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="Enter email address"
-                  className="pl-9"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+          <>
+            <div className={DIALOG_BODY_PADDING}>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="Enter email address"
+                    className="pl-9"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Phone <span className="text-destructive">*</span>
+                </Label>
+                <PhoneInput
+                  value={phone}
+                  onChange={setPhone}
+                  defaultCountry={currentTenant?.country || "GH"}
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>
-                Phone <span className="text-destructive">*</span>
-              </Label>
-              <PhoneInput
-                value={phone}
-                onChange={setPhone}
-                defaultCountry={currentTenant?.country || "GH"}
-              />
-            </div>
 
-            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -265,12 +268,13 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 Continue
               </Button>
             </DialogFooter>
-          </div>
+          </>
         )}
 
         {/* Step 2a: found elsewhere — minimal form */}
         {step === "existing" && match && (
-          <form onSubmit={handleSubmitExisting} className="space-y-4 mt-2">
+          <form onSubmit={handleSubmitExisting}>
+          <div className={DIALOG_BODY_PADDING}>
             <div className="flex items-start gap-3 rounded-xl border border-success/30 bg-success/5 p-4">
               <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
               <div>
@@ -302,8 +306,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 rows={3}
               />
             </div>
+          </div>
 
-            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -324,7 +329,8 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
 
         {/* Step 2b: not found — full form */}
         {step === "new" && (
-          <form onSubmit={handleSubmitNew} className="space-y-4 mt-2">
+          <form onSubmit={handleSubmitNew}>
+          <div className={DIALOG_BODY_PADDING}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>
@@ -477,8 +483,9 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
                 rows={3}
               />
             </div>
+          </div>
 
-            <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
               <Button
                 type="button"
                 variant="outline"

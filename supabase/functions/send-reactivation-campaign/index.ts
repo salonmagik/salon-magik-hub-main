@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -234,10 +235,17 @@ serve(async (req) => {
     }
 
     const usedCredits = sentCount * CREDIT_COST[channel];
+    const newBalance = Math.max(0, creditWallet.balance - usedCredits);
     await adminClient
       .from("communication_credits")
-      .update({ balance: Math.max(0, creditWallet.balance - usedCredits) })
+      .update({ balance: newBalance })
       .eq("tenant_id", campaign.tenant_id);
+
+    if (channel === "sms") {
+      await checkAndAlertLowSmsBalance(adminClient, campaign.tenant_id, newBalance, {
+        resendApiKey: Deno.env.get("RESEND_API_KEY"),
+      });
+    }
 
     await adminClient
       .from("customer_reactivation_campaigns")

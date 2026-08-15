@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -318,16 +319,21 @@ const handler = async (req: Request): Promise<Response> => {
 
     // If message sent successfully, deduct credits
     if (success) {
+      const newBalance = creditBalance.balance - creditsRequired;
       const { error: deductError } = await supabase
         .from("communication_credits")
         .update({
-          balance: creditBalance.balance - creditsRequired,
+          balance: newBalance,
         })
         .eq("tenant_id", message.tenant_id);
 
       if (deductError) {
         console.error("Failed to deduct credits:", deductError);
         // Continue - message was sent, credit deduction is secondary
+      } else {
+        await checkAndAlertLowSmsBalance(supabase, message.tenant_id, newBalance, {
+          resendApiKey: RESEND_API_KEY,
+        });
       }
     }
 

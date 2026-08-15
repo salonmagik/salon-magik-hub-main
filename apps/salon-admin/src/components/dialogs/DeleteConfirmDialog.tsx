@@ -12,6 +12,7 @@ import {
 import { Label } from "@ui/label";
 import { Input } from "@ui/input";
 import { Loader2, AlertTriangle } from "lucide-react";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface DeleteConfirmDialogProps {
   open: boolean;
@@ -49,23 +50,23 @@ export function DeleteConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent className="w-[calc(100%_-_1.5rem)] gap-0 rounded-[22px] border-0 p-5 shadow-2xl sm:max-w-[480px] sm:p-[34px]">
+      <AlertDialogContent className="w-[calc(100%_-_1.5rem)] gap-0 rounded-[22px] border-0 sm:max-w-[480px]">
         <AlertDialogHeader className="space-y-0 text-left">
-          <div className="mb-4 flex items-center gap-2.5 text-[#a23b3b]">
+          <div className="mb-4 flex items-center gap-2.5 text-destructive">
             <AlertTriangle className="h-5 w-5 shrink-0" strokeWidth={1.8} />
-            <AlertDialogTitle className="text-[19px] font-normal tracking-[-0.2px] text-[#a23b3b]">
+            <AlertDialogTitle className="text-[19px] font-normal tracking-[-0.2px] text-destructive">
               {itemCount > 1
                 ? `Delete ${itemCount} Items?`
                 : `Delete "${itemName}"?`}
             </AlertDialogTitle>
           </div>
-          <AlertDialogDescription className="text-[14.5px] leading-[1.6] text-[#141014]/60">
+          <AlertDialogDescription className="text-[14.5px] leading-[1.6]">
             {description ||
               "The item(s) will be removed from your catalog and your booking site. You can still restore deleted item(s) from Bin."}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <div className="mt-[22px]">
+        <div className={DIALOG_BODY_PADDING}>
           <Label htmlFor="confirm" className="mb-2.5 block text-[14.5px] font-normal text-[#141014]">
             Type{" "}
             <span className="rounded-md bg-[#f1ece3] px-2 py-[3px] font-mono text-[13.5px] font-normal">
@@ -83,9 +84,9 @@ export function DeleteConfirmDialog({
           />
         </div>
 
-        <AlertDialogFooter className="mt-6 gap-2.5 sm:space-x-0">
+        <AlertDialogFooter className="gap-2.5 sm:space-x-0">
           <AlertDialogCancel
-            className="h-11 rounded-full border-[#141014]/10 px-6 text-[14.5px] font-normal hover:bg-[#f1ece3]"
+            className="h-11 rounded-full px-6 text-[14.5px] font-normal"
             disabled={isLoading}
           >
             Cancel
@@ -93,7 +94,7 @@ export function DeleteConfirmDialog({
           <AlertDialogAction
             onClick={handleConfirm}
             disabled={!isConfirmed || isLoading}
-            className="h-11 rounded-full bg-[#a23b3b] px-[22px] text-[14.5px] font-medium text-white hover:bg-[#8f3030] disabled:bg-[#f7e5e5] disabled:text-[#a23b3b]/50 disabled:opacity-100"
+            className="h-11 rounded-full bg-destructive px-[22px] text-[14.5px] font-medium text-destructive-foreground hover:bg-destructive/90 disabled:bg-white/10 disabled:text-white/40 disabled:opacity-100"
           >
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Delete

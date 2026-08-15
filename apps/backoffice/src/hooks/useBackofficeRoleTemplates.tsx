@@ -62,6 +62,8 @@ const CANONICAL_PAGE_KEYS: PageKey[] = [
   { key: "customers_ops_monitor", label: "Customers · Ops Monitor", route_path: "/customers/ops-monitor" },
   { key: "feature_flags", label: "Feature Flags", route_path: "/feature-flags" },
   { key: "plans", label: "Plans", route_path: "/plans" },
+  { key: "payment_fee_settings", label: "Fees & Margins", route_path: "/fees-margins" },
+  { key: "verification_queue", label: "Verification Queue", route_path: "/verification-queue" },
   { key: "comms", label: "Comms", route_path: "/comms" },
   { key: "sales_campaigns", label: "Sales Ops · Campaigns", route_path: "/sales/campaigns" },
   { key: "sales_capture_client", label: "Sales Ops · Capture Client", route_path: "/sales/capture-client" },

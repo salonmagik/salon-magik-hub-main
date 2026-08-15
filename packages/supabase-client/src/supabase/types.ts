@@ -428,6 +428,7 @@ export type Database = {
           customer_id: string
           customer_response_status: string
           deposit_amount: number
+          gift_recipient_customer_id: string | null
           id: string
           is_gifted: boolean
           is_unscheduled: boolean
@@ -469,6 +470,7 @@ export type Database = {
           customer_id: string
           customer_response_status?: string
           deposit_amount?: number
+          gift_recipient_customer_id?: string | null
           id?: string
           is_gifted?: boolean
           is_unscheduled?: boolean
@@ -510,6 +512,7 @@ export type Database = {
           customer_id?: string
           customer_response_status?: string
           deposit_amount?: number
+          gift_recipient_customer_id?: string | null
           id?: string
           is_gifted?: boolean
           is_unscheduled?: boolean
@@ -549,6 +552,20 @@ export type Database = {
           {
             foreignKeyName: "appointments_customer_id_fkey"
             columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_gift_recipient_customer_id_fkey"
+            columns: ["gift_recipient_customer_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "appointments_gift_recipient_customer_id_fkey"
+            columns: ["gift_recipient_customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
@@ -3178,6 +3195,7 @@ export type Database = {
       message_logs: {
         Row: {
           channel: string
+          content: string | null
           created_at: string
           credits_used: number
           customer_id: string | null
@@ -3194,6 +3212,7 @@ export type Database = {
         }
         Insert: {
           channel: string
+          content?: string | null
           created_at?: string
           credits_used?: number
           customer_id?: string | null
@@ -3210,6 +3229,7 @@ export type Database = {
         }
         Update: {
           channel?: string
+          content?: string | null
           created_at?: string
           credits_used?: number
           customer_id?: string | null
@@ -3376,6 +3396,7 @@ export type Database = {
           entity_id: string | null
           entity_type: string | null
           id: string
+          is_gifted: boolean
           location_id: string | null
           read: boolean
           tenant_id: string
@@ -3390,6 +3411,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
+          is_gifted?: boolean
           location_id?: string | null
           read?: boolean
           tenant_id: string
@@ -3404,6 +3426,7 @@ export type Database = {
           entity_id?: string | null
           entity_type?: string | null
           id?: string
+          is_gifted?: boolean
           location_id?: string | null
           read?: boolean
           tenant_id?: string
@@ -5329,6 +5352,8 @@ export type Database = {
           paystack_subaccount_error: string | null
           paystack_subaccount_id: number | null
           paystack_subaccount_status: string | null
+          paystack_subaccount_verification_checked_at: string | null
+          paystack_subaccount_verified: boolean
           settlement_schedule: string
           tenant_id: string
         }
@@ -5352,6 +5377,8 @@ export type Database = {
           paystack_subaccount_error?: string | null
           paystack_subaccount_id?: number | null
           paystack_subaccount_status?: string | null
+          paystack_subaccount_verification_checked_at?: string | null
+          paystack_subaccount_verified?: boolean
           settlement_schedule?: string
           tenant_id: string
         }
@@ -5375,6 +5402,8 @@ export type Database = {
           paystack_subaccount_error?: string | null
           paystack_subaccount_id?: number | null
           paystack_subaccount_status?: string | null
+          paystack_subaccount_verification_checked_at?: string | null
+          paystack_subaccount_verified?: boolean
           settlement_schedule?: string
           tenant_id?: string
         }
@@ -7168,11 +7197,13 @@ export type Database = {
           pay_at_salon_enabled: boolean
           payment_setup_error: string | null
           payment_setup_status: Database["public"]["Enums"]["payment_setup_status"]
+          payout_mode: string
           paystack_authorization_code: string | null
           paystack_authorization_email: string | null
           paystack_customer_code: string | null
           plan: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge: number
+          platform_service_charge_borne_by_customer: boolean
           require_staff_selection: boolean
           show_contact_on_booking: boolean | null
           slot_capacity_default: number
@@ -7233,11 +7264,13 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           payment_setup_error?: string | null
           payment_setup_status?: Database["public"]["Enums"]["payment_setup_status"]
+          payout_mode?: string
           paystack_authorization_code?: string | null
           paystack_authorization_email?: string | null
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge?: number
+          platform_service_charge_borne_by_customer?: boolean
           require_staff_selection?: boolean
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
@@ -7298,11 +7331,13 @@ export type Database = {
           pay_at_salon_enabled?: boolean
           payment_setup_error?: string | null
           payment_setup_status?: Database["public"]["Enums"]["payment_setup_status"]
+          payout_mode?: string
           paystack_authorization_code?: string | null
           paystack_authorization_email?: string | null
           paystack_customer_code?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge?: number
+          platform_service_charge_borne_by_customer?: boolean
           require_staff_selection?: boolean
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
@@ -8687,6 +8722,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      backoffice_update_payment_fee_settings: {
+        Args: {
+          p_challenge_id: string
+          p_customer_facing_fee_percentage: number
+          p_default_platform_service_charge_percentage: number
+          p_reason: string
+        }
+        Returns: Json
+      }
       backoffice_update_plan_with_features: {
         Args: {
           p_description: string
@@ -9090,11 +9134,108 @@ export type Database = {
         Returns: Json
       }
       generate_invoice_number: { Args: { _tenant_id: string }; Returns: string }
+      generate_tenant_slug: { Args: { base_name: string }; Returns: string }
       get_active_subscription_promo_discount: {
         Args: { p_amount: number; p_surface?: string; p_tenant_id: string }
         Returns: number
       }
       get_auth_user_by_email: { Args: { lookup_email: string }; Returns: Json }
+      get_backoffice_comms_usage: {
+        Args: never
+        Returns: {
+          balance: number
+          birthday_sent_30d: number
+          country: string
+          delivered_30d: number
+          email_sent_30d: number
+          failed_30d: number
+          free_monthly_allocation: number
+          last_purchase_amount: number
+          last_purchase_at: string
+          last_purchase_currency: string
+          last_reset_at: string
+          reminders_sent_30d: number
+          sms_sent_30d: number
+          tenant_id: string
+          tenant_name: string
+        }[]
+      }
+      get_backoffice_subscription_ledger: {
+        Args: never
+        Returns: {
+          addon_breakdown: Json
+          addon_mrr: number
+          base_mrr: number
+          comms_balance: number
+          comms_last_purchase_amount: number
+          comms_last_purchase_at: string
+          comms_last_purchase_currency: string
+          country: string
+          currency: string
+          next_billing_at: string
+          plan: string
+          subscription_status: string
+          tenant_id: string
+          tenant_name: string
+        }[]
+      }
+      get_backoffice_transaction_summary_by_currency: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          currency: string
+          tx_count: number
+          volume: number
+        }[]
+      }
+      get_backoffice_transaction_totals: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          failed_count: number
+          refund_count: number
+          total_count: number
+        }[]
+      }
+      get_backoffice_transaction_type_counts: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          tx_count: number
+          type: string
+        }[]
+      }
+      get_backoffice_transactions: {
+        Args: {
+          p_currency?: string
+          p_from: string
+          p_limit?: number
+          p_method?: Database["public"]["Enums"]["payment_method"]
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+          p_tenant_id?: string
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          amount: number
+          appointment_id: string
+          charges: number
+          created_at: string
+          currency: string
+          customer_id: string
+          customer_name: string
+          id: string
+          method: Database["public"]["Enums"]["payment_method"]
+          provider: string
+          provider_reference: string
+          service_count: number
+          service_name: string
+          status: string
+          tenant_id: string
+          tenant_name: string
+          total_count: number
+          type: string
+        }[]
+      }
       get_customer_engagement_summary: {
         Args: { p_customer_id: string; p_tenant_id: string }
         Returns: {
@@ -9121,6 +9262,18 @@ export type Database = {
         Returns: {
           enabled: boolean
           feature_key: string
+        }[]
+      }
+      get_flagged_signups: {
+        Args: never
+        Returns: {
+          attempted_email: string
+          detected_at: string
+          flag_type: string
+          ip_address: string
+          phone_last4: string
+          tenant_id: string
+          tenant_name: string
         }[]
       }
       get_inactive_customers: {
@@ -9165,6 +9318,47 @@ export type Database = {
       get_sales_promo_email_vars: {
         Args: { p_origin?: string; p_promo_code_id: string }
         Returns: Json
+      }
+      get_salon_wallet_availability: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          available: number
+          balance: number
+          currency: string
+          next_settlement_at: string
+          pending: number
+        }[]
+      }
+      get_tenant_billing_activity: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          amount: number
+          currency: string
+          description: string
+          event_type: string
+          occurred_at: string
+        }[]
+      }
+      get_tenant_billing_admin_user_ids: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          user_id: string
+        }[]
+      }
+      get_tenant_message_log: {
+        Args: { p_limit?: number; p_tenant_id: string }
+        Returns: {
+          channel: string
+          content: string
+          created_at: string
+          credits_used: number
+          error_message: string
+          id: string
+          recipient: string
+          sent_at: string
+          status: string
+          subject: string
+        }[]
       }
       get_tenant_plan_change_notifications: {
         Args: { p_limit?: number; p_tenant_id: string }
@@ -9223,6 +9417,7 @@ export type Database = {
       }
       is_backoffice_user: { Args: { _user_id: string }; Returns: boolean }
       is_bookable_tenant: { Args: { _tenant_id: string }; Returns: boolean }
+      is_location_active: { Args: { _location_id: string }; Returns: boolean }
       is_tenant_operational: { Args: { p_tenant_id: string }; Returns: boolean }
       is_tenant_owner: {
         Args: { _tenant_id: string; _user_id: string }
@@ -9318,6 +9513,13 @@ export type Database = {
           _tenant_id: string
         }
         Returns: string
+      }
+      lookup_booking_customer_match: {
+        Args: { p_email?: string; p_phone?: string; p_tenant_id: string }
+        Returns: {
+          customer_id: string
+          first_name: string
+        }[]
       }
       lookup_customer_identity: {
         Args: { p_email: string; p_phone: string; p_tenant_id: string }
@@ -9587,6 +9789,8 @@ export type Database = {
         | "pos"
         | "transfer"
         | "purse"
+        | "ussd"
+        | "qr"
       payment_setup_status:
         | "pending_bank_account"
         | "subaccount_pending"
@@ -9601,7 +9805,7 @@ export type Database = {
         | "refunded_full"
       payout_destination_type: "bank" | "mobile_money"
       refund_status: "pending" | "approved" | "rejected" | "completed"
-      refund_type: "original_method" | "store_credit" | "offline"
+      refund_type: "original_method" | "store_credit" | "offline" | "paystack"
       service_status: "active" | "inactive" | "archived"
       subscription_plan: "solo" | "studio" | "chain"
       subscription_status:
@@ -9785,6 +9989,8 @@ export const Constants = {
         "pos",
         "transfer",
         "purse",
+        "ussd",
+        "qr",
       ],
       payment_setup_status: [
         "pending_bank_account",
@@ -9802,7 +10008,7 @@ export const Constants = {
       ],
       payout_destination_type: ["bank", "mobile_money"],
       refund_status: ["pending", "approved", "rejected", "completed"],
-      refund_type: ["original_method", "store_credit", "offline"],
+      refund_type: ["original_method", "store_credit", "offline", "paystack"],
       service_status: ["active", "inactive", "archived"],
       subscription_plan: ["solo", "studio", "chain"],
       subscription_status: [

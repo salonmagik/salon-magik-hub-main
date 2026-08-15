@@ -1,4 +1,4 @@
-import { paragraph, heading, createInfoBox, wrapEmailTemplate, buildFromAddress } from "./email-template.ts";
+import { paragraph, heading, createInfoBox, createButton, wrapEmailTemplate, buildFromAddress } from "./email-template.ts";
 import { buildReceiptPdf } from "./pdf-receipt.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -127,6 +127,72 @@ export async function sendReceiptEmail(options: SendReceiptEmailOptions): Promis
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error sending receipt";
     console.error("sendReceiptEmail: exception", error);
+    return { sent: false, error: message };
+  }
+}
+
+export interface SendPaymentFailedEmailOptions {
+  recipientEmail: string;
+  salonName: string;
+  salonLogoUrl?: string | null;
+  amount: number;
+  currency: string;
+  updatePaymentMethodUrl: string;
+}
+
+/**
+ * Sent when recurring subscription/add-on billing has stopped retrying (see
+ * MAX_RETRY_ATTEMPTS in process-recurring-addon-billing) — the owner needs to
+ * take action, since the cron won't try again on its own past this point.
+ */
+export async function sendPaymentFailedEmail(options: SendPaymentFailedEmailOptions): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) {
+    console.error("sendPaymentFailedEmail: RESEND_API_KEY not configured");
+    return { sent: false, error: "RESEND_API_KEY not configured" };
+  }
+
+  const content = `
+    ${heading("We couldn't bill your card")}
+    ${paragraph(
+      `We tried a few times to charge ${formatMoney(options.amount, options.currency)} for ${options.salonName}'s Salon Magik subscription, but your card didn't go through. We've stopped retrying so you're not charged unexpectedly — update your payment method and we'll pick up billing again right away.`,
+    )}
+    ${createButton("Update payment method", options.updatePaymentMethodUrl)}
+    ${paragraph("If this keeps happening, reply to this email and we'll help sort it out.")}
+  `;
+
+  const htmlBody = wrapEmailTemplate(content, {
+    mode: "salon",
+    salonName: options.salonName,
+    salonLogoUrl: options.salonLogoUrl || undefined,
+  });
+
+  const fromEmail = Deno.env.get("RECEIPTS_FROM_EMAIL") || Deno.env.get("DEFAULT_FROM_EMAIL") || "billing@salonmagik.com";
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: buildFromAddress({ mode: "salon", salonName: options.salonName, fromEmail }),
+        to: [options.recipientEmail],
+        subject: "Action needed: update your Salon Magik payment method",
+        html: htmlBody,
+      }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error("sendPaymentFailedEmail: Resend error", errBody);
+      return { sent: false, error: errBody };
+    }
+
+    return { sent: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error sending payment-failed email";
+    console.error("sendPaymentFailedEmail: exception", error);
     return { sent: false, error: message };
   }
 }

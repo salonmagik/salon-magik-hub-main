@@ -26,6 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import {
@@ -3095,7 +3097,7 @@ export default function PlansPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
                 Batch size: {createPlanDrafts.length}/{Math.min(MAX_BATCH_ITEMS, remainingPlanSlots)}
@@ -3429,7 +3431,7 @@ export default function PlansPage() {
           </DialogHeader>
 
           {editPlanDraft && (
-            <div className="space-y-4">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
               {editPlanValidation.errors.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
                   <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
@@ -3822,7 +3824,7 @@ export default function PlansPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="flex items-center justify-between">
               <div className="text-xs text-muted-foreground">
                 Sections: {createPricingSections.length}/{MAX_BATCH_ITEMS}
@@ -4051,7 +4053,7 @@ export default function PlansPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
               <div className="font-medium text-destructive">Plan: {deletePlanTarget?.name || "-"}</div>
               <p className="mt-1 text-muted-foreground">
@@ -4116,7 +4118,7 @@ export default function PlansPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             {editPricingValidation.errors.length > 0 && (
               <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
                 <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">

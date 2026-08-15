@@ -34,6 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
 import { DateRangePicker, type DateRangePreset as PickerDateRangePreset } from "@ui/date-range-picker";
 import { TimePicker } from "@ui/time-picker";
@@ -66,6 +67,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Loader2,
+  Link2,
 } from "lucide-react";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -86,6 +88,7 @@ import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "
 import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useCalendarAppointments, type CalendarView, type CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import { useAuth } from "@/hooks/useAuth";
+import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency } from "@shared/currency";
 import type { Enums, Tables } from "@supabase-client";
@@ -170,6 +173,16 @@ export default function AppointmentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { roles, currentTenant } = useAuth();
   const { createFromAppointment } = useInvoices();
+  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug, {
+    configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
+    hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
+  });
+  const isOnlineBookingEnabled = Boolean(currentTenant?.online_booking_enabled);
+  const handleCopyBookingLink = () => {
+    if (!isOnlineBookingEnabled || !bookingUrl) return;
+    navigator.clipboard.writeText(bookingUrl);
+    toast({ title: "Copied!", description: "Booking link copied to clipboard" });
+  };
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
@@ -424,7 +437,7 @@ export default function AppointmentsPage() {
         .from("appointments")
         .select(`
           *,
-          customer:customers(*),
+          customer:customers!appointments_customer_id_fkey(*),
           services:appointment_services(*)
         `)
         .eq("id", appointmentId)
@@ -1007,8 +1020,30 @@ export default function AppointmentsPage() {
               Manage upcoming bookings and stay on top of today's schedule.
             </p>
           </div>
-          {/* Desktop actions (mobile/tablet use the floating + button) */}
-          <div className="hidden lg:flex gap-2 flex-shrink-0">
+          {/* Copy booking link — visible on every viewport, not just desktop */}
+          <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {isOnlineBookingEnabled ? (
+                  <Button variant="outline" className="rounded-full" onClick={handleCopyBookingLink}>
+                    <Link2 className="w-4 h-4" />
+                  </Button>
+                ) : (
+                  <a href="/salon/business-settings?tab=payout-destinations">
+                    <Button variant="outline" className="rounded-full">
+                      <Link2 className="w-4 h-4" />
+                    </Button>
+                  </a>
+                )}
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64 text-xs">
+                {isOnlineBookingEnabled
+                  ? "Copy your salon's public booking page link."
+                  : "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payout Destinations settings."}
+              </TooltipContent>
+            </Tooltip>
+            {/* Desktop actions (mobile/tablet use the floating + button) */}
+            <div className="hidden lg:flex gap-2">
             <Button
               variant="outline"
               className="rounded-full"
@@ -1026,6 +1061,7 @@ export default function AppointmentsPage() {
               <Plus className="w-4 h-4 mr-2" />
               Book appointment
             </Button>
+            </div>
           </div>
         </div>
 
@@ -1872,14 +1908,14 @@ export default function AppointmentsPage() {
       />
 
       <Dialog open={!!notesAppointment} onOpenChange={(open) => !open && setNotesAppointment(null)}>
-        <DialogContent className="rounded-3xl p-5 sm:max-w-xl sm:p-8">
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">
               Notes for {notesAppointment?.customer?.full_name || "customer"}
             </DialogTitle>
             <DialogDescription>Appointment notes, newest first</DialogDescription>
           </DialogHeader>
-          <div className="mt-3 max-h-[60vh] overflow-y-auto overscroll-contain">
+          <div className={cn(DIALOG_BODY_PADDING, "max-h-[60vh] overflow-y-auto overscroll-contain")}>
             {notesAppointment?.notes ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1924,7 +1960,7 @@ export default function AppointmentsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className={DIALOG_BODY_PADDING}>
             {approvalDialogAction === "reschedule" ? (
               <>
                 <div className="space-y-3">

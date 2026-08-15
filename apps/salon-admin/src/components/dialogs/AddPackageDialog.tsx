@@ -23,6 +23,7 @@ import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
 import { formatCurrency, getCurrencySymbol } from "@shared/currency";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
 import { getCurrenciesForLocations } from "@/lib/locationCurrency";
 
@@ -291,22 +292,23 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
       if (!isOpen) resetForm();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-y-auto rounded-[22px] border-0 bg-white p-5 shadow-2xl sm:max-h-[92vh] sm:max-w-[580px] sm:p-[34px]">
-        <DialogHeader className="mb-7 flex flex-row items-center gap-3.5 pr-10 text-left">
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 rounded-[22px] border-0 sm:max-h-[92vh] sm:max-w-[580px]">
+        <DialogHeader className="flex flex-row items-center gap-3.5 pr-10 text-left">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[#e3f3eb]">
             <Gift className="h-5 w-5 text-[#2e7d5b]" />
           </div>
           <div className="min-w-0">
-            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px] text-[#141014]">
+            <DialogTitle className="font-serif text-xl font-medium tracking-[-0.3px]">
               Create package
             </DialogTitle>
-            <DialogDescription className="mt-0.5 text-[13px] text-[#141014]/60">
+            <DialogDescription className="mt-0.5 text-[13px]">
               Bundle services and products together at a special price
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-[18px]">
+        <form onSubmit={handleSubmit}>
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-[18px]")}>
           <div className="space-y-[7px]">
             <Label className="text-[13.5px] font-normal text-[#141014]/60">
               Package name <span className="text-[#2e1f4e]">*</span>
@@ -561,20 +563,21 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
               className="min-h-[96px] resize-y rounded-lg border-[#141014]/10 px-3.5 py-3 text-[14.5px] shadow-none focus-visible:border-[#2e1f4e] focus-visible:ring-[#f2eefa] focus-visible:ring-offset-0"
             />
           </div>
+        </div>
 
-          <DialogFooter className="flex flex-col-reverse gap-2 pt-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
+          <DialogFooter className="flex flex-col-reverse gap-2 min-[480px]:flex-row min-[480px]:justify-end min-[480px]:space-x-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="h-11 w-full rounded-full border-[#141014]/10 px-5 text-[14.5px] font-medium shadow-none hover:bg-[#f1ece3] min-[480px]:w-auto"
+              className="h-11 w-full rounded-full px-5 text-[14.5px] font-medium shadow-none min-[480px]:w-auto"
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              className="h-11 w-full rounded-full bg-[#141014] px-5 text-[14.5px] font-medium text-white hover:bg-[#2e1f4e] min-[480px]:w-auto"
+              className="h-11 w-full rounded-full px-5 text-[14.5px] font-medium min-[480px]:w-auto"
               disabled={isSubmitting || !isFormValid}
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

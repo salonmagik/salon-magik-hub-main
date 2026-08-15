@@ -15,6 +15,7 @@ import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
 import { TimePicker } from "@ui/time-picker";
 import { AlertTriangle, Calendar, Pause, X } from "lucide-react";
 import type { AppointmentWithDetails } from "@/hooks/useAppointments";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface AppointmentActionsDialogProps {
   open: boolean;
@@ -122,7 +123,8 @@ export function AppointmentActionsDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        <form onSubmit={handleSubmit}>
+        <div className={DIALOG_BODY_PADDING}>
           {/* Customer info */}
           {appointment && (
             <div className="p-3 rounded-lg bg-muted">
@@ -202,6 +204,7 @@ export function AppointmentActionsDialog({
               <p>Cancelling this appointment may trigger notifications to the customer.</p>
             </div>
           )}
+        </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
             <Button

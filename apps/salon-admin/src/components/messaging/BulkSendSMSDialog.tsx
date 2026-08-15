@@ -35,6 +35,7 @@ import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import { cn } from "@shared/utils";
 import { Input } from "@ui/input";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface BulkSendSMSDialogProps {
   open: boolean;
@@ -232,7 +233,7 @@ export function BulkSendSMSDialog({
           </div>
         </DialogHeader>
 
-        <div className="space-y-5 mt-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-5")}>
           {/* Filter Section */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -387,7 +388,7 @@ export function BulkSendSMSDialog({
           </div>
         </div>
 
-        <DialogFooter className="pt-4 flex flex-col-reverse sm:flex-row gap-2">
+        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
           <Button
             type="button"
             variant="outline"

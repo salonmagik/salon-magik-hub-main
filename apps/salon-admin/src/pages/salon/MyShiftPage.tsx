@@ -15,6 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
@@ -359,7 +361,7 @@ export default function MyShiftPage() {
             <DialogTitle className="font-serif text-xl">Request time off</DialogTitle>
             <DialogDescription>Your manager will approve or decline this request.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <div>
               <Label>Leave type</Label>
               <Select value={leaveType} onValueChange={(value) => setLeaveType(value as LeaveType)}>

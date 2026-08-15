@@ -170,7 +170,7 @@ const handler = async (req: Request): Promise<Response> => {
       .from("appointments")
       .select(`
         *,
-        customer:customers(id, full_name, email),
+        customer:customers!appointments_customer_id_fkey(id, full_name, email),
         services:appointment_services(service_name, price),
         location:locations(name, address, city),
         tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan)

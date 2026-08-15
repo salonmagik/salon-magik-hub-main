@@ -11,6 +11,8 @@ import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface FlagCustomerDialogProps {
   open: boolean;
@@ -60,7 +62,7 @@ export function FlagCustomerDialog({
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-2">
             <Label htmlFor="reason">Reason for flagging *</Label>
             <Textarea

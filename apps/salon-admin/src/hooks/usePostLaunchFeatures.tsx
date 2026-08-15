@@ -215,8 +215,8 @@ export function useServiceChange() {
 // Feature: Communication Credits Purchase
 // ============================================
 // IMPLEMENTED: See src/hooks/useCreditPurchase.tsx
-export { useCreditPurchase, CREDIT_PACKAGES } from "./useCreditPurchase";
-export type { CreditPackage } from "./useCreditPurchase";
+export { useCreditPurchase } from "./useCreditPurchase";
+export type { CreditTier } from "./useCreditPurchase";
 
 // ============================================
 // Feature: Trial Enforcement

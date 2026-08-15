@@ -13,6 +13,7 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Loader2, Info } from "lucide-react";
 import { Alert, AlertDescription } from "@ui/alert";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface RequestDeleteDialogProps {
   open: boolean;
@@ -53,8 +54,9 @@ export function RequestDeleteDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
 
+        <div className={DIALOG_BODY_PADDING}>
         {items.length > 0 && (
-          <div className="my-2 max-h-32 overflow-y-auto">
+          <div className="mb-2 max-h-32 overflow-y-auto">
             <ul className="list-disc pl-5 space-y-1 text-sm">
               {items.map((item) => (
                 <li key={item.id}>
@@ -66,7 +68,7 @@ export function RequestDeleteDialog({
           </div>
         )}
 
-        <div className="py-4 space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="reason">
             Reason for deletion <span className="text-destructive">*</span>
           </Label>
@@ -79,12 +81,13 @@ export function RequestDeleteDialog({
           />
         </div>
 
-        <Alert variant="default" className="border-muted">
+        <Alert variant="default" className="border-muted mt-4">
           <Info className="h-4 w-4" />
           <AlertDescription>
             An owner must approve this request before the items are removed.
           </AlertDescription>
         </Alert>
+        </div>
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>

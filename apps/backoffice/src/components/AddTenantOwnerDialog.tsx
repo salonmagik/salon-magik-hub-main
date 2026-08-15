@@ -14,6 +14,8 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 import { Crown, Loader2, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface AddTenantOwnerDialogProps {
   tenant: { id: string; name: string } | null;
@@ -147,7 +149,7 @@ export function AddTenantOwnerDialog({ tenant, onOpenChange, onSuccess }: AddTen
                 owner, not for reassigning an existing one.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>First name</Label>
@@ -187,7 +189,7 @@ export function AddTenantOwnerDialog({ tenant, onOpenChange, onSuccess }: AddTen
                 Enter your current 6-digit code to confirm adding {firstName} {lastName} as owner of {tenant?.name}.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col items-center gap-3 py-2">
+            <div className={cn(DIALOG_BODY_PADDING, "flex flex-col items-center gap-3")}>
               <InputOTP maxLength={6} value={totpToken} onChange={setTotpToken} disabled={isSubmitting}>
                 <InputOTPGroup>
                   {Array.from({ length: 6 }).map((_, i) => (

@@ -7,7 +7,7 @@ import { Slider } from "@ui/slider";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
 
-export type PaymentGateway = "stripe" | "paystack";
+export type PaymentGateway = "paystack";
 export type PaymentMode = "purse" | "card" | "split";
 
 interface PaymentStepProps {

@@ -68,7 +68,7 @@ export function useManualMessages(options: UseManualMessagesOptions) {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchMessages = useCallback(async () => {
-    if (!tenantId) {
+    if (!tenantId || !customerId) {
       setMessages([]);
       setIsLoading(false);
       return;
@@ -84,17 +84,15 @@ export function useManualMessages(options: UseManualMessagesOptions) {
           .from("manual_messages")
           .select(`*, customer:customers(*), template:whatsapp_templates(*)`)
           .eq("tenant_id", tenantId)
-          .eq("customer_id", customerId ?? "")
+          .eq("customer_id", customerId)
           .order("created_at", { ascending: false }),
 
-        customerId
-          ? supabase
-              .from("message_logs")
-              .select("*")
-              .eq("tenant_id", tenantId)
-              .eq("customer_id", customerId)
-              .order("created_at", { ascending: false })
-          : Promise.resolve({ data: [] as BroadcastLog[], error: null }),
+        supabase
+          .from("message_logs")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("customer_id", customerId)
+          .order("created_at", { ascending: false }),
       ]);
 
       if (manualResult.error) throw manualResult.error;

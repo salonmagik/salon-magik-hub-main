@@ -6,6 +6,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
@@ -28,6 +29,7 @@ import { useLocations } from "@/hooks/useLocations";
 import { useAppointmentActions } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
+import { formatCurrency } from "@shared/currency";
 
 const BUFFER_OPTIONS = [
   { value: "0", label: "Start immediately" },
@@ -52,6 +54,7 @@ interface SelectedService {
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
   const { currentTenant, activeLocationId, currentRole, assignedLocationIds } = useAuth();
+  const currency = currentTenant?.currency || "NGN";
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
@@ -176,7 +179,8 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
             </div>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <form onSubmit={handleSubmit}>
+          <div className={DIALOG_BODY_PADDING}>
             {/* Customer Selection */}
             <div className="space-y-2">
               <Label>
@@ -300,7 +304,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                             </div>
                           </div>
                           <span className="font-semibold text-sm">
-                            ${Number(service.price).toFixed(2)}
+                            {formatCurrency(Number(service.price), currency)}
                           </span>
                         </button>
                       );
@@ -323,7 +327,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                 </div>
                 <div className="flex justify-between text-sm font-semibold border-t pt-1">
                   <span>Total</span>
-                  <span>${totalPrice.toFixed(2)}</span>
+                  <span>{formatCurrency(totalPrice, currency)}</span>
                 </div>
               </div>
             )}
@@ -391,8 +395,9 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
               rows={2}
               disabled={isSubmitting}
             />
+          </div>
 
-            <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
+            <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
                 <Check className="w-4 h-4 text-success flex-shrink-0" />
                 <span className="whitespace-nowrap">

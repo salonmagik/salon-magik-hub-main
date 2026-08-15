@@ -15,6 +15,8 @@ import { useToast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
 import { validatePasswordStrength } from "@shared/validation";
 import { ValidationChecklist } from "@ui/validation-checklist";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 interface ForcePasswordChangeDialogProps {
   open: boolean;
@@ -153,7 +155,7 @@ export function ForcePasswordChangeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-2">
             <Label htmlFor="new-password">New Password</Label>
             <div className="relative">

@@ -38,7 +38,6 @@ export const SECURITY_CHECKLIST: SecurityChecklistItem[] = [
   
   // Edge Function Security
   { id: "ef_1", category: "Edge Functions", item: "All inputs validated and sanitized", status: "pending" },
-  { id: "ef_2", category: "Edge Functions", item: "Stripe webhook signature verified", status: "pending" },
   { id: "ef_3", category: "Edge Functions", item: "Paystack webhook signature verified (SHA-512)", status: "pending" },
   { id: "ef_4", category: "Edge Functions", item: "CORS properly configured", status: "pending" },
   { id: "ef_5", category: "Edge Functions", item: "Rate limiting implemented", status: "pending" },
@@ -81,7 +80,7 @@ export const E2E_TEST_CASES: E2ETestCase[] = [
   // Customer Journey
   { id: "cust_1", journey: "Customer", step: "Browse public booking page", expectedResult: "Services and packages displayed", status: "pending" },
   { id: "cust_2", journey: "Customer", step: "Select services → checkout", expectedResult: "Cart totals correct, proceed to payment", status: "pending" },
-  { id: "cust_3", journey: "Customer", step: "Complete Paystack/Stripe payment", expectedResult: "Payment confirmed, booking created", status: "pending" },
+  { id: "cust_3", journey: "Customer", step: "Complete Paystack payment", expectedResult: "Payment confirmed, booking created", status: "pending" },
   { id: "cust_4", journey: "Customer", step: "Access client portal via OTP", expectedResult: "Dashboard shows booking", status: "pending" },
   { id: "cust_5", journey: "Customer", step: "View booking details", expectedResult: "All services, times, and amounts visible", status: "pending" },
   { id: "cust_6", journey: "Customer", step: "Request refund", expectedResult: "Refund request submitted, visible in salon", status: "pending" },
@@ -150,7 +149,6 @@ export const LAUNCH_CONFIG = {
   minSecurityScore: 100,
   minE2EPassRate: 90,
   requiredSecrets: [
-    "STRIPE_SECRET_KEY",
     "PAYSTACK_SECRET_KEY",
     "RESEND_API_KEY",
     "RESEND_FROM_EMAIL",

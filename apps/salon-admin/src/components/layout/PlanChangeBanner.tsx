@@ -4,6 +4,8 @@ import { Button } from "@ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
 import { usePlanChangeNotifications } from "@/hooks/usePlanChangeNotifications";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 
 type PriceDelta = {
   currency: string;
@@ -71,7 +73,7 @@ export function PlanChangeBanner() {
         <DialogHeader>
           <DialogTitle>Plan Change Details</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 text-sm">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
           <div>
             <strong>Reason:</strong> {latestUnseen.reason || "No reason provided"}
           </div>

@@ -1,12 +1,14 @@
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
-import { Separator } from "@ui/separator";
 import { Edit, Archive, Trash2, Percent } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -76,7 +78,7 @@ export function PackageDetailDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
           {/* Image */}
           {pkg.image_urls && pkg.image_urls.length > 0 && (
             <ImageCarousel images={pkg.image_urls} alt={pkg.name} />
@@ -122,36 +124,34 @@ export function PackageDetailDialog({
             </div>
           )}
 
-          <Separator />
-
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="flex-1" onClick={onEdit}>
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Button>
-            
-            {canManage && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={onArchive}
-                >
-                  <Archive className="w-4 h-4 mr-2" />
-                  {isArchived ? "Unarchive" : "Archive"}
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  onClick={onDelete}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </>
-            )}
-          </div>
         </div>
+
+        <DialogFooter className="flex-row items-center gap-2 sm:justify-start">
+          <Button variant="outline" className="flex-1" onClick={onEdit}>
+            <Edit className="w-4 h-4 mr-2" />
+            Edit
+          </Button>
+
+          {canManage && (
+            <>
+              <Button
+                variant="outline"
+                onClick={onArchive}
+              >
+                <Archive className="w-4 h-4 mr-2" />
+                {isArchived ? "Unarchive" : "Archive"}
+              </Button>
+
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

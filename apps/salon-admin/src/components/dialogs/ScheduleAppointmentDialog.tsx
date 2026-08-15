@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Button } from "@ui/button";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
@@ -17,6 +18,7 @@ import { useLocations } from "@/hooks/useLocations";
 import { useAppointmentActions } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
+import { formatCurrency } from "@shared/currency";
 
 interface ScheduleAppointmentDialogProps {
   open: boolean;
@@ -32,7 +34,8 @@ interface SelectedService {
 }
 
 export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: ScheduleAppointmentDialogProps) {
-  const { activeLocationId, currentRole, assignedLocationIds } = useAuth();
+  const { currentTenant, activeLocationId, currentRole, assignedLocationIds } = useAuth();
+  const currency = currentTenant?.currency || "NGN";
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<
@@ -152,7 +155,8 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
             </p>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <form onSubmit={handleSubmit}>
+          <div className={DIALOG_BODY_PADDING}>
             {/* Customer Selection */}
             <div className="space-y-2">
               <Label>
@@ -269,7 +273,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                             </div>
                           </div>
                           <span className="font-semibold text-sm">
-                            ${Number(service.price).toFixed(2)}
+                            {formatCurrency(Number(service.price), currency)}
                           </span>
                         </button>
                       );
@@ -292,7 +296,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 </div>
                 <div className="flex justify-between text-sm font-semibold border-t pt-1">
                   <span>Total</span>
-                  <span>${totalPrice.toFixed(2)}</span>
+                  <span>{formatCurrency(totalPrice, currency)}</span>
                 </div>
               </div>
             )}
@@ -354,8 +358,9 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
               onAttachmentsChange={setNoteAttachments}
               disabled={isSubmitting}
             />
+          </div>
 
-            <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 border-t">
+            <DialogFooter className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground">
                 <Check className="w-4 h-4 text-success flex-shrink-0" />
                 <span className="whitespace-nowrap">Client notifications will be sent automatically.</span>

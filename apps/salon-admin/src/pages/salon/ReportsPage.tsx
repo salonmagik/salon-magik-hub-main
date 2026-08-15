@@ -66,6 +66,8 @@ const METHOD_LABELS: Record<string, string> = {
   mobile_money: "Mobile Money",
   paystack: "Paystack",
   purse: "Client Wallet",
+  ussd: "USSD",
+  qr: "QR",
   other: "Other",
 };
 

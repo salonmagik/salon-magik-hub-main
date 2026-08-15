@@ -1,129 +1,103 @@
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
 
-export interface CreditPackage {
-  id: string;
+export interface CreditTier {
+  bundlePrice: number;
   credits: number;
-  priceUSD: number;
-  priceNGN: number;
-  priceGHS: number;
 }
 
-export const CREDIT_PACKAGES: CreditPackage[] = [
-  { id: "pack_50", credits: 50, priceUSD: 5, priceNGN: 3500, priceGHS: 60 },
-  { id: "pack_100", credits: 100, priceUSD: 9, priceNGN: 6500, priceGHS: 108 },
-  { id: "pack_250", credits: 250, priceUSD: 20, priceNGN: 15000, priceGHS: 240 },
-  { id: "pack_500", credits: 500, priceUSD: 35, priceNGN: 27000, priceGHS: 420 },
-];
+interface SmsCreditPricingValue {
+  margin_multiplier: number;
+  low_balance_threshold_credits: number;
+  tiers: Record<string, Array<{ bundle_price: number; arkesel_cost_per_sms: number }>>;
+}
 
-// Tier-based pricing for custom credits (based on PRD pricing structure)
-function calculateCustomCreditPrice(credits: number, currency: string): number {
-  let ratePerCredit: number;
-  
-  // Determine rate based on tier
-  if (credits <= 50) {
-    // Pack 50 rate: NGN 70/credit, GHS 1.20/credit
-    ratePerCredit = currency === 'NGN' ? 70 : currency === 'GHS' ? 1.20 : 0.10;
-  } else if (credits <= 100) {
-    // Pack 100 rate: NGN 65/credit, GHS 1.08/credit
-    ratePerCredit = currency === 'NGN' ? 65 : currency === 'GHS' ? 1.08 : 0.09;
-  } else if (credits <= 250) {
-    // Pack 250 rate: NGN 60/credit, GHS 0.96/credit
-    ratePerCredit = currency === 'NGN' ? 60 : currency === 'GHS' ? 0.96 : 0.08;
-  } else {
-    // Pack 500+ rate: NGN 54/credit, GHS 0.84/credit
-    ratePerCredit = currency === 'NGN' ? 54 : currency === 'GHS' ? 0.84 : 0.07;
-  }
-  
-  return Math.round(credits * ratePerCredit);
+function computeTiers(value: SmsCreditPricingValue | null, currency: string): CreditTier[] {
+  if (!value) return [];
+  const margin = Number(value.margin_multiplier || 1.5);
+  const rawTiers = value.tiers?.[currency] || [];
+  return rawTiers.map((t) => {
+    const ourCostPerCredit = Number(t.arkesel_cost_per_sms) * margin;
+    const credits = ourCostPerCredit > 0 ? Math.floor(Number(t.bundle_price) / ourCostPerCredit) : 0;
+    return { bundlePrice: Number(t.bundle_price), credits };
+  });
 }
 
 export function useCreditPurchase() {
   const { currentTenant } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pricingValue, setPricingValue] = useState<SmsCreditPricingValue | null>(null);
+  const currency = currentTenant?.currency || "NGN";
 
-  const getPackagePrice = useCallback((pkg: CreditPackage, currency: string): number => {
-    switch (currency) {
-      case "NGN":
-        return pkg.priceNGN;
-      case "GHS":
-        return pkg.priceGHS;
-      default:
-        return pkg.priceUSD;
-    }
-  }, []);
-
-  const getCustomCreditPrice = useCallback((credits: number, currency: string): number => {
-    return calculateCustomCreditPrice(credits, currency);
-  }, []);
-
-  const purchaseCredits = useCallback(async (packageId: string): Promise<{ success: boolean; checkoutUrl: string | null }> => {
-    if (!currentTenant?.id) {
-      toast({
-        title: "Error",
-        description: "No salon selected",
-        variant: "destructive",
-      });
-      return { success: false, checkoutUrl: null };
-    }
-
-    const pkg = CREDIT_PACKAGES.find((p) => p.id === packageId);
-    if (!pkg) {
-      toast({
-        title: "Error",
-        description: "Invalid package selected",
-        variant: "destructive",
-      });
-      return { success: false, checkoutUrl: null };
-    }
-
+  useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
+    supabase
+      .from("platform_settings")
+      .select("value")
+      .eq("key", "sms_credit_pricing")
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Failed to load SMS credit pricing:", error);
+        } else {
+          setPricingValue((data?.value as unknown as SmsCreditPricingValue) || null);
+        }
+        setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const tiers = computeTiers(pricingValue, currency);
+
+  const purchaseCredits = useCallback(async (bundlePrice: number): Promise<{ success: boolean; checkoutUrl: string | null }> => {
+    if (!currentTenant?.id) {
+      toast({ title: "Error", description: "No salon selected", variant: "destructive" });
+      return { success: false, checkoutUrl: null };
+    }
 
     try {
-      const currency = currentTenant.currency || "USD";
-      const amount = getPackagePrice(pkg, currency);
+      const { data: { user } } = await supabase.auth.getUser();
+      const customerEmail = user?.email || "";
+      if (!customerEmail) throw new Error("Unable to retrieve your email address. Please try again.");
 
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+      const tier = tiers.find((t) => t.bundlePrice === bundlePrice);
+
+      const { data, error } = await supabase.functions.invoke("create-payment-session", {
         body: {
           tenantId: currentTenant.id,
-          mode: "payment",
-          productType: "credits",
-          credits: pkg.credits,
-          amount,
+          amount: bundlePrice,
           currency,
-          returnUrl: `${window.location.origin}/salon/messaging?purchase=success`,
+          customerEmail,
+          customerName: currentTenant.name || "Salon Owner",
+          description: `Purchase ${tier?.credits ?? ""} messaging credits`,
+          intentType: "messaging_credit_purchase",
+          successUrl: `${window.location.origin}/salon/messaging?purchase=success`,
           cancelUrl: `${window.location.origin}/salon/messaging?purchase=cancelled`,
         },
       });
 
       if (error) throw error;
-
-      if (data?.url) {
-        return { success: true, checkoutUrl: data.url };
+      if (data?.paymentUrl || data?.checkoutUrl) {
+        return { success: true, checkoutUrl: data.paymentUrl || data.checkoutUrl };
       }
-
       throw new Error("No checkout URL returned");
     } catch (err) {
       console.error("Error creating checkout session:", err);
-      toast({
-        title: "Error",
-        description: "Failed to initiate purchase. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to initiate purchase. Please try again.", variant: "destructive" });
       return { success: false, checkoutUrl: null };
-    } finally {
-      setIsLoading(false);
     }
-  }, [currentTenant?.id, currentTenant?.currency, getPackagePrice]);
+  }, [currentTenant?.id, currentTenant?.name, currency, tiers]);
 
   return {
-    packages: CREDIT_PACKAGES,
-    purchaseCredits,
-    getPackagePrice,
-    getCustomCreditPrice,
+    tiers,
     isLoading,
-    currency: currentTenant?.currency || "USD",
+    purchaseCredits,
+    currency,
   };
 }

@@ -17,6 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { cn } from "@shared/utils";
 import {
   Table,
   TableBody,
@@ -250,7 +252,7 @@ export default function FeatureFlagsPage() {
                   : ""}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
               <div className="space-y-2">
                 <Label htmlFor="toggle-reason">Reason</Label>
                 <Textarea

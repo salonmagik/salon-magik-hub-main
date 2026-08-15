@@ -6,12 +6,11 @@ import {
   sendResendEmail,
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
-
-const STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300;
+import { mapPaystackChannelToPaymentMethod } from "./paystack-helpers.ts";
 
 export interface WebhookEvent {
   type: string;
-  gateway: "stripe" | "paystack";
+  gateway: "paystack";
   data: {
     paymentIntentId?: string;
     appointmentId?: string;
@@ -23,6 +22,7 @@ export interface WebhookEvent {
     amount?: number;
     serviceAmount?: number;
     processingFeeAmount?: number;
+    channel?: string;
     status?: string;
     reference?: string;
     isDeposit?: boolean;
@@ -136,10 +136,10 @@ async function validateTenant(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   context: string
-): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null; logo_url?: string | null }> {
+): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null; logo_url?: string | null; payout_mode?: string | null }> {
   const { data: tenant, error: tenantError } = await supabase
     .from("tenants")
-    .select("name, currency, platform_percentage_charge, logo_url")
+    .select("name, currency, platform_percentage_charge, logo_url, payout_mode")
     .eq("id", tenantId)
     .single();
 
@@ -183,60 +183,6 @@ async function validateWalletCurrency(
   }
 }
 
-// Verify Stripe webhook signature using HMAC SHA256
-export async function verifyStripeSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): Promise<boolean> {
-  try {
-    const parts = signature.split(",").reduce((acc, part) => {
-      const [key, value] = part.split("=");
-      acc[key] = value;
-      return acc;
-    }, {} as Record<string, string>);
-
-    const timestamp = parts["t"];
-    const expectedSig = parts["v1"];
-
-    if (!timestamp || !expectedSig) {
-      console.error("Invalid Stripe signature format");
-      return false;
-    }
-
-    // Check timestamp is within 5 minutes
-    const timestampAge = Math.floor(Date.now() / 1000) - parseInt(timestamp);
-    if (timestampAge > STRIPE_WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS) {
-      console.error("Stripe webhook timestamp too old");
-      return false;
-    }
-
-    // Compute expected signature
-    const signedPayload = `${timestamp}.${payload}`;
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      encoder.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"]
-    );
-    const signatureBuffer = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(signedPayload)
-    );
-    const computedSig = Array.from(new Uint8Array(signatureBuffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-
-    return computedSig === expectedSig;
-  } catch (error) {
-    console.error("Stripe signature verification error:", error);
-    return false;
-  }
-}
-
 // Verify Paystack webhook signature using HMAC SHA512
 export async function verifyPaystackSignature(
   payload: string,
@@ -274,7 +220,7 @@ const sendTransactionAlerts = async (input: {
   currency?: string | null;
   customerName?: string | null;
   amount: number;
-  gateway: "stripe" | "paystack";
+  gateway: "paystack";
   title: string;
   description: string;
   entityId?: string | null;
@@ -325,9 +271,10 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
 
       const actualServiceAmount = serviceAmount ?? amount;
+      const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
 
       // Subscription activation: payment was initiated from the upgrade/trial flow.
       // Activate the tenant immediately — Paystack handles recurring billing from here.
@@ -466,15 +413,19 @@ export async function processWebhook(
                 }
               }
 
-              // Create transaction record for card payment (grouped with purse if split payment)
+              // Create transaction record (grouped with purse if split payment).
+              // amount here is the true service price, not what Paystack
+              // actually charged the customer's card (which includes
+              // Paystack's own processing fee and Salon Magik's fees) — see
+              // actualServiceAmount above.
               await supabase.from("transactions").insert({
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
                 appointment_id: primaryAppointment.id,
                 type: isDeposit ? "deposit" : "payment",
-                amount,
+                amount: actualServiceAmount,
                 currency: tenant?.currency || "USD",
-                method: "card",
+                method: paymentMethod,
                 provider: event.gateway,
                 provider_reference: reference,
                 status: "completed",
@@ -484,11 +435,11 @@ export async function processWebhook(
 
               // Calculate total payment including purse for notifications
               const totalPaymentAmount = splitPurseAmount && splitPurseAmount > 0
-                ? amount + splitPurseAmount
-                : amount;
+                ? actualServiceAmount + splitPurseAmount
+                : actualServiceAmount;
               const paymentDescription = splitPurseAmount && splitPurseAmount > 0
-                ? `${tenant?.currency || ""} ${amount} (card) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
-                : `${tenant?.currency || ""} ${amount}`;
+                ? `${tenant?.currency || ""} ${actualServiceAmount} (${paymentMethod}) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
+                : `${tenant?.currency || ""} ${actualServiceAmount}`;
 
               await sendTransactionAlerts({
                 tenantId: primaryAppointment.tenant_id,
@@ -507,10 +458,10 @@ export async function processWebhook(
                   ${splitPurseAmount && splitPurseAmount > 0 ? `
                     <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Payment Breakdown:</strong></p>
                     <ul style="color: #4b5563; font-size: 16px; line-height: 1.6;">
-                      <li>Card payment: ${tenant?.currency || "USD"} ${amount}</li>
+                      <li>${paymentMethod} payment: ${tenant?.currency || "USD"} ${actualServiceAmount}</li>
                       <li>Store credit: ${tenant?.currency || "USD"} ${splitPurseAmount}</li>
                     </ul>
-                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${amount}</p>`}
+                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${actualServiceAmount}</p>`}
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
                 `,
@@ -570,7 +521,7 @@ export async function processWebhook(
                             <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
                             <ul>
                               <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
-                              <li><strong>Amount Paid:</strong> ${tenant.currency} ${amount}</li>
+                              <li><strong>Amount Paid:</strong> ${tenant.currency} ${actualServiceAmount}</li>
                               <li><strong>Gateway:</strong> ${event.gateway}</li>
                               <li><strong>Appointments:</strong> ${appointments.length}</li>
                             </ul>
@@ -632,36 +583,44 @@ export async function processWebhook(
               }
 
               try {
-                // Validate salon wallet currency matches tenant currency
-                await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
+                // "Automatic" salons get paid straight to their bank by
+                // Paystack's own settlement — their money never touches the
+                // internal wallet. Only "on_demand" salons accumulate a
+                // withdrawable balance here.
+                if (tenant.payout_mode === "on_demand") {
+                  // Validate salon wallet currency matches tenant currency
+                  await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
-                // Only gateway funds become immediately withdrawable. Paid
-                // customer-balance grants settle when the appointment completes;
-                // salon-issued store credit never increases payout balance.
-                const totalAmountForSalon = actualServiceAmount;
+                  // Only gateway funds become immediately withdrawable. Paid
+                  // customer-balance grants settle when the appointment completes;
+                  // salon-issued store credit never increases payout balance.
+                  const totalAmountForSalon = actualServiceAmount;
 
-                let finalCreditAmount = totalAmountForSalon;
-                if (tenant.platform_percentage_charge) {
-                   finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
-                }
+                  let finalCreditAmount = totalAmountForSalon;
+                  if (tenant.platform_percentage_charge) {
+                     finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
+                  }
 
-                console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
+                  console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
 
-                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                  p_tenant_id: primaryAppointment.tenant_id,
-                  p_entry_type: "salon_purse_credit_booking",
-                  p_reference_type: "appointment",
-                  p_reference_id: primaryAppointment.id,
-                  p_amount: finalCreditAmount,
-                  p_currency: tenant.currency,
-                  p_idempotency_key: `booking_${reference}`,
-                  p_gateway_reference: reference,
-                });
+                  const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                    p_tenant_id: primaryAppointment.tenant_id,
+                    p_entry_type: "salon_purse_credit_booking",
+                    p_reference_type: "appointment",
+                    p_reference_id: primaryAppointment.id,
+                    p_amount: finalCreditAmount,
+                    p_currency: tenant.currency,
+                    p_idempotency_key: `booking_${reference}`,
+                    p_gateway_reference: reference,
+                  });
 
-                if (creditError) {
-                  console.error("Error crediting salon purse:", creditError);
+                  if (creditError) {
+                    console.error("Error crediting salon purse:", creditError);
+                  } else {
+                    console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  }
                 } else {
-                  console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  console.log(`Tenant ${primaryAppointment.tenant_id} is on automatic payout — skipping internal wallet credit, Paystack settles directly.`);
                 }
               } catch (purseError) {
                 console.error("Exception crediting salon purse:", purseError);
@@ -795,27 +754,31 @@ export async function processWebhook(
                 console.error("Error updating invoice:", invoiceUpdateError);
               }
 
-              // Validate salon wallet currency matches tenant currency
-              await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
+              if (invoiceTenant.payout_mode === "on_demand") {
+                // Validate salon wallet currency matches tenant currency
+                await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
-              let finalCreditAmount = actualServiceAmount;
-              if (invoiceTenant.platform_percentage_charge) {
-                 finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
-              }
+                let finalCreditAmount = actualServiceAmount;
+                if (invoiceTenant.platform_percentage_charge) {
+                   finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
+                }
 
-              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                p_tenant_id: tenantId,
-                p_entry_type: "salon_purse_credit_invoice",
-                p_reference_type: "invoice",
-                p_reference_id: invoiceId,
-                p_amount: finalCreditAmount,
-                p_currency: invoiceTenant.currency,
-                p_idempotency_key: `invoice_${reference}`,
-                p_gateway_reference: reference,
-              });
+                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                  p_tenant_id: tenantId,
+                  p_entry_type: "salon_purse_credit_invoice",
+                  p_reference_type: "invoice",
+                  p_reference_id: invoiceId,
+                  p_amount: finalCreditAmount,
+                  p_currency: invoiceTenant.currency,
+                  p_idempotency_key: `invoice_${reference}`,
+                  p_gateway_reference: reference,
+                });
 
-              if (creditError) {
-                console.error("Error crediting salon purse for invoice:", creditError);
+                if (creditError) {
+                  console.error("Error crediting salon purse for invoice:", creditError);
+                }
+              } else {
+                console.log(`Tenant ${tenantId} is on automatic payout — skipping internal wallet credit for invoice payment.`);
               }
             } catch (invoiceError) {
               console.error("Exception processing invoice payment:", invoiceError);

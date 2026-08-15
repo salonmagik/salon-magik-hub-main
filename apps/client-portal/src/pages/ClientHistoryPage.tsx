@@ -20,6 +20,17 @@ const TYPE_TOOLTIPS: Record<string, string> = {
 
 const STATUS_TOOLTIP = "Whether this transaction has fully processed. \"Completed\" means it's final.";
 
+const METHOD_LABELS: Record<string, string> = {
+  card: "Card",
+  mobile_money: "Mobile Money",
+  cash: "Cash",
+  pos: "POS",
+  transfer: "Transfer",
+  purse: "Salon balance",
+  ussd: "USSD",
+  qr: "QR",
+};
+
 export default function ClientHistoryPage() {
   const navigate = useNavigate();
   const { transactions, isLoading: txLoading } = useClientTransactions();
@@ -119,7 +130,7 @@ export default function ClientHistoryPage() {
                                 </Tooltip>
                               )}
                               <Badge variant="outline" className="text-xs">
-                                {tx.method}
+                                {METHOD_LABELS[tx.method] || tx.method}
                               </Badge>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
