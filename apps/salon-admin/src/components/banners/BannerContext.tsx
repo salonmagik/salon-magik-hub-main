@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
+import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { useLocation } from "react-router-dom";
 
 export type BannerVariant = "error" | "warning" | "info" | "success" | "maintenance";
@@ -65,6 +66,7 @@ interface BannerProviderProps {
 export function BannerProvider({ children, platform }: BannerProviderProps) {
   const { currentTenant, isActiveContextPaused } = useAuth();
   const { pendingInvitations } = useStaffInvitations();
+  const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
   const routerLocation = useLocation();
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -222,8 +224,12 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       }
 
       // Priority 3: Trial Expired
-      if (currentTenant.subscription_status === "trialing" && currentTenant.trial_ends_at) {
-        const trialEnd = new Date(currentTenant.trial_ends_at);
+      // An active gifted-trial override (Backoffice → Tenant Gifted Trials)
+      // takes precedence over the tenant's own trial dates — see
+      // useActiveTrialOverride's doc comment.
+      const effectiveTrialEndsAt = activeTrialOverride?.ends_at ?? currentTenant.trial_ends_at;
+      if ((activeTrialOverride || currentTenant.subscription_status === "trialing") && effectiveTrialEndsAt) {
+        const trialEnd = new Date(effectiveTrialEndsAt);
         const now = new Date();
         const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         const hoursLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60));
@@ -331,7 +337,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
 
     // Filter out dismissed banners
     return result.filter((b) => !dismissedIds.includes(b.id));
-  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen]);
+  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen, activeTrialOverride]);
 
   const dismissBanner = useCallback((id: string) => {
     setDismissedIds((prev) => [...prev, id]);

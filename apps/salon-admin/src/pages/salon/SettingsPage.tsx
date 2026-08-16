@@ -110,6 +110,7 @@ import { CustomDomainManager } from "./CustomDomainManager";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { useTenantRecurringTotal } from "@/hooks/useTenantRecurringTotal";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
+import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
@@ -208,6 +209,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		activeLocationId,
 		refreshTenants,
 	} = useAuth();
+	const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
 
 	// /salon/settings is a legacy unscoped URL — always redirect to the correct scoped page.
 	useEffect(() => {
@@ -3370,8 +3372,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	};
 
 	const renderSubscriptionTab = () => {
-		const trialEndsAt = currentTenant?.trial_ends_at
-			? new Date(currentTenant.trial_ends_at)
+		// An active gifted-trial override (Backoffice → Tenant Gifted Trials)
+		// takes precedence over the tenant's own trial dates — see
+		// useActiveTrialOverride's doc comment.
+		const effectiveTrialEndsAt = activeTrialOverride?.ends_at ?? currentTenant?.trial_ends_at;
+		const trialEndsAt = effectiveTrialEndsAt
+			? new Date(effectiveTrialEndsAt)
 			: null;
 		// Math.ceil (not date-fns differenceInDays, which floors) to match the
 		// sidebar badge and trial-ending banner — otherwise the same trial_ends_at
@@ -3384,7 +3390,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					),
 				)
 			: 0;
-		const isTrialing = currentTenant?.subscription_status === "trialing";
+		const isTrialing = Boolean(activeTrialOverride) || currentTenant?.subscription_status === "trialing";
 
 		const branchesValue = Number(branchesInput);
 		const seatsValue = Number(seatsInput);
