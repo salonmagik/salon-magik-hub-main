@@ -344,7 +344,7 @@ export default function SalonDashboard() {
 								<div className="mt-2">
 									<TrendText
 										value={stats.todayBookingsTrend}
-										suffix="more than usual"
+										suffix={stats.todayBookingsTrend !== null && stats.todayBookingsTrend < 0 ? "fewer than usual" : "more than usual"}
 										nullLabel={`${stats.confirmedCount} confirmed`}
 									/>
 								</div>
