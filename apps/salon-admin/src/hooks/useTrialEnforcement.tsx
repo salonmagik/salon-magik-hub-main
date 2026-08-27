@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { useAuth } from "./useAuth";
+import { useActiveTrialOverride } from "./useActiveTrialOverride";
 import { supabase } from "@/lib/supabase";
 import { getFunctionErrorMessage } from "@shared/function-errors";
 
@@ -17,6 +18,8 @@ const GRACE_PERIOD_DAYS = 3;
 export function useTrialEnforcement() {
   const { currentTenant } = useAuth();
 
+  const { data: activeOverride } = useActiveTrialOverride(currentTenant?.id);
+
   const trialStatus = useMemo((): TrialStatus => {
     if (!currentTenant) {
       return {
@@ -29,8 +32,8 @@ export function useTrialEnforcement() {
       };
     }
 
-    const isTrialing = currentTenant.subscription_status === "trialing";
-    const trialEndsAt = currentTenant.trial_ends_at;
+    const isTrialing = Boolean(activeOverride) || currentTenant.subscription_status === "trialing";
+    const trialEndsAt = activeOverride?.ends_at ?? currentTenant.trial_ends_at;
 
     if (!isTrialing || !trialEndsAt) {
       return {
@@ -63,7 +66,7 @@ export function useTrialEnforcement() {
       isGracePeriod,
       graceDaysRemaining: Math.max(0, graceDaysRemaining),
     };
-  }, [currentTenant]);
+  }, [currentTenant, activeOverride]);
 
   // Initiate Paystack subscription checkout (used from trial expiry blocking modal)
   const startUpgradeCheckout = useCallback(async (): Promise<{ success: boolean; checkoutUrl: string | null; error?: string }> => {

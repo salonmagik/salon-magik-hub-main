@@ -50,6 +50,7 @@ import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerM
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
+import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { TrialBanner } from "@/components/billing/TrialBanner";
 import { TrialReminderModals } from "@/components/billing/TrialReminderModals";
 import { PromoTrialBonusBanner } from "@/components/billing/PromoTrialBonusBanner";
@@ -375,6 +376,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     refreshTenants,
     canUseOwnerHub,
   } = useAuth();
+  const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
 
   // Start staff session on mount
   const { startSession } = useStaffSessions();
@@ -1089,12 +1091,16 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									<TenantSwitcher />
 									{(() => {
 										if (!currentTenant) return null;
+										// An active gifted-trial override (Backoffice → Tenant
+										// Gifted Trials) takes precedence over the tenant's own
+										// trial dates — see useActiveTrialOverride's doc comment.
+										const effectiveTrialEndsAt = activeTrialOverride?.ends_at ?? currentTenant.trial_ends_at;
 										if (
-											currentTenant.subscription_status === "trialing" &&
-											currentTenant.trial_ends_at
+											(activeTrialOverride || currentTenant.subscription_status === "trialing") &&
+											effectiveTrialEndsAt
 										) {
 											const daysLeft = Math.ceil(
-												(new Date(currentTenant.trial_ends_at).getTime() -
+												(new Date(effectiveTrialEndsAt).getTime() -
 													Date.now()) /
 													86400000,
 											);

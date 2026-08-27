@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
+import { buildPublicBookingUrl } from "../_shared/public-booking-url.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -393,10 +394,7 @@ async function processBulkSMS(
   const tenantSenderId = tenant.sms_sender_name || null;
   const BATCH_SIZE = 25;
 
-  const bookingBaseUrl = Deno.env.get("PUBLIC_BOOKING_URL") || "https://booking.salonmagik.com";
-  const bookingLink = tenant.slug
-    ? `${bookingBaseUrl}/?slug=${tenant.slug}`
-    : bookingBaseUrl;
+  const bookingLink = buildPublicBookingUrl(tenant.slug) || "https://salonmagik.com";
 
   // Process in smaller batches to avoid timeouts and keep per-message status.
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
@@ -513,10 +511,7 @@ async function processBulkEmail(
     fromEmail,
   });
 
-  const bookingBaseUrl = Deno.env.get("PUBLIC_BOOKING_URL") || "https://booking.salonmagik.com";
-  const bookingLink = tenant.slug
-    ? `${bookingBaseUrl}/?slug=${tenant.slug}`
-    : bookingBaseUrl;
+  const bookingLink = buildPublicBookingUrl(tenant.slug) || "https://salonmagik.com";
 
   // Process in batches of 10
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {

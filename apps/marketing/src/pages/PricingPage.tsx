@@ -2,6 +2,7 @@ import { useEffect, useState, Fragment } from "react";
 import { Link } from "react-router-dom";
 import { usePlans, usePlanFeatures, usePlanLimits } from "@/hooks/usePlans";
 import { usePlanPricing, getCurrencySymbol } from "@/hooks/usePlanPricing";
+import { useSmsCreditPricing } from "@/hooks/useSmsCreditPricing";
 import { useWaitlistMode } from "@/hooks/useFeatureFlags";
 import { MarketingLayout } from "@/components/MarketingLayout";
 import { PlanCard } from "@/components/PlanCard";
@@ -34,6 +35,7 @@ export default function PricingPage() {
   const { data: features } = usePlanFeatures();
   const { data: limits } = usePlanLimits();
   const { data: pricing, isLoading: pricingLoading } = usePlanPricing(currency);
+  const { data: cheapestCreditBundlePrice } = useSmsCreditPricing(currency);
 
   const isLoading = plansLoading || pricingLoading;
   const trialDays =
@@ -506,7 +508,10 @@ export default function PricingPage() {
 							{
 								name: "Extra communication credits",
 								desc: "Top up your SMS and notification credits when your monthly allocation runs low.",
-								price: "Starting from ₵5 / bundle",
+								price:
+									cheapestCreditBundlePrice != null
+										? `Starting from ${getCurrencySymbol(currency)}${cheapestCreditBundlePrice.toLocaleString()} / bundle`
+										: null,
 								available: true,
 							},
 							{
