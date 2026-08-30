@@ -69,6 +69,10 @@ function isDeliveryAddressComplete(address: BookerInfo["deliveryAddress"] | Gift
   return Boolean(address?.line1?.trim() && address?.city?.trim() && address?.country?.trim());
 }
 
+function normalizeEmail(email?: string | null) {
+  return email?.trim().toLowerCase() || "";
+}
+
 function formatErrorMessage(message: string, statusCode?: number): string {
   // Common error patterns and their user-friendly replacements
   const patterns = [
@@ -201,6 +205,20 @@ export function BookingWizard({
   const [bookerHasExistingAccount, setBookerHasExistingAccount] = useState(false);
   const [bookerResendAvailableAt, setBookerResendAvailableAt] = useState<string | null>(null);
   const [bookerOtpCountdown, setBookerOtpCountdown] = useState(0);
+
+  const clearBookingIdentityState = () => {
+    setBookerHasExistingAccount(false);
+    setBookerResolution(null);
+    setBookerPassword("");
+    setBookerOtp("");
+    setBookerError("");
+    setCustomerId(null);
+    setPurseBalance(0);
+    setPurseAmount(0);
+    setSplitPurseAmount(0);
+    setSplitCardAmount(0);
+    setPaymentMode("card");
+  };
 
   useEffect(() => {
     if (!bookerResendAvailableAt) {
@@ -551,8 +569,12 @@ export function BookingWizard({
   };
 
   const handleBookerEmailContinue = async () => {
-    const normalizedEmail = bookerInfo.email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(bookerInfo.email);
     setBookerError("");
+
+    if (bookerResolution && normalizeEmail(bookerResolution.identifier) !== normalizedEmail) {
+      clearBookingIdentityState();
+    }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setBookerError("Please enter a valid email address.");
@@ -687,16 +709,26 @@ export function BookingWizard({
   };
 
   const resetBookerIdentity = () => {
+    clearBookingIdentityState();
     setBookerEmailStage("email");
-    setBookerResolution(null);
-    setBookerHasExistingAccount(false);
-    setBookerPassword("");
-    setBookerOtp("");
-    setBookerError("");
+  };
+
+  const clearMismatchedAuthSession = async () => {
+    const bookingEmail = normalizeEmail(bookerInfo.email);
+    if (!bookingEmail) return;
+
+    const { data } = await supabase.auth.getSession();
+    const sessionEmail = normalizeEmail(data.session?.user?.email);
+    if (sessionEmail && sessionEmail !== bookingEmail) {
+      await supabase.auth.signOut({ scope: "local" });
+      setBookerHasExistingAccount(false);
+    }
   };
 
   const handleCreateBooking = async (includePaymentSession = false, customPaymentAmount?: number) => {
     try {
+      await clearMismatchedAuthSession();
+
       // For split payment mode, purse is handled in webhook after payment success
       // so we don't send purseAmount to backend to avoid double deduction
       const purseAmountForBackend = paymentMode === "split" || paymentMode === "purse" ? 0 : purseAmount;

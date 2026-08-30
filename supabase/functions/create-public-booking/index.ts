@@ -198,6 +198,7 @@ serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization");
     let authenticatedUserId: string | null = null;
+    let authenticatedUserEmail = "";
     if (authHeader) {
       const accessToken = authHeader.replace(/^Bearer\s+/i, "").trim();
       if (accessToken) {
@@ -207,6 +208,7 @@ serve(async (req) => {
         } = await supabase.auth.getUser(accessToken);
         if (!authUserError && user?.id) {
           authenticatedUserId = user.id;
+          authenticatedUserEmail = normalizeEmail(user.email);
         } else if (authUserError) {
           console.warn("create-public-booking: could not resolve auth user from bearer token", authUserError.message);
         }
@@ -381,7 +383,14 @@ serve(async (req) => {
     let customerId: string;
     const activeCustomers = tenantCustomerRows.filter((row: TenantCustomerRow) => row.status !== "deleted");
 
-    const linkedAuthCustomers = authenticatedUserId
+    const isAuthIdentityEmailMatch = Boolean(
+      authenticatedUserId &&
+      authenticatedUserEmail &&
+      normalizedEmail &&
+      authenticatedUserEmail === normalizedEmail,
+    );
+
+    const linkedAuthCustomers = isAuthIdentityEmailMatch
       ? activeCustomers.filter((row: TenantCustomerRow) => row.user_id === authenticatedUserId)
       : [];
 
@@ -417,6 +426,13 @@ serve(async (req) => {
           { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       } else if (phoneMatches.length === 1) {
+        const phoneMatchEmail = normalizeEmail(phoneMatches[0].email);
+        if (normalizedEmail && phoneMatchEmail && phoneMatchEmail !== normalizedEmail) {
+          return new Response(
+            JSON.stringify({ error: "This phone number is already registered with another customer. Please use a different phone number or contact the salon." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
         customerId = phoneMatches[0].id;
       } else {
         const { data: newCustomer, error: customerError } = await supabase
