@@ -78,6 +78,11 @@ function formatErrorMessage(message: string, statusCode?: number): string {
       replacement: "This phone number is already registered with another customer. Please use a different phone number or contact the salon."
     },
     {
+      // Pattern: "Dior Gabanna already uses this customer email address."
+      regex: /(.+?)\s+already uses this customer email address/i,
+      replacement: "This email address is already registered with another customer profile. Please sign in or contact the salon to merge your profile."
+    },
+    {
       // Pattern: "Customer with email X already exists"
       regex: /customer with email (.+?) already exists/i,
       replacement: "An account with this email address already exists. Please sign in or use a different email."
