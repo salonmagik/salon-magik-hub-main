@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTrialEnforcement } from "@/hooks/useTrialEnforcement";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useProductTour } from "@/components/onboarding/ProductTourProvider";
 import { Button } from "@ui/button";
 import {
   Dialog,
@@ -21,12 +22,24 @@ export function TrialBanner() {
   const { trialStatus, shouldShowWarning, shouldShowUrgent, startUpgradeCheckout } = useTrialEnforcement();
   const { hasPermission } = usePermissions();
   const { toast } = useToast();
+  const { isTourActive, cancelTour } = useProductTour();
   const [dismissed, setDismissed] = useState(false);
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const canAccessSettings = hasPermission("settings");
+
+  // Hard-expired (grace period also elapsed) → blocking modal, no way out
+  const isHardExpired = trialStatus.isExpired && !trialStatus.isGracePeriod;
+
+  // The blocking dialog below sits above the product tour's tooltip, so an
+  // in-progress tour keeps running invisibly underneath it. Cancel it
+  // outright instead of leaving it stacked; it isn't marked "seen", so it
+  // resumes naturally once the block clears.
+  useEffect(() => {
+    if (isHardExpired && isTourActive) cancelTour();
+  }, [isHardExpired, isTourActive, cancelTour]);
 
   const handleUpgradeClick = () => {
     if (canAccessSettings) {
@@ -61,9 +74,6 @@ export function TrialBanner() {
     }
     navigate("/login");
   };
-
-  // Hard-expired (grace period also elapsed) → blocking modal, no way out
-  const isHardExpired = trialStatus.isExpired && !trialStatus.isGracePeriod;
 
   if (isHardExpired) {
     return (
