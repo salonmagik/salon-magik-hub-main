@@ -149,6 +149,7 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", currentTenant.id)
+          .eq("is_unscheduled", false)
           .in("approval_status", ["pending", "reschedule_proposed"])
           .or(
             `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
@@ -158,6 +159,7 @@ export function useAppointmentStats(options: UseAppointmentStatsOptions = {}): U
           .from("appointments")
           .select("total_amount")
           .eq("tenant_id", currentTenant.id)
+          .eq("is_unscheduled", false)
           .in("approval_status", ["pending", "reschedule_proposed"])
           .or(
             `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`

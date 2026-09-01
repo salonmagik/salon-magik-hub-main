@@ -91,6 +91,14 @@ interface BookingRequest {
   pursePaymentCustomerId?: string;
 }
 
+interface TenantCustomerRow {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  status: string | null;
+  user_id: string | null;
+}
+
 function normalizeEmail(email?: string | null) {
   return email?.trim().toLowerCase() || "";
 }
@@ -187,6 +195,25 @@ serve(async (req) => {
       processPursePayment = false,
       pursePaymentCustomerId,
     } = body;
+
+    const authHeader = req.headers.get("Authorization");
+    let authenticatedUserId: string | null = null;
+    let authenticatedUserEmail = "";
+    if (authHeader) {
+      const accessToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+      if (accessToken) {
+        const {
+          data: { user },
+          error: authUserError,
+        } = await supabase.auth.getUser(accessToken);
+        if (!authUserError && user?.id) {
+          authenticatedUserId = user.id;
+          authenticatedUserEmail = normalizeEmail(user.email);
+        } else if (authUserError) {
+          console.warn("create-public-booking: could not resolve auth user from bearer token", authUserError.message);
+        }
+      }
+    }
 
     console.log("Payment session params:", {
       createPaymentSession,
@@ -347,64 +374,88 @@ serve(async (req) => {
 
     const { data: tenantCustomers, error: tenantCustomersError } = await supabase
       .from("customers")
-      .select("id, email, phone, status")
+      .select("id, email, phone, status, user_id")
       .eq("tenant_id", tenantId);
 
     if (tenantCustomersError) throw tenantCustomersError;
 
-    // Use AND matching: both email AND phone must match to consider it the same customer
-    // This prevents false matches when phone numbers are reused or shared
-    const matches = (tenantCustomers || []).filter(
-      (row) => {
-        if (row.status === "deleted") return false;
+    const tenantCustomerRows = (tenantCustomers || []) as TenantCustomerRow[];
+    let customerId: string;
+    const activeCustomers = tenantCustomerRows.filter((row: TenantCustomerRow) => row.status !== "deleted");
 
-        // Both email and phone must be present in both the new booking and existing customer
-        const hasEmail = normalizedEmail && row.email;
-        const hasPhone = normalizedPhone && row.phone;
-
-        // Skip if either email or phone is missing from either side
-        if (!hasEmail || !hasPhone) return false;
-
-        // Both must match
-        const emailMatch = normalizeEmail(row.email) === normalizedEmail;
-        const phoneMatch = normalizePhone(row.phone) === normalizedPhone;
-
-        return emailMatch && phoneMatch;
-      }
+    const isAuthIdentityEmailMatch = Boolean(
+      authenticatedUserId &&
+      authenticatedUserEmail &&
+      normalizedEmail &&
+      authenticatedUserEmail === normalizedEmail,
     );
 
-    const matchedIds = [...new Set(matches.map((row) => row.id))];
+    const linkedAuthCustomers = isAuthIdentityEmailMatch
+      ? activeCustomers.filter((row: TenantCustomerRow) => row.user_id === authenticatedUserId)
+      : [];
 
-    if (matchedIds.length > 1) {
+    if (linkedAuthCustomers.length > 1) {
       return new Response(
-        JSON.stringify({ error: "A customer conflict was found for this email and phone number. Please contact the salon." }),
+        JSON.stringify({ error: "A customer conflict was found for your account. Please contact the salon." }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    let customerId: string;
-    if (matchedIds.length === 1) {
-      customerId = matchedIds[0];
+    if (linkedAuthCustomers.length === 1) {
+      customerId = linkedAuthCustomers[0].id;
     } else {
-      const { data: newCustomer, error: customerError } = await supabase
-        .from("customers")
-        .insert({
-          tenant_id: tenantId,
-          full_name: customerFullName,
-          email: normalizedEmail,
-          phone: customer.phone?.trim() || null,
-        })
-        .select("id")
-        .single();
+      const emailMatches = normalizedEmail
+        ? activeCustomers.filter((row: TenantCustomerRow) => normalizeEmail(row.email) === normalizedEmail)
+        : [];
+      const phoneMatches = normalizedPhone
+        ? activeCustomers.filter((row: TenantCustomerRow) => normalizePhone(row.phone) === normalizedPhone)
+        : [];
 
-      if (customerError || !newCustomer) {
+      if (emailMatches.length > 1) {
         return new Response(
-          JSON.stringify({ error: customerError?.message || "Failed to create customer" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          JSON.stringify({ error: "A customer conflict was found for this email address. Please contact the salon." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      customerId = newCustomer.id;
+      if (emailMatches.length === 1) {
+        customerId = emailMatches[0].id;
+      } else if (phoneMatches.length > 1) {
+        return new Response(
+          JSON.stringify({ error: "A customer conflict was found for this phone number. Please contact the salon." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } else if (phoneMatches.length === 1) {
+        const phoneMatchEmail = normalizeEmail(phoneMatches[0].email);
+        if (normalizedEmail && phoneMatchEmail && phoneMatchEmail !== normalizedEmail) {
+          return new Response(
+            JSON.stringify({ error: "This phone number is already registered with another customer. Please use a different phone number or contact the salon." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        customerId = phoneMatches[0].id;
+      } else {
+        const { data: newCustomer, error: customerError } = await supabase
+          .from("customers")
+          .insert({
+            tenant_id: tenantId,
+            full_name: customerFullName,
+            email: normalizedEmail,
+            phone: customer.phone?.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (customerError || !newCustomer) {
+          const maybeDuplicateInsert = (customerError as { code?: string } | null)?.code === "23505";
+          return new Response(
+            JSON.stringify({ error: customerError?.message || "Failed to create customer" }),
+            { status: maybeDuplicateInsert ? 409 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        customerId = newCustomer.id;
+      }
     }
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -566,7 +617,7 @@ serve(async (req) => {
         continue;
       }
 
-      let recipientCustomerId = existingRecipientCustomers?.[0]?.id as string | undefined;
+      let recipientCustomerId: string | null = existingRecipientCustomers?.[0]?.id || null;
 
       if (!recipientCustomerId) {
         const recipientFullName = `${recipient.firstName} ${recipient.lastName}`.trim();
@@ -586,6 +637,10 @@ serve(async (req) => {
           continue;
         }
         recipientCustomerId = newRecipientCustomer.id;
+      }
+
+      if (!recipientCustomerId) {
+        continue;
       }
 
       giftRecipientsToNotify.set(key, { recipient, customerId: recipientCustomerId, itemNames: [] });
