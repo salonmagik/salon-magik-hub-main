@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@ui/tooltip";
 import { SalonSidebar } from "./SalonSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -151,11 +152,13 @@ describe("SalonSidebar access refresh modal", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/salon/appointments"]}>
-          <SalonSidebar>
-            <div>Child Content</div>
-          </SalonSidebar>
-        </MemoryRouter>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/salon/appointments"]}>
+            <SalonSidebar>
+              <div>Child Content</div>
+            </SalonSidebar>
+          </MemoryRouter>
+        </TooltipProvider>
       </QueryClientProvider>
     );
 
@@ -202,11 +205,13 @@ describe("SalonSidebar access refresh modal", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={["/salon/appointments"]}>
-          <SalonSidebar>
-            <LocationProbe />
-          </SalonSidebar>
-        </MemoryRouter>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/salon/appointments"]}>
+            <SalonSidebar>
+              <LocationProbe />
+            </SalonSidebar>
+          </MemoryRouter>
+        </TooltipProvider>
       </QueryClientProvider>,
     );
 
