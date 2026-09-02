@@ -58,6 +58,8 @@ export interface StartTourInput {
 
 interface ProductTourContextValue {
   startTour: (input: StartTourInput) => void;
+  /** Ends the active tour immediately without marking it seen — it resumes naturally later. */
+  cancelTour: () => void;
   isTourActive: boolean;
   hasSeenWalkthrough: (id: string) => boolean;
   /**
@@ -191,6 +193,13 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
     [navigate],
   );
 
+  const cancelTour = useCallback(() => {
+    setRun(false);
+    setSteps([]);
+    setActiveWalkthroughIds([]);
+    onCompleteRef.current = undefined;
+  }, []);
+
   const handleEvent = useCallback(
     (data: EventData) => {
       if (data.type === TOUR_END_EVENT) {
@@ -209,8 +218,8 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo<ProductTourContextValue>(
-    () => ({ startTour, isTourActive: run, hasSeenWalkthrough, hasLoadedSeenWalkthroughs }),
-    [startTour, run, hasSeenWalkthrough, hasLoadedSeenWalkthroughs],
+    () => ({ startTour, cancelTour, isTourActive: run, hasSeenWalkthrough, hasLoadedSeenWalkthroughs }),
+    [startTour, cancelTour, run, hasSeenWalkthrough, hasLoadedSeenWalkthroughs],
   );
 
   return (

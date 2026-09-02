@@ -1,7 +1,11 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, ChevronLeft, ChevronRight, AlertTriangle, Clock, CreditCard, Wrench, Info, CheckCircle } from "lucide-react";
 import { Button } from "@ui/button";
 import { cn } from "@shared/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useProductTour } from "@/components/onboarding/ProductTourProvider";
+import { toast } from "@ui/ui/use-toast";
 import { useBanners, BannerVariant } from "./BannerContext";
 
 /**
@@ -11,9 +15,38 @@ import { useBanners, BannerVariant } from "./BannerContext";
  */
 export function BlockingBannerOverlay() {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const { isTourActive, cancelTour } = useProductTour();
   const { banners } = useBanners();
   const blockingBanner = banners.find((b) => b.blocking);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  // A blocking overlay (trial expired, payment failed, kill switch, paused
+  // branch) sits at z-[200], above the product tour's own tooltip — so an
+  // in-progress tour keeps running invisibly underneath it, and reappears
+  // stacked on top the moment the overlay clears. Cancel it outright instead;
+  // it isn't marked "seen", so it resumes naturally next time this page
+  // triggers it once the block is gone.
+  useEffect(() => {
+    if (blockingBanner && isTourActive) cancelTour();
+  }, [blockingBanner, isTourActive, cancelTour]);
+
   if (!blockingBanner) return null;
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      navigate("/login");
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      });
+      setIsSigningOut(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -34,6 +67,14 @@ export function BlockingBannerOverlay() {
             {blockingBanner.cta.label}
           </Button>
         )}
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={isSigningOut}
+          className="w-full py-1 text-[12.5px] text-muted-foreground hover:text-foreground disabled:opacity-60"
+        >
+          {isSigningOut ? "Signing out…" : "Sign out"}
+        </button>
       </div>
     </div>
   );
