@@ -372,6 +372,25 @@ serve(async (req) => {
     const normalizedEmail = normalizeEmail(customer.email);
     const normalizedPhone = normalizePhone(customer.phone);
 
+    // Authoritative, platform-wide version of the phone/email identity
+    // check — a phone number should map to exactly one email regardless of
+    // which salon someone is booking with, so this runs before any
+    // tenant-scoped customer lookup below. Same RPC the booking wizard
+    // calls proactively on Step 3, so the two never disagree.
+    if (normalizedEmail && normalizedPhone) {
+      const { data: hasConflict, error: conflictError } = await supabase.rpc(
+        "check_booking_phone_email_conflict",
+        { p_email: normalizedEmail, p_phone: normalizedPhone },
+      );
+      if (conflictError) throw conflictError;
+      if (hasConflict) {
+        return new Response(
+          JSON.stringify({ error: "This phone number is already registered with another customer. Please use a different phone number or contact the salon." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     const { data: tenantCustomers, error: tenantCustomersError } = await supabase
       .from("customers")
       .select("id, email, phone, status, user_id")

@@ -186,6 +186,7 @@ export function BookingWizard({
     notes: "",
     deliveryAddress: emptyDeliveryAddress,
   });
+  const [bookerPhoneEmailConflict, setBookerPhoneEmailConflict] = useState(false);
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_now");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
@@ -277,6 +278,36 @@ export function BookingWizard({
 
     fetchPurseBalance();
   }, [bookerInfo.email, salon.id]);
+
+  // Proactive version of the block create-public-booking already enforces
+  // at final submission (409 if the entered phone matches an existing
+  // customer whose stored email differs) — surfaced here instead of only
+  // after the customer has filled in every remaining step. Checked across
+  // every tenant's customers, not just this salon's, since a phone number
+  // should map to exactly one email regardless of which salon someone is
+  // booking with. Debounced on email/phone change rather than onBlur, same
+  // as GiftRecipientsStep — PhoneInput doesn't expose a blur handler.
+  useEffect(() => {
+    const email = bookerInfo.email.trim();
+    const phone = bookerInfo.phone.trim();
+    if (!email || !phone) {
+      setBookerPhoneEmailConflict(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const { data, error } = await supabase.rpc(
+        "check_booking_phone_email_conflict" as never,
+        { p_email: email, p_phone: phone } as never,
+      );
+      if (!cancelled) setBookerPhoneEmailConflict(!error && data === true);
+    }, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [bookerInfo.email, bookerInfo.phone]);
+
   const giftItems = getGiftItems();
   const schedulableItems = useMemo(
     () => items.filter((item) => item.type === "service" || item.type === "package"),
@@ -448,9 +479,10 @@ export function BookingWizard({
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookerInfo.email);
 
     if (!baseValid) return false;
+    if (bookerPhoneEmailConflict) return false;
     if (deliveredNonGiftProducts.length === 0) return true;
     return isDeliveryAddressComplete(bookerInfo.deliveryAddress);
-  }, [bookerEmailStage, bookerInfo, deliveredNonGiftProducts.length]);
+  }, [bookerEmailStage, bookerInfo, bookerPhoneEmailConflict, deliveredNonGiftProducts.length]);
 
   const isGiftStepComplete = useMemo(() => {
     return giftItems.every((item) => {
@@ -1033,6 +1065,7 @@ export function BookingWizard({
                 requiresDeliveryAddress={deliveredNonGiftProducts.length > 0}
                 deliveryCountryCode={deliveryCountryCode}
                 emailStage={bookerEmailStage}
+                phoneEmailConflict={bookerPhoneEmailConflict}
                 password={bookerPassword}
                 otpCode={bookerOtp}
                 otpCountdown={bookerOtpCountdown}
