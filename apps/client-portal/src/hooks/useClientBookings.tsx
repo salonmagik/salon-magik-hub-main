@@ -14,7 +14,7 @@ export interface ClientAppointmentWithDetails extends Appointment {
   location: Location | null;
 }
 
-type BookingFilter = "upcoming" | "completed" | "cancelled";
+type BookingFilter = "upcoming" | "completed" | "cancelled" | "unpaid";
 
 export function useClientBookings(filter: BookingFilter = "upcoming") {
   const { customers, isAuthenticated } = useClientAuth();
@@ -44,7 +44,7 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
           location:locations(*)
         `)
         .in("customer_id", customerIds)
-        .order("scheduled_start", { ascending: filter === "upcoming" });
+        .order("scheduled_start", { ascending: filter === "upcoming" || filter === "unpaid" });
 
       // Apply filter based on tab
       if (filter === "upcoming") {
@@ -54,6 +54,11 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
         query = query.eq("status", "completed");
       } else if (filter === "cancelled") {
         query = query.eq("status", "cancelled");
+      } else if (filter === "unpaid") {
+        // Any non-cancelled booking still owing money, regardless of whether
+        // the appointment itself is upcoming or already completed — this is
+        // about money owed, not scheduling status.
+        query = query.neq("status", "cancelled").in("payment_status", ["unpaid", "deposit_paid"]);
       }
 
       const { data, error: fetchError } = await query;

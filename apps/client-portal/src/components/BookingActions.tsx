@@ -63,8 +63,11 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
     booking.status === "scheduled" &&
     !onMyWayMarked;
 
-  // Can mark "Running Late" if before scheduled start
-  const canMarkRunningLate = isBeforeStart && booking.status === "scheduled";
+  // Can mark "Running Late" if before scheduled start and the customer has
+  // actually paid something toward it — an entirely unpaid booking isn't a
+  // committed appointment yet, so there's nothing to be "running late" for.
+  const canMarkRunningLate =
+    isBeforeStart && booking.status === "scheduled" && booking.payment_status !== "unpaid";
 
   // Self-service reschedule not yet available — keep flag false until implemented
   const canReschedule = false;

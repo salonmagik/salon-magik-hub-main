@@ -17,7 +17,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type EmailAction = "reschedule_proposed" | "declined" | "partially_declined";
+type EmailAction = "reschedule_proposed" | "reschedule_accepted" | "declined" | "partially_declined";
 
 interface RequestBody {
   appointmentIds: string[];
@@ -30,6 +30,8 @@ type AppointmentRecord = {
   tenant_id: string;
   customer_id: string | null;
   booking_reference: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
   proposed_start: string | null;
   proposed_end: string | null;
   proposed_message: string | null;
@@ -132,6 +134,8 @@ serve(async (req) => {
         tenant_id,
         customer_id,
         booking_reference,
+        scheduled_start,
+        scheduled_end,
         proposed_start,
         proposed_end,
         proposed_message,
@@ -187,6 +191,19 @@ serve(async (req) => {
         ${primary.proposed_message ? createAlertBox(primary.proposed_message, "info") : ""}
         ${createButton("Review booking", bookingUrl)}
         ${contactHref ? smallText(`Need help instead? Contact the salon directly: <a href="${contactHref}">${contactHref.replace(/^mailto:|^tel:/, "")}</a>`) : ""}
+      `;
+    } else if (body.action === "reschedule_accepted") {
+      subject = `Your booking at ${tenant?.name || "your salon"} is confirmed`;
+      content = `
+        ${heading("Your appointment is confirmed")}
+        ${paragraph(`Hi ${customerFirstName},`)}
+        ${paragraph(`You accepted the new time for your booking at ${tenant?.name || "the salon"} — it's confirmed for the time below.`)}
+        ${createInfoBox(`
+          <p style="margin: 0 0 8px 0;"><strong>Items:</strong><br />${itemDescription}</p>
+          <p style="margin: 0;"><strong>Confirmed time:</strong> ${formatDateRange(primary.scheduled_start, primary.scheduled_end)}</p>
+        `)}
+        ${createButton("View booking", bookingUrl)}
+        ${contactHref ? smallText(`Need to make a change? Contact the salon directly: <a href="${contactHref}">${contactHref.replace(/^mailto:|^tel:/, "")}</a>`) : ""}
       `;
     } else {
       const declinedItems = normalizedAppointments

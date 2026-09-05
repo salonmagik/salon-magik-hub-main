@@ -119,7 +119,21 @@ serve(async (req) => {
 
     const paystackData = await paystackRes.json();
     if (!paystackData.status || paystackData.data?.status !== "success") {
-      return json({ verified: false, paystackStatus: paystackData.data?.status || "unknown" });
+      const paystackStatus = paystackData.data?.status || "unknown";
+      // "abandoned"/"failed" are Paystack's own terminal-non-success states —
+      // the customer closed checkout or the charge was declined, nothing is
+      // still in flight. Mark the intent so it stops being offered as
+      // "Check Payment Status" forever and the customer can start a fresh
+      // attempt instead. Anything else (e.g. "pending" for bank transfer/USSD,
+      // which can take real time to clear) is left alone — still genuinely
+      // in progress, so the intent stays "processing" and worth checking again.
+      if (intent?.id && ["abandoned", "failed"].includes(paystackStatus)) {
+        await supabase
+          .from("payment_intents")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", intent.id);
+      }
+      return json({ verified: false, paystackStatus });
     }
 
     const txData = paystackData.data;
