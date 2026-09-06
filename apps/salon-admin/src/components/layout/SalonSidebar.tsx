@@ -31,6 +31,7 @@ import {
   Clock,
   PauseCircle,
   Wallet,
+  MapPin,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -41,6 +42,14 @@ import { useToast } from "@ui/ui/use-toast";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@ui/dropdown-menu";
 import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
@@ -238,6 +247,12 @@ const BOTTOM_NAV_PATHS = new Set([
   "/salon/services",
   "/salon/transactions",
   "/salon/customers",
+  // Business Hub context's bottom nav (see the mobile nav render block) —
+  // harmless to list unconditionally, since these paths don't exist in the
+  // branch-context nav tree the filter also runs against.
+  "/salon/overview",
+  "/salon/payouts",
+  "/salon/overview/staff",
 ]);
 
 const mainNavItems: NavItem[] = [
@@ -918,41 +933,83 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 			{/* Context Switcher */}
 			{(isExpanded || isMobileOpen) &&
 				!isAssignmentPending &&
-				availableContexts.length > 1 && (
-					<div className="px-4 mb-2">
-						<label
-							htmlFor="context-switcher"
-							className="mb-1 block text-[11px] font-medium text-white/70"
-						>
-							Switch
-						</label>
-						<select
-							id="context-switcher"
-							data-tour-id="tour-context-switcher"
-							value={contextValue}
-							onChange={(event) => {
-								void handleContextChange(event.target.value);
-							}}
-							className="w-full rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
-						>
-							{availableContexts.map((context) => (
-								<option
-									key={`${context.type}-${context.locationId || "owner_hub"}`}
-									value={
-										context.type === "owner_hub"
-											? "owner_hub"
-											: context.locationId || ""
-									}
-									className="text-ink"
-								>
-									{context.isPaused
-										? `⏸ ${context.label} (Paused)`
-										: context.label}
-								</option>
-							))}
-						</select>
-					</div>
-				)}
+				availableContexts.length > 1 && (() => {
+					const hubContext = availableContexts.find((c) => c.type === "owner_hub");
+					const branchContexts = availableContexts.filter((c) => c.type === "location");
+					const currentContext = availableContexts.find((c) =>
+						c.type === "owner_hub" ? contextValue === "owner_hub" : c.locationId === contextValue,
+					);
+					return (
+						<div className="px-4 mb-2">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<button
+										id="context-switcher"
+										data-tour-id="tour-context-switcher"
+										type="button"
+										className="flex w-full items-center gap-2.5 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-left outline-none transition-colors hover:bg-white/[0.14] focus:border-white/30"
+									>
+										<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F4C84E] text-[#2E1F4E]">
+											{currentContext?.type === "owner_hub" ? (
+												<Building2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+											) : (
+												<MapPin className="h-3.5 w-3.5" strokeWidth={2.5} />
+											)}
+										</span>
+										<span className="min-w-0 flex-1">
+											<span className="block text-[10px] uppercase tracking-wide text-white/60">Viewing</span>
+											<span className="block truncate text-sm font-semibold text-white">
+												{currentContext?.isPaused ? `⏸ ${currentContext.label}` : currentContext?.label || "Select"}
+											</span>
+										</span>
+										<ChevronDown className="h-4 w-4 shrink-0 text-white/60" />
+									</button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start" className="w-64">
+									{hubContext && (
+										<>
+											<DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+												Business
+											</DropdownMenuLabel>
+											<DropdownMenuItem
+												onClick={() => void handleContextChange("owner_hub")}
+												className="gap-2"
+											>
+												<span className="flex h-5 w-5 items-center justify-center rounded-md bg-muted">
+													<Building2 className="h-3 w-3" />
+												</span>
+												{hubContext.label}
+											</DropdownMenuItem>
+										</>
+									)}
+									{branchContexts.length > 0 && (
+										<>
+											{hubContext && <DropdownMenuSeparator />}
+											<DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+												Branches
+											</DropdownMenuLabel>
+											{branchContexts.map((context) => (
+												<DropdownMenuItem
+													key={`location-${context.locationId}`}
+													onClick={() => void handleContextChange(context.locationId || "")}
+													className="gap-2"
+												>
+													<span className="flex h-5 w-5 items-center justify-center rounded-md bg-muted">
+														<MapPin className="h-3 w-3" />
+													</span>
+													<span className="flex-1 truncate">{context.label}</span>
+													{context.isPaused && (
+														<span className="text-xs text-muted-foreground">Paused</span>
+													)}
+												</DropdownMenuItem>
+											))}
+										</>
+									)}
+								</DropdownMenuContent>
+							</DropdownMenu>
+						</div>
+					);
+				})()}
 
 			{/* Global Banner (only when expanded) */}
 			{(isExpanded || isMobileOpen) && <GlobalBanner />}
@@ -1176,33 +1233,57 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									className="mx-2.5 mb-3 flex items-center justify-around rounded-[26px] px-1.5 py-2 shadow-[0_16px_32px_rgba(46,31,78,0.35)]"
 									style={{ background: "white" }}
 								>
-									{[
-										{
-											label: "Home",
-											icon: LayoutDashboard,
-											path: "/salon",
-										},
-										{
-											label: "Bookings",
-											icon: Calendar,
-											path: "/salon/appointments",
-										},
-										{
-											label: "Services",
-											icon: Scissors,
-											path: "/salon/services",
-										},
-										{
-											label: "Transactions",
-											icon: CreditCard,
-											path: "/salon/transactions",
-										},
-										{
-											label: "Customers",
-											icon: Users,
-											path: "/salon/customers",
-										},
-									].map(({ label, icon: Icon, path }) => {
+									{(activeContextType === "owner_hub"
+										? [
+											{
+												label: "Overview",
+												icon: Building2,
+												path: "/salon/overview",
+											},
+											{
+												label: "Cashflow",
+												icon: CreditCard,
+												path: "/salon/transactions",
+											},
+											{
+												label: "Payouts",
+												icon: Wallet,
+												path: "/salon/payouts",
+											},
+											{
+												label: "Team",
+												icon: UserCog,
+												path: "/salon/overview/staff",
+											},
+										]
+										: [
+											{
+												label: "Home",
+												icon: LayoutDashboard,
+												path: "/salon",
+											},
+											{
+												label: "Bookings",
+												icon: Calendar,
+												path: "/salon/appointments",
+											},
+											{
+												label: "Services",
+												icon: Scissors,
+												path: "/salon/services",
+											},
+											{
+												label: "Transactions",
+												icon: CreditCard,
+												path: "/salon/transactions",
+											},
+											{
+												label: "Customers",
+												icon: Users,
+												path: "/salon/customers",
+											},
+										]
+									).map(({ label, icon: Icon, path }) => {
 										const active = isActive(path);
 										return (
 											<button
