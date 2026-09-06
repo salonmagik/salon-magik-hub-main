@@ -63,7 +63,7 @@ interface BannerProviderProps {
 }
 
 export function BannerProvider({ children, platform }: BannerProviderProps) {
-  const { currentTenant, isActiveContextPaused } = useAuth();
+  const { currentTenant, isActiveContextPaused, currentRole } = useAuth();
   const { pendingInvitations } = useStaffInvitations();
   const routerLocation = useLocation();
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
@@ -230,8 +230,13 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       // other — the cruder one from here (no "Contact Admin" path, and until
       // recently no sign-out) painted over TrialBanner's better one underneath.
 
-      // Priority 12: Owner Invite Expired
-      const expiredOwnerInvite = pendingInvitations.find(
+      // Priority 12: Owner Invite Expired — staff_invitations is queried
+      // tenant-wide with no scoping to who the invite was for or who sent
+      // it, so without this role check every team member (not just the
+      // owner) would see "your owner invitation expired," which reads as
+      // personal and actionable when it's really tenant-level state that
+      // has nothing to do with them.
+      const expiredOwnerInvite = currentRole === "owner" && pendingInvitations.find(
         (inv) => inv.role === "owner" && new Date(inv.expires_at) < new Date()
       );
       if (expiredOwnerInvite) {
@@ -295,7 +300,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
 
     // Filter out dismissed banners
     return result.filter((b) => !dismissedIds.includes(b.id));
-  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen]);
+  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen, currentRole]);
 
   const dismissBanner = useCallback((id: string) => {
     setDismissedIds((prev) => [...prev, id]);
