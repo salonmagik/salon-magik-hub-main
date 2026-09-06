@@ -918,7 +918,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		emailCancellations: true,
 		emailTransactionAlerts: true,
 		inAppTransactionAlerts: true,
-		emailDailyDigest: false,
+		digestFrequency: "off" as "off" | "daily" | "weekly" | "monthly",
 		emailBirthdayMessages: true,
 	});
 
@@ -1333,7 +1333,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				emailTransactionAlerts: dbNotificationSettings.email_transaction_alerts,
 				inAppTransactionAlerts:
 					dbNotificationSettings.in_app_transaction_alerts,
-				emailDailyDigest: dbNotificationSettings.email_daily_digest,
+				digestFrequency: dbNotificationSettings.digest_frequency,
 				emailBirthdayMessages: dbNotificationSettings.email_birthday_messages ?? true,
 			});
 		}
@@ -1349,7 +1349,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			email_cancellations: notificationSettings.emailCancellations,
 			email_transaction_alerts: notificationSettings.emailTransactionAlerts,
 			in_app_transaction_alerts: notificationSettings.inAppTransactionAlerts,
-			email_daily_digest: notificationSettings.emailDailyDigest,
+			digest_frequency: notificationSettings.digestFrequency,
 		email_birthday_messages: notificationSettings.emailBirthdayMessages,
 		});
 	};
@@ -2341,7 +2341,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			emailCancellations: "email_cancellations",
 			emailTransactionAlerts: "email_transaction_alerts",
 			inAppTransactionAlerts: "in_app_transaction_alerts",
-			emailDailyDigest: "email_daily_digest",
 			emailBirthdayMessages: "email_birthday_messages",
 		};
 
@@ -2352,6 +2351,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		if (!success) {
 			// Revert on failure
 			setNotificationSettings((prev) => ({ ...prev, [field]: !checked }));
+		}
+	};
+
+	const handleDigestFrequencyChange = async (frequency: "off" | "daily" | "weekly" | "monthly") => {
+		const previous = notificationSettings.digestFrequency;
+		setNotificationSettings((prev) => ({ ...prev, digestFrequency: frequency }));
+		const success = await saveNotificationSettings({ digest_frequency: frequency });
+		if (!success) {
+			setNotificationSettings((prev) => ({ ...prev, digestFrequency: previous }));
 		}
 	};
 
@@ -2502,18 +2510,28 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
-						<p className="font-medium">Daily digest</p>
+						<p className="font-medium">Digest email</p>
 						<p className="text-sm text-muted-foreground">
-							Receive a daily summary of upcoming appointments
+							A summary of bookings, revenue, and new customers, sent to owners and managers
 						</p>
 					</div>
-					<Switch
-						checked={notificationSettings.emailDailyDigest}
+					<Select
+						value={notificationSettings.digestFrequency}
 						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailDailyDigest", checked)
+						onValueChange={(value) =>
+							handleDigestFrequencyChange(value as "off" | "daily" | "weekly" | "monthly")
 						}
-					/>
+					>
+						<SelectTrigger className="w-32">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="off">Off</SelectItem>
+							<SelectItem value="daily">Daily</SelectItem>
+							<SelectItem value="weekly">Weekly</SelectItem>
+							<SelectItem value="monthly">Monthly</SelectItem>
+						</SelectContent>
+					</Select>
 				</div>
 
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
