@@ -3491,7 +3491,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</div>
 							</div>
 							<div className="flex items-center gap-2">
-								{currentTenant?.subscription_status === "past_due" && (
+								{(currentTenant?.subscription_status === "past_due" ||
+									(currentTenant?.subscription_status === "active" && !currentTenant?.next_billing_at && !isTrialing)) && (
 									<Button
 										type="button"
 										size="sm"
@@ -3500,7 +3501,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										disabled={isUpdatingPaymentMethod}
 										onClick={handleUpdatePaymentMethod}
 									>
-										{isUpdatingPaymentMethod ? "Redirecting…" : "Update payment method"}
+										{isUpdatingPaymentMethod ? "Redirecting…" : "Add payment method"}
 									</Button>
 								)}
 								<Button
@@ -3543,14 +3544,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<p className="font-serif text-3xl text-white">
 										{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}
 									</p>
-									<p className="text-xs text-white/60">
+									<p className={cn("text-xs", currentTenant?.subscription_status === "active" && !currentTenant?.next_billing_at && !isTrialing ? "font-medium text-[#F4A6A6]" : "text-white/60")}>
 										{isTrialing
 											? trialEndsAt
 												? `starts after trial · ${format(trialEndsAt, "MMM d")}`
 												: "starts after trial"
 											: currentTenant?.next_billing_at
 												? `next charge · ${format(new Date(currentTenant.next_billing_at), "MMM d")}`
-												: "next charge"}
+												: "billing not scheduled — add a payment method"}
 									</p>
 								</div>
 								<div className="mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">

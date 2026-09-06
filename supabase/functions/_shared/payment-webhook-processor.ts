@@ -29,6 +29,11 @@ export interface WebhookEvent {
     splitPurseAmount?: number;
     splitCustomerId?: string;
     intent?: string;
+    billingCycle?: string;
+    authorizationCode?: string;
+    authorizationReusable?: boolean;
+    customerCode?: string;
+    customerEmail?: string;
   };
 }
 
@@ -271,17 +276,53 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent, billingCycle, authorizationCode, authorizationReusable, customerCode, customerEmail } = event.data;
 
       const actualServiceAmount = serviceAmount ?? amount;
       const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
 
       // Subscription activation: payment was initiated from the upgrade/trial flow.
-      // Activate the tenant immediately — Paystack handles recurring billing from here.
+      //
+      // This webhook is the ONLY reliable path here — the alternative,
+      // verify-subscription-payment, only runs if the customer's browser
+      // successfully redirects back from Paystack, which silently never
+      // happens for some real fraction of checkouts (closed tab, flaky
+      // connection, etc.). Before this fix, only that client-side path ever
+      // captured the reusable card token and scheduled next_billing_at — a
+      // tenant whose browser didn't return was left permanently active with
+      // no card on file and no scheduled charge, invisible to the recurring
+      // billing cron forever (it explicitly skips rows with no stored
+      // authorization). This mirrors verify-subscription-payment's capture
+      // logic so the webhook can't be second-best to the browser redirect.
+      //
+      // Guarded on next_billing_at being unset so a webhook arriving after
+      // verify-subscription-payment already ran doesn't need to do anything
+      // (both paths converge on the same tenant state either way).
       if (intent === "subscription_activation" && tenantId && isValidUUID(tenantId)) {
+        const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
+
+        const { data: tenantRow } = await supabase
+          .from("tenants")
+          .select("next_billing_at")
+          .eq("id", tenantId)
+          .maybeSingle();
+
+        if (!tenantRow?.next_billing_at) {
+          if (authorizationReusable && authorizationCode) {
+            tenantUpdate.paystack_authorization_code = authorizationCode;
+            tenantUpdate.paystack_customer_code = customerCode || null;
+            tenantUpdate.paystack_authorization_email = customerEmail || null;
+          }
+          if (billingCycle === "annual" || billingCycle === "monthly") {
+            tenantUpdate.billing_cycle = billingCycle;
+          }
+          tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          tenantUpdate.billing_retry_count = 0;
+        }
+
         const { error: activationError } = await supabase
           .from("tenants")
-          .update({ subscription_status: "active" })
+          .update(tenantUpdate)
           .eq("id", tenantId);
         if (activationError) {
           console.error("Failed to activate tenant subscription:", activationError);

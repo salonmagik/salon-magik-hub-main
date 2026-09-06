@@ -109,8 +109,17 @@ Deno.serve(async (req) => {
           split_purse_amount?: string | number;
           split_customer_id?: string;
           intent?: string;
+          billing_cycle?: string;
           service_amount?: string | number;
           processing_fee_amount?: string | number;
+        };
+        authorization?: {
+          authorization_code?: string;
+          reusable?: boolean;
+        };
+        customer?: {
+          customer_code?: string;
+          email?: string;
         };
         // Transfer-specific fields
         transfer_code?: string;
@@ -144,6 +153,11 @@ Deno.serve(async (req) => {
         splitPurseAmount: metadata?.split_purse_amount ? parseFloat(String(metadata.split_purse_amount)) : undefined,
         splitCustomerId: metadata?.split_customer_id,
         intent: metadata?.intent,
+        billingCycle: metadata?.billing_cycle,
+        authorizationCode: data.authorization?.authorization_code,
+        authorizationReusable: data.authorization?.reusable,
+        customerCode: data.customer?.customer_code,
+        customerEmail: data.customer?.email,
         serviceAmount: metadata?.service_amount ? parseFloat(String(metadata.service_amount)) : undefined,
         processingFeeAmount: metadata?.processing_fee_amount ? parseFloat(String(metadata.processing_fee_amount)) : undefined,
       },
