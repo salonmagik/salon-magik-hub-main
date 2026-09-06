@@ -12,7 +12,7 @@ import {
   validateCurrencyMatch,
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
-import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
+import { computeBookingCharge, getPaymentFeeSettings, SUBACCOUNT_SPLIT_ENABLED } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1221,7 +1221,17 @@ serve(async (req) => {
             },
           };
 
-          if (storeSubaccountCode) {
+          // Unplugged 2026-09-06, pending a test verdict — not deleted, just
+          // not applied. Subaccount splits silently don't apply while a
+          // subaccount is unverified (the root cause of a real payment once
+          // landing in Salon Magik's own account instead of the salon's),
+          // and /transfer-based withdrawals never depended on subaccounts
+          // to begin with. Every charge lands undivided in Salon Magik's
+          // main balance now; credit_salon_purse below is what tracks the
+          // salon's share for withdrawal. Re-enable by restoring the two
+          // lines inside this `if` once testing confirms it's safe to
+          // delete this block instead.
+          if (SUBACCOUNT_SPLIT_ENABLED && storeSubaccountCode) {
             paystackPayload.subaccount = storeSubaccountCode;
             if (bookingCharge.transactionChargeMinor > 0) {
               paystackPayload.transaction_charge = bookingCharge.transactionChargeMinor;

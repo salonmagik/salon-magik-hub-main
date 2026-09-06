@@ -5,7 +5,7 @@ import {
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
 import { getSmsCreditPricing, findSmsCreditTier } from "../_shared/sms-credit-pricing.ts";
-import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
+import { computeBookingCharge, getPaymentFeeSettings, SUBACCOUNT_SPLIT_ENABLED } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -344,8 +344,10 @@ Deno.serve(async (req) => {
         currency: effectiveCurrency.toUpperCase(),
         reference: reference,
         callback_url: successUrl,
-        ...(subaccountCode ? { subaccount: subaccountCode } : {}),
-        ...(bookingCharge && bookingCharge.transactionChargeMinor > 0
+        // See SUBACCOUNT_SPLIT_ENABLED in _shared/payment-fee-calculator.ts —
+        // unplugged 2026-09-06, pending a test verdict, not deleted.
+        ...(SUBACCOUNT_SPLIT_ENABLED && subaccountCode ? { subaccount: subaccountCode } : {}),
+        ...(SUBACCOUNT_SPLIT_ENABLED && bookingCharge && bookingCharge.transactionChargeMinor > 0
           ? { transaction_charge: bookingCharge.transactionChargeMinor }
           : {}),
         metadata: {
