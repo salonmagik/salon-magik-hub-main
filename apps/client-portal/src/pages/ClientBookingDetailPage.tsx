@@ -130,6 +130,7 @@ export default function ClientBookingDetailPage() {
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [pendingReference, setPendingReference] = useState<string | null>(null);
+  const [totalFeeAmount, setTotalFeeAmount] = useState(0);
   const verifyCalledRef = useRef(false);
   const autoPayTriggeredRef = useRef(false);
 
@@ -315,6 +316,26 @@ export default function ClientBookingDetailPage() {
         else setPendingReference(null);
       });
   }, [id, booking?.payment_status]);
+
+  // Sum the real processing fee already charged on this booking (and its
+  // group siblings) from actual completed transactions, so the Payment card
+  // can show what was truly charged instead of a bare Total/Amount Paid
+  // pair that doesn't explain why Amount Paid is higher than Total.
+  useEffect(() => {
+    const appointmentIds = [id, ...relatedBookings.map((r) => r.id)].filter((v): v is string => Boolean(v));
+    if (appointmentIds.length === 0) {
+      setTotalFeeAmount(0);
+      return;
+    }
+    supabase
+      .from("transactions")
+      .select("fee_amount")
+      .in("appointment_id", appointmentIds)
+      .in("type", ["payment", "deposit"])
+      .then(({ data }) => {
+        setTotalFeeAmount((data || []).reduce((sum, row) => sum + Number(row.fee_amount || 0), 0));
+      });
+  }, [id, relatedBookings, booking?.payment_status]);
 
   const handleCheckPaymentStatus = async () => {
     if (!pendingReference) return;
@@ -940,10 +961,22 @@ export default function ClientBookingDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total</span>
-              <span className="font-semibold">{formatCurrency(booking.total_amount, currency)}</span>
+              <span className="text-muted-foreground">Service</span>
+              <span>{formatCurrency(booking.total_amount, currency)}</span>
             </div>
-            
+
+            {totalFeeAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Processing fee</span>
+                <span>{formatCurrency(totalFeeAmount, currency)}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{totalFeeAmount > 0 ? "Total Due" : "Total"}</span>
+              <span className="font-semibold">{formatCurrency(booking.total_amount + totalFeeAmount, currency)}</span>
+            </div>
+
             {booking.deposit_amount > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Deposit</span>

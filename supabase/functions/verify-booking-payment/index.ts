@@ -252,6 +252,13 @@ serve(async (req) => {
     const primaryApt = appointments[0];
     const txTenantId = intent?.tenant_id || primaryApt.tenant_id;
     const txCustomerId = primaryApt.customer_id;
+    // Only knowable when service_amount metadata was actually attached —
+    // otherwise there's no true-price baseline to diff the gross charge
+    // against, so a legacy transaction correctly records no fee rather than
+    // a wrong one.
+    const feeAmount = txMetadata.service_amount
+      ? Number((Number(txData.amount) / 100 - amountInMajor).toFixed(2))
+      : 0;
     if (txTenantId && txCustomerId) {
       const { error: txError } = await supabase.from("transactions").insert({
         tenant_id: txTenantId,
@@ -259,6 +266,7 @@ serve(async (req) => {
         appointment_id: primaryApt.id,
         type: isDeposit ? "deposit" : "payment",
         amount: amountInMajor,
+        fee_amount: feeAmount,
         currency,
         method: paymentMethod,
         provider: "paystack",
