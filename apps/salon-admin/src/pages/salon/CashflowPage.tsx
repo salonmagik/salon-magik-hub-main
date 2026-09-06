@@ -323,6 +323,9 @@ export default function CashflowPage() {
   const renderTransactionRow = (txn: typeof filteredTransactions[0], showBranch = false) => {
     const style = statusStyles[txn.status] || statusStyles.pending;
     const isIncoming = txn.type === "payment" || txn.type === "purse_topup" || txn.type === "deposit";
+    const amountColorClass = txn.status === "pending"
+      ? "text-warning-foreground"
+      : isIncoming ? "text-success" : "text-destructive";
     const transactionRefunds = refunds.filter(
       (refund) => refund.transaction_id === txn.id && ["pending", "approved", "completed"].includes(refund.status)
     );
@@ -391,7 +394,7 @@ export default function CashflowPage() {
                 </p>
               )}
             </div>
-            <p className={cn("shrink-0 font-serif text-base font-semibold", isIncoming ? "text-success" : "text-destructive")}>
+            <p className={cn("shrink-0 font-serif text-base font-semibold", amountColorClass)}>
               {isIncoming ? "+" : "-"}{sharedFormatCurrency(Number(txn.amount), txn.currency)}
             </p>
           </div>
@@ -476,7 +479,7 @@ export default function CashflowPage() {
             </div>
           </div>
           <p className="min-w-0 truncate whitespace-nowrap text-sm">{methodLabels[txn.method] || txn.method}</p>
-          <p className={cn("font-serif text-base font-semibold", isIncoming ? "text-success" : "text-destructive")}>
+          <p className={cn("font-serif text-base font-semibold", amountColorClass)}>
               {isIncoming ? "+" : "-"}{sharedFormatCurrency(Number(txn.amount), txn.currency)}
           </p>
           <div className="flex items-center justify-start gap-2">
