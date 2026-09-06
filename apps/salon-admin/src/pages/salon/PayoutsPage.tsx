@@ -168,51 +168,69 @@ export default function PayoutsPage() {
 
         {/* Wallet balance */}
         <Card>
-          <CardContent className="p-5 flex items-center justify-between flex-wrap gap-3">
+          <CardContent className="p-5 flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-primary/10"><Wallet className="w-6 h-6 text-primary" /></div>
-              <div>
-                <div className="flex items-center gap-1">
-                  <p className="text-sm text-muted-foreground">Available to Withdraw</p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-56 text-xs">
-                      Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
-                  <>
+              <div className="p-3 rounded-xl bg-primary/10 shrink-0"><Wallet className="w-6 h-6 text-primary" /></div>
+              <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground">Total Balance</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">
+                        Everything you've earned that hasn't been paid out yet — including money still clearing with our payment processor and not withdrawable just yet.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
                     <p className="text-2xl font-semibold mt-0.5">
-                      {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                      {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
                     </p>
-                    {payoutMode === "on_demand" && Number(walletAvailability?.pending ?? 0) > 0 && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <p className="text-xs text-amber-700 mt-1 cursor-default">
-                            + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
-                          </p>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-64 text-xs">
-                          Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
-                          {walletAvailability?.nextSettlementAt
-                            ? ` Available by ${new Date(walletAvailability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`
-                            : ""}
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    {payoutMode === "automatic" && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        You're on automatic payouts — booking payments go straight to your bank, about 1 business day after each one clears.
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground">Available Balance</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">
+                        Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
+                    <>
+                      <p className="text-2xl font-semibold mt-0.5">
+                        {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
                       </p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Total wallet balance: {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
-                    </p>
-                  </>
-                )}
+                      {payoutMode === "on_demand" && Number(walletAvailability?.pending ?? 0) > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <p className="text-xs text-amber-700 mt-1 cursor-default">
+                              + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
+                            </p>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-64 text-xs">
+                            Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
+                            {walletAvailability?.nextSettlementAt
+                              ? ` Available by ${new Date(walletAvailability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`
+                              : ""}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {payoutMode === "automatic" && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          You're on automatic payouts — booking payments go straight to your bank, about 1 business day after each one clears.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(walletAvailability?.available ?? wallet.balance) <= 0}>
