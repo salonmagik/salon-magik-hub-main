@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -1566,6 +1566,7 @@ export type Database = {
           free_monthly_allocation: number
           id: string
           last_reset_at: string
+          low_balance_alerted_at: string | null
           tenant_id: string
           updated_at: string
         }
@@ -1575,6 +1576,7 @@ export type Database = {
           free_monthly_allocation?: number
           id?: string
           last_reset_at?: string
+          low_balance_alerted_at?: string | null
           tenant_id: string
           updated_at?: string
         }
@@ -1584,6 +1586,7 @@ export type Database = {
           free_monthly_allocation?: number
           id?: string
           last_reset_at?: string
+          low_balance_alerted_at?: string | null
           tenant_id?: string
           updated_at?: string
         }
@@ -3329,10 +3332,10 @@ export type Database = {
       notification_settings: {
         Row: {
           created_at: string
+          digest_frequency: string
           email_appointment_reminders: boolean
           email_birthday_messages: boolean
           email_cancellations: boolean
-          email_daily_digest: boolean
           email_new_bookings: boolean
           email_transaction_alerts: boolean
           id: string
@@ -3344,10 +3347,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          digest_frequency?: string
           email_appointment_reminders?: boolean
           email_birthday_messages?: boolean
           email_cancellations?: boolean
-          email_daily_digest?: boolean
           email_new_bookings?: boolean
           email_transaction_alerts?: boolean
           id?: string
@@ -3359,10 +3362,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          digest_frequency?: string
           email_appointment_reminders?: boolean
           email_birthday_messages?: boolean
           email_cancellations?: boolean
-          email_daily_digest?: boolean
           email_new_bookings?: boolean
           email_transaction_alerts?: boolean
           id?: string
@@ -7441,6 +7444,27 @@ export type Database = {
         }
         Relationships: []
       }
+      tour_progress: {
+        Row: {
+          id: string
+          seen_at: string
+          user_id: string
+          walkthrough_id: string
+        }
+        Insert: {
+          id?: string
+          seen_at?: string
+          user_id: string
+          walkthrough_id: string
+        }
+        Update: {
+          id?: string
+          seen_at?: string
+          user_id?: string
+          walkthrough_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -7449,6 +7473,7 @@ export type Database = {
           created_by_id: string | null
           currency: string
           customer_id: string | null
+          fee_amount: number
           id: string
           method: Database["public"]["Enums"]["payment_method"]
           original_transaction_id: string | null
@@ -7468,6 +7493,7 @@ export type Database = {
           created_by_id?: string | null
           currency?: string
           customer_id?: string | null
+          fee_amount?: number
           id?: string
           method: Database["public"]["Enums"]["payment_method"]
           original_transaction_id?: string | null
@@ -7487,6 +7513,7 @@ export type Database = {
           created_by_id?: string | null
           currency?: string
           customer_id?: string | null
+          fee_amount?: number
           id?: string
           method?: Database["public"]["Enums"]["payment_method"]
           original_transaction_id?: string | null
@@ -8851,6 +8878,10 @@ export type Database = {
         Args: { p_reason?: string; p_tenant_id: string }
         Returns: boolean
       }
+      check_booking_phone_email_conflict: {
+        Args: { p_email: string; p_phone: string }
+        Returns: boolean
+      }
       check_email_available: {
         Args: { p_email: string; p_exclude_user_id: string }
         Returns: boolean
@@ -9829,7 +9860,12 @@ export type Database = {
         | "salon_purse_debit_credit_purchase"
         | "salon_purse_debit_refund"
       wallet_type: "customer" | "salon"
-      withdrawal_status: "pending" | "processing" | "completed" | "failed"
+      withdrawal_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "awaiting_otp"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -9845,12 +9881,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9874,11 +9910,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9899,11 +9935,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9924,11 +9960,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9941,11 +9977,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -10034,7 +10070,13 @@ export const Constants = {
         "salon_purse_debit_refund",
       ],
       wallet_type: ["customer", "salon"],
-      withdrawal_status: ["pending", "processing", "completed", "failed"],
+      withdrawal_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "awaiting_otp",
+      ],
     },
   },
 } as const
