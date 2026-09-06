@@ -45,3 +45,6 @@ ralph.sh
 # Local destructive reset scripts
 supabase/scripts/reset*.sql
 .playwright-mcp/
+
+#claude
+.claudespace

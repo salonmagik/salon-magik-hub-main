@@ -391,3 +391,83 @@ export function getNextBillingAt(billingCycle: string | null | undefined): strin
   const days = billingCycle === "annual" ? 365 : 30;
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
+
+export interface PaystackSubscriptionResult {
+  subscription: {
+    subscription_code: string;
+    email_token: string;
+    status: string;
+    next_payment_date: string | null;
+    authorization?: Record<string, unknown>;
+  } | null;
+  error?: string;
+}
+
+/**
+ * Fetches a Paystack native Subscription by its code. Used only by the
+ * Chain-annual migration (migrate-chain-annual-billing) to read
+ * next_payment_date before disabling it — nothing in the ongoing self-managed
+ * billing path ever creates or reads a native Subscription object.
+ */
+export async function getPaystackSubscription(
+  paystackKey: string,
+  subscriptionCode: string,
+): Promise<PaystackSubscriptionResult> {
+  try {
+    const res = await fetch(`https://api.paystack.co/subscription/${encodeURIComponent(subscriptionCode)}`, {
+      headers: { Authorization: `Bearer ${paystackKey}` },
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.status) {
+      return { subscription: null, error: data.message || `HTTP ${res.status}` };
+    }
+
+    return { subscription: data.data };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error fetching Paystack subscription";
+    return { subscription: null, error: message };
+  }
+}
+
+export interface DisablePaystackSubscriptionResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Disables a Paystack native Subscription so it stops renewing on its own
+ * schedule. Used exactly once per tenant by migrate-chain-annual-billing,
+ * as the mandatory first step before realigning that tenant onto
+ * self-managed billing (see AD-9) — disabling first means a failure to
+ * realign afterward leaves the tenant safely still-billing-natively rather
+ * than double-charged.
+ */
+export async function disablePaystackSubscription(
+  paystackKey: string,
+  params: { subscriptionCode: string; emailToken: string },
+): Promise<DisablePaystackSubscriptionResult> {
+  try {
+    const res = await fetch("https://api.paystack.co/subscription/disable", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        code: params.subscriptionCode,
+        token: params.emailToken,
+      }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.status) {
+      return { success: false, error: data.message || `HTTP ${res.status}` };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error disabling Paystack subscription";
+    return { success: false, error: message };
+  }
+}

@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency, getNextBillingAt } from "../_shared/paystack-helpers.ts";
-import { sendReceiptEmail } from "../_shared/receipts.ts";
+import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { sendReceiptEmail, sendReactivationEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,7 +80,7 @@ serve(async (req) => {
 
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, name, logo_url, currency, billing_cycle")
+      .select("id, name, logo_url, currency, billing_cycle, subscription_status, billing_period_due_at")
       .eq("id", tenantId)
       .single();
 
@@ -146,8 +146,23 @@ serve(async (req) => {
     }
 
     // Card captured, billing unblocked: fresh token, reset retry state, and
-    // schedule the next cycle from today rather than leaving the old
-    // next_billing_at (frozen null since billing stopped retrying) in place.
+    // resume on the *original* cycle anchor (billing_period_due_at, stamped
+    // by the charge pass before the attempt that put this tenant into
+    // retry) rather than now + cycle — the owner does not gain or lose paid
+    // days because their card failed (AC 9). Falls back to now() if no
+    // anchor was recorded (e.g. a tenant suspended before this anchor
+    // tracking shipped — edge case 5).
+    const { data: nextBillingAt, error: anchorError } = await supabase.rpc("advance_billing_anchor", {
+      p_due_at: tenant.billing_period_due_at,
+      p_billing_cycle: tenant.billing_cycle || "monthly",
+    });
+
+    if (anchorError) {
+      console.error("advance_billing_anchor error:", anchorError);
+    }
+
+    const fromStatus = tenant.subscription_status;
+
     await supabase
       .from("tenants")
       .update({
@@ -156,7 +171,11 @@ serve(async (req) => {
         paystack_authorization_email: txData?.customer?.email || null,
         subscription_status: "active",
         billing_retry_count: 0,
-        next_billing_at: getNextBillingAt(tenant.billing_cycle),
+        billing_grace_ends_at: null,
+        billing_grace_started_at: null,
+        billing_period_due_at: null,
+        suspended_at: null,
+        next_billing_at: nextBillingAt || new Date().toISOString(),
       })
       .eq("id", tenantId);
 
@@ -171,6 +190,15 @@ serve(async (req) => {
       metadata: { reference, amount, currency },
     });
 
+    await supabase.from("audit_logs").insert({
+      tenant_id: tenantId,
+      actor_user_id: user.id,
+      action: "subscription_reactivated",
+      entity_type: "tenant",
+      entity_id: tenantId,
+      metadata: { trigger: "owner", from_status: fromStatus, amount, currency },
+    });
+
     const receiptEmail = txData?.customer?.email || user.email;
     if (receiptEmail) {
       await sendReceiptEmail({
@@ -182,6 +210,11 @@ serve(async (req) => {
         total: amount,
         currency,
         reference,
+      });
+      await sendReactivationEmail({
+        recipientEmail: receiptEmail,
+        salonName: tenant.name,
+        salonLogoUrl: tenant.logo_url,
       });
     }
 

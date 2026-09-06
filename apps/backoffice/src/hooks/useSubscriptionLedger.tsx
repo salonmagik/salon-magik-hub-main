@@ -22,6 +22,14 @@ export interface SubscriptionLedgerRow {
   comms_last_purchase_at: string | null;
   comms_last_purchase_amount: number | null;
   comms_last_purchase_currency: string | null;
+  subscription_cancel_at: string | null;
+  cancellation_reason: string | null;
+  cancellation_reason_note: string | null;
+  cancellation_requested_by_email: string | null;
+  cancellation_requested_at: string | null;
+  billing_grace_ends_at: string | null;
+  suspended_at: string | null;
+  billing_retry_count: number | null;
 }
 
 export function useSubscriptionLedger() {

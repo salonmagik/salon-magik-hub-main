@@ -29,9 +29,17 @@ const STATUS_BADGE: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700",
   trialing: "bg-sky-50 text-sky-700",
   past_due: "bg-red-50 text-red-700",
+  suspended: "bg-red-100 text-red-800",
   canceled: "bg-muted text-muted-foreground",
   inactive: "bg-muted text-muted-foreground",
 };
+
+function statusLabel(row: SubscriptionLedgerRow): string {
+  if (row.subscription_status === "active" && row.subscription_cancel_at) {
+    return "cancellation pending";
+  }
+  return (row.subscription_status || "").replace("_", " ");
+}
 
 type SortKey = "tenant_name" | "addon_mrr" | "comms_balance" | "next_billing_at";
 
@@ -148,6 +156,7 @@ export default function SubscriptionLedgerPage() {
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="trialing">Trialing</SelectItem>
               <SelectItem value="past_due">Past due</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
               <SelectItem value="canceled">Canceled</SelectItem>
             </SelectContent>
           </Select>
@@ -203,9 +212,26 @@ export default function SubscriptionLedgerPage() {
                         </TableCell>
                         <TableCell>
                           {row.subscription_status && (
-                            <Badge variant="secondary" className={`capitalize ${STATUS_BADGE[row.subscription_status] || ""}`}>
-                              {row.subscription_status.replace("_", " ")}
+                            <Badge
+                              variant="secondary"
+                              className={`capitalize ${
+                                row.subscription_cancel_at && row.subscription_status === "active"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : STATUS_BADGE[row.subscription_status] || ""
+                              }`}
+                            >
+                              {statusLabel(row)}
                             </Badge>
+                          )}
+                          {row.subscription_status === "past_due" && row.billing_grace_ends_at && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              grace ends {format(new Date(row.billing_grace_ends_at), "MMM d")}
+                            </div>
+                          )}
+                          {row.subscription_status === "suspended" && row.suspended_at && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              since {format(new Date(row.suspended_at), "MMM d")}
+                            </div>
                           )}
                         </TableCell>
                         <TableCell>
@@ -270,6 +296,43 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
             {tenant?.country && <> · {tenant.country}</>}
           </SheetDescription>
         </SheetHeader>
+
+        {(tenant?.subscription_cancel_at || tenant?.billing_grace_ends_at || tenant?.suspended_at) && (
+          <div className="mt-4 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+            {tenant.subscription_cancel_at && (
+              <>
+                <p className="font-medium text-amber-900">
+                  Cancellation pending — access until {format(new Date(tenant.subscription_cancel_at), "MMM d, yyyy")}
+                </p>
+                {tenant.cancellation_reason && (
+                  <p className="text-xs text-amber-800">
+                    Reason: {tenant.cancellation_reason.replace(/_/g, " ")}
+                    {tenant.cancellation_reason_note ? ` — "${tenant.cancellation_reason_note}"` : ""}
+                  </p>
+                )}
+                {tenant.cancellation_requested_by_email && (
+                  <p className="text-xs text-amber-800">
+                    Requested by {tenant.cancellation_requested_by_email}
+                    {tenant.cancellation_requested_at
+                      ? ` on ${format(new Date(tenant.cancellation_requested_at), "MMM d, yyyy")}`
+                      : ""}
+                  </p>
+                )}
+              </>
+            )}
+            {tenant.subscription_status === "past_due" && tenant.billing_grace_ends_at && (
+              <p className="font-medium text-amber-900">
+                Grace period ends {format(new Date(tenant.billing_grace_ends_at), "MMM d, yyyy")}
+                {tenant.billing_retry_count ? ` · ${tenant.billing_retry_count} failed attempt(s)` : ""}
+              </p>
+            )}
+            {tenant.subscription_status === "suspended" && tenant.suspended_at && (
+              <p className="font-medium text-amber-900">
+                Suspended since {format(new Date(tenant.suspended_at), "MMM d, yyyy")}
+              </p>
+            )}
+          </div>
+        )}
 
         <Tabs defaultValue="activity" className="mt-4">
           <TabsList>

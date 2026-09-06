@@ -97,6 +97,9 @@ import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
 import { WalletLedger } from "@/components/billing/WalletLedger";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
+import { CancelSubscriptionDialog } from "@/components/billing/CancelSubscriptionDialog";
+import { useSubscriptionLifecycle } from "@/hooks/useSubscriptionLifecycle";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import {
@@ -256,6 +259,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
 	const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
+	const [cancelSubscriptionOpen, setCancelSubscriptionOpen] = useState(false);
+	const [isResumingSubscription, setIsResumingSubscription] = useState(false);
+	const subscriptionLifecycle = useSubscriptionLifecycle();
+	const { isOwner } = usePermissions();
 	const { staff, refetch: refetchStaff } = useStaff();
 	const [seatReleaseSelected, setSeatReleaseSelected] = useState<Set<string>>(new Set());
 	const [isReleasingSeats, setIsReleasingSeats] = useState(false);
@@ -606,6 +613,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				variant: "destructive",
 			});
 			setIsUpdatingPaymentMethod(false);
+		}
+	};
+
+	const handleResumeSubscription = async () => {
+		if (!currentTenant?.id) return;
+		setIsResumingSubscription(true);
+		try {
+			const { error } = await supabase.functions.invoke("manage-subscription-cancellation", {
+				body: { tenantId: currentTenant.id, action: "resume" },
+			});
+			if (error) throw error;
+			await refreshTenants();
+			toast({
+				title: "Cancellation reversed",
+				description: "Your subscription will continue on its normal schedule.",
+			});
+		} catch (error) {
+			toast({
+				title: "Couldn't resume your subscription",
+				description: (error as { message?: string })?.message || "Please try again.",
+				variant: "destructive",
+			});
+		} finally {
+			setIsResumingSubscription(false);
 		}
 	};
 
@@ -3476,6 +3507,29 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										{isUpdatingPaymentMethod ? "Redirecting…" : "Add payment method"}
 									</Button>
 								)}
+								{isOwner && subscriptionLifecycle.state === "cancellation_pending" && (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="rounded-full border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+										disabled={isResumingSubscription}
+										onClick={handleResumeSubscription}
+									>
+										{isResumingSubscription ? "Resuming…" : "Resume subscription"}
+									</Button>
+								)}
+								{isOwner && subscriptionLifecycle.state === "active" && subscriptionLifecycle.primaryAction === "cancel" && (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="rounded-full border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+										onClick={() => setCancelSubscriptionOpen(true)}
+									>
+										Cancel subscription
+									</Button>
+								)}
 								<Button
 									type="button"
 									size="sm"
@@ -3492,6 +3546,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</Button>
 							</div>
 						</div>
+						{subscriptionLifecycle.state === "cancellation_pending" && (
+							<div className="relative mt-3 rounded-lg border border-[#F4C84E]/40 bg-[#F4C84E]/10 p-3 text-sm text-white">
+								Cancellation pending — your access continues until{" "}
+								{subscriptionLifecycle.accessEndDate
+									? format(subscriptionLifecycle.accessEndDate, "MMMM d, yyyy")
+									: "the end of your billing period"}
+								.
+							</div>
+						)}
 						{isTrialing && trialEndsAt && (
 							<div className="relative mt-3">
 								<div className="flex items-center justify-between text-sm mb-1">
@@ -4148,6 +4211,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</DialogFooter>
 						</DialogContent>
 					</Dialog>
+					<CancelSubscriptionDialog
+						open={cancelSubscriptionOpen}
+						onOpenChange={setCancelSubscriptionOpen}
+						accessEndDate={currentTenant?.next_billing_at ? new Date(currentTenant.next_billing_at) : null}
+						onCancelled={() => setCancelSubscriptionOpen(false)}
+					/>
 				</CardContent>
 			</Card>
 		);
