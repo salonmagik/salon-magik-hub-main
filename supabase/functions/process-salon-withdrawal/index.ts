@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, getPaystackBalance } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -205,6 +205,34 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+    }
+
+    // Our own wallet ledger can be wrong — a bug, a chargeback not yet
+    // reflected, or (historically) a subaccount split silently siphoning a
+    // salon's share out of the main balance the ledger assumed it was in.
+    // Before authorizing a real transfer, confirm against Paystack's own
+    // live settlement balance that the platform actually holds at least
+    // this much. This is a platform-wide balance, not itemized per tenant,
+    // so it can't verify this specific salon's money individually settled —
+    // but it's an unambiguous floor: if Paystack doesn't show enough to
+    // cover this payout, something is wrong with our own accounting and the
+    // withdrawal must not proceed.
+    const { balance: paystackRealBalance, error: paystackBalanceError } = await getPaystackBalance(paystackSecretKey);
+    if (paystackBalanceError || paystackRealBalance === null) {
+      console.error("[Withdrawal] Could not confirm Paystack balance:", paystackBalanceError);
+      return new Response(
+        JSON.stringify({ error: "Could not confirm available funds with our payment processor. Please try again shortly." }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (paystackRealBalance < amount) {
+      console.error(
+        `[Withdrawal] Refusing withdrawal for tenant ${tenantId}: requested ${amount} ${wallet.currency}, Paystack balance only ${paystackRealBalance}.`,
+      );
+      return new Response(
+        JSON.stringify({ error: "Your payout processor hasn't confirmed enough available funds for this withdrawal yet. Please try again shortly, or contact support if this persists." }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const { data: payoutDestination, error: destinationError } = await serviceSupabase
