@@ -62,7 +62,7 @@ function CopyBookingLinkButton({ tenant }: { tenant: { slug?: string | null; onl
           </button>
         ) : (
           <a
-            href="/salon/business-settings?tab=payout-destinations"
+            href="/salon/payouts?tab=accounts"
             className="flex-shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Set up online booking"
           >

@@ -1029,7 +1029,7 @@ export default function AppointmentsPage() {
                     <Link2 className="w-4 h-4" />
                   </Button>
                 ) : (
-                  <a href="/salon/business-settings?tab=payout-destinations">
+                  <a href="/salon/payouts?tab=accounts">
                     <Button variant="outline" className="rounded-full">
                       <Link2 className="w-4 h-4" />
                     </Button>

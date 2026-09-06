@@ -38,7 +38,6 @@ import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
-import { usePayoutMode } from "@/hooks/usePayoutMode";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
@@ -89,7 +88,6 @@ export default function PayoutsPage() {
   const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
     canManagePayouts ? currentTenant?.id : undefined
   );
-  const { payoutMode } = usePayoutMode();
   const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
     canManagePayouts ? currentTenant?.id : undefined
   );
@@ -208,7 +206,7 @@ export default function PayoutsPage() {
                       <p className="text-2xl font-semibold mt-0.5">
                         {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
                       </p>
-                      {payoutMode === "on_demand" && Number(walletAvailability?.pending ?? 0) > 0 && (
+                      {Number(walletAvailability?.pending ?? 0) > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <p className="text-xs text-amber-700 mt-1 cursor-default">
@@ -222,11 +220,6 @@ export default function PayoutsPage() {
                               : ""}
                           </TooltipContent>
                         </Tooltip>
-                      )}
-                      {payoutMode === "automatic" && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          You're on automatic payouts — booking payments go straight to your bank, about 1 business day after each one clears.
-                        </p>
                       )}
                     </>
                   )}
@@ -244,7 +237,7 @@ export default function PayoutsPage() {
           <TabsList className="h-auto w-full justify-start rounded-full bg-muted/70 p-1.5 lg:w-auto">
             <TabsTrigger value="history" className="gap-2"><History className="w-4 h-4" />History</TabsTrigger>
             <TabsTrigger value="accounts" className="gap-2"><Building2 className="w-4 h-4" />Accounts</TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2"><Settings2 className="w-4 h-4" />Settings</TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2"><Settings2 className="w-4 h-4" />Settlement</TabsTrigger>
           </TabsList>
 
           {/* History */}
@@ -342,7 +335,7 @@ export default function PayoutsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-tour-id="tour-payout-destinations">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">All Payout Accounts</CardTitle>
                 <p className="text-sm text-muted-foreground">Manage bank accounts and mobile money accounts for receiving withdrawals.</p>
@@ -351,12 +344,24 @@ export default function PayoutsPage() {
             </Card>
           </TabsContent>
 
-          {/* Settings */}
+          {/* Settlement */}
           <TabsContent value="settings" className="mt-4">
             <Card>
-              <CardContent className="py-10 text-center">
-                <Settings2 className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-muted-foreground">Payout schedule and auto-payout settings coming soon.</p>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">How you get paid</CardTitle>
+                <p className="text-sm text-muted-foreground">This applies to every payout account on the Accounts tab.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface">
+                  <div className="p-2 rounded-lg bg-primary/10"><Settings2 className="w-4 h-4 text-primary" /></div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Settlement</p>
+                    <p className="text-sm font-medium mt-0.5">Request anytime · paid out next business day</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Cleared money sits in your balance until you request a withdrawal — see the Accounts tab for where it's sent, and the History tab to track a request.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

@@ -96,11 +96,9 @@ import { toast } from "@ui/ui/use-toast";
 import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
 import { WalletLedger } from "@/components/billing/WalletLedger";
-import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
-import { usePayoutMode } from "@/hooks/usePayoutMode";
 import {
 	useClaimTenantSalesPromo,
 	useTenantSalesPromo,
@@ -134,7 +132,6 @@ const BASE_SETTINGS_TABS = [
 	{ id: "booking", label: "Booking Settings", icon: User },
 	{ id: "payments", label: "Payments", icon: CreditCard },
 	{ id: "wallet", label: "Wallet", icon: Wallet },
-	{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 	{ id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
@@ -321,7 +318,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "profile", label: "Business Profile", icon: Building2 },
 				{ id: "branches", label: "Manage Branches", icon: CalendarX2 },
 				{ id: "booking", label: "Booking Settings", icon: User },
-				{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 				{ id: "notifications", label: "Notifications", icon: Bell },
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
@@ -344,7 +340,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	// at the DB level too (trg_enforce_online_booking_requires_payout), this
 	// just disables the toggle with an explanation instead of a raw DB error.
 	const { destinations: payoutDestinations, isLoading: payoutDestinationsLoading } = usePayoutDestinations(currentTenant?.id);
-	const { payoutMode, isSaving: payoutModeSaving, updatePayoutMode } = usePayoutMode();
 	const hasPayoutDestination = payoutDestinations.length > 0;
 
 	// Seed the branches/seats inputs from entitlements, and re-seed whenever
@@ -2907,7 +2902,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												<Button
 													size="sm"
 													className="mt-3 w-full gap-1.5"
-													onClick={() => handleTabChange("payout-destinations")}
+													onClick={() => navigate("/salon/payouts?tab=accounts")}
 												>
 													Go to payout
 													<ExternalLink className="h-3.5 w-3.5" />
@@ -3241,60 +3236,19 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<CardHeader>
 						<CardTitle>Receiving Account</CardTitle>
 						<CardDescription>
-							Add your bank account or Mobile Money number so Salon Magik can
-							send your earnings directly to you.
+							Manage the bank account or Mobile Money number your earnings are paid out to.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						<PayoutDestinationsManager />
+						<Button variant="outline" className="gap-2" onClick={() => navigate("/salon/payouts?tab=accounts")}>
+							<Banknote className="w-4 h-4" />
+							Manage payout accounts
+						</Button>
 					</CardContent>
 				</Card>
-
-				{renderPayoutModeCard()}
 			</div>
 		);
 	};
-
-	const renderPayoutModeCard = () => (
-		<Card>
-			<CardHeader>
-				<CardTitle>When do you get paid?</CardTitle>
-				<CardDescription>
-					Choose whether Paystack pays your bank directly, or your earnings build up as a salon balance you withdraw yourself.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="grid gap-3 sm:grid-cols-2">
-				<button
-					type="button"
-					disabled={payoutModeSaving}
-					onClick={() => updatePayoutMode("automatic")}
-					className={`rounded-xl border p-4 text-left transition-colors ${
-						payoutMode === "automatic" ? "border-primary bg-primary/5" : "hover:border-primary/40"
-					}`}
-				>
-					<Zap className="mb-3 h-5 w-5 text-primary" />
-					<p className="text-sm font-medium">Automatic</p>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Paystack pays your bank directly — about 1 business day after each payment clears (a Friday payment clears Monday).
-					</p>
-				</button>
-				<button
-					type="button"
-					disabled={payoutModeSaving}
-					onClick={() => updatePayoutMode("on_demand")}
-					className={`rounded-xl border p-4 text-left transition-colors ${
-						payoutMode === "on_demand" ? "border-primary bg-primary/5" : "hover:border-primary/40"
-					}`}
-				>
-					<Wallet className="mb-3 h-5 w-5 text-primary" />
-					<p className="text-sm font-medium">On-demand</p>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Cleared payments build up in your salon balance. Withdraw whenever you like from Payouts.
-					</p>
-				</button>
-			</CardContent>
-		</Card>
-	);
 
 	const renderRolesTab = () => {
 		const roles = [
@@ -4487,12 +4441,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "booking" && renderBookingTab()}
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
-			{activeTab === "payout-destinations" && (
-				<div data-tour-id="tour-payout-destinations" className="space-y-6">
-					<PayoutDestinationsManager />
-					{renderPayoutModeCard()}
-				</div>
-			)}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}
 			{activeTab === "promotions" && renderPromotionsTab()}
 			{activeTab === "notifications" && renderNotificationsTab()}

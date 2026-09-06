@@ -31,7 +31,6 @@ import {
   Clock,
   PauseCircle,
   Wallet,
-  Banknote,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -438,7 +437,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Business Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
                 { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
                 { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
-                { label: "Payout Destinations", icon: Banknote, path: "/salon/business-settings?tab=payout-destinations" },
                 { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
                 { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
@@ -455,7 +453,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Salon Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
               { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
               { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
-              { label: "Payout Destinations", icon: Banknote, path: "/salon/business-settings?tab=payout-destinations" },
               { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
               { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
