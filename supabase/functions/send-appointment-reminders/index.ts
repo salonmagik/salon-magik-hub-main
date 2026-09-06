@@ -24,6 +24,21 @@ serve(async (req) => {
   }
 
   try {
+    // Every invocation of this function was silently 401ing at the platform
+    // gateway (config.toml had no verify_jwt override, so it defaulted to
+    // true, and the cron job sends no Authorization header at all) — this
+    // in-code secret check is the actual auth boundary now that the gateway
+    // lets requests through, matching process-recurring-addon-billing's
+    // pattern so this endpoint isn't left fully open.
+    const cronSecret = Deno.env.get("APPOINTMENT_REMINDERS_SECRET");
+    const providedSecret = req.headers.get("x-reminders-secret");
+    if (cronSecret && providedSecret !== cronSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
