@@ -64,6 +64,7 @@ const CANONICAL_PAGE_KEYS: PageKey[] = [
   { key: "plans", label: "Plans", route_path: "/plans" },
   { key: "payment_fee_settings", label: "Fees & Margins", route_path: "/fees-margins" },
   { key: "verification_queue", label: "Verification Queue", route_path: "/verification-queue" },
+  { key: "withdrawals", label: "Withdrawals", route_path: "/withdrawals" },
   { key: "comms", label: "Comms", route_path: "/comms" },
   { key: "sales_campaigns", label: "Sales Ops · Campaigns", route_path: "/sales/campaigns" },
   { key: "sales_capture_client", label: "Sales Ops · Capture Client", route_path: "/sales/capture-client" },

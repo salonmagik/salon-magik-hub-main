@@ -332,16 +332,37 @@ Deno.serve(async (req) => {
     console.log(`[Withdrawal] Paystack transfer initiated successfully: ${paystackData.data.transfer_code}`);
 
     // =====================================================
-    // STEP 5: UPDATE WITHDRAWAL STATUS TO PENDING
+    // STEP 5: RECORD THE REAL TRANSFER STATE
     // =====================================================
-    // NOTE: Wallet will be debited when Paystack webhook confirms transfer success
-    // This prevents debiting the wallet if the transfer fails or is reversed
-    
+    // paystackData.status is just "did the API call itself succeed" — the
+    // transfer's actual state is paystackData.data.status. A transfer that
+    // requires OTP finalization on OUR Paystack account (not the salon's)
+    // comes back here with data.status === "otp" and paystackData.status
+    // still true, which the old code treated identically to a normal
+    // in-flight transfer. We have no code path that ever finalizes that
+    // OTP, so left as plain "pending" it would sit stuck forever with no
+    // way for anyone to tell it apart from one that's genuinely just
+    // clearing. Recording it as its own status lets backoffice see and act
+    // on it — salons still only ever see "pending" (see PayoutsPage).
+    // NOTE: Wallet is still only debited when Paystack's webhook confirms
+    // transfer.success — this prevents debiting for a transfer that fails,
+    // is reversed, or never gets past OTP.
+    const transferStatus = paystackData.data.status;
+    let internalStatus: "pending" | "awaiting_otp" | "failed" = "pending";
+    let failureReason: string | null = null;
+    if (transferStatus === "otp") {
+      internalStatus = "awaiting_otp";
+    } else if (transferStatus === "failed" || transferStatus === "reversed") {
+      internalStatus = "failed";
+      failureReason = `Paystack transfer status: ${transferStatus}`;
+    }
+
     const { error: updateError } = await serviceSupabase
       .from("salon_withdrawals")
       .update({
-        status: "pending",
+        status: internalStatus,
         paystack_transfer_code: paystackData.data.transfer_code,
+        ...(failureReason ? { failure_reason: failureReason } : {}),
       })
       .eq("id", withdrawal.id);
 
@@ -350,12 +371,27 @@ Deno.serve(async (req) => {
       // Continue anyway - withdrawal is initiated, this is just a status update
     }
 
-    console.log(`[Withdrawal] Withdrawal ${withdrawal.id} initiated successfully, awaiting webhook confirmation`);
+    console.log(`[Withdrawal] Withdrawal ${withdrawal.id} initiated, Paystack transfer status: ${transferStatus}, internal status: ${internalStatus}`);
 
     // =====================================================
-    // RETURN SUCCESS RESPONSE
+    // RETURN RESPONSE
     // =====================================================
-    
+    // The salon never sees "awaiting_otp" — that's purely an internal ops
+    // state (see comment above) — so it's presented identically to a normal
+    // pending transfer here. A synchronous failed/reversed response is rare
+    // (most failures only surface later via webhook) but real, so that one
+    // case is reported honestly rather than claimed as success.
+
+    if (internalStatus === "failed") {
+      return new Response(
+        JSON.stringify({
+          error: "The payment provider could not complete this transfer.",
+          details: `Paystack transfer status: ${transferStatus}`,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

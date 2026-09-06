@@ -53,6 +53,14 @@ const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
   failed: { bg: "bg-destructive/10", text: "text-destructive" },
 };
 
+// "awaiting_otp" is an internal-only state (a transfer stuck needing our own
+// team to complete a step on our Paystack account, nothing to do with the
+// salon) — it's tracked in backoffice, but here it's shown as an ordinary
+// pending transfer so nothing salon-facing ever hints at it.
+function getSalonFacingWithdrawalStatus(status: string | null | undefined): string {
+  return status === "awaiting_otp" ? "pending" : status || "pending";
+}
+
 export default function PayoutsPage() {
   useWalkthroughAutoTrigger("transactions");
   const [payoutsSubTab, setPayoutsSubTab] = useState("history");
@@ -236,7 +244,8 @@ export default function PayoutsPage() {
                   <div className="space-y-2">
                     {withdrawals.map((w) => {
                       const dest = destinations.find((d) => d.id === w.payout_destination_id);
-                      const wStyle = withdrawalStatusStyles[w.status || "pending"] || withdrawalStatusStyles.pending;
+                      const displayStatus = getSalonFacingWithdrawalStatus(w.status);
+                      const wStyle = withdrawalStatusStyles[displayStatus] || withdrawalStatusStyles.pending;
                       return (
                         <div key={w.id} className="flex items-center justify-between p-3 rounded-lg bg-surface">
                           <div>
@@ -245,8 +254,13 @@ export default function PayoutsPage() {
                               {dest ? `${dest.account_name || dest.momo_provider} · ${dest.account_number || dest.momo_number}` : "Payout account"}
                               {w.requested_at && ` · ${format(new Date(w.requested_at), "MMM d, yyyy")}`}
                             </p>
+                            {displayStatus === "failed" && (
+                              <p className="text-xs text-destructive mt-0.5">
+                                This withdrawal couldn't be completed — contact support for details.
+                              </p>
+                            )}
                           </div>
-                          <Badge className={cn("text-xs", wStyle.bg, wStyle.text)}>{w.status || "pending"}</Badge>
+                          <Badge className={cn("text-xs", wStyle.bg, wStyle.text)}>{displayStatus}</Badge>
                         </div>
                       );
                     })}
