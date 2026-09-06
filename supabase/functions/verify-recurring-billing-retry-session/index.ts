@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, getNextBillingAt } from "../_shared/paystack-helpers.ts";
 import { sendReceiptEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
@@ -80,7 +80,7 @@ serve(async (req) => {
 
     const { data: tenant } = await supabase
       .from("tenants")
-      .select("id, name, logo_url, currency")
+      .select("id, name, logo_url, currency, billing_cycle")
       .eq("id", tenantId)
       .single();
 
@@ -156,7 +156,7 @@ serve(async (req) => {
         paystack_authorization_email: txData?.customer?.email || null,
         subscription_status: "active",
         billing_retry_count: 0,
-        next_billing_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        next_billing_at: getNextBillingAt(tenant.billing_cycle),
       })
       .eq("id", tenantId);
 

@@ -380,3 +380,14 @@ export async function getPaystackBalance(paystackKey: string): Promise<PaystackB
     return { balance: null, currency: null, error: message };
   }
 }
+
+/**
+ * Both monthly and annual tenants are fully self-managed (charged via a
+ * saved authorization, on our own schedule) — annual never uses Paystack's
+ * own native Subscription object. The only difference between the two is
+ * how far out the next charge is scheduled.
+ */
+export function getNextBillingAt(billingCycle: string | null | undefined): string {
+  const days = billingCycle === "annual" ? 365 : 30;
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}

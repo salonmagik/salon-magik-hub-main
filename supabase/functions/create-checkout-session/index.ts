@@ -135,19 +135,27 @@ serve(async (req) => {
 
     // Build Paystack transaction initialization payload.
     //
-    // Monthly signups are self-managed from here on: no `plan` code is sent,
-    // so Paystack never creates its own recurring Subscription object (that
-    // fixed-price engine is what let tier upgrades silently keep billing the
-    // old price forever — see compute_tenant_recurring_total). Instead this
-    // is a one-time transaction; the saved card authorization is charged the
-    // server-computed total (base + seats + locations + add-ons - promo)
-    // every cycle by process-recurring-addon-billing.
+    // Monthly and annual signups (Solo/Studio) are both self-managed: no
+    // `plan` code is sent, so Paystack never creates its own recurring
+    // Subscription object (that fixed-price engine is what let tier
+    // upgrades silently keep billing the old price forever — see
+    // compute_tenant_recurring_total, and separately meant nothing ever
+    // monitored whether Paystack's own renewals succeeded or failed).
+    // Instead this is a one-time transaction; the saved card authorization
+    // is charged the server-computed total every cycle by
+    // process-recurring-addon-billing — every 30 days for monthly, every
+    // 365 for annual (see getNextBillingAt).
     //
-    // Annual signups still go through Paystack's native Subscription (no
-    // billing_cycle is persisted anywhere yet, so the self-managed monthly
-    // cron has no way to know a tenant already paid for the year — building
-    // that is separate, deferred work, not something to improvise here).
+    // Chain + annual is the one remaining exception — see the comment below.
     const isAnnual = billingCycle === "annual";
+    // Chain has no annual-tiered pricing model (additional_location_pricing
+    // is monthly-only — see compute_tenant_recurring_total), so unlike every
+    // other plan, Chain's annual base price still has to ride Paystack's own
+    // native Subscription for now; moving it to self-managed billing would
+    // leave it with no correct number to charge. Flagged as a known gap,
+    // not something to quietly work around here.
+    const isChain = tenant.plan?.toLowerCase() === "chain";
+    const usesPaystackNativeSubscription = isAnnual && isChain;
     const paystackBody: Record<string, unknown> = {
       email: user.email,
       callback_url: successUrl,
@@ -156,13 +164,13 @@ serve(async (req) => {
         tenant_name: tenant.name,
         cancel_action: cancelUrl,
         intent: "subscription_activation",
-        billing_mode: isAnnual ? "paystack_subscription" : "self_managed",
+        billing_mode: usesPaystackNativeSubscription ? "paystack_subscription" : "self_managed",
         billing_cycle: isAnnual ? "annual" : "monthly",
         discount_applied: discount,
       },
     };
 
-    if (isAnnual && paystackPlanCode && localPlanAmount > 0) {
+    if (usesPaystackNativeSubscription && paystackPlanCode && localPlanAmount > 0) {
       // Paystack requires `amount` even when a plan code is provided — it
       // validates the two match (or uses it as the charge amount). Both are
       // now kept in sync via backoffice → "Sync to Paystack", so they agree.

@@ -6,7 +6,7 @@ import {
   sendResendEmail,
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
-import { mapPaystackChannelToPaymentMethod } from "./paystack-helpers.ts";
+import { mapPaystackChannelToPaymentMethod, getNextBillingAt } from "./paystack-helpers.ts";
 
 export interface WebhookEvent {
   type: string;
@@ -316,7 +316,7 @@ export async function processWebhook(
           if (billingCycle === "annual" || billingCycle === "monthly") {
             tenantUpdate.billing_cycle = billingCycle;
           }
-          tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          tenantUpdate.next_billing_at = getNextBillingAt(billingCycle);
           tenantUpdate.billing_retry_count = 0;
         }
 
