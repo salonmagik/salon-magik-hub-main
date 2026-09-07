@@ -390,8 +390,11 @@ function BookingPageWithCart({
       setPaymentReference(reference);
       setShowPaymentStatus(true);
 
-      // Clear the cart since payment was initiated
-      clearCart();
+      // Cart is cleared once PaymentStatusDialog confirms the payment
+      // actually succeeded (its onSuccess callback below) — not here. A
+      // failed/abandoned payment used to clear the cart unconditionally on
+      // redirect-back, so "Try again" landed on an empty cart with nothing
+      // left to retry.
 
       // Clean URL: remove payment params but keep other params like slug
       urlParams.delete("reference");
@@ -514,6 +517,7 @@ function BookingPageWithCart({
         open={showPaymentStatus}
         onOpenChange={setShowPaymentStatus}
         reference={paymentReference}
+        onSuccess={clearCart}
         brandColor={salon.brand_color}
       />
 

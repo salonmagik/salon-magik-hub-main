@@ -46,18 +46,24 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = (Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"))!;
 
-    // Require an authenticated client portal user
+    // Authenticated client-portal customers are scoped to appointments they
+    // own (checked below). Public-booking checkout is mostly a guest flow —
+    // most customers completing a payment there have no session at all — so
+    // a missing/invalid bearer token doesn't 401 here; it just means the
+    // ownership check below is skipped and the caller is trusted on the
+    // strength of the reference alone (like Paystack's own redirect: only
+    // whoever just paid receives that reference, and this function's own
+    // call to Paystack's verify API, authenticated with OUR secret key, is
+    // what actually confirms success — a caller can't spoof that part no
+    // matter what they claim).
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return json({ error: "Missing bearer token" }, 401);
-    }
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return json({ error: "Invalid or expired session" }, 401);
+    let user: { id: string } | null = null;
+    if (authHeader?.startsWith("Bearer ")) {
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data } = await userClient.auth.getUser();
+      user = data.user;
     }
 
     const body = await req.json();
@@ -142,22 +148,29 @@ serve(async (req) => {
       return json({ error: "No appointment IDs found in transaction metadata" }, 400);
     }
 
-    // Verify the caller owns at least one of the appointments via their customer records
-    const { data: customerRows } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("user_id", user.id);
-
-    const customerIds = (customerRows || []).map((c) => c.id);
-    if (customerIds.length === 0) {
-      return json({ error: "No customer records found for this user" }, 403);
-    }
-
-    const { data: appointments } = await supabase
+    // Logged-in client-portal customers are scoped to appointments they own.
+    // Guests have no customer_id to scope by — the reference itself (see
+    // note above) is what authorizes the lookup for them, matching every
+    // other guest-facing step of checkout.
+    let appointmentsQuery = supabase
       .from("appointments")
       .select("id, total_amount, amount_paid, payment_status, customer_id, tenant_id")
-      .in("id", appointmentIds)
-      .in("customer_id", customerIds);
+      .in("id", appointmentIds);
+
+    if (user) {
+      const { data: customerRows } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("user_id", user.id);
+
+      const customerIds = (customerRows || []).map((c) => c.id);
+      if (customerIds.length === 0) {
+        return json({ error: "No customer records found for this user" }, 403);
+      }
+      appointmentsQuery = appointmentsQuery.in("customer_id", customerIds);
+    }
+
+    const { data: appointments } = await appointmentsQuery;
 
     if (!appointments || appointments.length === 0) {
       return json({ error: "Appointments not found or access denied" }, 403);
