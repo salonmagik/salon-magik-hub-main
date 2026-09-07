@@ -3492,6 +3492,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 											"Unknown"}
 									</Badge>
 								</div>
+								{currentTenant?.paystack_authorization_code && (
+									<p className="mt-1.5 flex items-center gap-1.5 text-xs text-white/60">
+										<CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
+										Card on file
+									</p>
+								)}
 							</div>
 							<div className="flex items-center gap-2">
 								{(currentTenant?.subscription_status === "past_due" ||

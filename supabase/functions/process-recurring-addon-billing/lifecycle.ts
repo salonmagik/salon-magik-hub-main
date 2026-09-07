@@ -107,7 +107,12 @@ async function runDunningReminders(req: Request, supabase: SupabaseClient, resul
     return;
   }
 
-  for (const tenant of inGrace || []) {
+  const tenants = inGrace || [];
+
+  // Compute which (tenant, notice_key) pairs are due, in memory, before
+  // touching the database at all.
+  const dueByTenant = new Map<string, string[]>();
+  for (const tenant of tenants) {
     if (!tenant.billing_grace_started_at || !tenant.billing_grace_ends_at) continue;
 
     const startedAt = new Date(tenant.billing_grace_started_at).getTime();
@@ -121,9 +126,40 @@ async function runDunningReminders(req: Request, supabase: SupabaseClient, resul
     if (elapsedFraction >= 0.5) dueNoticeKeys.push(DUNNING_HALFWAY_KEY);
     if (msUntilDeadline <= 24 * 60 * 60 * 1000) dueNoticeKeys.push(DUNNING_FINAL_DAY_KEY);
 
+    if (dueNoticeKeys.length > 0) dueByTenant.set(tenant.id, dueNoticeKeys);
+  }
+
+  if (dueByTenant.size === 0) return;
+
+  // One query for every already-recorded notice across every tenant in
+  // grace, rather than one lookup per tenant per threshold (N×K) — see the
+  // design's Performance Considerations.
+  const { data: alreadySent, error: sentError } = await supabase
+    .from("billing_dunning_notices")
+    .select("tenant_id, grace_started_at, notice_key")
+    .in("tenant_id", Array.from(dueByTenant.keys()));
+
+  if (sentError) {
+    console.error("Failed to load existing dunning notices:", sentError);
+    results.push({ stage: "dunning_reminders", status: "error", error: sentError.message });
+    return;
+  }
+
+  const alreadySentSet = new Set(
+    (alreadySent || []).map((row) => `${row.tenant_id}|${row.grace_started_at}|${row.notice_key}`),
+  );
+
+  for (const tenant of tenants) {
+    const dueNoticeKeys = dueByTenant.get(tenant.id);
+    if (!dueNoticeKeys) continue;
+
     for (const noticeKey of dueNoticeKeys) {
+      if (alreadySentSet.has(`${tenant.id}|${tenant.billing_grace_started_at}|${noticeKey}`)) continue;
+
       // Insert-then-send, never send-then-insert: a duplicate email is worse
-      // than a missed one here, and the unique index is the guard.
+      // than a missed one here, and the unique index is the final guard
+      // against a race with another concurrent run (the batch check above
+      // is an optimization, not the correctness guarantee).
       const { data: inserted, error: insertError } = await supabase
         .from("billing_dunning_notices")
         .insert({

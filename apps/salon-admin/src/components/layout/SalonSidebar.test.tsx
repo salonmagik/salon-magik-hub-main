@@ -36,6 +36,10 @@ vi.mock("@/components/billing/TrialBanner", () => ({
   TrialBanner: () => null,
 }));
 
+vi.mock("@/components/billing/BillingStateBanner", () => ({
+  BillingStateBanner: () => <div data-testid="billing-state-banner" />,
+}));
+
 vi.mock("@/components/layout/PlanChangeBanner", () => ({
   PlanChangeBanner: () => null,
 }));
@@ -165,6 +169,7 @@ describe("SalonSidebar access refresh modal", () => {
     expect(screen.getByText("Access Updated")).toBeInTheDocument();
     expect(screen.getByText(/Your role has been updated by an admin/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(screen.getByTestId("billing-state-banner")).toBeInTheDocument();
   });
 
   it("does not navigate when a touch gesture scrolls across a sidebar link", () => {

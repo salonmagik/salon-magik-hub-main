@@ -186,4 +186,133 @@ begin
 end;
 $$;
 
+-- Chain-annual pricing gating (AD-8) and billing_dunning_notices idempotency (AD-7).
+-- Uses the real 'chain' plan row (tenants.plan is a strict enum limited to
+-- solo/studio/chain, so a throwaway plan slug can't be attached to a
+-- tenant) — but everything it inserts is rolled back with the rest of this
+-- file's transaction, so it's safe to run against an environment that
+-- already has real Chain pricing data.
+do $$
+declare
+  v_plan_id uuid;
+  v_chain_tenant_id constant uuid := '20000000-0000-0000-0000-000000000011';
+  v_row record;
+  v_total_rows record;
+  v_grace_started_at constant timestamptz := now() - interval '3 days';
+begin
+  if to_regprocedure('public.compute_chain_price(uuid,text,integer,text)') is null
+     or to_regprocedure('public.compute_tenant_recurring_total(uuid)') is null
+     or to_regclass('public.billing_dunning_notices') is null then
+    raise exception 'Chain-annual / dunning-notice schema is incomplete';
+  end if;
+
+  select id into v_plan_id from public.plans where lower(slug) = 'chain' limit 1;
+  if v_plan_id is null then
+    raise exception 'No chain plan found — cannot test Chain-annual pricing';
+  end if;
+
+  insert into public.plan_pricing (plan_id, currency, monthly_price, annual_price, effective_monthly)
+  values (v_plan_id, 'GHS', 100, 1000, 100);
+
+  -- Tier covering locations 2-3 has both monthly and annual prices — complete.
+  insert into public.additional_location_pricing
+    (plan_id, currency, tier_label, tier_min, tier_max, price_per_location, price_per_location_annual, is_custom)
+  values
+    (v_plan_id, 'GHS', '2-3', 2, 3, 20, 200, false);
+
+  -- Base + one complete tier: annual total should be computable (1 location, base only).
+  select * into v_row from public.compute_chain_price(v_plan_id, 'GHS', 1, 'annual');
+  if v_row.total_price is distinct from 1000 then
+    raise exception 'compute_chain_price(annual) should return the annual base price when configured, got %', v_row.total_price;
+  end if;
+
+  -- 3 locations: base + fully-priced tier -> a real annual total, not null.
+  select * into v_row from public.compute_chain_price(v_plan_id, 'GHS', 3, 'annual');
+  if v_row.total_price is null then
+    raise exception 'compute_chain_price(annual) should return a total when every tier in range has an annual price';
+  end if;
+  if v_row.total_price <> 1000 + 2 * 200 then
+    raise exception 'compute_chain_price(annual) computed an unexpected total: %', v_row.total_price;
+  end if;
+
+  -- Add a second, incomplete tier (locations 4-5, no annual price) and confirm
+  -- reaching into it makes the annual total null while monthly is unaffected.
+  insert into public.additional_location_pricing
+    (plan_id, currency, tier_label, tier_min, tier_max, price_per_location, price_per_location_annual, is_custom)
+  values
+    (v_plan_id, 'GHS', '4-5', 4, 5, 25, null, false);
+
+  select * into v_row from public.compute_chain_price(v_plan_id, 'GHS', 5, 'annual');
+  if v_row.total_price is not null then
+    raise exception 'compute_chain_price(annual) should return null once any reached tier lacks an annual price, got %', v_row.total_price;
+  end if;
+
+  select * into v_row from public.compute_chain_price(v_plan_id, 'GHS', 5, 'monthly');
+  if v_row.total_price is null then
+    raise exception 'compute_chain_price(monthly) must be unaffected by missing annual tier prices';
+  end if;
+
+  -- A currency with no plan_pricing row at all -> annual total is null (not
+  -- an error). 'ZZZ' rather than a real currency code, so this holds
+  -- regardless of what real Chain pricing an environment already has.
+  select * into v_row from public.compute_chain_price(v_plan_id, 'ZZZ', 1, 'annual');
+  if v_row.total_price is not null then
+    raise exception 'compute_chain_price(annual) should return null for a currency with no pricing configured at all';
+  end if;
+
+  -- compute_tenant_recurring_total: chain+annual tenant, pricing configured -> a real total.
+  insert into public.tenants (id, name, slug, country, currency, timezone, billing_cycle, plan, subscription_status)
+  values (v_chain_tenant_id, 'Chain Annual Test', 'chain-annual-test', 'GH', 'GHS', 'Africa/Accra', 'annual', 'chain', 'active');
+
+  select * into v_total_rows from public.compute_tenant_recurring_total(v_chain_tenant_id);
+  if v_total_rows.total_amount is null or v_total_rows.total_amount < 1000 then
+    raise exception 'compute_tenant_recurring_total should include the annual chain base price when configured, got %', v_total_rows.total_amount;
+  end if;
+
+  -- Same tenant, currency with no annual pricing configured -> raises rather
+  -- than silently under-billing (a platform misconfiguration must never dun
+  -- a customer, and must never quietly charge them less than the real price).
+  update public.tenants set currency = 'ZZZ' where id = v_chain_tenant_id;
+  begin
+    perform public.compute_tenant_recurring_total(v_chain_tenant_id);
+    raise exception 'compute_tenant_recurring_total unexpectedly succeeded for an unpriced chain-annual currency';
+  exception
+    when others then
+      if sqlerrm = 'compute_tenant_recurring_total unexpectedly succeeded for an unpriced chain-annual currency' then raise; end if;
+      if sqlerrm <> 'CHAIN_ANNUAL_PRICING_NOT_CONFIGURED' then
+        raise exception 'Expected CHAIN_ANNUAL_PRICING_NOT_CONFIGURED, got: %', sqlerrm;
+      end if;
+  end;
+
+  -- billing_dunning_notices: unique index rejects a duplicate
+  -- (tenant_id, grace_started_at, notice_key) — this, not application code,
+  -- is the idempotency guarantee behind AC 14 for dunning email.
+  insert into public.billing_dunning_notices (tenant_id, grace_started_at, notice_key)
+  values (v_chain_tenant_id, v_grace_started_at, 'grace_halfway');
+
+  begin
+    insert into public.billing_dunning_notices (tenant_id, grace_started_at, notice_key)
+    values (v_chain_tenant_id, v_grace_started_at, 'grace_halfway');
+    raise exception 'Duplicate dunning notice unexpectedly inserted';
+  exception
+    when unique_violation then
+      null; -- expected
+    when others then
+      if sqlerrm = 'Duplicate dunning notice unexpectedly inserted' then raise; end if;
+      raise;
+  end;
+
+  -- A different notice_key for the same episode, or the same notice_key for
+  -- a new grace episode, are both legitimately distinct rows.
+  insert into public.billing_dunning_notices (tenant_id, grace_started_at, notice_key)
+  values (v_chain_tenant_id, v_grace_started_at, 'grace_final_day');
+  insert into public.billing_dunning_notices (tenant_id, grace_started_at, notice_key)
+  values (v_chain_tenant_id, now(), 'grace_halfway');
+
+  if (select count(*) from public.billing_dunning_notices where tenant_id = v_chain_tenant_id) <> 3 then
+    raise exception 'Expected exactly 3 distinct dunning notice rows for the test tenant';
+  end if;
+end;
+$$;
+
 rollback;

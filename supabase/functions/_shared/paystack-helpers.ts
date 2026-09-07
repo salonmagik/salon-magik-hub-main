@@ -439,9 +439,13 @@ export interface DisablePaystackSubscriptionResult {
  * Disables a Paystack native Subscription so it stops renewing on its own
  * schedule. Used exactly once per tenant by migrate-chain-annual-billing,
  * as the mandatory first step before realigning that tenant onto
- * self-managed billing (see AD-9) — disabling first means a failure to
- * realign afterward leaves the tenant safely still-billing-natively rather
- * than double-charged.
+ * self-managed billing (see AD-9). Disabling first (rather than realigning
+ * first) picks the safer failure mode: if this call itself fails, the
+ * tenant's row is untouched and they keep billing natively. If it succeeds
+ * but the subsequent realign write fails, the tenant now has no billing
+ * mechanism at all until the caller re-runs — which is why the caller
+ * writes an audit row immediately after a successful disable, so a re-run
+ * can detect that half-migrated state and complete it.
  */
 export async function disablePaystackSubscription(
   paystackKey: string,
