@@ -322,6 +322,7 @@ export default function ClientBookingDetailPage() {
   // can show what was truly charged instead of a bare Total/Amount Paid
   // pair that doesn't explain why Amount Paid is higher than Total.
   useEffect(() => {
+    if (!booking) return;
     const appointmentIds = [id, ...relatedBookings.map((r) => r.id)].filter((v): v is string => Boolean(v));
     if (appointmentIds.length === 0) {
       setTotalFeeAmount(0);
