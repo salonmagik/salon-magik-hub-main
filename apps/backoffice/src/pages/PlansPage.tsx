@@ -163,6 +163,7 @@ interface ChainTierRowDraft {
   tier_min: string;
   tier_max: string;
   price_per_location: string;
+  price_per_location_annual: string;
   is_custom: boolean;
 }
 
@@ -336,6 +337,7 @@ const createChainTierRowDraft = (
   tier_min: tierMin,
   tier_max: tierMax,
   price_per_location: "",
+  price_per_location_annual: "",
   is_custom: isCustom,
 });
 
@@ -652,6 +654,7 @@ export default function PlansPage() {
         tier_min: number;
         tier_max: number | null;
         price_per_location: number | null;
+        price_per_location_annual: number | null;
         is_custom: boolean;
       }>;
     },
@@ -669,6 +672,7 @@ export default function PlansPage() {
         tier_min: String(row.tier_min),
         tier_max: row.tier_max == null ? "" : String(row.tier_max),
         price_per_location: row.price_per_location == null ? "" : String(row.price_per_location),
+        price_per_location_annual: row.price_per_location_annual == null ? "" : String(row.price_per_location_annual),
         is_custom: Boolean(row.is_custom),
       });
     });
@@ -1011,6 +1015,7 @@ export default function PlansPage() {
         min: Number(row.tier_min),
         max: row.tier_max.trim() ? Number(row.tier_max) : null,
         price: row.price_per_location.trim() ? Number(row.price_per_location) : null,
+        annualPrice: row.price_per_location_annual.trim() ? Number(row.price_per_location_annual) : null,
       }))
       .sort((a, b) => a.min - b.min);
 
@@ -1049,8 +1054,19 @@ export default function PlansPage() {
         if (item.price !== null) {
           errors.push(`${currency}: custom tier must not have a price.`);
         }
-      } else if (item.price === null || !Number.isFinite(item.price) || item.price < 0) {
-        errors.push(`${currency}: non-custom tiers require price >= 0.`);
+        if (item.annualPrice !== null) {
+          errors.push(`${currency}: custom tier must not have an annual price.`);
+        }
+      } else {
+        if (item.price === null || !Number.isFinite(item.price) || item.price < 0) {
+          errors.push(`${currency}: non-custom tiers require price >= 0.`);
+        }
+        // Annual price is optional per tier — leaving it blank just means
+        // annual Chain pricing isn't configured for that tier yet (AD-8),
+        // not a validation error.
+        if (item.annualPrice !== null && (!Number.isFinite(item.annualPrice) || item.annualPrice < 0)) {
+          errors.push(`${currency}: annual price must be empty or >= 0.`);
+        }
       }
     });
 
@@ -1522,6 +1538,9 @@ export default function PlansPage() {
           price_per_location: row.is_custom
             ? null
             : Number(row.price_per_location),
+          price_per_location_annual: row.is_custom || !row.price_per_location_annual.trim()
+            ? null
+            : Number(row.price_per_location_annual),
           is_custom: row.is_custom,
         })),
       );
@@ -2584,7 +2603,7 @@ export default function PlansPage() {
                           {chainTierDrafts[currency].map((row) => (
                             <div
                               key={row.localId}
-                              className="grid gap-2 md:grid-cols-[1fr_110px_110px_150px_110px_70px]"
+                              className="grid gap-2 md:grid-cols-[1fr_110px_110px_150px_150px_110px_70px]"
                             >
                               <Input
                                 placeholder="2-3"
@@ -2628,6 +2647,19 @@ export default function PlansPage() {
                                   })
                                 }
                               />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="Annual price per location"
+                                value={row.price_per_location_annual}
+                                disabled={row.is_custom}
+                                onChange={(event) =>
+                                  updateChainTierRow(currency, row.localId, {
+                                    price_per_location_annual: event.target.value,
+                                  })
+                                }
+                              />
                               <div className="flex items-center gap-2">
                                 <Switch
                                   checked={row.is_custom}
@@ -2635,6 +2667,7 @@ export default function PlansPage() {
                                     updateChainTierRow(currency, row.localId, {
                                       is_custom: checked,
                                       price_per_location: checked ? "" : row.price_per_location,
+                                      price_per_location_annual: checked ? "" : row.price_per_location_annual,
                                     })
                                   }
                                 />

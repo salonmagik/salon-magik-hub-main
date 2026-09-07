@@ -60,6 +60,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { TrialBanner } from "@/components/billing/TrialBanner";
+import { BillingStateBanner } from "@/components/billing/BillingStateBanner";
 import { TrialReminderModals } from "@/components/billing/TrialReminderModals";
 import { PromoTrialBonusBanner } from "@/components/billing/PromoTrialBonusBanner";
 import { PlanChangeBanner } from "@/components/layout/PlanChangeBanner";
@@ -1218,6 +1219,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<TrialReminderModals />
 							<PlanChangeBanner />
 							<AnnualLockinBanner />
+							<BillingStateBanner />
 
 							{/* Page Content */}
 							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
