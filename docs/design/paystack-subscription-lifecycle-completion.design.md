@@ -1,3 +1,5 @@
+Status: implemented
+
 # References
 
 - Planning Brief: `docs/prd/paystack-subscription-lifecycle-completion.prd.md`
