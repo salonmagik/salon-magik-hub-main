@@ -96,11 +96,9 @@ import { toast } from "@ui/ui/use-toast";
 import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
 import { WalletLedger } from "@/components/billing/WalletLedger";
-import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
-import { usePayoutMode } from "@/hooks/usePayoutMode";
 import {
 	useClaimTenantSalesPromo,
 	useTenantSalesPromo,
@@ -134,7 +132,6 @@ const BASE_SETTINGS_TABS = [
 	{ id: "booking", label: "Booking Settings", icon: User },
 	{ id: "payments", label: "Payments", icon: CreditCard },
 	{ id: "wallet", label: "Wallet", icon: Wallet },
-	{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 	{ id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
@@ -321,7 +318,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "profile", label: "Business Profile", icon: Building2 },
 				{ id: "branches", label: "Manage Branches", icon: CalendarX2 },
 				{ id: "booking", label: "Booking Settings", icon: User },
-				{ id: "payout-destinations", label: "Payout Destinations", icon: Banknote },
 				{ id: "notifications", label: "Notifications", icon: Bell },
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
@@ -344,7 +340,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	// at the DB level too (trg_enforce_online_booking_requires_payout), this
 	// just disables the toggle with an explanation instead of a raw DB error.
 	const { destinations: payoutDestinations, isLoading: payoutDestinationsLoading } = usePayoutDestinations(currentTenant?.id);
-	const { payoutMode, isSaving: payoutModeSaving, updatePayoutMode } = usePayoutMode();
 	const hasPayoutDestination = payoutDestinations.length > 0;
 
 	// Seed the branches/seats inputs from entitlements, and re-seed whenever
@@ -923,7 +918,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		emailCancellations: true,
 		emailTransactionAlerts: true,
 		inAppTransactionAlerts: true,
-		emailDailyDigest: false,
+		digestFrequency: "off" as "off" | "daily" | "weekly" | "monthly",
 		emailBirthdayMessages: true,
 	});
 
@@ -1338,7 +1333,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				emailTransactionAlerts: dbNotificationSettings.email_transaction_alerts,
 				inAppTransactionAlerts:
 					dbNotificationSettings.in_app_transaction_alerts,
-				emailDailyDigest: dbNotificationSettings.email_daily_digest,
+				digestFrequency: dbNotificationSettings.digest_frequency,
 				emailBirthdayMessages: dbNotificationSettings.email_birthday_messages ?? true,
 			});
 		}
@@ -1354,7 +1349,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			email_cancellations: notificationSettings.emailCancellations,
 			email_transaction_alerts: notificationSettings.emailTransactionAlerts,
 			in_app_transaction_alerts: notificationSettings.inAppTransactionAlerts,
-			email_daily_digest: notificationSettings.emailDailyDigest,
+			digest_frequency: notificationSettings.digestFrequency,
 		email_birthday_messages: notificationSettings.emailBirthdayMessages,
 		});
 	};
@@ -2346,7 +2341,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			emailCancellations: "email_cancellations",
 			emailTransactionAlerts: "email_transaction_alerts",
 			inAppTransactionAlerts: "in_app_transaction_alerts",
-			emailDailyDigest: "email_daily_digest",
 			emailBirthdayMessages: "email_birthday_messages",
 		};
 
@@ -2357,6 +2351,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		if (!success) {
 			// Revert on failure
 			setNotificationSettings((prev) => ({ ...prev, [field]: !checked }));
+		}
+	};
+
+	const handleDigestFrequencyChange = async (frequency: "off" | "daily" | "weekly" | "monthly") => {
+		const previous = notificationSettings.digestFrequency;
+		setNotificationSettings((prev) => ({ ...prev, digestFrequency: frequency }));
+		const success = await saveNotificationSettings({ digest_frequency: frequency });
+		if (!success) {
+			setNotificationSettings((prev) => ({ ...prev, digestFrequency: previous }));
 		}
 	};
 
@@ -2507,18 +2510,28 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
-						<p className="font-medium">Daily digest</p>
+						<p className="font-medium">Digest email</p>
 						<p className="text-sm text-muted-foreground">
-							Receive a daily summary of upcoming appointments
+							A summary of bookings, revenue, and new customers, sent to owners and managers
 						</p>
 					</div>
-					<Switch
-						checked={notificationSettings.emailDailyDigest}
+					<Select
+						value={notificationSettings.digestFrequency}
 						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailDailyDigest", checked)
+						onValueChange={(value) =>
+							handleDigestFrequencyChange(value as "off" | "daily" | "weekly" | "monthly")
 						}
-					/>
+					>
+						<SelectTrigger className="w-32">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="off">Off</SelectItem>
+							<SelectItem value="daily">Daily</SelectItem>
+							<SelectItem value="weekly">Weekly</SelectItem>
+							<SelectItem value="monthly">Monthly</SelectItem>
+						</SelectContent>
+					</Select>
 				</div>
 
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2907,7 +2920,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												<Button
 													size="sm"
 													className="mt-3 w-full gap-1.5"
-													onClick={() => handleTabChange("payout-destinations")}
+													onClick={() => navigate("/salon/payouts?tab=accounts")}
 												>
 													Go to payout
 													<ExternalLink className="h-3.5 w-3.5" />
@@ -3241,60 +3254,19 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<CardHeader>
 						<CardTitle>Receiving Account</CardTitle>
 						<CardDescription>
-							Add your bank account or Mobile Money number so Salon Magik can
-							send your earnings directly to you.
+							Manage the bank account or Mobile Money number your earnings are paid out to.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						<PayoutDestinationsManager />
+						<Button variant="outline" className="gap-2" onClick={() => navigate("/salon/payouts?tab=accounts")}>
+							<Banknote className="w-4 h-4" />
+							Manage payout accounts
+						</Button>
 					</CardContent>
 				</Card>
-
-				{renderPayoutModeCard()}
 			</div>
 		);
 	};
-
-	const renderPayoutModeCard = () => (
-		<Card>
-			<CardHeader>
-				<CardTitle>When do you get paid?</CardTitle>
-				<CardDescription>
-					Choose whether Paystack pays your bank directly, or your earnings build up as a salon balance you withdraw yourself.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="grid gap-3 sm:grid-cols-2">
-				<button
-					type="button"
-					disabled={payoutModeSaving}
-					onClick={() => updatePayoutMode("automatic")}
-					className={`rounded-xl border p-4 text-left transition-colors ${
-						payoutMode === "automatic" ? "border-primary bg-primary/5" : "hover:border-primary/40"
-					}`}
-				>
-					<Zap className="mb-3 h-5 w-5 text-primary" />
-					<p className="text-sm font-medium">Automatic</p>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Paystack pays your bank directly — about 1 business day after each payment clears (a Friday payment clears Monday).
-					</p>
-				</button>
-				<button
-					type="button"
-					disabled={payoutModeSaving}
-					onClick={() => updatePayoutMode("on_demand")}
-					className={`rounded-xl border p-4 text-left transition-colors ${
-						payoutMode === "on_demand" ? "border-primary bg-primary/5" : "hover:border-primary/40"
-					}`}
-				>
-					<Wallet className="mb-3 h-5 w-5 text-primary" />
-					<p className="text-sm font-medium">On-demand</p>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Cleared payments build up in your salon balance. Withdraw whenever you like from Payouts.
-					</p>
-				</button>
-			</CardContent>
-		</Card>
-	);
 
 	const renderRolesTab = () => {
 		const roles = [
@@ -3491,7 +3463,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</div>
 							</div>
 							<div className="flex items-center gap-2">
-								{currentTenant?.subscription_status === "past_due" && (
+								{(currentTenant?.subscription_status === "past_due" ||
+									(currentTenant?.subscription_status === "active" && !currentTenant?.next_billing_at && !isTrialing)) && (
 									<Button
 										type="button"
 										size="sm"
@@ -3500,7 +3473,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										disabled={isUpdatingPaymentMethod}
 										onClick={handleUpdatePaymentMethod}
 									>
-										{isUpdatingPaymentMethod ? "Redirecting…" : "Update payment method"}
+										{isUpdatingPaymentMethod ? "Redirecting…" : "Add payment method"}
 									</Button>
 								)}
 								<Button
@@ -3543,14 +3516,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<p className="font-serif text-3xl text-white">
 										{formatCurrency(recurringTotal.total_amount, recurringTotal.currency)}
 									</p>
-									<p className="text-xs text-white/60">
+									<p className={cn("text-xs", currentTenant?.subscription_status === "active" && !currentTenant?.next_billing_at && !isTrialing ? "font-medium text-[#F4A6A6]" : "text-white/60")}>
 										{isTrialing
 											? trialEndsAt
 												? `starts after trial · ${format(trialEndsAt, "MMM d")}`
 												: "starts after trial"
 											: currentTenant?.next_billing_at
 												? `next charge · ${format(new Date(currentTenant.next_billing_at), "MMM d")}`
-												: "next charge"}
+												: "billing not scheduled — add a payment method"}
 									</p>
 								</div>
 								<div className="mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
@@ -4486,12 +4459,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "booking" && renderBookingTab()}
 			{activeTab === "payments" && renderPaymentsTab()}
 			{activeTab === "wallet" && renderWalletTab()}
-			{activeTab === "payout-destinations" && (
-				<div data-tour-id="tour-payout-destinations" className="space-y-6">
-					<PayoutDestinationsManager />
-					{renderPayoutModeCard()}
-				</div>
-			)}
 			{activeTab === "withdrawals" && renderWithdrawalsTab()}
 			{activeTab === "promotions" && renderPromotionsTab()}
 			{activeTab === "notifications" && renderNotificationsTab()}

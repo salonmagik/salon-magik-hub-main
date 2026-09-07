@@ -3,6 +3,44 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
 
+// Synthesized rather than an audio file — no asset to host/load, and a
+// short two-tone chime is enough to signal "something arrived" without
+// needing a real sound library. Browsers suspend AudioContext until the
+// user has interacted with the page at least once (autoplay policy), so
+// the very first notification of a session may play silently — expected,
+// not a bug, and it plays normally after any click.
+let chimeContext: AudioContext | null = null;
+
+function playNotificationChime() {
+  try {
+    if (!chimeContext) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      chimeContext = new AudioContextClass();
+    }
+    if (chimeContext.state === "suspended") {
+      void chimeContext.resume();
+    }
+    const now = chimeContext.currentTime;
+    [880, 1318.51].forEach((frequency, index) => {
+      const oscillator = chimeContext!.createOscillator();
+      const gain = chimeContext!.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      const startAt = now + index * 0.09;
+      gain.gain.setValueAtTime(0, startAt);
+      gain.gain.linearRampToValueAtTime(0.15, startAt + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.22);
+      oscillator.connect(gain);
+      gain.connect(chimeContext!.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.24);
+    });
+  } catch (err) {
+    console.error("Failed to play notification chime:", err);
+  }
+}
+
 export interface Notification {
   id: string;
   tenant_id: string;
@@ -145,7 +183,9 @@ export function useNotifications(enabled = true) {
               });
               return next;
             });
-            
+
+            playNotificationChime();
+
             // Show toast for urgent notifications
             if (newNotification.urgent) {
               toast({

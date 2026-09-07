@@ -35,12 +35,22 @@ function TenantAvatar({ name, logoUrl, className }: { name: string; logoUrl?: st
  * trigger is itself a real <button>, and a <button> inside a <button> is
  * invalid HTML (and would also toggle the dropdown open on every copy).
  */
-function CopyBookingLinkButton({ tenant }: { tenant: { slug?: string | null; online_booking_enabled?: boolean | null } | null | undefined }) {
+function CopyBookingLinkButton({
+  tenant,
+  currentRole,
+}: {
+  tenant: { slug?: string | null; online_booking_enabled?: boolean | null } | null | undefined;
+  currentRole?: string | null;
+}) {
   const bookingUrl = buildPublicBookingUrl(tenant?.slug, {
     configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
     hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
   });
   const isOnlineBookingEnabled = Boolean(tenant?.online_booking_enabled);
+  // Payouts is only reachable from the owner hub by an owner/manager/
+  // supervisor — sending anyone else there just lands them on "Payouts
+  // isn't available here," a dead end with nothing to act on.
+  const canSetUpPayouts = currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor";
 
   const handleCopy = () => {
     if (!isOnlineBookingEnabled || !bookingUrl) return;
@@ -60,20 +70,29 @@ function CopyBookingLinkButton({ tenant }: { tenant: { slug?: string | null; onl
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
-        ) : (
+        ) : canSetUpPayouts ? (
           <a
-            href="/salon/business-settings?tab=payout-destinations"
+            href="/salon/payouts?tab=accounts"
             className="flex-shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Set up online booking"
           >
             <Copy className="h-3.5 w-3.5" />
           </a>
+        ) : (
+          <span
+            className="flex-shrink-0 cursor-default rounded-md p-1 text-muted-foreground/50"
+            aria-label="Online booking not set up"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </span>
         )}
       </TooltipTrigger>
       <TooltipContent className="max-w-64 text-xs">
         {isOnlineBookingEnabled
           ? "Copy your salon's public booking page link."
-          : "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payout Destinations settings."}
+          : canSetUpPayouts
+            ? "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payout Destinations settings."
+            : "Online booking isn't turned on yet — ask your salon owner or manager to set up a payout account first."}
       </TooltipContent>
     </Tooltip>
   );
@@ -87,7 +106,7 @@ function CopyBookingLinkButton({ tenant }: { tenant: { slug?: string | null; onl
  * within one business.
  */
 export function TenantSwitcher() {
-  const { currentTenant, tenants, roles, setCurrentTenant } = useAuth();
+  const { currentTenant, tenants, roles, setCurrentTenant, currentRole } = useAuth();
   const [open, setOpen] = useState(false);
 
   if (tenants.length <= 1 || !currentTenant) {
@@ -97,7 +116,7 @@ export function TenantSwitcher() {
         <span className="font-semibold text-sm text-foreground truncate max-w-[120px] sm:max-w-[180px]">
           {currentTenant?.name || "Your Salon"}
         </span>
-        <CopyBookingLinkButton tenant={currentTenant} />
+        <CopyBookingLinkButton tenant={currentTenant} currentRole={currentRole} />
       </div>
     );
   }
@@ -161,7 +180,7 @@ export function TenantSwitcher() {
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
-      <CopyBookingLinkButton tenant={currentTenant} />
+      <CopyBookingLinkButton tenant={currentTenant} currentRole={currentRole} />
     </div>
   );
 }

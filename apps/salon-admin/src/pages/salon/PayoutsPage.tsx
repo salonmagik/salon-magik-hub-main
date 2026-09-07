@@ -38,7 +38,6 @@ import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
-import { usePayoutMode } from "@/hooks/usePayoutMode";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
@@ -52,6 +51,14 @@ const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
   completed: { bg: "bg-success/10", text: "text-success" },
   failed: { bg: "bg-destructive/10", text: "text-destructive" },
 };
+
+// "awaiting_otp" is an internal-only state (a transfer stuck needing our own
+// team to complete a step on our Paystack account, nothing to do with the
+// salon) — it's tracked in backoffice, but here it's shown as an ordinary
+// pending transfer so nothing salon-facing ever hints at it.
+function getSalonFacingWithdrawalStatus(status: string | null | undefined): string {
+  return status === "awaiting_otp" ? "pending" : status || "pending";
+}
 
 export default function PayoutsPage() {
   useWalkthroughAutoTrigger("transactions");
@@ -81,7 +88,6 @@ export default function PayoutsPage() {
   const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
     canManagePayouts ? currentTenant?.id : undefined
   );
-  const { payoutMode } = usePayoutMode();
   const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
     canManagePayouts ? currentTenant?.id : undefined
   );
@@ -160,51 +166,64 @@ export default function PayoutsPage() {
 
         {/* Wallet balance */}
         <Card>
-          <CardContent className="p-5 flex items-center justify-between flex-wrap gap-3">
+          <CardContent className="p-5 flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-primary/10"><Wallet className="w-6 h-6 text-primary" /></div>
-              <div>
-                <div className="flex items-center gap-1">
-                  <p className="text-sm text-muted-foreground">Available to Withdraw</p>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-56 text-xs">
-                      Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
-                  <>
+              <div className="p-3 rounded-xl bg-primary/10 shrink-0"><Wallet className="w-6 h-6 text-primary" /></div>
+              <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground">Total Balance</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">
+                        Everything you've earned that hasn't been paid out yet — including money still clearing with our payment processor and not withdrawable just yet.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
                     <p className="text-2xl font-semibold mt-0.5">
-                      {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                      {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
                     </p>
-                    {payoutMode === "on_demand" && Number(walletAvailability?.pending ?? 0) > 0 && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <p className="text-xs text-amber-700 mt-1 cursor-default">
-                            + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
-                          </p>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-64 text-xs">
-                          Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
-                          {walletAvailability?.nextSettlementAt
-                            ? ` Available by ${new Date(walletAvailability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`
-                            : ""}
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    {payoutMode === "automatic" && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        You're on automatic payouts — booking payments go straight to your bank, about 1 business day after each one clears.
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground">Available Balance</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">
+                        Funds that have fully cleared with our payment processor and can be paid out right now. Separate from customer store credit or prepaid funds.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
+                    <>
+                      <p className="text-2xl font-semibold mt-0.5">
+                        {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
                       </p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Total wallet balance: {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
-                    </p>
-                  </>
-                )}
+                      {Number(walletAvailability?.pending ?? 0) > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <p className="text-xs text-amber-700 mt-1 cursor-default">
+                              + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
+                            </p>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="max-w-64 text-xs">
+                            Recent payments are held by our payment processor (Paystack) for up to 1 business day before they can be paid out. This is standard for all Paystack merchants.
+                            {walletAvailability?.nextSettlementAt
+                              ? ` Available by ${new Date(walletAvailability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}.`
+                              : ""}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(walletAvailability?.available ?? wallet.balance) <= 0}>
@@ -218,7 +237,7 @@ export default function PayoutsPage() {
           <TabsList className="h-auto w-full justify-start rounded-full bg-muted/70 p-1.5 lg:w-auto">
             <TabsTrigger value="history" className="gap-2"><History className="w-4 h-4" />History</TabsTrigger>
             <TabsTrigger value="accounts" className="gap-2"><Building2 className="w-4 h-4" />Accounts</TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2"><Settings2 className="w-4 h-4" />Settings</TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2"><Settings2 className="w-4 h-4" />Settlement</TabsTrigger>
           </TabsList>
 
           {/* History */}
@@ -236,7 +255,8 @@ export default function PayoutsPage() {
                   <div className="space-y-2">
                     {withdrawals.map((w) => {
                       const dest = destinations.find((d) => d.id === w.payout_destination_id);
-                      const wStyle = withdrawalStatusStyles[w.status || "pending"] || withdrawalStatusStyles.pending;
+                      const displayStatus = getSalonFacingWithdrawalStatus(w.status);
+                      const wStyle = withdrawalStatusStyles[displayStatus] || withdrawalStatusStyles.pending;
                       return (
                         <div key={w.id} className="flex items-center justify-between p-3 rounded-lg bg-surface">
                           <div>
@@ -245,8 +265,13 @@ export default function PayoutsPage() {
                               {dest ? `${dest.account_name || dest.momo_provider} · ${dest.account_number || dest.momo_number}` : "Payout account"}
                               {w.requested_at && ` · ${format(new Date(w.requested_at), "MMM d, yyyy")}`}
                             </p>
+                            {displayStatus === "failed" && (
+                              <p className="text-xs text-destructive mt-0.5">
+                                This withdrawal couldn't be completed — contact support for details.
+                              </p>
+                            )}
                           </div>
-                          <Badge className={cn("text-xs", wStyle.bg, wStyle.text)}>{w.status || "pending"}</Badge>
+                          <Badge className={cn("text-xs", wStyle.bg, wStyle.text)}>{displayStatus}</Badge>
                         </div>
                       );
                     })}
@@ -310,7 +335,7 @@ export default function PayoutsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-tour-id="tour-payout-destinations">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">All Payout Accounts</CardTitle>
                 <p className="text-sm text-muted-foreground">Manage bank accounts and mobile money accounts for receiving withdrawals.</p>
@@ -319,12 +344,24 @@ export default function PayoutsPage() {
             </Card>
           </TabsContent>
 
-          {/* Settings */}
+          {/* Settlement */}
           <TabsContent value="settings" className="mt-4">
             <Card>
-              <CardContent className="py-10 text-center">
-                <Settings2 className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-muted-foreground">Payout schedule and auto-payout settings coming soon.</p>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">How you get paid</CardTitle>
+                <p className="text-sm text-muted-foreground">This applies to every payout account on the Accounts tab.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface">
+                  <div className="p-2 rounded-lg bg-primary/10"><Settings2 className="w-4 h-4 text-primary" /></div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Settlement</p>
+                    <p className="text-sm font-medium mt-0.5">Request anytime · paid out next business day</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Cleared money sits in your balance until you request a withdrawal — see the Accounts tab for where it's sent, and the History tab to track a request.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

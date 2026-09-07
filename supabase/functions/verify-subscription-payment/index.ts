@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, getNextBillingAt } from "../_shared/paystack-helpers.ts";
 import { sendReceiptEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
@@ -146,15 +146,16 @@ serve(async (req) => {
       tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
 
-    // Every tenant is scheduled into the self-managed monthly cron — for
-    // monthly billing_cycle tenants that covers the full price (base +
-    // add-ons), for annual tenants compute_tenant_recurring_total excludes
-    // the base price (their annual Paystack Subscription already covers
-    // that) and only charges the add-on portion each month.
+    // Every tenant is scheduled into the self-managed recurring cron —
+    // compute_tenant_recurring_total includes the full price (base +
+    // add-ons) for both cycles now, except Chain+annual, which has no
+    // annual-tiered pricing model yet and so still only has its add-on
+    // portion charged here (its base price still rides Paystack's own
+    // Subscription — see create-checkout-session).
     if (meta.billing_cycle === "annual" || meta.billing_cycle === "monthly") {
       tenantUpdate.billing_cycle = meta.billing_cycle;
     }
-    tenantUpdate.next_billing_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    tenantUpdate.next_billing_at = getNextBillingAt(meta.billing_cycle);
     tenantUpdate.billing_retry_count = 0;
 
     // Activate the subscription

@@ -12,7 +12,7 @@ export interface NotificationSettings {
   email_cancellations: boolean;
   email_transaction_alerts: boolean;
   in_app_transaction_alerts: boolean;
-  email_daily_digest: boolean;
+  digest_frequency: "off" | "daily" | "weekly" | "monthly";
   email_birthday_messages: boolean;
   reminder_hours_before: number;
   created_at: string;
@@ -26,7 +26,7 @@ const defaultSettings: Omit<NotificationSettings, "id" | "tenant_id" | "created_
   email_cancellations: true,
   email_transaction_alerts: true,
   in_app_transaction_alerts: true,
-  email_daily_digest: false,
+  digest_frequency: "off",
   email_birthday_messages: true,
   reminder_hours_before: 24,
 };

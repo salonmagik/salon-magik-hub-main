@@ -17,7 +17,6 @@ export interface TenantNotificationSettings {
   email_cancellations: boolean;
   email_transaction_alerts: boolean;
   in_app_transaction_alerts: boolean;
-  email_daily_digest: boolean;
 }
 
 export async function getSalonRecipients(
@@ -95,7 +94,7 @@ export async function getTenantNotificationSettings(
 ): Promise<TenantNotificationSettings> {
   const { data } = await supabase
     .from("notification_settings")
-    .select("email_new_bookings, email_cancellations, email_transaction_alerts, in_app_transaction_alerts, email_daily_digest")
+    .select("email_new_bookings, email_cancellations, email_transaction_alerts, in_app_transaction_alerts")
     .eq("tenant_id", tenantId)
     .maybeSingle();
 
@@ -104,7 +103,6 @@ export async function getTenantNotificationSettings(
     email_cancellations: data?.email_cancellations ?? true,
     email_transaction_alerts: data?.email_transaction_alerts ?? true,
     in_app_transaction_alerts: data?.in_app_transaction_alerts ?? true,
-    email_daily_digest: data?.email_daily_digest ?? false,
   };
 }
 

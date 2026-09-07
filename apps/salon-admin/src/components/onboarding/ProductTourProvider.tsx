@@ -13,6 +13,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import type { EventData, Step } from "react-joyride";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 
 // Inlined instead of importing react-joyride's `EVENTS`/`STATUS` consts:
 // react-joyride ships as a single bundled module, so importing anything
@@ -95,10 +96,6 @@ export function useIsDesktopViewport() {
   return isDesktop;
 }
 
-function tourSeenKey(userId: string) {
-  return `salonmagik.tour.seen.${userId}`;
-}
-
 const TARGET_POLL_INTERVAL_MS = 100;
 const TARGET_WAIT_TIMEOUT_MS = 6000;
 
@@ -130,23 +127,37 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   const [steps, setSteps] = useState<Step[]>([]);
   const [run, setRun] = useState(false);
   const [activeWalkthroughIds, setActiveWalkthroughIds] = useState<string[]>([]);
-  // Can't read this from a useState lazy initializer: user.id isn't resolved
-  // yet on the very first render (auth loads asynchronously), so that
-  // initializer would run once against an empty/undefined id and never
-  // re-read localStorage once the real id showed up — every walkthrough
-  // would look "unseen" for the rest of the session regardless of history.
+  // Seen state lives in tour_progress (per-account, server-side) instead of
+  // localStorage — it used to be scoped to one browser, so logging out and
+  // back in (or switching devices) reset every tour to unseen. Can't read
+  // this from a useState lazy initializer: user.id isn't resolved yet on the
+  // very first render (auth loads asynchronously), so that initializer would
+  // run once against an empty/undefined id and never re-fetch once the real
+  // id showed up — every walkthrough would look "unseen" for the rest of the
+  // session regardless of history.
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const [hasLoadedSeenWalkthroughs, setHasLoadedSeenWalkthroughs] = useState(false);
   useEffect(() => {
     if (!user?.id) return;
-    try {
-      const raw = localStorage.getItem(tourSeenKey(user.id));
-      setSeenIds(raw ? new Set(JSON.parse(raw)) : new Set());
-    } catch {
-      setSeenIds(new Set());
-    } finally {
-      setHasLoadedSeenWalkthroughs(true);
-    }
+    let cancelled = false;
+    setHasLoadedSeenWalkthroughs(false);
+    supabase
+      .from("tour_progress")
+      .select("walkthrough_id")
+      .eq("user_id", user.id)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Failed to load tour progress:", error);
+          setSeenIds(new Set());
+        } else {
+          setSeenIds(new Set((data || []).map((row) => row.walkthrough_id)));
+        }
+        setHasLoadedSeenWalkthroughs(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   const markSeen = useCallback(
@@ -155,11 +166,23 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
       setSeenIds((prev) => {
         const next = new Set(prev);
         ids.forEach((id) => next.add(id));
-        if (user?.id) {
-          localStorage.setItem(tourSeenKey(user.id), JSON.stringify(Array.from(next)));
-        }
         return next;
       });
+      if (user?.id) {
+        // Optimistic local update above already lets the UI move on
+        // immediately; this persists it. Not retried on failure — same
+        // fire-and-forget characteristic as the localStorage write it
+        // replaces (which also had no failure mode of its own).
+        supabase
+          .from("tour_progress")
+          .upsert(
+            ids.map((walkthrough_id) => ({ user_id: user.id, walkthrough_id })),
+            { onConflict: "user_id,walkthrough_id", ignoreDuplicates: true },
+          )
+          .then(({ error }) => {
+            if (error) console.error("Failed to persist tour progress:", error);
+          });
+      }
     },
     [user?.id],
   );

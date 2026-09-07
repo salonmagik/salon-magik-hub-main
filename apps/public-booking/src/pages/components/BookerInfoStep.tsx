@@ -18,7 +18,7 @@ import {
 } from "@ui/select";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
 import type { DeliveryAddress } from "@/hooks";
-import { Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 
 export interface BookerInfo {
@@ -36,6 +36,8 @@ interface BookerInfoStepProps {
   requiresDeliveryAddress?: boolean;
   deliveryCountryCode?: string | null;
   emailStage?: "email" | "otp" | "password" | "details";
+  /** True once this phone number is found registered to a different email — blocks continuing until resolved. */
+  phoneEmailConflict?: boolean;
   password?: string;
   otpCode?: string;
   otpCountdown?: number;
@@ -57,6 +59,7 @@ export function BookerInfoStep({
   requiresDeliveryAddress = false,
   deliveryCountryCode,
   emailStage = "details",
+  phoneEmailConflict = false,
   password = "",
   otpCode = "",
   otpCountdown = 0,
@@ -234,6 +237,14 @@ export function BookerInfoStep({
           allowedCountryCodes={selectableCountries.map((country) => country.code)}
           disabled={hasExistingAccount}
         />
+        {phoneEmailConflict && (
+          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <p className="text-sm text-destructive">
+              This phone number is already registered to a different email address. Double-check the number, or use the email already on file for it.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

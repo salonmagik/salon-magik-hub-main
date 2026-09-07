@@ -67,7 +67,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Loader2,
-  Link2,
 } from "lucide-react";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -88,7 +87,6 @@ import { useAppointments, useAppointmentActions, AppointmentWithDetails } from "
 import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useCalendarAppointments, type CalendarView, type CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import { useAuth } from "@/hooks/useAuth";
-import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { useInvoices } from "@/hooks/useInvoices";
 import { formatCurrency } from "@shared/currency";
 import type { Enums, Tables } from "@supabase-client";
@@ -173,16 +171,6 @@ export default function AppointmentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { roles, currentTenant } = useAuth();
   const { createFromAppointment } = useInvoices();
-  const bookingUrl = buildPublicBookingUrl(currentTenant?.slug, {
-    configuredDomain: import.meta.env.VITE_PUBLIC_BOOKING_BASE_DOMAIN as string | undefined,
-    hostname: typeof window !== "undefined" ? window.location.hostname : undefined,
-  });
-  const isOnlineBookingEnabled = Boolean(currentTenant?.online_booking_enabled);
-  const handleCopyBookingLink = () => {
-    if (!isOnlineBookingEnabled || !bookingUrl) return;
-    navigator.clipboard.writeText(bookingUrl);
-    toast({ title: "Copied!", description: "Booking link copied to clipboard" });
-  };
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
@@ -1020,28 +1008,9 @@ export default function AppointmentsPage() {
               Manage upcoming bookings and stay on top of today's schedule.
             </p>
           </div>
-          {/* Copy booking link — visible on every viewport, not just desktop */}
+          {/* The header's own copy-booking-link icon (TenantSwitcher) already covers
+              this on every page — this page doesn't need a second copy. */}
           <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {isOnlineBookingEnabled ? (
-                  <Button variant="outline" className="rounded-full" onClick={handleCopyBookingLink}>
-                    <Link2 className="w-4 h-4" />
-                  </Button>
-                ) : (
-                  <a href="/salon/business-settings?tab=payout-destinations">
-                    <Button variant="outline" className="rounded-full">
-                      <Link2 className="w-4 h-4" />
-                    </Button>
-                  </a>
-                )}
-              </TooltipTrigger>
-              <TooltipContent className="max-w-64 text-xs">
-                {isOnlineBookingEnabled
-                  ? "Copy your salon's public booking page link."
-                  : "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payout Destinations settings."}
-              </TooltipContent>
-            </Tooltip>
             {/* Desktop actions (mobile/tablet use the floating + button) */}
             <div className="hidden lg:flex gap-2">
             <Button

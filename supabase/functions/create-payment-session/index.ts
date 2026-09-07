@@ -5,6 +5,7 @@ import {
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
 import { getSmsCreditPricing, findSmsCreditTier } from "../_shared/sms-credit-pricing.ts";
+import { computeBookingCharge, getPaymentFeeSettings, SUBACCOUNT_SPLIT_ENABLED } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -150,7 +151,7 @@ Deno.serve(async (req) => {
 
     const { data: tenant, error: tenantError } = await supabase
       .from("tenants")
-      .select("id, country, currency")
+      .select("id, country, currency, platform_percentage_charge, platform_service_charge_borne_by_customer")
       .eq("id", tenantId)
       .single();
 
@@ -173,6 +174,8 @@ Deno.serve(async (req) => {
 
     let payableAmount = amount;
     let appliedPromo: Record<string, unknown> | null = null;
+    let bookingCharge: ReturnType<typeof computeBookingCharge> | null = null;
+    let subaccountCode: string | null = null;
 
     // Never trust a client-supplied amount for an appointment payment: recompute
     // the real outstanding balance server-side from the appointment rows
@@ -219,6 +222,31 @@ Deno.serve(async (req) => {
       }
 
       payableAmount = roundedOutstanding;
+
+      // The initial booking checkout (create-public-booking) already adds
+      // Salon Magik's fees on top of the true service price and splits to
+      // the salon's subaccount — a balance payment for the same booking
+      // never got the same treatment, so it charged the bare outstanding
+      // amount with no fee added and no split, and (since it never told
+      // verify-booking-payment what the true service portion was) left
+      // amount_paid recording whatever Paystack's own card fee inflated the
+      // charge to, with no way to explain the difference to the customer.
+      const { data: destinationForFee } = await supabase
+        .from("salon_payout_destinations")
+        .select("paystack_subaccount_code")
+        .eq("tenant_id", tenantId)
+        .eq("is_default", true)
+        .maybeSingle();
+
+      const feeSettings = await getPaymentFeeSettings(supabase);
+      bookingCharge = computeBookingCharge({
+        servicePrice: payableAmount,
+        platformServiceChargePercent: Number(tenant.platform_percentage_charge ?? feeSettings.defaultPlatformServiceChargePercent),
+        customerFacingFeePercent: feeSettings.customerFacingFeePercent,
+        serviceChargeBorneByCustomer: Boolean(tenant.platform_service_charge_borne_by_customer),
+        hasSubaccount: Boolean(destinationForFee?.paystack_subaccount_code),
+      });
+      subaccountCode = destinationForFee?.paystack_subaccount_code || null;
     }
 
     let effectiveCredits = credits;
@@ -284,6 +312,11 @@ Deno.serve(async (req) => {
         metadata: {
           appointment_ids: body.appointmentIds || [appointmentId],
           ...(appliedPromo ? { sales_promo: appliedPromo } : {}),
+          ...(bookingCharge ? {
+            service_amount: payableAmount,
+            platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
+            customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
+          } : {}),
         },
       })
       .select("id")
@@ -293,7 +326,11 @@ Deno.serve(async (req) => {
       console.error("Error creating payment intent:", intentError);
     }
 
-    const amountInMinorUnits = Math.round(payableAmount * 100);
+    // For an appointment balance payment, the customer is actually charged
+    // service + fees (bookingCharge.amountToChargePaystack) — everywhere
+    // else payableAmount already is the full charge amount.
+    const paystackChargeAmount = bookingCharge?.amountToChargePaystack ?? payableAmount;
+    const amountInMinorUnits = Math.round(paystackChargeAmount * 100);
 
     const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
@@ -307,6 +344,12 @@ Deno.serve(async (req) => {
         currency: effectiveCurrency.toUpperCase(),
         reference: reference,
         callback_url: successUrl,
+        // See SUBACCOUNT_SPLIT_ENABLED in _shared/payment-fee-calculator.ts —
+        // unplugged 2026-09-06, pending a test verdict, not deleted.
+        ...(SUBACCOUNT_SPLIT_ENABLED && subaccountCode ? { subaccount: subaccountCode } : {}),
+        ...(SUBACCOUNT_SPLIT_ENABLED && bookingCharge && bookingCharge.transactionChargeMinor > 0
+          ? { transaction_charge: bookingCharge.transactionChargeMinor }
+          : {}),
         metadata: {
           appointment_ids: body.appointmentIds || [appointmentId],
           appointment_id: appointmentId || null,
@@ -320,6 +363,11 @@ Deno.serve(async (req) => {
           credits: effectiveCredits || null,
           promo_redemption_id: appliedPromo?.redemption_id || null,
           promo_code_id: appliedPromo?.promo_code_id || null,
+          ...(bookingCharge ? {
+            service_amount: payableAmount,
+            platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
+            customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
+          } : {}),
         },
       }),
     });

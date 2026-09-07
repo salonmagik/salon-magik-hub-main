@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
-type BookingFilter = "upcoming" | "completed" | "cancelled";
+type BookingFilter = "upcoming" | "completed" | "cancelled" | "unpaid";
 type ApprovalAwareBooking = ClientAppointmentWithDetails & {
   approval_status?: string | null;
 };
@@ -183,7 +183,7 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
                 size="sm"
                 onClick={(event) => {
                   event.stopPropagation();
-                  navigate(`/bookings/${booking.id}`);
+                  navigate(`/bookings/${booking.id}?pay=1`);
                 }}
               >
                 Complete Payment
@@ -233,6 +233,7 @@ function BookingsList({ filter }: { filter: BookingFilter }) {
       upcoming: "No upcoming appointments",
       completed: "No completed appointments",
       cancelled: "No cancelled appointments",
+      unpaid: "You're all paid up — no unpaid bookings",
     };
 
     return (
@@ -278,6 +279,9 @@ export default function ClientBookingsPage() {
             <TabsTrigger value="cancelled" className="h-10 shrink-0 rounded-full px-5">
               Cancelled
             </TabsTrigger>
+            <TabsTrigger value="unpaid" className="h-10 shrink-0 rounded-full px-5">
+              Unpaid
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="mt-4">
@@ -290,6 +294,10 @@ export default function ClientBookingsPage() {
 
           <TabsContent value="cancelled" className="mt-4">
             <BookingsList filter="cancelled" />
+          </TabsContent>
+
+          <TabsContent value="unpaid" className="mt-4">
+            <BookingsList filter="unpaid" />
           </TabsContent>
         </Tabs>
       </div>

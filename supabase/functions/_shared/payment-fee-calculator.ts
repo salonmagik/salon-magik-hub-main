@@ -14,6 +14,18 @@
  * re-split by the subaccount's own percentage.
  */
 
+// Unplugged 2026-09-06, pending a test verdict — not deleted, just not
+// applied at charge time (see create-public-booking and create-payment-session,
+// the two call sites that gate sending `subaccount`/`transaction_charge` to
+// Paystack on this flag). Subaccount splits silently don't apply while a
+// subaccount is unverified — the root cause of a real payment once landing
+// in Salon Magik's own account instead of the salon's — and /transfer-based
+// withdrawals never depended on subaccounts to begin with, so every charge
+// now lands undivided in Salon Magik's main balance; credit_salon_purse is
+// what tracks the salon's share for withdrawal instead. Flip back to `true`
+// once testing confirms it's safe to delete this instead.
+export const SUBACCOUNT_SPLIT_ENABLED = false;
+
 export interface BookingChargeInput {
   /** True price owed for the service, in major currency units (e.g. naira, not kobo). */
   servicePrice: number;

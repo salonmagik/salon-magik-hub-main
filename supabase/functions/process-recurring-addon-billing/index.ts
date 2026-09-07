@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency, chargeAuthorization } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, chargeAuthorization, getNextBillingAt } from "../_shared/paystack-helpers.ts";
 import { sendReceiptEmail, sendPaymentFailedEmail } from "../_shared/receipts.ts";
 import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
 
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
     const { data: dueTenants, error: dueError } = await supabase
       .from("tenants")
-      .select("id, name, logo_url, currency, paystack_authorization_code, paystack_authorization_email, next_billing_at, billing_retry_count")
+      .select("id, name, logo_url, currency, billing_cycle, paystack_authorization_code, paystack_authorization_email, next_billing_at, billing_retry_count")
       .not("paystack_authorization_code", "is", null)
       .lte("next_billing_at", new Date().toISOString());
 
@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
         const totalRow = totalRows?.[0];
         const addonTotal = totalRow?.total_amount || 0;
         const currency = totalRow?.currency || (tenant.currency || "NGN").toUpperCase();
-        const nextBillingAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const nextBillingAt = getNextBillingAt(tenant.billing_cycle);
 
         if (addonTotal <= 0) {
           await supabase

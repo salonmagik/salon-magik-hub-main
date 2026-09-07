@@ -45,6 +45,7 @@ import {
   ArrowLeftRight,
   Percent,
   BadgeCheck,
+  Banknote,
   type LucideIcon,
 } from "lucide-react";
 
@@ -83,6 +84,7 @@ const navItems: NavItem[] = [
   { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, pageKey: "transactions" },
   { href: "/fees-margins", label: "Fees & Margins", icon: Percent, pageKey: "payment_fee_settings" },
   { href: "/verification-queue", label: "Verification Queue", icon: BadgeCheck, pageKey: "verification_queue" },
+  { href: "/withdrawals", label: "Withdrawals", icon: Banknote, pageKey: "withdrawals" },
   { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
   { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
   {

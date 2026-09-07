@@ -749,7 +749,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     requiresOwnerHub: true,
     buildStep: () => ({
       id: "hub.payout-destinations",
-      path: "/salon/business-settings?tab=payout-destinations",
+      path: "/salon/payouts?tab=accounts",
       target: '[data-tour-id="tour-payout-destinations"]',
       title: "Payout destinations",
       content: "Set up where your online payments get settled to.",

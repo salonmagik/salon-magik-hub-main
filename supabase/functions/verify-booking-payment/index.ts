@@ -119,7 +119,21 @@ serve(async (req) => {
 
     const paystackData = await paystackRes.json();
     if (!paystackData.status || paystackData.data?.status !== "success") {
-      return json({ verified: false, paystackStatus: paystackData.data?.status || "unknown" });
+      const paystackStatus = paystackData.data?.status || "unknown";
+      // "abandoned"/"failed" are Paystack's own terminal-non-success states —
+      // the customer closed checkout or the charge was declined, nothing is
+      // still in flight. Mark the intent so it stops being offered as
+      // "Check Payment Status" forever and the customer can start a fresh
+      // attempt instead. Anything else (e.g. "pending" for bank transfer/USSD,
+      // which can take real time to clear) is left alone — still genuinely
+      // in progress, so the intent stays "processing" and worth checking again.
+      if (intent?.id && ["abandoned", "failed"].includes(paystackStatus)) {
+        await supabase
+          .from("payment_intents")
+          .update({ status: "failed", updated_at: new Date().toISOString() })
+          .eq("id", intent.id);
+      }
+      return json({ verified: false, paystackStatus });
     }
 
     const txData = paystackData.data;
@@ -238,6 +252,13 @@ serve(async (req) => {
     const primaryApt = appointments[0];
     const txTenantId = intent?.tenant_id || primaryApt.tenant_id;
     const txCustomerId = primaryApt.customer_id;
+    // Only knowable when service_amount metadata was actually attached —
+    // otherwise there's no true-price baseline to diff the gross charge
+    // against, so a legacy transaction correctly records no fee rather than
+    // a wrong one.
+    const feeAmount = txMetadata.service_amount
+      ? Number((Number(txData.amount) / 100 - amountInMajor).toFixed(2))
+      : 0;
     if (txTenantId && txCustomerId) {
       const { error: txError } = await supabase.from("transactions").insert({
         tenant_id: txTenantId,
@@ -245,6 +266,7 @@ serve(async (req) => {
         appointment_id: primaryApt.id,
         type: isDeposit ? "deposit" : "payment",
         amount: amountInMajor,
+        fee_amount: feeAmount,
         currency,
         method: paymentMethod,
         provider: "paystack",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTrialEnforcement } from "@/hooks/useTrialEnforcement";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useProductTour } from "@/components/onboarding/ProductTourProvider";
@@ -19,19 +19,24 @@ import { useToast } from "@ui/ui/use-toast";
 
 export function TrialBanner() {
   const navigate = useNavigate();
-  const { trialStatus, shouldShowWarning, shouldShowUrgent, startUpgradeCheckout } = useTrialEnforcement();
+  const location = useLocation();
+  const { trialStatus, shouldShowWarning, shouldShowUrgent } = useTrialEnforcement();
   const { hasPermission } = usePermissions();
   const { toast } = useToast();
   const { isTourActive, cancelTour } = useProductTour();
   const [dismissed, setDismissed] = useState(false);
   const [showContactAdmin, setShowContactAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const canAccessSettings = hasPermission("settings");
 
-  // Hard-expired (grace period also elapsed) → blocking modal, no way out
+  // Hard-expired (grace period also elapsed) → blocking modal, no way out —
+  // except on the subscription page itself, which needs free interaction to
+  // let the owner actually review pricing and complete the upgrade there
+  // instead of being dropped straight into Paystack checkout with no review
+  // step at all.
   const isHardExpired = trialStatus.isExpired && !trialStatus.isGracePeriod;
+  const isOnSubscriptionPage = location.pathname === "/salon/subscription";
 
   // The blocking dialog below sits above the product tour's tooltip, so an
   // in-progress tour keeps running invisibly underneath it. Cancel it
@@ -49,21 +54,6 @@ export function TrialBanner() {
     }
   };
 
-  const handleStartCheckout = async () => {
-    setIsLoading(true);
-    const result = await startUpgradeCheckout();
-    setIsLoading(false);
-    if (result.success && result.checkoutUrl) {
-      window.location.href = result.checkoutUrl;
-    } else {
-      toast({
-        title: "Couldn't start checkout",
-        description: result.error || "Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleSignOut = async () => {
     setIsSigningOut(true);
     const { error } = await supabase.auth.signOut();
@@ -75,7 +65,7 @@ export function TrialBanner() {
     navigate("/login");
   };
 
-  if (isHardExpired) {
+  if (isHardExpired && !isOnSubscriptionPage) {
     return (
       <>
         <Dialog open={true} onOpenChange={() => {}}>
@@ -95,9 +85,8 @@ export function TrialBanner() {
             </DialogHeader>
             <DialogFooter className="flex-col gap-2 sm:flex-col">
               {canAccessSettings ? (
-                <Button onClick={handleStartCheckout} disabled={isLoading} className="w-full">
-                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {isLoading ? "Redirecting to payment..." : "Upgrade Now"}
+                <Button onClick={handleUpgradeClick} className="w-full">
+                  Upgrade Now
                 </Button>
               ) : (
                 <Button onClick={() => setShowContactAdmin(true)} className="w-full">

@@ -6,7 +6,7 @@ import {
   sendResendEmail,
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
-import { mapPaystackChannelToPaymentMethod } from "./paystack-helpers.ts";
+import { mapPaystackChannelToPaymentMethod, getNextBillingAt } from "./paystack-helpers.ts";
 
 export interface WebhookEvent {
   type: string;
@@ -29,6 +29,11 @@ export interface WebhookEvent {
     splitPurseAmount?: number;
     splitCustomerId?: string;
     intent?: string;
+    billingCycle?: string;
+    authorizationCode?: string;
+    authorizationReusable?: boolean;
+    customerCode?: string;
+    customerEmail?: string;
   };
 }
 
@@ -271,17 +276,53 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent, billingCycle, authorizationCode, authorizationReusable, customerCode, customerEmail } = event.data;
 
       const actualServiceAmount = serviceAmount ?? amount;
       const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
 
       // Subscription activation: payment was initiated from the upgrade/trial flow.
-      // Activate the tenant immediately — Paystack handles recurring billing from here.
+      //
+      // This webhook is the ONLY reliable path here — the alternative,
+      // verify-subscription-payment, only runs if the customer's browser
+      // successfully redirects back from Paystack, which silently never
+      // happens for some real fraction of checkouts (closed tab, flaky
+      // connection, etc.). Before this fix, only that client-side path ever
+      // captured the reusable card token and scheduled next_billing_at — a
+      // tenant whose browser didn't return was left permanently active with
+      // no card on file and no scheduled charge, invisible to the recurring
+      // billing cron forever (it explicitly skips rows with no stored
+      // authorization). This mirrors verify-subscription-payment's capture
+      // logic so the webhook can't be second-best to the browser redirect.
+      //
+      // Guarded on next_billing_at being unset so a webhook arriving after
+      // verify-subscription-payment already ran doesn't need to do anything
+      // (both paths converge on the same tenant state either way).
       if (intent === "subscription_activation" && tenantId && isValidUUID(tenantId)) {
+        const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
+
+        const { data: tenantRow } = await supabase
+          .from("tenants")
+          .select("next_billing_at")
+          .eq("id", tenantId)
+          .maybeSingle();
+
+        if (!tenantRow?.next_billing_at) {
+          if (authorizationReusable && authorizationCode) {
+            tenantUpdate.paystack_authorization_code = authorizationCode;
+            tenantUpdate.paystack_customer_code = customerCode || null;
+            tenantUpdate.paystack_authorization_email = customerEmail || null;
+          }
+          if (billingCycle === "annual" || billingCycle === "monthly") {
+            tenantUpdate.billing_cycle = billingCycle;
+          }
+          tenantUpdate.next_billing_at = getNextBillingAt(billingCycle);
+          tenantUpdate.billing_retry_count = 0;
+        }
+
         const { error: activationError } = await supabase
           .from("tenants")
-          .update({ subscription_status: "active" })
+          .update(tenantUpdate)
           .eq("id", tenantId);
         if (activationError) {
           console.error("Failed to activate tenant subscription:", activationError);
@@ -583,44 +624,40 @@ export async function processWebhook(
               }
 
               try {
-                // "Automatic" salons get paid straight to their bank by
-                // Paystack's own settlement — their money never touches the
-                // internal wallet. Only "on_demand" salons accumulate a
-                // withdrawable balance here.
-                if (tenant.payout_mode === "on_demand") {
-                  // Validate salon wallet currency matches tenant currency
-                  await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
+                // Every tenant is on-demand now (no more "automatic" mode
+                // relying on a Paystack subaccount settling straight to the
+                // bank) — every booking payment credits the internal wallet
+                // unconditionally, paid out via withdrawal request instead.
+                // Validate salon wallet currency matches tenant currency
+                await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
 
-                  // Only gateway funds become immediately withdrawable. Paid
-                  // customer-balance grants settle when the appointment completes;
-                  // salon-issued store credit never increases payout balance.
-                  const totalAmountForSalon = actualServiceAmount;
+                // Only gateway funds become immediately withdrawable. Paid
+                // customer-balance grants settle when the appointment completes;
+                // salon-issued store credit never increases payout balance.
+                const totalAmountForSalon = actualServiceAmount;
 
-                  let finalCreditAmount = totalAmountForSalon;
-                  if (tenant.platform_percentage_charge) {
-                     finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
-                  }
+                let finalCreditAmount = totalAmountForSalon;
+                if (tenant.platform_percentage_charge) {
+                   finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
+                }
 
-                  console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
+                console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
 
-                  const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                    p_tenant_id: primaryAppointment.tenant_id,
-                    p_entry_type: "salon_purse_credit_booking",
-                    p_reference_type: "appointment",
-                    p_reference_id: primaryAppointment.id,
-                    p_amount: finalCreditAmount,
-                    p_currency: tenant.currency,
-                    p_idempotency_key: `booking_${reference}`,
-                    p_gateway_reference: reference,
-                  });
+                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                  p_tenant_id: primaryAppointment.tenant_id,
+                  p_entry_type: "salon_purse_credit_booking",
+                  p_reference_type: "appointment",
+                  p_reference_id: primaryAppointment.id,
+                  p_amount: finalCreditAmount,
+                  p_currency: tenant.currency,
+                  p_idempotency_key: `booking_${reference}`,
+                  p_gateway_reference: reference,
+                });
 
-                  if (creditError) {
-                    console.error("Error crediting salon purse:", creditError);
-                  } else {
-                    console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
-                  }
+                if (creditError) {
+                  console.error("Error crediting salon purse:", creditError);
                 } else {
-                  console.log(`Tenant ${primaryAppointment.tenant_id} is on automatic payout — skipping internal wallet credit, Paystack settles directly.`);
+                  console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
                 }
               } catch (purseError) {
                 console.error("Exception crediting salon purse:", purseError);
@@ -754,31 +791,27 @@ export async function processWebhook(
                 console.error("Error updating invoice:", invoiceUpdateError);
               }
 
-              if (invoiceTenant.payout_mode === "on_demand") {
-                // Validate salon wallet currency matches tenant currency
-                await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
+              // Validate salon wallet currency matches tenant currency
+              await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
-                let finalCreditAmount = actualServiceAmount;
-                if (invoiceTenant.platform_percentage_charge) {
-                   finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
-                }
+              let finalCreditAmount = actualServiceAmount;
+              if (invoiceTenant.platform_percentage_charge) {
+                 finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
+              }
 
-                const { error: creditError } = await supabase.rpc("credit_salon_purse", {
-                  p_tenant_id: tenantId,
-                  p_entry_type: "salon_purse_credit_invoice",
-                  p_reference_type: "invoice",
-                  p_reference_id: invoiceId,
-                  p_amount: finalCreditAmount,
-                  p_currency: invoiceTenant.currency,
-                  p_idempotency_key: `invoice_${reference}`,
-                  p_gateway_reference: reference,
-                });
+              const { error: creditError } = await supabase.rpc("credit_salon_purse", {
+                p_tenant_id: tenantId,
+                p_entry_type: "salon_purse_credit_invoice",
+                p_reference_type: "invoice",
+                p_reference_id: invoiceId,
+                p_amount: finalCreditAmount,
+                p_currency: invoiceTenant.currency,
+                p_idempotency_key: `invoice_${reference}`,
+                p_gateway_reference: reference,
+              });
 
-                if (creditError) {
-                  console.error("Error crediting salon purse for invoice:", creditError);
-                }
-              } else {
-                console.log(`Tenant ${tenantId} is on automatic payout — skipping internal wallet credit for invoice payment.`);
+              if (creditError) {
+                console.error("Error crediting salon purse for invoice:", creditError);
               }
             } catch (invoiceError) {
               console.error("Exception processing invoice payment:", invoiceError);

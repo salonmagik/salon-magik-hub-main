@@ -30,6 +30,7 @@ import FlaggedSignupsPage from "@/pages/FlaggedSignupsPage";
 import TransactionsPage from "@/pages/TransactionsPage";
 import FeesMarginsPage from "@/pages/FeesMarginsPage";
 import VerificationQueuePage from "@/pages/VerificationQueuePage";
+import WithdrawalsPage from "@/pages/WithdrawalsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -198,6 +199,15 @@ function App() {
               {
                 <BackofficeProtectedRoute requiredPageKey="verification_queue">
                   <VerificationQueuePage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
+            path="/withdrawals"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="withdrawals">
+                  <WithdrawalsPage />
                 </BackofficeProtectedRoute>
               }
           />

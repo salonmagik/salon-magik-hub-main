@@ -21,6 +21,37 @@ function endOfUtcDay(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 }
 
+type DigestFrequency = "daily" | "weekly" | "monthly";
+
+// The cron fires once a day — frequency is decided in here, not by having
+// separate cron schedules. A weekly/monthly digest would be nearly all
+// zeros if it only ever looked at "today", so both the send-or-skip
+// decision and the aggregation window depend on which day it actually is.
+function shouldSendToday(frequency: DigestFrequency, now: Date): boolean {
+  if (frequency === "daily") return true;
+  if (frequency === "weekly") return now.getUTCDay() === 1; // Monday
+  return now.getUTCDate() === 1; // Monthly: 1st of the month
+}
+
+function periodRange(frequency: DigestFrequency, now: Date): { start: Date; end: Date; label: string } {
+  const end = endOfUtcDay(now);
+  if (frequency === "daily") {
+    return { start: startOfUtcDay(now), end, label: "today" };
+  }
+  if (frequency === "weekly") {
+    const start = startOfUtcDay(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
+    return { start, end, label: "this week" };
+  }
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
+  return { start, end, label: "this month" };
+}
+
+function formatDateRange(frequency: DigestFrequency, start: Date, end: Date): string {
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  if (frequency === "daily") return fmt(end);
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -90,8 +121,8 @@ Deno.serve(async (req) => {
 
     let tenantsQuery = admin
       .from("notification_settings")
-      .select("tenant_id, tenants(id, name, logo_url, currency)")
-      .eq("email_daily_digest", true);
+      .select("tenant_id, digest_frequency, tenants(id, name, logo_url, currency)")
+      .neq("digest_frequency", "off");
 
     if (scopedTenantId) {
       tenantsQuery = tenantsQuery.eq("tenant_id", scopedTenantId);
@@ -100,8 +131,7 @@ Deno.serve(async (req) => {
     const { data: settingsRows, error: settingsError } = await tenantsQuery;
     if (settingsError) throw settingsError;
 
-    const todayStart = startOfUtcDay(new Date());
-    const todayEnd = endOfUtcDay(new Date());
+    const now = new Date();
 
     let processed = 0;
 
@@ -111,6 +141,15 @@ Deno.serve(async (req) => {
         : (row as { tenants?: { id: string; name: string | null; logo_url: string | null; currency: string | null } | null }).tenants;
 
       if (!tenant?.id) continue;
+
+      const frequency = (row as { digest_frequency: DigestFrequency }).digest_frequency;
+      // A manually-triggered/scoped-to-one-tenant call (tenantId in the
+      // request body) always sends regardless of today's date, so an owner
+      // testing their weekly/monthly digest doesn't have to wait for the
+      // real day it'd normally fire.
+      if (!scopedTenantId && !shouldSendToday(frequency, now)) continue;
+
+      const { start: periodStart, end: periodEnd, label: periodLabel } = periodRange(frequency, now);
 
       const recipients = await getSalonRecipients(admin, tenant.id, ["owner", "manager"]);
       if (recipients.length === 0) continue;
@@ -127,8 +166,8 @@ Deno.serve(async (req) => {
           .from("appointments")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenant.id)
-          .gte("scheduled_start", todayStart.toISOString())
-          .lte("scheduled_start", todayEnd.toISOString())
+          .gte("scheduled_start", periodStart.toISOString())
+          .lte("scheduled_start", periodEnd.toISOString())
           .in("status", ["scheduled", "started", "paused"]),
         admin
           .from("transactions")
@@ -136,8 +175,8 @@ Deno.serve(async (req) => {
           .eq("tenant_id", tenant.id)
           .in("type", ["payment", "deposit", "purse_topup"])
           .eq("status", "completed")
-          .gte("created_at", todayStart.toISOString())
-          .lte("created_at", todayEnd.toISOString()),
+          .gte("created_at", periodStart.toISOString())
+          .lte("created_at", periodEnd.toISOString()),
         admin
           .from("appointments")
           .select("total_amount, amount_paid, payment_status, status")
@@ -147,8 +186,8 @@ Deno.serve(async (req) => {
           .from("customers")
           .select("id", { count: "exact", head: true })
           .eq("tenant_id", tenant.id)
-          .gte("created_at", todayStart.toISOString())
-          .lte("created_at", todayEnd.toISOString()),
+          .gte("created_at", periodStart.toISOString())
+          .lte("created_at", periodEnd.toISOString()),
         admin
           .from("email_templates")
           .select("subject, body_html, is_active")
@@ -174,19 +213,27 @@ Deno.serve(async (req) => {
         return sum + Math.max(Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0), 0);
       }, 0);
 
-      const defaultSubject = "Daily digest for {{salon_name}}";
+      const frequencyLabel = frequency.charAt(0).toUpperCase() + frequency.slice(1);
+      const settingsUrl = `${dashboardBaseUrl}/salon/business-settings?tab=notifications`;
+      const otherFrequencies: Record<DigestFrequency, string> = {
+        daily: "weekly or monthly",
+        weekly: "daily or monthly",
+        monthly: "daily or weekly",
+      };
+
+      const defaultSubject = "{{frequency_label}} digest for {{salon_name}}";
       const defaultBody = `
-        <p style="margin:0 0 6px;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:650;">Daily digest · {{digest_date}}</p>
+        <p style="margin:0 0 6px;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:650;">{{frequency_label}} digest · {{digest_date}}</p>
         <h2 style="color:#111827;font-size:19px;font-weight:650;margin:0 0 18px;">Good morning, {{first_name}}</h2>
-        <p style="color:#4b5563;font-size:13.5px;line-height:1.6;margin:0 0 20px;">Here's how {{salon_name}} is looking today.</p>
+        <p style="color:#4b5563;font-size:13.5px;line-height:1.6;margin:0 0 20px;">Here's how {{salon_name}} did {{period_label}}.</p>
         <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:10px 10px;margin:0 0 4px -10px;">
           <tr>
             <td style="width:50%;background:#f8f6f2;border-radius:9px;padding:14px 16px;">
-              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Revenue today</p>
+              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Revenue {{period_label}}</p>
               <p style="margin:0;font-size:19px;font-weight:700;color:#158a4a;">{{payments_received}}</p>
             </td>
             <td style="width:50%;background:#f8f6f2;border-radius:9px;padding:14px 16px;">
-              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Appointments today</p>
+              <p style="margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;font-weight:650;">Appointments {{period_label}}</p>
               <p style="margin:0;font-size:19px;font-weight:700;color:#111827;">{{upcoming_appointments_count}}</p>
             </td>
           </tr>
@@ -202,13 +249,21 @@ Deno.serve(async (req) => {
           </tr>
         </table>
         {{cta_link_button}}
+        <p style="margin:18px 0 0;padding-top:16px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:11.5px;line-height:1.7;">
+          You're getting this {{frequency_lowercase}}. <a href="{{settings_link}}" style="color:#2E1F4E;font-weight:600;text-decoration:none;">Change to {{other_frequencies}}, or turn it off</a> in Notification Settings.
+        </p>
       `;
 
       for (const recipient of recipients) {
         const values = {
           first_name: recipient.firstName || "there",
           salon_name: tenant.name || "Salon Magik",
-          digest_date: todayStart.toISOString().slice(0, 10),
+          digest_date: formatDateRange(frequency, periodStart, periodEnd),
+          frequency_label: frequencyLabel,
+          frequency_lowercase: frequency,
+          period_label: periodLabel,
+          other_frequencies: otherFrequencies[frequency],
+          settings_link: settingsUrl,
           upcoming_appointments_count: String(upcomingAppointmentsCount),
           new_customers_count: String(newCustomersCount),
           payments_received: `${tenant.currency || "USD"} ${paymentsReceived.toFixed(2)}`,

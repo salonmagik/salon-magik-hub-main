@@ -1,0 +1,11 @@
+-- The Payment card on client-portal's booking-detail page showed a flat
+-- Total (true service price) and Amount Paid (fee-inclusive gross charge)
+-- with no explanation for the gap between them — e.g. "Total ₦100.00 /
+-- Amount Paid ₦101.53". This adds the storage needed to break the
+-- difference out explicitly as its own line instead of leaving it
+-- unexplained: the processing fee actually charged on top of the true
+-- service price for a given transaction (Salon Magik's own fees plus
+-- Paystack's own card fee where the customer bears it) — only knowable
+-- once a transaction completes, since Paystack's own fee isn't disclosed
+-- until then.
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS fee_amount numeric NOT NULL DEFAULT 0;

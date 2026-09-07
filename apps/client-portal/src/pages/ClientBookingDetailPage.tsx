@@ -59,7 +59,7 @@ const approvalConfig: Record<string, { label: string; className: string }> = {
   approved: { label: "Approved", className: "bg-emerald-100 text-emerald-900" },
   declined: { label: "Declined", className: "bg-rose-100 text-rose-900" },
   reschedule_proposed: { label: "Reschedule proposed", className: "bg-sky-100 text-sky-900" },
-  reschedule_accepted: { label: "Reschedule accepted", className: "bg-emerald-100 text-emerald-900" },
+  reschedule_accepted: { label: "Reschedule accepted · Confirmed", className: "bg-emerald-100 text-emerald-900" },
   reschedule_declined: { label: "Reschedule declined", className: "bg-orange-100 text-orange-900" },
   not_required: { label: "Confirmed", className: "bg-slate-100 text-slate-800" },
 };
@@ -130,7 +130,9 @@ export default function ClientBookingDetailPage() {
   const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
   const [paymentVerified, setPaymentVerified] = useState(false);
   const [pendingReference, setPendingReference] = useState<string | null>(null);
+  const [totalFeeAmount, setTotalFeeAmount] = useState(0);
   const verifyCalledRef = useRef(false);
+  const autoPayTriggeredRef = useRef(false);
 
   const customerIds = customers.map((c) => c.id);
 
@@ -184,6 +186,71 @@ export default function ClientBookingDetailPage() {
     refetchBookingAndSiblings().finally(() => setIsLoading(false));
   }, [id, isAuthenticated, customerIds.join(",")]);
 
+  // "Complete Payment" on the bookings list links here with ?pay=1 so a
+  // customer lands straight in Paystack checkout instead of needing a second
+  // tap on this page. Mirrors handleCompletePayment's own eligibility logic
+  // (defined further down, after this component's early-return guards, so
+  // it isn't safely referenceable from an effect declared this early) —
+  // duplicated rather than shared for that reason.
+  useEffect(() => {
+    if (autoPayTriggeredRef.current || !booking) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("pay") !== "1") return;
+    if (params.get("reference") || params.get("trxref")) return;
+
+    const customerRecord = customers.find((item) => item.id === booking.customer_id) || null;
+    const payableBookings = [
+      {
+        id: booking.id,
+        total_amount: booking.total_amount,
+        amount_paid: booking.amount_paid,
+        payment_status: booking.payment_status,
+        status: booking.status,
+      },
+      ...relatedBookings,
+    ].filter((item) => {
+      if (item.status === "cancelled") return false;
+      if (["fully_paid", "refunded_full"].includes(item.payment_status)) return false;
+      return Number(item.total_amount || 0) > Number(item.amount_paid || 0);
+    });
+    const outstandingAmount = payableBookings.reduce(
+      (sum, item) => sum + Math.max(Number(item.total_amount || 0) - Number(item.amount_paid || 0), 0),
+      0,
+    );
+    const approvalStatus = (booking as ClientApprovalBooking).approval_status || "not_required";
+    const eligible =
+      outstandingAmount > 0 &&
+      Boolean(customerRecord?.email) &&
+      ["approved", "reschedule_accepted", "not_required"].includes(approvalStatus);
+
+    if (!eligible || !customerRecord?.email) return;
+
+    autoPayTriggeredRef.current = true;
+    const clean = new URLSearchParams(location.search);
+    clean.delete("pay");
+    window.history.replaceState({}, "", location.pathname + (clean.toString() ? `?${clean.toString()}` : ""));
+
+    setIsStartingPayment(true);
+    const bookingReference = (booking as ClientApprovalBooking).booking_reference || null;
+    startClientBookingPayment({
+      tenantId: booking.tenant_id,
+      appointmentIds: payableBookings.map((item) => item.id),
+      amount: outstandingAmount,
+      currency: booking.tenant?.currency || "USD",
+      customerEmail: customerRecord.email,
+      customerName: customerRecord.full_name || "Customer",
+      description: bookingReference
+        ? `Complete payment for booking ${bookingReference}`
+        : `Complete payment for booking ${booking.id}`,
+      successUrl: window.location.href,
+      cancelUrl: window.location.href,
+    }).catch((paymentError) => {
+      console.error("Error auto-starting booking payment:", paymentError);
+      setError(paymentError instanceof Error ? paymentError.message : "Failed to start payment");
+      setIsStartingPayment(false);
+    });
+  }, [booking, relatedBookings, customers, location.search]);
+
   // After a Paystack redirect (?reference= or ?trxref=), verify the payment and refetch.
   useEffect(() => {
     if (verifyCalledRef.current || !isAuthenticated) return;
@@ -208,6 +275,12 @@ export default function ClientBookingDetailPage() {
           console.error("verify-booking-payment error:", fnError);
         } else if (data?.verified) {
           setPaymentVerified(true);
+        } else if (["abandoned", "failed"].includes(data?.paystackStatus)) {
+          toast({
+            title: "Payment wasn't completed",
+            description: "You can try again whenever you're ready.",
+            variant: "destructive",
+          });
         }
       } catch (err) {
         console.error("Payment verification failed:", err);
@@ -244,6 +317,27 @@ export default function ClientBookingDetailPage() {
       });
   }, [id, booking?.payment_status]);
 
+  // Sum the real processing fee already charged on this booking (and its
+  // group siblings) from actual completed transactions, so the Payment card
+  // can show what was truly charged instead of a bare Total/Amount Paid
+  // pair that doesn't explain why Amount Paid is higher than Total.
+  useEffect(() => {
+    if (!booking) return;
+    const appointmentIds = [id, ...relatedBookings.map((r) => r.id)].filter((v): v is string => Boolean(v));
+    if (appointmentIds.length === 0) {
+      setTotalFeeAmount(0);
+      return;
+    }
+    supabase
+      .from("transactions")
+      .select("fee_amount")
+      .in("appointment_id", appointmentIds)
+      .in("type", ["payment", "deposit"])
+      .then(({ data }) => {
+        setTotalFeeAmount((data || []).reduce((sum, row) => sum + Number(row.fee_amount || 0), 0));
+      });
+  }, [id, relatedBookings, booking?.payment_status]);
+
   const handleCheckPaymentStatus = async () => {
     if (!pendingReference) return;
     setIsVerifyingPayment(true);
@@ -256,6 +350,22 @@ export default function ClientBookingDetailPage() {
         setPaymentVerified(true);
         setPendingReference(null);
         await refetchBookingAndSiblings();
+      } else if (["abandoned", "failed"].includes(data?.paystackStatus)) {
+        // Terminal non-success on Paystack's side — the earlier attempt is
+        // dead, not still in flight. Drop it so "Complete Payment" comes
+        // back instead of leaving the customer stuck on a check-status
+        // button that can never succeed.
+        setPendingReference(null);
+        toast({
+          title: "Payment wasn't completed",
+          description: "You can try again whenever you're ready.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Still processing",
+          description: "This payment hasn't cleared yet — check again in a moment.",
+        });
       }
     } catch (err) {
       console.error("Check payment status failed:", err);
@@ -852,10 +962,22 @@ export default function ClientBookingDetailPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total</span>
-              <span className="font-semibold">{formatCurrency(booking.total_amount, currency)}</span>
+              <span className="text-muted-foreground">Service</span>
+              <span>{formatCurrency(booking.total_amount, currency)}</span>
             </div>
-            
+
+            {totalFeeAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Processing fee</span>
+                <span>{formatCurrency(totalFeeAmount, currency)}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{totalFeeAmount > 0 ? "Total Due" : "Total"}</span>
+              <span className="font-semibold">{formatCurrency(booking.total_amount + totalFeeAmount, currency)}</span>
+            </div>
+
             {booking.deposit_amount > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Deposit</span>

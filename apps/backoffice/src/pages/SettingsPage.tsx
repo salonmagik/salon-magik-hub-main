@@ -743,6 +743,23 @@ export default function BackofficeSettingsPage() {
     setKillSwitchDialogOpen(true);
   };
 
+  // backoffice_step_up_challenges.resource_id is a real uuid column (it
+  // audits *which row* a step-up covered) — passing the platform_settings
+  // *key* string ("kill_switch"/"maintenance_banner") instead of its actual
+  // row id fails the insert with "invalid input syntax for type uuid" and
+  // surfaces to the user as a bare "Edge Function returned a non-2xx status
+  // code". These two settings are singleton rows with no id already loaded
+  // in the component, so fetch it fresh right before the step-up call.
+  const getPlatformSettingId = async (key: string): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from("platform_settings")
+      .select("id")
+      .eq("key", key)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.id;
+  };
+
   const confirmKillSwitch = async () => {
     if (pendingKillSwitchState && !killSwitchReason.trim()) {
       setKillSwitchSecurityError("A reason is required to enable the kill switch");
@@ -756,11 +773,16 @@ export default function BackofficeSettingsPage() {
       setKillSwitchSecurityError("Enter your 6-digit 2FA code.");
       return;
     }
+    const resourceId = await getPlatformSettingId("kill_switch");
+    if (!resourceId) {
+      setKillSwitchSecurityError("Could not find the kill switch setting. Please refresh and try again.");
+      return;
+    }
     const verify = await supabase.functions.invoke("backoffice-verify-step-up-totp", {
       body: {
         token: killSwitchTotpToken.trim(),
         action: "kill_switch_write",
-        resourceId: "kill_switch",
+        resourceId,
         accessToken: session.access_token,
       },
     });
@@ -793,11 +815,16 @@ export default function BackofficeSettingsPage() {
       setMaintSecurityError("Enter your 6-digit 2FA code.");
       return;
     }
+    const resourceId = await getPlatformSettingId("maintenance_banner");
+    if (!resourceId) {
+      setMaintSecurityError("Could not find the maintenance banner setting. Please refresh and try again.");
+      return;
+    }
     const verify = await supabase.functions.invoke("backoffice-verify-step-up-totp", {
       body: {
         token: maintTotpToken.trim(),
         action: "maintenance_banner_write",
-        resourceId: "maintenance_banner",
+        resourceId,
         accessToken: session.access_token,
       },
     });

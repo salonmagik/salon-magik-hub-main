@@ -115,6 +115,25 @@ serve(async (req) => {
         entity_type: "appointment",
         entity_id: appointment.id,
       } as any);
+
+      // Accepting a reschedule confirms the booking outright (no separate
+      // salon re-confirmation step exists) — tell the customer so, since
+      // otherwise nothing ever communicates that back to them.
+      try {
+        await fetch(`${supabaseUrl}/functions/v1/send-booking-approval-email`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "reschedule_accepted",
+            appointmentIds: [appointment.id],
+          }),
+        });
+      } catch (emailError) {
+        console.error("respond-booking-reschedule: failed to send confirmation email", emailError);
+      }
     } else {
       const { error: updateError } = await admin
         .from("appointments")
