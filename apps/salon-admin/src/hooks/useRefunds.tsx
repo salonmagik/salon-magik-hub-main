@@ -82,14 +82,36 @@ export function useRefunds() {
         throw new Error("Refund request not found");
       }
 
-      const { error } = await supabase.rpc("complete_transaction_refund" as never, {
-        p_transaction_id: refundRequest.transaction_id,
-        p_amount: refundRequest.amount,
-        p_refund_type: refundRequest.refund_type,
-        p_reason: refundRequest.reason,
-        p_request_id: refundId,
-      } as never);
-      if (error) throw error;
+      // Routed through the edge function (not the RPC directly) so the
+      // refund-clawback safeguard applies to the approval-queue path too —
+      // a blocked refund surfaces here as an error and the request stays
+      // pending rather than being marked completed.
+      const { data, error } = await supabase.functions.invoke("refund-via-paystack", {
+        body: {
+          transactionId: refundRequest.transaction_id,
+          amount: refundRequest.amount,
+          reason: refundRequest.reason,
+          requestId: refundId,
+          refundType: refundRequest.refund_type,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      if (error) {
+        let message = error instanceof Error ? error.message : "Failed to approve refund";
+        try {
+          const response = (error as { context?: Response }).context;
+          const payload = response ? await response.json() : null;
+          if (payload?.code === "INSUFFICIENT_RECOVERABLE_FUNDS") {
+            message = "This salon has already withdrawn the funds for this payment, so it can't be recovered to refund the customer.";
+          } else if (typeof payload?.error === "string") {
+            message = payload.error;
+          }
+        } catch {
+          // fall through to the generic message above
+        }
+        throw new Error(message);
+      }
+      if (data?.error) throw new Error(data.error);
 
       await fetchRefunds();
       return true;

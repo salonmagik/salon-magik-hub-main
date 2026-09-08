@@ -22,3 +22,9 @@ export {
   type TypeCountRow,
   type TransactionFilters,
 } from "./useBackofficeTransactions";
+export {
+  useBlockedRefunds,
+  useBlockedRefundsCount,
+  type BlockedRefundRow,
+  type BlockedRefundFilters,
+} from "./useBlockedRefunds";

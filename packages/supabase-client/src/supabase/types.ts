@@ -4612,6 +4612,7 @@ export type Database = {
           tenant_id: string
           transaction_id: string
           updated_at: string
+          wallet_debit_entry_id: string | null
         }
         Insert: {
           amount: number
@@ -4629,6 +4630,7 @@ export type Database = {
           tenant_id: string
           transaction_id: string
           updated_at?: string
+          wallet_debit_entry_id?: string | null
         }
         Update: {
           amount?: number
@@ -4646,6 +4648,7 @@ export type Database = {
           tenant_id?: string
           transaction_id?: string
           updated_at?: string
+          wallet_debit_entry_id?: string | null
         }
         Relationships: [
           {
@@ -4685,6 +4688,100 @@ export type Database = {
           },
           {
             foreignKeyName: "refund_requests_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_wallet_debit_entry_id_fkey"
+            columns: ["wallet_debit_entry_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_ledger_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      refund_block_events: {
+        Row: {
+          appointment_id: string | null
+          attempted_amount: number
+          attempted_by_id: string | null
+          block_code: string
+          created_at: string
+          currency: string
+          id: string
+          reason: string | null
+          refund_request_id: string | null
+          refund_type: Database["public"]["Enums"]["refund_type"]
+          shortfall: number
+          tenant_id: string
+          transaction_id: string | null
+          wallet_balance_at_attempt: number
+        }
+        Insert: {
+          appointment_id?: string | null
+          attempted_amount: number
+          attempted_by_id?: string | null
+          block_code?: string
+          created_at?: string
+          currency: string
+          id?: string
+          reason?: string | null
+          refund_request_id?: string | null
+          refund_type: Database["public"]["Enums"]["refund_type"]
+          shortfall: number
+          tenant_id: string
+          transaction_id?: string | null
+          wallet_balance_at_attempt: number
+        }
+        Update: {
+          appointment_id?: string | null
+          attempted_amount?: number
+          attempted_by_id?: string | null
+          block_code?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          reason?: string | null
+          refund_request_id?: string | null
+          refund_type?: Database["public"]["Enums"]["refund_type"]
+          shortfall?: number
+          tenant_id?: string
+          transaction_id?: string | null
+          wallet_balance_at_attempt?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_block_events_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_refund_request_id_fkey"
+            columns: ["refund_request_id"]
+            isOneToOne: false
+            referencedRelation: "refund_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_transaction_id_fkey"
             columns: ["transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions"
@@ -8976,8 +9073,57 @@ export type Database = {
           p_refund_type: Database["public"]["Enums"]["refund_type"]
           p_request_id?: string
           p_transaction_id: string
+          p_wallet_debit_entry_id?: string
         }
         Returns: string
+      }
+      check_refund_recoverability: {
+        Args: { p_transaction_id: string }
+        Returns: Json
+      }
+      debit_salon_wallet_for_refund: {
+        Args: {
+          p_actor_id: string
+          p_amount: number
+          p_appointment_id?: string
+          p_idempotency_key: string
+          p_reason: string
+          p_refund_request_id?: string
+          p_refund_type: Database["public"]["Enums"]["refund_type"]
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      reverse_refund_wallet_debit: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_debit_idempotency_key: string
+          p_tenant_id: string
+          p_transaction_id: string
+        }
+        Returns: string
+      }
+      get_backoffice_blocked_refunds: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: {
+          attempted_amount: number
+          attempted_by_email: string
+          attempted_by_id: string
+          block_code: string
+          created_at: string
+          currency: string
+          id: string
+          reason: string
+          refund_request_id: string
+          refund_type: string
+          shortfall: number
+          tenant_id: string
+          tenant_name: string
+          total_count: number
+          transaction_id: string
+          wallet_balance_at_attempt: number
+        }[]
       }
       compute_chain_price: {
         Args: {
