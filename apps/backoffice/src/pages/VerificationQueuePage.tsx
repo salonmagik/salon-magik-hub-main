@@ -28,6 +28,18 @@ interface UnverifiedDestination {
   tenants: { name: string | null } | null;
 }
 
+interface StaleSettlementDestination {
+  id: string;
+  tenant_id: string;
+  destination_type: string;
+  country: string;
+  currency: string;
+  paystack_subaccount_code: string | null;
+  settlement_schedule: string;
+  created_at: string;
+  tenants: { name: string | null } | null;
+}
+
 export default function VerificationQueuePage() {
   const queryClient = useQueryClient();
   const [lastRefreshSummary, setLastRefreshSummary] = useState<string | null>(null);
@@ -70,6 +82,49 @@ export default function VerificationQueuePage() {
     },
     onError: (error: any) => {
       toast.error(error?.message || "Refresh failed");
+    },
+  });
+
+  const [lastSyncSummary, setLastSyncSummary] = useState<string | null>(null);
+
+  const { data: staleSchedules = [], isLoading: staleSchedulesLoading } = useQuery({
+    queryKey: ["stale-settlement-schedules"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("salon_payout_destinations" as any)
+        .select(
+          "id, tenant_id, destination_type, country, currency, paystack_subaccount_code, settlement_schedule, created_at, tenants(name)",
+        )
+        .not("paystack_subaccount_code", "is", null)
+        .neq("settlement_schedule", "manual")
+        .order("created_at", { ascending: true }) as any);
+      if (error) throw error;
+      return (data || []) as unknown as StaleSettlementDestination[];
+    },
+  });
+
+  const syncSchedules = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("sync-subaccount-settlement-schedule", {
+        body: {},
+      });
+      if (error) throw error;
+      return data as { updated: number; remaining: number; errors: string[] };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["stale-settlement-schedules"] });
+      setLastSyncSummary(
+        `Updated ${data.updated} subaccount(s) to manual settlement, ${data.remaining} still pending.`,
+      );
+      if (data.errors.length > 0) {
+        toast.warning(`${data.errors.length} destination(s) failed to sync — see console.`);
+        console.error("Settlement schedule sync errors:", data.errors);
+      } else {
+        toast.success("Settlement schedules synced");
+      }
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Sync failed");
     },
   });
 
@@ -139,6 +194,80 @@ export default function VerificationQueuePage() {
                             Never checked
                           </span>
                         )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight">Stale Settlement Schedules</h2>
+            <p className="text-muted-foreground">
+              Subaccounts whose Paystack settlement schedule was never updated after the tenant's payout mode
+              changed. These are still live-auto-settling on Paystack regardless of what our own records say.
+            </p>
+          </div>
+          <Button
+            onClick={() => syncSchedules.mutate()}
+            disabled={syncSchedules.isPending}
+            variant="outline"
+            className="gap-2"
+          >
+            <RefreshCw className={syncSchedules.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            {syncSchedules.isPending ? "Syncing..." : "Sync Settlement Schedules"}
+          </Button>
+        </div>
+
+        {lastSyncSummary && <p className="text-sm text-muted-foreground">{lastSyncSummary}</p>}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Out-of-date Subaccounts</CardTitle>
+            <CardDescription>
+              {staleSchedules.length} destination{staleSchedules.length === 1 ? "" : "s"} not yet on manual
+              settlement.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {staleSchedulesLoading ? (
+              <p className="py-6 text-center text-muted-foreground">Loading...</p>
+            ) : staleSchedules.length === 0 ? (
+              <p className="py-6 text-center text-muted-foreground">
+                Nothing pending — every subaccount is on manual settlement.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Salon</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Country</TableHead>
+                    <TableHead>Currency</TableHead>
+                    <TableHead>Subaccount Code</TableHead>
+                    <TableHead>Current Schedule</TableHead>
+                    <TableHead>Created</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {staleSchedules.map((dest) => (
+                    <TableRow key={dest.id}>
+                      <TableCell className="font-medium">{dest.tenants?.name || "—"}</TableCell>
+                      <TableCell className="capitalize">{dest.destination_type.replace("_", " ")}</TableCell>
+                      <TableCell>{dest.country}</TableCell>
+                      <TableCell>{dest.currency}</TableCell>
+                      <TableCell className="font-mono text-xs">{dest.paystack_subaccount_code}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1 text-amber-600">
+                          <AlertTriangle className="h-3 w-3" />
+                          {dest.settlement_schedule}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {format(new Date(dest.created_at), "MMM d, yyyy")}
                       </TableCell>
                     </TableRow>
                   ))}
