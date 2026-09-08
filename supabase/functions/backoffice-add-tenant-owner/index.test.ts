@@ -187,3 +187,29 @@ Deno.test("non-super-admin is rejected with 403", async () => {
   );
   assertEquals(res.status, 403);
 });
+
+Deno.test("non-super-admin with missing fields still gets 403, not 400 (auth precedes payload validation)", async () => {
+  const { admin, authClient } = createMocks({
+    ownerRows: [],
+    boUser: { role: "support_agent", is_active: true, totp_secret: TOTP_SECRET, totp_enabled: true },
+  });
+  const res = await handleAddTenantOwner(
+    // No firstName/lastName — a request this malformed must still be
+    // rejected on authorization, not leak a payload-shape error to an
+    // unauthorized caller.
+    makeRequest({ tenantId: "tenant-1", email: "new-owner@example.com", totpToken: currentTotpToken() }),
+    admin,
+    authClient,
+  );
+  assertEquals(res.status, 403);
+});
+
+Deno.test("bad TOTP with missing fields still gets 401, not 400 (auth precedes payload validation)", async () => {
+  const { admin, authClient } = createMocks({ ownerRows: [] });
+  const res = await handleAddTenantOwner(
+    makeRequest({ tenantId: "tenant-1", email: "new-owner@example.com", totpToken: "000000" }),
+    admin,
+    authClient,
+  );
+  assertEquals(res.status, 401);
+});

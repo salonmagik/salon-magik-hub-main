@@ -53,6 +53,15 @@ export async function requireSuperAdminWithFreshTotp(
     return { ok: false, response: json({ error: "TOTP is not configured for your account" }, 400, corsHeaders) };
   }
 
+  // Callers run this check before their own field validation (so auth
+  // fails fast rather than leaking field-shape errors to an unauthorized
+  // caller), which means totpToken may not have been confirmed present
+  // yet — OTPAuth's validate() reads `token.length` unconditionally and
+  // throws on a missing/non-string token rather than just failing closed.
+  if (typeof totpToken !== "string" || totpToken.length === 0) {
+    return { ok: false, response: json({ error: "Invalid verification code" }, 401, corsHeaders) };
+  }
+
   const totp = new OTPAuth.TOTP({
     issuer: "SalonMagik",
     label: caller.email || "BackOffice",

@@ -120,16 +120,20 @@ export async function handleAddTenantCoOwner(
   try {
     const { tenantId, email, firstName, lastName, phone, confirmedOwnerUserIds, totpToken } = await req.json();
 
+    // Auth/authorization runs before payload-shape validation, matching
+    // backoffice-add-tenant-owner's precedence (AD-8 — the two functions
+    // share this check and must agree on what an unauthorized or
+    // under-verified caller sees before anything else does).
+    const auth = await requireSuperAdminWithFreshTotp(admin, authClient, totpToken, corsHeaders);
+    if (!auth.ok) return auth.response!;
+    const caller = auth.caller!;
+
     if (!tenantId || !email || !totpToken || !Array.isArray(confirmedOwnerUserIds)) {
       return json({ error: "Missing required fields" }, 400);
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return json({ error: "Enter a valid email address" }, 400);
     }
-
-    const auth = await requireSuperAdminWithFreshTotp(admin, authClient, totpToken, corsHeaders);
-    if (!auth.ok) return auth.response!;
-    const caller = auth.caller!;
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
@@ -254,6 +258,12 @@ export async function handleAddTenantCoOwner(
       if (message === "CO_OWNER_NO_EXISTING_OWNER") {
         return json({ error: 'This salon has no owner yet. Use "Add owner" to assign the first one.' }, 409);
       }
+      // Unlike CO_OWNER_CAP_REACHED/CO_OWNER_NO_EXISTING_OWNER above, this
+      // isn't a named exception this function raises — it's
+      // trg_enforce_single_owner_tenant's fixed, untouched message
+      // (AD-9), which also uses P0001 and can't be given its own error
+      // code without changing a trigger this item deliberately leaves
+      // alone. A substring match is the only way to distinguish it here.
       if (typeof message === "string" && message.includes("already owns another salon")) {
         return json({ error: "This email already owns another salon on Salon Magik." }, 409);
       }

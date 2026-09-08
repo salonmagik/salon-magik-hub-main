@@ -70,16 +70,21 @@ export async function handleAddTenantOwner(
 ): Promise<Response> {
   try {
     const { tenantId, email, firstName, lastName, phone, totpToken } = await req.json();
+
+    // Auth/authorization runs before payload-shape validation, matching
+    // this function's original precedence (and AD-8: sharing this check
+    // with the co-owner function must not change what an unauthorized or
+    // under-verified caller sees before anything else does).
+    const auth = await requireSuperAdminWithFreshTotp(admin, authClient, totpToken, corsHeaders);
+    if (!auth.ok) return auth.response!;
+    const caller = auth.caller!;
+
     if (!tenantId || !email || !firstName?.trim() || !lastName?.trim() || !totpToken) {
       return json({ error: "Missing required fields" }, 400);
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return json({ error: "Enter a valid email address" }, 400);
     }
-
-    const auth = await requireSuperAdminWithFreshTotp(admin, authClient, totpToken, corsHeaders);
-    if (!auth.ok) return auth.response!;
-    const caller = auth.caller!;
 
     const normalizedEmail = String(email).trim().toLowerCase();
 

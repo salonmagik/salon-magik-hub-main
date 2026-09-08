@@ -148,6 +148,29 @@ Deno.test("bad TOTP is rejected with 401", async () => {
   assertEquals(res.status, 401);
 });
 
+Deno.test("non-super-admin with missing fields still gets 403, not 400 (auth precedes payload validation)", async () => {
+  const { admin, authClient } = createMocks({
+    owners: [owner1],
+    boUser: { role: "support_agent", is_active: true, totp_secret: TOTP_SECRET, totp_enabled: true },
+  });
+  const res = await handleAddTenantCoOwner(
+    makeRequest({ tenantId: "tenant-1", totpToken: currentTotpToken() }),
+    admin,
+    authClient,
+  );
+  assertEquals(res.status, 403);
+});
+
+Deno.test("bad TOTP with missing fields still gets 401, not 400 (auth precedes payload validation)", async () => {
+  const { admin, authClient } = createMocks({ owners: [owner1] });
+  const res = await handleAddTenantCoOwner(
+    makeRequest({ tenantId: "tenant-1", totpToken: "000000" }),
+    admin,
+    authClient,
+  );
+  assertEquals(res.status, 401);
+});
+
 Deno.test("0 owners returns 409 recovery message", async () => {
   const { admin, authClient } = createMocks({ owners: [] });
   const res = await handleAddTenantCoOwner(makeRequest(baseBody()), admin, authClient);
