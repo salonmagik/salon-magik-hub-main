@@ -94,10 +94,13 @@ serve(async (req) => {
       );
     }
 
-    // Look up the Paystack plan code (annual only, see below) and list price
-    // for this plan + currency combination.
-    let paystackPlanCode: string | null = null;
+    // List price for this plan + currency combination. Paystack plan codes
+    // (paystack_plan_code_monthly/_annual) are kept in sync purely for
+    // reporting on Paystack's dashboard (see sync-paystack-plan-pricing) —
+    // no checkout path sends a `plan` code to Paystack any more, so no
+    // Paystack-native Subscription is ever created here (see AD-9/AD-8).
     let localPlanAmount: number = 0; // the amount to be paid stored in our records
+    let planId: string | null = null;
     if (tenant.plan) {
       const { data: planRow } = await supabase
         .from("plans")
@@ -105,21 +108,49 @@ serve(async (req) => {
         .eq("slug", tenant.plan)
         .maybeSingle();
 
+      planId = planRow?.id ?? null;
       if (planRow?.id) {
         const { data: pricingRow } = await supabase
           .from("plan_pricing")
-          .select("paystack_plan_code_monthly, paystack_plan_code_annual, annual_price, monthly_price")
+          .select("annual_price, monthly_price")
           .eq("plan_id", planRow.id)
           .eq("currency", currency)
           .is("valid_until", null)
           .maybeSingle();
-        paystackPlanCode = billingCycle === "annual"
-          ? (pricingRow?.paystack_plan_code_annual ?? null)
-          : (pricingRow?.paystack_plan_code_monthly ?? null);
         localPlanAmount = billingCycle === "annual"
           ? (pricingRow?.annual_price ?? 0)
           : (pricingRow?.monthly_price ?? 0);
       }
+    }
+
+    const isChain = tenant.plan?.toLowerCase() === "chain";
+    const isAnnual = billingCycle === "annual";
+
+    // Chain-annual is only available once its annual per-location pricing
+    // model is fully configured for this currency (AD-8) — never a code
+    // flag, so this check disappears the moment backoffice enters real
+    // pricing rather than needing a follow-up deploy.
+    if (isChain && isAnnual) {
+      if (!planId) {
+        return new Response(
+          JSON.stringify({ error: `Annual billing isn't available for the Chain plan in ${currency} yet.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const { data: chainAnnualQuote, error: chainAnnualError } = await supabase.rpc("compute_chain_price", {
+        p_plan_id: planId,
+        p_currency: currency,
+        p_total_locations: 1,
+        p_billing_cycle: "annual",
+      });
+      const chainAnnualTotal = chainAnnualQuote?.[0]?.total_price;
+      if (chainAnnualError || chainAnnualTotal === null || chainAnnualTotal === undefined) {
+        return new Response(
+          JSON.stringify({ error: `Annual billing isn't available for the Chain plan in ${currency} yet.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      localPlanAmount = chainAnnualTotal;
     }
 
     // Any active subscription-surface promo discount applies to the first charge.
@@ -133,29 +164,17 @@ serve(async (req) => {
     }
     const chargeAmount = Math.max(localPlanAmount - discount, 0);
 
-    // Build Paystack transaction initialization payload.
-    //
-    // Monthly and annual signups (Solo/Studio) are both self-managed: no
-    // `plan` code is sent, so Paystack never creates its own recurring
-    // Subscription object (that fixed-price engine is what let tier
-    // upgrades silently keep billing the old price forever — see
-    // compute_tenant_recurring_total, and separately meant nothing ever
-    // monitored whether Paystack's own renewals succeeded or failed).
-    // Instead this is a one-time transaction; the saved card authorization
-    // is charged the server-computed total every cycle by
+    // Build Paystack transaction initialization payload. Every plan and
+    // cycle — Chain-annual included — is self-managed: no `plan` code is
+    // ever sent, so Paystack never creates its own recurring Subscription
+    // object (that fixed-price engine is what let tier upgrades silently
+    // keep billing the old price forever — see compute_tenant_recurring_total,
+    // and separately meant nothing ever monitored whether Paystack's own
+    // renewals succeeded or failed). Instead this is a one-time transaction
+    // that captures a reusable card authorization; the saved card is charged
+    // the server-computed total every cycle by
     // process-recurring-addon-billing — every 30 days for monthly, every
     // 365 for annual (see getNextBillingAt).
-    //
-    // Chain + annual is the one remaining exception — see the comment below.
-    const isAnnual = billingCycle === "annual";
-    // Chain has no annual-tiered pricing model (additional_location_pricing
-    // is monthly-only — see compute_tenant_recurring_total), so unlike every
-    // other plan, Chain's annual base price still has to ride Paystack's own
-    // native Subscription for now; moving it to self-managed billing would
-    // leave it with no correct number to charge. Flagged as a known gap,
-    // not something to quietly work around here.
-    const isChain = tenant.plan?.toLowerCase() === "chain";
-    const usesPaystackNativeSubscription = isAnnual && isChain;
     const paystackBody: Record<string, unknown> = {
       email: user.email,
       callback_url: successUrl,
@@ -164,20 +183,12 @@ serve(async (req) => {
         tenant_name: tenant.name,
         cancel_action: cancelUrl,
         intent: "subscription_activation",
-        billing_mode: usesPaystackNativeSubscription ? "paystack_subscription" : "self_managed",
         billing_cycle: isAnnual ? "annual" : "monthly",
         discount_applied: discount,
       },
     };
 
-    if (usesPaystackNativeSubscription && paystackPlanCode && localPlanAmount > 0) {
-      // Paystack requires `amount` even when a plan code is provided — it
-      // validates the two match (or uses it as the charge amount). Both are
-      // now kept in sync via backoffice → "Sync to Paystack", so they agree.
-      paystackBody.plan = paystackPlanCode;
-      paystackBody.amount = Math.round(chargeAmount * 100);
-      paystackBody.currency = currency;
-    } else if (chargeAmount > 0) {
+    if (chargeAmount > 0) {
       paystackBody.amount = Math.round(chargeAmount * 100);
       paystackBody.currency = currency;
     } else {

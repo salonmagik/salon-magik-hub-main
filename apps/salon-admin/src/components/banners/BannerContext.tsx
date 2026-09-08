@@ -207,19 +207,20 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
 
     // Platform-specific banners
     if (platform === "salon" && currentTenant) {
-      // Priority 2: Payment Failed
-      if (currentTenant.subscription_status === "past_due") {
-        result.push({
-          id: "payment-failed",
-          priority: 2,
-          variant: "error",
-          title: "Payment Failed",
-          message: "Your payment has failed. Update your billing to avoid service interruption.",
-          cta: { label: "Update Billing", path: "/salon/subscription" },
-          dismissible: false,
-          blocking: true,
-        });
-      }
+      // Priority 2 used to be a blocking "Payment Failed" overlay here for
+      // subscription_status === "past_due". Removed: the subscription
+      // lifecycle work made past_due a deliberately *operational* state for
+      // the length of the grace period (see is_tenant_operational and AD-4
+      // in docs/design/paystack-subscription-lifecycle-completion.design.md)
+      // — the tenant is meant to keep working and be warned, not be locked
+      // out of the entire dashboard. A `blocking: true` overlay with no
+      // route exception made that impossible in practice: it re-triggers on
+      // every route (including /salon/subscription itself, its own CTA
+      // target), permanently hiding the actual settle UI behind an overlay
+      // whose only action loops back to the same block. BillingStateBanner
+      // (mounted in SalonSidebar) is this system's replacement — a
+      // persistent, non-blocking, unmissable banner with a working settle
+      // action, for both past_due and suspended.
 
       // Trial status (expired-block, T-7/T-3 warnings) is NOT handled here —
       // TrialBanner.tsx already owns the full lifecycle via useTrialEnforcement

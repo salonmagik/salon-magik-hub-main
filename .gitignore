@@ -45,3 +45,12 @@ ralph.sh
 # Local destructive reset scripts
 supabase/scripts/reset*.sql
 .playwright-mcp/
+
+# Playwright e2e output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+#claude
+.claudespace

@@ -196,3 +196,205 @@ export async function sendPaymentFailedEmail(options: SendPaymentFailedEmailOpti
     return { sent: false, error: message };
   }
 }
+
+async function sendResendEmail(options: {
+  recipientEmail: string;
+  salonName: string;
+  salonLogoUrl?: string | null;
+  subject: string;
+  html: string;
+  logLabel: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) {
+    console.error(`${options.logLabel}: RESEND_API_KEY not configured`);
+    return { sent: false, error: "RESEND_API_KEY not configured" };
+  }
+
+  const fromEmail = Deno.env.get("RECEIPTS_FROM_EMAIL") || Deno.env.get("DEFAULT_FROM_EMAIL") || "billing@salonmagik.com";
+
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: buildFromAddress({ mode: "salon", salonName: options.salonName, fromEmail }),
+        to: [options.recipientEmail],
+        subject: options.subject,
+        html: options.html,
+      }),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`${options.logLabel}: Resend error`, errBody);
+      return { sent: false, error: errBody };
+    }
+
+    return { sent: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `Unknown error in ${options.logLabel}`;
+    console.error(`${options.logLabel}: exception`, error);
+    return { sent: false, error: message };
+  }
+}
+
+export interface SendCancellationConfirmationEmailOptions {
+  recipientEmail: string;
+  salonName: string;
+  salonLogoUrl?: string | null;
+  accessEndDate: string; // ISO date
+  manageSubscriptionUrl: string;
+}
+
+/** Sent when an owner requests end-of-period cancellation (request_subscription_cancellation). */
+export async function sendCancellationConfirmationEmail(
+  options: SendCancellationConfirmationEmailOptions,
+): Promise<{ sent: boolean; error?: string }> {
+  const accessEndLabel = new Date(options.accessEndDate).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const content = `
+    ${heading("Your subscription cancellation is confirmed")}
+    ${paragraph(
+      `We're sorry to see ${options.salonName} go. You'll keep full access until ${accessEndLabel} — after that, billing stops and your storefront and bookings will be disabled.`,
+    )}
+    ${paragraph("Changed your mind? You can reverse this at any time before then, with no new payment required.")}
+    ${createButton("Manage subscription", options.manageSubscriptionUrl)}
+  `;
+
+  const htmlBody = wrapEmailTemplate(content, {
+    mode: "salon",
+    salonName: options.salonName,
+    salonLogoUrl: options.salonLogoUrl || undefined,
+  });
+
+  return sendResendEmail({
+    recipientEmail: options.recipientEmail,
+    salonName: options.salonName,
+    subject: `Your Salon Magik subscription is set to cancel on ${accessEndLabel}`,
+    html: htmlBody,
+    logLabel: "sendCancellationConfirmationEmail",
+  });
+}
+
+export interface SendDunningReminderEmailOptions {
+  recipientEmail: string;
+  salonName: string;
+  salonLogoUrl?: string | null;
+  amount: number;
+  currency: string;
+  graceEndsAt: string; // ISO date
+  updatePaymentMethodUrl: string;
+}
+
+/**
+ * Sent at each configured dunning threshold during the grace window (see
+ * BILLING_GRACE_PERIOD_DAYS and billing_dunning_notices) — escalating
+ * reminders that a suspension is coming.
+ */
+export async function sendDunningReminderEmail(
+  options: SendDunningReminderEmailOptions,
+): Promise<{ sent: boolean; error?: string }> {
+  const deadlineLabel = new Date(options.graceEndsAt).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const content = `
+    ${heading("Your Salon Magik subscription is still past due")}
+    ${paragraph(
+      `${options.salonName} owes ${formatMoney(options.amount, options.currency)} on Salon Magik. Update your payment method by ${deadlineLabel} to keep your storefront and bookings running — after that date your account will be suspended.`,
+    )}
+    ${createButton("Settle now", options.updatePaymentMethodUrl)}
+  `;
+
+  const htmlBody = wrapEmailTemplate(content, {
+    mode: "salon",
+    salonName: options.salonName,
+    salonLogoUrl: options.salonLogoUrl || undefined,
+  });
+
+  return sendResendEmail({
+    recipientEmail: options.recipientEmail,
+    salonName: options.salonName,
+    subject: `Action needed: ${formatMoney(options.amount, options.currency)} past due on your Salon Magik account`,
+    html: htmlBody,
+    logLabel: "sendDunningReminderEmail",
+  });
+}
+
+export interface SendSuspensionEmailOptions {
+  recipientEmail: string;
+  salonName: string;
+  salonLogoUrl?: string | null;
+  amount: number;
+  currency: string;
+  updatePaymentMethodUrl: string;
+}
+
+/** Sent when the grace period expires unsettled and the tenant is suspended. */
+export async function sendSuspensionEmail(
+  options: SendSuspensionEmailOptions,
+): Promise<{ sent: boolean; error?: string }> {
+  const content = `
+    ${heading("Your Salon Magik account has been suspended")}
+    ${paragraph(
+      `We couldn't collect the ${formatMoney(options.amount, options.currency)} owed on ${options.salonName}'s Salon Magik subscription, so your public storefront and new bookings are now disabled. Your existing data is safe and you can still sign in to read and export it.`,
+    )}
+    ${paragraph("Pay the outstanding amount at any time to restore full access immediately.")}
+    ${createButton("Restore access", options.updatePaymentMethodUrl)}
+  `;
+
+  const htmlBody = wrapEmailTemplate(content, {
+    mode: "salon",
+    salonName: options.salonName,
+    salonLogoUrl: options.salonLogoUrl || undefined,
+  });
+
+  return sendResendEmail({
+    recipientEmail: options.recipientEmail,
+    salonName: options.salonName,
+    subject: "Your Salon Magik account has been suspended",
+    html: htmlBody,
+    logLabel: "sendSuspensionEmail",
+  });
+}
+
+export interface SendReactivationEmailOptions {
+  recipientEmail: string;
+  salonName: string;
+  salonLogoUrl?: string | null;
+}
+
+/** Sent when a past_due or suspended tenant settles and returns to active. */
+export async function sendReactivationEmail(
+  options: SendReactivationEmailOptions,
+): Promise<{ sent: boolean; error?: string }> {
+  const content = `
+    ${heading("You're back in business")}
+    ${paragraph(
+      `${options.salonName}'s Salon Magik account is active again — your storefront and bookings are fully restored, and billing continues as normal.`,
+    )}
+  `;
+
+  const htmlBody = wrapEmailTemplate(content, {
+    mode: "salon",
+    salonName: options.salonName,
+    salonLogoUrl: options.salonLogoUrl || undefined,
+  });
+
+  return sendResendEmail({
+    recipientEmail: options.recipientEmail,
+    salonName: options.salonName,
+    subject: "Your Salon Magik account is active again",
+    html: htmlBody,
+    logLabel: "sendReactivationEmail",
+  });
+}

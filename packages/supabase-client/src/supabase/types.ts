@@ -47,6 +47,7 @@ export type Database = {
           is_custom: boolean
           plan_id: string
           price_per_location: number | null
+          price_per_location_annual: number | null
           tier_label: string
           tier_max: number | null
           tier_min: number
@@ -59,6 +60,7 @@ export type Database = {
           is_custom?: boolean
           plan_id: string
           price_per_location?: number | null
+          price_per_location_annual?: number | null
           tier_label: string
           tier_max?: number | null
           tier_min: number
@@ -71,6 +73,7 @@ export type Database = {
           is_custom?: boolean
           plan_id?: string
           price_per_location?: number | null
+          price_per_location_annual?: number | null
           tier_label?: string
           tier_max?: number | null
           tier_min?: number
@@ -1052,6 +1055,38 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      billing_dunning_notices: {
+        Row: {
+          grace_started_at: string
+          id: string
+          notice_key: string
+          sent_at: string
+          tenant_id: string
+        }
+        Insert: {
+          grace_started_at: string
+          id?: string
+          notice_key: string
+          sent_at?: string
+          tenant_id: string
+        }
+        Update: {
+          grace_started_at?: string
+          id?: string
+          notice_key?: string
+          sent_at?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_dunning_notices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       branch_unavailability_windows: {
         Row: {
@@ -7166,11 +7201,18 @@ export type Database = {
           auto_confirm_bookings: boolean | null
           banner_urls: string[] | null
           billing_cycle: string
+          billing_grace_ends_at: string | null
+          billing_grace_started_at: string | null
+          billing_period_due_at: string | null
           billing_retry_count: number
           booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
           cancellation_grace_hours: number | null
+          cancellation_reason: string | null
+          cancellation_reason_note: string | null
+          cancellation_requested_at: string | null
+          cancellation_requested_by: string | null
           contact_phone: string | null
           country: string
           created_at: string
@@ -7216,7 +7258,9 @@ export type Database = {
           storefront_mode: string
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
+          subscription_cancel_at: string | null
           subscription_status: Database["public"]["Enums"]["subscription_status"]
+          suspended_at: string | null
           timezone: string
           trial_bonus_granted_at: string | null
           trial_ends_at: string | null
@@ -7233,11 +7277,18 @@ export type Database = {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           billing_cycle?: string
+          billing_grace_ends_at?: string | null
+          billing_grace_started_at?: string | null
+          billing_period_due_at?: string | null
           billing_retry_count?: number
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
+          cancellation_reason?: string | null
+          cancellation_reason_note?: string | null
+          cancellation_requested_at?: string | null
+          cancellation_requested_by?: string | null
           contact_phone?: string | null
           country: string
           created_at?: string
@@ -7283,7 +7334,9 @@ export type Database = {
           storefront_mode?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          subscription_cancel_at?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          suspended_at?: string | null
           timezone?: string
           trial_bonus_granted_at?: string | null
           trial_ends_at?: string | null
@@ -7300,11 +7353,18 @@ export type Database = {
           auto_confirm_bookings?: boolean | null
           banner_urls?: string[] | null
           billing_cycle?: string
+          billing_grace_ends_at?: string | null
+          billing_grace_started_at?: string | null
+          billing_period_due_at?: string | null
           billing_retry_count?: number
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
           cancellation_grace_hours?: number | null
+          cancellation_reason?: string | null
+          cancellation_reason_note?: string | null
+          cancellation_requested_at?: string | null
+          cancellation_requested_by?: string | null
           contact_phone?: string | null
           country?: string
           created_at?: string
@@ -7350,7 +7410,9 @@ export type Database = {
           storefront_mode?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
+          subscription_cancel_at?: string | null
           subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          suspended_at?: string | null
           timezone?: string
           trial_bonus_granted_at?: string | null
           trial_ends_at?: string | null
@@ -8919,6 +8981,7 @@ export type Database = {
       }
       compute_chain_price: {
         Args: {
+          p_billing_cycle?: string
           p_currency: string
           p_plan_id: string
           p_total_locations: number
@@ -8928,6 +8991,18 @@ export type Database = {
           requires_custom: boolean
           total_price: number
         }[]
+      }
+      advance_billing_anchor: {
+        Args: { p_billing_cycle: string; p_due_at: string }
+        Returns: string
+      }
+      request_subscription_cancellation: {
+        Args: { p_note: string; p_reason: string; p_tenant_id: string }
+        Returns: string
+      }
+      resume_subscription: {
+        Args: { p_tenant_id: string }
+        Returns: string
       }
       compute_current_addon_total: {
         Args: { p_tenant_id: string }
@@ -9197,6 +9272,12 @@ export type Database = {
           addon_breakdown: Json
           addon_mrr: number
           base_mrr: number
+          billing_grace_ends_at: string
+          billing_retry_count: number
+          cancellation_reason: string
+          cancellation_reason_note: string
+          cancellation_requested_at: string
+          cancellation_requested_by_email: string
           comms_balance: number
           comms_last_purchase_amount: number
           comms_last_purchase_at: string
@@ -9205,7 +9286,9 @@ export type Database = {
           currency: string
           next_billing_at: string
           plan: string
+          subscription_cancel_at: string
           subscription_status: string
+          suspended_at: string
           tenant_id: string
           tenant_name: string
         }[]
@@ -9846,6 +9929,7 @@ export type Database = {
         | "canceled"
         | "paused"
         | "permanently_deactivated"
+        | "suspended"
       waitlist_status: "pending" | "invited" | "converted" | "rejected"
       wallet_entry_type:
         | "customer_purse_topup"
@@ -10054,6 +10138,7 @@ export const Constants = {
         "canceled",
         "paused",
         "permanently_deactivated",
+        "suspended",
       ],
       waitlist_status: ["pending", "invited", "converted", "rejected"],
       wallet_entry_type: [
