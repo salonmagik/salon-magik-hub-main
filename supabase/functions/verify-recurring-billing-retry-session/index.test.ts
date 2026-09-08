@@ -17,7 +17,9 @@ interface SingleResult {
 function ownerRoleChain(result: SingleResult) {
   const chain: Record<string, unknown> = {};
   for (const m of ["select", "eq"]) chain[m] = () => chain;
-  chain.single = () => Promise.resolve(result);
+  // requireTenantRole awaits the builder directly (no terminal call), so
+  // the chain itself must be thenable, matching real supabase-js.
+  (chain as unknown as { then: unknown }).then = (resolve: (v: unknown) => void) => resolve(result);
   return chain;
 }
 
@@ -125,7 +127,7 @@ function successfulVerifyResponse(overrides: Record<string, unknown> = {}) {
 
 Deno.test("already-applied reference is a no-op and mutates nothing (idempotency guard)", async () => {
   const { supabase, updates, inserts } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     existingLog: { data: { id: "existing-log-1" }, error: null },
     tenant: { data: tenantRow, error: null },
   });
@@ -145,7 +147,7 @@ Deno.test("already-applied reference is a no-op and mutates nothing (idempotency
 
 Deno.test("settlement from past_due resumes on the anchor date, not now+cycle (AC 9)", async () => {
   const { supabase, updates, inserts } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     existingLog: { data: null, error: null },
     tenant: { data: tenantRow, error: null },
     rpcResults: {
@@ -183,7 +185,7 @@ Deno.test("settlement from past_due resumes on the anchor date, not now+cycle (A
 Deno.test("settlement from suspended resumes to active the same way", async () => {
   const suspendedTenant = { ...tenantRow, subscription_status: "suspended" };
   const { supabase, updates } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     existingLog: { data: null, error: null },
     tenant: { data: suspendedTenant, error: null },
     rpcResults: {
@@ -210,7 +212,7 @@ Deno.test("settlement from suspended resumes to active the same way", async () =
 
 Deno.test("a declined charge returns an error and mutates nothing, preserving the grace deadline (AC 10)", async () => {
   const { supabase, updates, inserts } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     existingLog: { data: null, error: null },
     tenant: { data: tenantRow, error: null },
   });
@@ -241,7 +243,7 @@ Deno.test("a declined charge returns an error and mutates nothing, preserving th
 
 Deno.test("a non-reusable card is rejected without mutating anything", async () => {
   const { supabase, updates } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     existingLog: { data: null, error: null },
     tenant: { data: tenantRow, error: null },
   });
@@ -266,7 +268,7 @@ Deno.test("a non-reusable card is rejected without mutating anything", async () 
 
 Deno.test("non-owner is rejected with 403", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "staff" }, error: null },
+    userRole: { data: [{ role: "staff", is_active: true }], error: null },
     existingLog: { data: null, error: null },
     tenant: { data: tenantRow, error: null },
   });

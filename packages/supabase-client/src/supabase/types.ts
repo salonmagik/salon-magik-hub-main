@@ -8952,7 +8952,10 @@ export type Database = {
         Args: { p_email: string; p_phone: string }
         Returns: string
       }
-      check_owner_invite_email: { Args: { p_email: string }; Returns: Json }
+      check_owner_invite_email: {
+        Args: { p_email: string; p_tenant_id?: string }
+        Returns: Json
+      }
       check_phone_available: {
         Args: { p_exclude_user_id: string; p_phone: string }
         Returns: boolean
@@ -9474,6 +9477,15 @@ export type Database = {
           subject: string
         }[]
       }
+      get_tenant_owners: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          email: string
+          full_name: string
+          granted_at: string
+          user_id: string
+        }[]
+      }
       get_tenant_plan_change_notifications: {
         Args: { p_limit?: number; p_tenant_id: string }
         Returns: {
@@ -9510,6 +9522,10 @@ export type Database = {
         Returns: Json
       }
       get_user_tenant_ids: { Args: { _user_id: string }; Returns: string[] }
+      grant_tenant_co_owner: {
+        Args: { p_tenant_id: string; p_user_id: string }
+        Returns: Json
+      }
       has_backoffice_role: {
         Args: {
           _role: Database["public"]["Enums"]["backoffice_role"]

@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 import { sendCancellationConfirmationEmail } from "../_shared/receipts.ts";
 import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
+import { requireTenantRole } from "../_shared/tenant-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,16 +57,15 @@ export async function handleManageSubscriptionCancellation(
 
   // Returns a clean 403 for the common case; the RPC's own check (below)
   // is the authoritative boundary since it's callable directly as `authenticated`.
-  const { data: userRole } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("tenant_id", tenantId)
-    .single();
-
-  if (userRole?.role !== "owner") {
-    return jsonResponse({ error: "Only owners can manage subscription cancellation" }, 403);
-  }
+  const membership = await requireTenantRole(
+    supabase,
+    user.id,
+    tenantId,
+    ["owner"],
+    { error: "Only owners can manage subscription cancellation" },
+    corsHeaders,
+  );
+  if (!membership.ok) return membership.response!;
 
   const { data: tenant } = await supabase
     .from("tenants")

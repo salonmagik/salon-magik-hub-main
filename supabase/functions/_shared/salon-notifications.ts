@@ -24,18 +24,26 @@ export async function getSalonRecipients(
   tenantId: string,
   roles: string[] = ["owner", "manager"],
 ): Promise<SalonRecipient[]> {
-  const { data: roleRows, error: roleError } = await supabase
+  const { data: allRoleRows, error: roleError } = await supabase
     .from("user_roles")
-    .select("user_id, role")
+    .select("user_id, role, is_active")
     .eq("tenant_id", tenantId)
     .in("role", roles);
 
-  if (roleError || !roleRows?.length) {
+  if (roleError || !allRoleRows?.length) {
     if (roleError) console.error("Failed to fetch salon recipients:", roleError);
     return [];
   }
 
-  const userIds = [...new Set(roleRows.map((row: { user_id: string }) => row.user_id).filter(Boolean))];
+  // A deactivated owner (support's only undo for a mistaken co-owner grant)
+  // must stop receiving the salon's mail, same as it stops holding RLS
+  // ownership (AD-10).
+  const roleRows = allRoleRows.filter((row: { is_active: boolean | null }) => row.is_active ?? true);
+  if (roleRows.length === 0) return [];
+
+  const userIds: string[] = [
+    ...new Set(roleRows.map((row: { user_id: string }) => row.user_id).filter(Boolean)),
+  ] as string[];
   if (userIds.length === 0) return [];
 
   // Get profiles for full_name
@@ -66,7 +74,7 @@ export async function getSalonRecipients(
       }
 
       if (authUser?.user?.email) {
-        const fullName = profileByUserId.get(userId);
+        const fullName = profileByUserId.get(userId) as string | undefined;
         // Parse first/last name from full_name
         const nameParts = fullName?.split(" ") || [];
         const firstName = nameParts[0] || null;
@@ -77,7 +85,7 @@ export async function getSalonRecipients(
           email: authUser.user.email,
           firstName,
           lastName,
-          role: roleByUserId.get(userId),
+          role: roleByUserId.get(userId) as string | undefined,
         });
       }
     } catch (err) {

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, getNextBillingAt } from "../_shared/paystack-helpers.ts";
+import { requireTenantRole } from "../_shared/tenant-auth.ts";
 import { sendReceiptEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
@@ -49,19 +50,15 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Verify caller has owner role for this tenant
-    const { data: userRole } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("tenant_id", tenantId)
-      .single();
-
-    if (userRole?.role !== "owner") {
-      return new Response(JSON.stringify({ error: "Only owners can verify subscription payments" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const membership = await requireTenantRole(
+      supabase,
+      user.id,
+      tenantId,
+      ["owner"],
+      { error: "Only owners can verify subscription payments" },
+      corsHeaders,
+    );
+    if (!membership.ok) return membership.response!;
 
     // Load tenant to get currency
     const { data: tenant } = await supabase
