@@ -68,18 +68,23 @@ serve(async (req) => {
 
     // Authorization: caller may revoke their own session freely.
     // Otherwise they must be an owner or a manager with can_manage_staff_sessions.
+    // Not `.maybeSingle()` — that still errors when the caller holds more
+    // than one active role row for this tenant (e.g. an owner who is also
+    // a manager), which `.single()`/`.maybeSingle()` both treat as an error
+    // case rather than "pick the row that matters" (see tenant-auth.ts).
     const isSelf = session.user_id === user.id;
     if (!isSelf) {
-      const { data: callerRole } = await supabase
+      const { data: callerRoleRows } = await supabase
         .from("user_roles")
-        .select("role, can_manage_staff_sessions")
+        .select("role, is_active, can_manage_staff_sessions")
         .eq("user_id", user.id)
-        .eq("tenant_id", session.tenant_id)
-        .maybeSingle();
+        .eq("tenant_id", session.tenant_id);
 
-      const isOwner = callerRole?.role === "owner";
-      const isElevatedManager =
-        callerRole?.role === "manager" && callerRole?.can_manage_staff_sessions === true;
+      const activeRoles = (callerRoleRows || []).filter((row) => row.is_active ?? true);
+      const isOwner = activeRoles.some((row) => row.role === "owner");
+      const isElevatedManager = activeRoles.some(
+        (row) => row.role === "manager" && row.can_manage_staff_sessions === true,
+      );
 
       if (!isOwner && !isElevatedManager) {
         return new Response(

@@ -1,5 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, getPaystackBalance } from "../_shared/paystack-helpers.ts";
+import { requireTenantRole } from "../_shared/tenant-auth.ts";
+import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
+import { heading, paragraph } from "../_shared/email-template.ts";
+
+const PAYOUT_ALLOWED_ROLES = ["owner", "manager", "supervisor"];
+const PAYOUT_FORBIDDEN_BODY = { error: "You don't have permission to manage payouts for this salon." };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,41 +22,40 @@ interface WithdrawalRequest {
 // Duplicate detection time window (5 minutes in milliseconds)
 const DUPLICATE_WINDOW_MS = 5 * 60 * 1000;
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+/**
+ * The actual process-salon-withdrawal logic, factored out from the
+ * Deno.serve() handler below so it can be driven directly by a test with an
+ * injected Supabase client and a fake authenticated user (see
+ * index.test.ts) — covers the new membership check (AD-6/F-1, T-4), the
+ * payout-destination/tenant assertion, and the owner-notification fan-out
+ * (FR-10, AC-10).
+ */
+export async function handleProcessSalonWithdrawal(
+  req: Request,
+  // deno-lint-ignore no-explicit-any
+  supabase: SupabaseClient<any>,
+  // deno-lint-ignore no-explicit-any
+  serviceSupabase: SupabaseClient<any>,
+  user: Pick<User, "id" | "email">,
+): Promise<Response> {
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Verify the user's JWT
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Missing bearer token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Client with user's auth
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const body: WithdrawalRequest = await req.json();
     const { tenantId, payoutDestinationId, amount } = body;
+
+    // Membership check runs before field validation so an unauthorized
+    // caller gets a generic 403 rather than a 400 that confirms the shape
+    // of another salon's data.
+    if (tenantId) {
+      const membership = await requireTenantRole(
+        supabase,
+        user.id,
+        tenantId,
+        PAYOUT_ALLOWED_ROLES,
+        PAYOUT_FORBIDDEN_BODY,
+        corsHeaders,
+      );
+      if (!membership.ok) return membership.response!;
+    }
 
     // Validate required fields
     if (!tenantId || !payoutDestinationId || !amount) {
@@ -65,9 +71,6 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Use service role for database operations
-    const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // =====================================================
     // STEP 1: CHECK FOR DUPLICATE WITHDRAWALS
@@ -239,7 +242,6 @@ Deno.serve(async (req) => {
       .from("salon_payout_destinations")
       .select("*")
       .eq("id", payoutDestinationId)
-      .eq("tenant_id", tenantId)
       .single();
 
     if (destinationError || !payoutDestination) {
@@ -247,6 +249,13 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Payout destination not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (payoutDestination.tenant_id !== tenantId) {
+      return new Response(
+        JSON.stringify(PAYOUT_FORBIDDEN_BODY),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -316,19 +325,20 @@ Deno.serve(async (req) => {
 
       paystackData = await paystackResponse.json();
     } catch (fetchError) {
+      const message = fetchError instanceof Error ? fetchError.message : "Unknown error";
       console.error("Paystack API request failed:", fetchError);
-      
+
       // Mark withdrawal as failed
       await serviceSupabase
         .from("salon_withdrawals")
         .update({
           status: "failed",
-          failure_reason: `Network error: ${fetchError.message}`,
+          failure_reason: `Network error: ${message}`,
         })
         .eq("id", withdrawal.id);
 
       return new Response(
-        JSON.stringify({ error: `Failed to connect to payment provider: ${fetchError.message}` }),
+        JSON.stringify({ error: `Failed to connect to payment provider: ${message}` }),
         { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -401,6 +411,34 @@ Deno.serve(async (req) => {
 
     console.log(`[Withdrawal] Withdrawal ${withdrawal.id} initiated, Paystack transfer status: ${transferStatus}, internal status: ${internalStatus}`);
 
+    if (internalStatus !== "failed") {
+      // Either owner can request a withdrawal; every active owner is told,
+      // so a withdrawal one owner didn't request is always visible to the
+      // other (AD-6/FR-10). A Resend outage must never fail a withdrawal
+      // that has already moved money.
+      try {
+        const { data: tenantRow } = await serviceSupabase.from("tenants").select("name").eq("id", tenantId).maybeSingle();
+        const owners = await getSalonRecipients(serviceSupabase, tenantId, ["owner"]);
+        const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
+        for (const owner of owners) {
+          if (!owner.email) continue;
+          await sendResendEmail({
+            resendApiKey: Deno.env.get("RESEND_API_KEY"),
+            fromEmail: resendFromEmail,
+            to: [owner.email],
+            subject: `Withdrawal requested for ${tenantRow?.name || "your salon"}`,
+            salonName: tenantRow?.name,
+            htmlContent:
+              heading("Withdrawal requested") +
+              paragraph(`A withdrawal of ${amount} ${wallet.currency} was requested for <strong>${tenantRow?.name || "your salon"}</strong>.`) +
+              paragraph("If you didn't request this, contact support immediately."),
+          });
+        }
+      } catch (notifyError) {
+        console.error("Error notifying owners of withdrawal request:", notifyError);
+      }
+    }
+
     // =====================================================
     // RETURN RESPONSE
     // =====================================================
@@ -440,11 +478,47 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Unhandled error processing salon withdrawal:", error);
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: "Internal server error",
         message: "An unexpected error occurred. Please try again later.",
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  // Verify the user's JWT
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(
+      JSON.stringify({ error: "Missing bearer token" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Client with user's auth
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return new Response(
+      JSON.stringify({ error: "Invalid or expired session. Please sign in again." }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+  return await handleProcessSalonWithdrawal(req, supabase, serviceSupabase, user);
 });

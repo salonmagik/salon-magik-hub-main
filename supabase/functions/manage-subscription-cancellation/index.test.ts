@@ -20,6 +20,17 @@ function singleChain(result: SingleResult) {
   return chain;
 }
 
+function roleChain(result: SingleResult) {
+  const chain: Record<string, unknown> = {};
+  for (const method of ["select", "eq"]) {
+    chain[method] = () => chain;
+  }
+  // requireTenantRole awaits the builder directly (no terminal call), so
+  // the chain itself must be thenable, matching real supabase-js.
+  (chain as unknown as { then: unknown }).then = (resolve: (v: unknown) => void) => resolve(result);
+  return chain;
+}
+
 interface MockOptions {
   userRole: SingleResult;
   tenant: SingleResult;
@@ -30,7 +41,7 @@ function createMockSupabase(opts: MockOptions) {
   const rpcCalls: string[] = [];
   const supabase = {
     from(table: string) {
-      if (table === "user_roles") return singleChain(opts.userRole);
+      if (table === "user_roles") return roleChain(opts.userRole);
       if (table === "tenants") return singleChain(opts.tenant);
       throw new Error(`Unexpected table in test: ${table}`);
     },
@@ -52,7 +63,7 @@ function makeRequest(body: Record<string, unknown>) {
 
 Deno.test("missing tenantId/action returns 400", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {},
   });
@@ -62,7 +73,7 @@ Deno.test("missing tenantId/action returns 400", async () => {
 
 Deno.test("cancel without a valid reason returns 400", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {},
   });
@@ -76,7 +87,7 @@ Deno.test("cancel without a valid reason returns 400", async () => {
 
 Deno.test("non-owner is rejected with 403 before any RPC is attempted", async () => {
   const { supabase, rpcCalls } = createMockSupabase({
-    userRole: { data: { role: "staff" }, error: null },
+    userRole: { data: [{ role: "staff", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {
       request_subscription_cancellation: { data: "should never be reached", error: null },
@@ -93,7 +104,7 @@ Deno.test("non-owner is rejected with 403 before any RPC is attempted", async ()
 
 Deno.test("tenant not found returns 404", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: { data: null, error: null },
     rpcResults: {},
   });
@@ -107,7 +118,7 @@ Deno.test("tenant not found returns 404", async () => {
 
 Deno.test("successful cancel returns 200 with the access-end date", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {
       request_subscription_cancellation: { data: "2026-10-05T00:00:00.000Z", error: null },
@@ -125,7 +136,7 @@ Deno.test("successful cancel returns 200 with the access-end date", async () => 
 
 Deno.test("an already-pending cancellation maps SUBSCRIPTION_NOT_CANCELLABLE to 409", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {
       request_subscription_cancellation: { data: null, error: { message: "SUBSCRIPTION_NOT_CANCELLABLE" } },
@@ -141,7 +152,7 @@ Deno.test("an already-pending cancellation maps SUBSCRIPTION_NOT_CANCELLABLE to 
 
 Deno.test("successful resume returns 200 with the next billing date", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {
       resume_subscription: { data: "2026-10-05T00:00:00.000Z", error: null },
@@ -156,7 +167,7 @@ Deno.test("successful resume returns 200 with the next billing date", async () =
 
 Deno.test("resume with nothing pending maps NOTHING_TO_RESUME to 409", async () => {
   const { supabase } = createMockSupabase({
-    userRole: { data: { role: "owner" }, error: null },
+    userRole: { data: [{ role: "owner", is_active: true }], error: null },
     tenant: tenantRow,
     rpcResults: {
       resume_subscription: { data: null, error: { message: "NOTHING_TO_RESUME" } },

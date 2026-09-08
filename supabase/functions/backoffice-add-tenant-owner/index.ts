@@ -1,8 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import * as OTPAuth from "npm:otpauth@9.2.2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { wrapEmailTemplate, heading, paragraph, smallText, createButton, createCredentialBox, buildFromAddress } from "../_shared/email-template.ts";
 import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
+import { requireSuperAdminWithFreshTotp } from "../_shared/backoffice-elevated-auth.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -46,44 +47,28 @@ function buildExistingOwnerEmail(firstName: string, tenantName: string, loginLin
   return wrapEmailTemplate(content, { mode: "product" });
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+function json(body: object, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders },
+  });
+}
 
-  const json = (body: object, status = 200) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    });
-
+/**
+ * The actual add-owner logic, factored out from the serve() handler below
+ * so it can be driven directly by a test with an injected admin/authClient
+ * (see index.test.ts) — pinning T-3: this function's behaviour must not
+ * change now that its super-admin/TOTP preamble is shared with
+ * backoffice-add-tenant-co-owner (AD-8).
+ */
+export async function handleAddTenantOwner(
+  req: Request,
+  // deno-lint-ignore no-explicit-any
+  admin: SupabaseClient<any>,
+  // deno-lint-ignore no-explicit-any
+  authClient: SupabaseClient<any>,
+): Promise<Response> {
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const admin = createClient(supabaseUrl, serviceRoleKey);
-    const authClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user: caller }, error: callerError } = await authClient.auth.getUser();
-    if (callerError || !caller) return json({ error: "Unauthorized" }, 401);
-
-    // This action is deliberately restricted to super_admin only, not the
-    // usual backoffice permission-template system — assigning ownership of
-    // a business is a different tier of consequence than the rest of what
-    // backoffice does.
-    const { data: boUser, error: boError } = await admin
-      .from("backoffice_users")
-      .select("id, role, is_active, totp_secret, totp_enabled")
-      .eq("user_id", caller.id)
-      .maybeSingle();
-
-    if (boError || !boUser || boUser.role !== "super_admin" || boUser.is_active === false) {
-      return json({ error: "Super admin access required" }, 403);
-    }
-
     const { tenantId, email, firstName, lastName, phone, totpToken } = await req.json();
     if (!tenantId || !email || !firstName?.trim() || !lastName?.trim() || !totpToken) {
       return json({ error: "Missing required fields" }, 400);
@@ -92,23 +77,9 @@ serve(async (req) => {
       return json({ error: "Enter a valid email address" }, 400);
     }
 
-    // Fresh 2FA re-validation — deliberately not reusing the session-level
-    // "already verified TOTP this session" flag the rest of backoffice
-    // relies on. Assigning ownership gets its own check, every time.
-    if (!boUser.totp_enabled || !boUser.totp_secret) {
-      return json({ error: "TOTP is not configured for your account" }, 400);
-    }
-    const totp = new OTPAuth.TOTP({
-      issuer: "SalonMagik",
-      label: caller.email || "BackOffice",
-      algorithm: "SHA1",
-      digits: 6,
-      period: 30,
-      secret: OTPAuth.Secret.fromBase32(boUser.totp_secret),
-    });
-    if (totp.validate({ token: totpToken, window: 1 }) === null) {
-      return json({ error: "Invalid verification code" }, 401);
-    }
+    const auth = await requireSuperAdminWithFreshTotp(admin, authClient, totpToken, corsHeaders);
+    if (!auth.ok) return auth.response!;
+    const caller = auth.caller!;
 
     const normalizedEmail = String(email).trim().toLowerCase();
 
@@ -240,4 +211,21 @@ serve(async (req) => {
     const message = error instanceof Error ? error.message : "Internal server error";
     return json({ error: message }, 500);
   }
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  const authClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  return await handleAddTenantOwner(req, admin, authClient);
 });

@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
 import { sendReceiptEmail, sendReactivationEmail } from "../_shared/receipts.ts";
+import { requireTenantRole } from "../_shared/tenant-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,16 +35,15 @@ export async function handleVerifyRecurringBillingRetrySession(
     return jsonResponse({ error: "Missing reference or tenantId" }, 400);
   }
 
-  const { data: userRole } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("tenant_id", tenantId)
-    .single();
-
-  if (userRole?.role !== "owner") {
-    return jsonResponse({ error: "Only owners can verify billing payments" }, 403);
-  }
+  const membership = await requireTenantRole(
+    supabase,
+    user.id,
+    tenantId,
+    ["owner"],
+    { error: "Only owners can verify billing payments" },
+    corsHeaders,
+  );
+  if (!membership.ok) return membership.response!;
 
   // Idempotency: if this reference was already applied, return success without re-applying.
   const { data: existingLog } = await supabase

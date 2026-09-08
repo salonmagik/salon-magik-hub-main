@@ -46,6 +46,7 @@ import { cn } from "@shared/utils";
 import { toast } from "sonner";
 import { EmptyState } from "@ui/empty-state";
 import { AddTenantOwnerDialog } from "@/components/AddTenantOwnerDialog";
+import { AddCoOwnerDialog } from "@/components/AddCoOwnerDialog";
 import { MigrateTenantBillingDialog } from "@/components/MigrateTenantBillingDialog";
 
 interface ChainUnlockRequestRow {
@@ -73,6 +74,7 @@ export default function TenantsPage() {
    const [reason, setReason] = useState("");
    const [selectedTenant, setSelectedTenant] = useState<TenantWithStats | null>(null);
    const [addOwnerTenant, setAddOwnerTenant] = useState<TenantWithStats | null>(null);
+   const [addCoOwnerTenant, setAddCoOwnerTenant] = useState<TenantWithStats | null>(null);
    const [migrateBillingTenant, setMigrateBillingTenant] = useState<TenantWithStats | null>(null);
 
    const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
@@ -113,7 +115,7 @@ export default function TenantsPage() {
    const filteredTenants = tenants?.filter((tenant) => {
      const matchesSearch =
        tenant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       tenant.owner_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       tenant.owners.some((owner) => owner.fullName?.toLowerCase().includes(searchQuery.toLowerCase())) ||
        tenant.id.toLowerCase().includes(searchQuery.toLowerCase());
      const matchesPlan = planFilter === "all" || tenant.plan === planFilter;
      const matchesStatus =
@@ -319,7 +321,11 @@ export default function TenantsPage() {
                              </div>
                            </div>
                          </TableCell>
-                         <TableCell>{tenant.owner_email || "-"}</TableCell>
+                         <TableCell>
+                           {tenant.owners.length > 0
+                             ? tenant.owners.map((owner) => owner.fullName || "Unnamed owner").join(", ")
+                             : "-"}
+                         </TableCell>
                          <TableCell>{tenant.country}</TableCell>
                          <TableCell>
                            <Badge variant="outline">
@@ -348,10 +354,16 @@ export default function TenantsPage() {
                                  <Eye className="mr-2 h-4 w-4" />
                                  View Details
                                </DropdownMenuItem>
-                               {!tenant.owner_email && backofficeUser?.role === "super_admin" && (
+                               {tenant.owners.length === 0 && backofficeUser?.role === "super_admin" && (
                                  <DropdownMenuItem onClick={() => setAddOwnerTenant(tenant)}>
                                    <Crown className="mr-2 h-4 w-4" />
                                    Add owner
+                                 </DropdownMenuItem>
+                               )}
+                               {tenant.owners.length === 1 && backofficeUser?.role === "super_admin" && (
+                                 <DropdownMenuItem onClick={() => setAddCoOwnerTenant(tenant)}>
+                                   <Crown className="mr-2 h-4 w-4" />
+                                   Add co-owner
                                  </DropdownMenuItem>
                                )}
                                {backofficeUser?.role === "super_admin" &&
@@ -521,7 +533,12 @@ export default function TenantsPage() {
 
                <div className="grid gap-3 sm:grid-cols-2">
                  {[
-                   { label: "Owner", value: selectedTenant.owner_email || "Not available" },
+                   {
+                     label: "Owner",
+                     value: selectedTenant.owners.length > 0
+                       ? selectedTenant.owners.map((owner) => owner.fullName || "Unnamed owner").join(", ")
+                       : "Not available",
+                   },
                    { label: "Team members", value: selectedTenant.staff_count.toLocaleString() },
                    {
                      label: "Created",
@@ -586,6 +603,12 @@ export default function TenantsPage() {
        <AddTenantOwnerDialog
          tenant={addOwnerTenant ? { id: addOwnerTenant.id, name: addOwnerTenant.name } : null}
          onOpenChange={(open) => !open && setAddOwnerTenant(null)}
+         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
+       />
+
+       <AddCoOwnerDialog
+         tenant={addCoOwnerTenant ? { id: addCoOwnerTenant.id, name: addCoOwnerTenant.name } : null}
+         onOpenChange={(open) => !open && setAddCoOwnerTenant(null)}
          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
        />
 
