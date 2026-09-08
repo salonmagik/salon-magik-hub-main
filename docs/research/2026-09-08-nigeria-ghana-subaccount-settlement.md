@@ -1,3 +1,5 @@
+Status: implemented
+
 # Original Request
 
 > Can you also investigate how I implemented paystack for helping the salons sell bookings, products and packages and also getting paid via auto-payout into their account and also manual withdrawal. I had asked paystack to turn on manual settlements for our Nigeria and Ghana accounts, but today I realised Nigeria still auto settles salons via subaccount while Ghana didn't which makes me wonder if we implemeneted subaccount properly for Ghana like we did Nigeria. Investigate, and fix what needs fixing.

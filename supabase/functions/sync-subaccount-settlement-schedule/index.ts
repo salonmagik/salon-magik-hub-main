@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency, updatePaystackSubaccount } from "../_shared/paystack-helpers.ts";
+import { updatePaystackSubaccount } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,13 +64,10 @@ serve(async (req) => {
     const errors: string[] = [];
 
     for (const dest of stale || []) {
-      const { key, error: keyError } = getPaystackKeyForCurrency(dest.currency);
-      if (keyError || !key) {
-        errors.push(`${dest.id}: ${keyError || "no key for currency"}`);
-        continue;
-      }
-
       try {
+        // updatePaystackSubaccount resolves the currency's Paystack key
+        // internally and throws if one isn't configured — caught below, no
+        // need to pre-check it here too.
         await updatePaystackSubaccount(dest.currency, dest.paystack_subaccount_code!, {
           settlement_schedule: "manual",
         });
