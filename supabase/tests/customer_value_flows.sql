@@ -163,8 +163,14 @@ begin
     raise exception 'Partial refund did not update the appointment';
   end if;
 
+  -- This is a gateway-funded (card) transaction, so the store-credit refund
+  -- now needs a real wallet debit backing it (refund clawback safeguard).
+  update public.salon_wallets set balance = 20 where tenant_id = v_tenant_id;
+  v_result := public.debit_salon_wallet_for_refund(
+    v_payment_id, 20, 'store_credit', 'Goodwill credit', v_owner_id, 'customer-value-goodwill-debit'
+  );
   perform public.complete_transaction_refund(
-    v_payment_id, 20, 'store_credit', 'Goodwill credit', null
+    v_payment_id, 20, 'store_credit', 'Goodwill credit', null, (v_result ->> 'ledger_entry_id')::uuid
   );
   if public.customer_credit_available(v_tenant_id, v_customer_id) <> 20 then
     raise exception 'Store-credit refund did not create spendable customer credit';
