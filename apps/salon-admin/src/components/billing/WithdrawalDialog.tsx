@@ -4,7 +4,7 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
-import { formatCurrency } from "@shared/currency";
+import { formatCurrency, getMinimumWithdrawal } from "@shared/currency";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import {
 } from "@ui/select";
 import { Alert, AlertDescription } from "@ui/alert";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
-import { Loader2, AlertCircle, Wallet, Info } from "lucide-react";
+import { Loader2, AlertCircle, Wallet, Info, TriangleAlert } from "lucide-react";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { cn } from "@shared/utils";
 
@@ -49,8 +49,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
 
-  // Get minimum withdrawal amount based on currency
-  const minWithdrawal = currency === "NGN" ? 1000 : 50;
+  const minWithdrawal = getMinimumWithdrawal(currency);
   const walletBalance = Number(wallet?.balance || 0);
   // Fall back to the raw wallet balance while availability is still loading
   // so the dialog doesn't briefly claim $0 is withdrawable.
@@ -59,6 +58,11 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   const nextSettlementAt = availability?.nextSettlementAt
     ? new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })
     : null;
+  // Only judge this once availability has actually loaded — before that,
+  // availableBalance is a walletBalance fallback that can't be trusted for
+  // a "you're below the minimum" verdict.
+  const belowMinimum = !availabilityLoading && availableBalance < minWithdrawal;
+  const minimumProgressPercent = Math.min(100, (availableBalance / minWithdrawal) * 100);
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -203,64 +207,84 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
                   </Tooltip>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-2">
-                Total wallet balance: {formatCurrency(walletBalance, currency)} · Minimum withdrawal: {formatCurrency(minWithdrawal, currency)}
-              </p>
-            </div>
-
-            {/* Payout Destination Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="destination">Payout Destination</Label>
-              {destinations.length === 0 ? (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    No payout destinations configured. Please add a bank account or mobile money account first.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <Select
-                  value={selectedDestinationId}
-                  onValueChange={setSelectedDestinationId}
-                >
-                  <SelectTrigger id="destination">
-                    <SelectValue placeholder="Select destination" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {destinations.map((dest) => (
-                      <SelectItem key={dest.id} value={dest.id}>
-                        {dest.destination_type === "bank"
-                          ? `${dest.bank_name} - ${dest.account_number}`
-                          : `${dest.momo_provider} - ${dest.momo_number}`}
-                        {dest.is_default && " (Default)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {!belowMinimum && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Total wallet balance: {formatCurrency(walletBalance, currency)} · Minimum withdrawal: {formatCurrency(minWithdrawal, currency)}
+                </p>
               )}
             </div>
 
-            {/* Amount Input */}
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount ({currency})</Label>
-              <Input
-                id="amount"
-                type="number"
-                placeholder={`Min: ${minWithdrawal}`}
-                value={amount}
-                onChange={(e) => handleAmountChange(e.target.value)}
-                min={minWithdrawal}
-                max={availableBalance}
-                step="0.01"
-              />
-            </div>
+            {belowMinimum ? (
+              <div className="text-center py-2">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-warning-bg">
+                  <TriangleAlert className="h-6 w-6 text-warning-foreground" />
+                </div>
+                <h4 className="mt-3 text-sm font-semibold">Not quite at the minimum yet</h4>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  You have {formatCurrency(availableBalance, currency)} available. Withdrawals start at{" "}
+                  {formatCurrency(minWithdrawal, currency)} — keep taking bookings and check back once you've cleared that.
+                </p>
+                <div className="mx-auto mt-4 max-w-[220px] h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full bg-warning" style={{ width: `${minimumProgressPercent}%` }} />
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Payout Destination Selection */}
+                <div className="space-y-2">
+                  <Label htmlFor="destination">Payout Destination</Label>
+                  {destinations.length === 0 ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        No payout destinations configured. Please add a bank account or mobile money account first.
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Select
+                      value={selectedDestinationId}
+                      onValueChange={setSelectedDestinationId}
+                    >
+                      <SelectTrigger id="destination">
+                        <SelectValue placeholder="Select destination" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {destinations.map((dest) => (
+                          <SelectItem key={dest.id} value={dest.id}>
+                            {dest.destination_type === "bank"
+                              ? `${dest.bank_name} - ${dest.account_number}`
+                              : `${dest.momo_provider} - ${dest.momo_number}`}
+                            {dest.is_default && " (Default)"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
 
-            {/* Error Message */}
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+                {/* Amount Input */}
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount ({currency})</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    placeholder={`Min: ${minWithdrawal}`}
+                    value={amount}
+                    onChange={(e) => handleAmountChange(e.target.value)}
+                    min={minWithdrawal}
+                    max={availableBalance}
+                    step="0.01"
+                  />
+                </div>
+
+                {/* Error Message */}
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+              </>
             )}
           </div>
         )}
@@ -271,8 +295,9 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
           >
-            Cancel
+            {belowMinimum ? "Close" : "Cancel"}
           </Button>
+          {!belowMinimum && (
           <Button
             onClick={handleWithdraw}
             disabled={!canSubmit || destinations.length === 0}
@@ -286,6 +311,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               "Withdraw"
             )}
           </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

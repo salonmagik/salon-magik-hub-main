@@ -38,3 +38,14 @@ export function formatCurrency(amount: number, currencyCode: string): string {
 export function getCurrencySymbol(currencyCode: string): string {
   return currencySymbols[currencyCode] || currencyCode;
 }
+
+/**
+ * The smallest amount a salon can withdraw in one request, per currency.
+ * Single source of truth so the Payouts page and the withdrawal dialog
+ * can't drift out of sync on what "too small to withdraw" means.
+ * @param currencyCode - ISO currency code
+ * @returns The minimum withdrawable amount in that currency's major unit
+ */
+export function getMinimumWithdrawal(currencyCode: string): number {
+  return currencyCode === "NGN" ? 1000 : 50;
+}
