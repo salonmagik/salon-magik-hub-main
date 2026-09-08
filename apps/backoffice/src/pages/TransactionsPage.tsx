@@ -3,6 +3,7 @@ import { BackofficeLayout } from "@/components/BackofficeLayout";
 import {
   useBackofficeTransactions,
   useBackofficeTransactionSummary,
+  useBlockedRefunds,
   useTenants,
   type BackofficeTransactionRow,
 } from "@/hooks";
@@ -30,6 +31,7 @@ import {
   Gauge,
   Hash,
   QrCode,
+  ShieldAlert,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -94,6 +96,7 @@ export default function TransactionsPage() {
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<BackofficeTransactionRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [blockedRefundsPage, setBlockedRefundsPage] = useState(0);
 
   const { data: tenants } = useTenants();
   const { data: summary, isLoading: summaryLoading } = useBackofficeTransactionSummary(range.from, range.to);
@@ -112,6 +115,13 @@ export default function TransactionsPage() {
 
   const totalCount = rows?.[0]?.total_count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  const { data: blockedRefunds, isLoading: blockedRefundsLoading } = useBlockedRefunds({
+    page: blockedRefundsPage,
+    pageSize: PAGE_SIZE,
+  });
+  const blockedRefundsTotal = blockedRefunds?.[0]?.total_count ?? 0;
+  const blockedRefundsTotalPages = Math.max(1, Math.ceil(blockedRefundsTotal / PAGE_SIZE));
 
   const successRate = useMemo(() => {
     if (!summary?.totals.total_count) return null;
@@ -428,6 +438,83 @@ export default function TransactionsPage() {
                   </Button>
                   <span className="px-2 tabular-nums">{page + 1} / {totalPages}</span>
                   <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Blocked refunds — refunds rejected because the salon had already
+            withdrawn the money. See refund-clawback-safeguard design. */}
+        <div>
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-destructive" />
+            Blocked refunds
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1 max-w-xl">
+            Refund attempts rejected because the salon's wallet could no longer cover the amount — the salon had already withdrawn the money. Follow up with these salons directly.
+          </p>
+        </div>
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            {blockedRefundsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : !blockedRefunds || blockedRefunds.length === 0 ? (
+              <EmptyState icon={ShieldAlert} title="No blocked refunds" description="No refund attempts have been blocked for insufficient recoverable funds." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Tenant</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Attempted</TableHead>
+                    <TableHead className="text-right">Wallet balance</TableHead>
+                    <TableHead className="text-right">Shortfall</TableHead>
+                    <TableHead>Attempted by</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {blockedRefunds.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <div className="text-sm font-medium">{format(new Date(row.created_at), "MMM d")}</div>
+                        <div className="text-xs text-muted-foreground">{format(new Date(row.created_at), "h:mm a")}</div>
+                      </TableCell>
+                      <TableCell className="text-sm">{row.tenant_name}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="bg-red-50 text-red-700 capitalize">{row.refund_type}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums font-semibold text-destructive">
+                        {formatMoney(row.attempted_amount, row.currency)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                        {formatMoney(row.wallet_balance_at_attempt, row.currency)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                        {formatMoney(row.shortfall, row.currency)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            {blockedRefunds && blockedRefunds.length > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30 text-xs text-muted-foreground">
+                <span>
+                  Showing {blockedRefundsPage * PAGE_SIZE + 1}–{Math.min((blockedRefundsPage + 1) * PAGE_SIZE, blockedRefundsTotal)} of {blockedRefundsTotal}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="icon" className="h-7 w-7" disabled={blockedRefundsPage === 0} onClick={() => setBlockedRefundsPage((p) => p - 1)}>
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  <span className="px-2 tabular-nums">{blockedRefundsPage + 1} / {blockedRefundsTotalPages}</span>
+                  <Button variant="outline" size="icon" className="h-7 w-7" disabled={blockedRefundsPage >= blockedRefundsTotalPages - 1} onClick={() => setBlockedRefundsPage((p) => p + 1)}>
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>

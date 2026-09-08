@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,41 +9,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+/**
+ * The actual refund logic, factored out from the serve() handler below so
+ * it can be driven directly by a test with an injected service-role client
+ * and a fake authenticated user — the handler's own job is just CORS and
+ * resolving `user` before calling this.
+ */
+export async function handleRefundCancelledAppointment(
+  req: Request,
+  // deno-lint-ignore no-explicit-any
+  admin: SupabaseClient<any, any, any>,
+  user: Pick<User, "id">,
+): Promise<Response> {
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const authHeader = req.headers.get("Authorization");
-
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const authed = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const admin = createClient(supabaseUrl, serviceRoleKey);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await authed.auth.getUser();
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const { appointmentId, transactionId } = await req.json();
     if (!appointmentId && !transactionId) {
       return new Response(JSON.stringify({ error: "Appointment or transaction is required" }), {
@@ -194,16 +173,36 @@ serve(async (req) => {
       );
     }
 
-    // Step 1: Debit the salon wallet first
+    const { data: originalTransaction, error: originalTransactionError } = await admin
+      .from("transactions")
+      .select("id")
+      .eq("appointment_id", appointment.id)
+      .eq("type", "payment")
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (originalTransactionError || !originalTransaction) {
+      return new Response(
+        JSON.stringify({ error: "Original payment transaction not found for this appointment" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Step 1: Debit the salon wallet first — via the shared enforcement RPC
+    // so a blocked attempt (the salon already withdrew this money) is
+    // recorded in refund_block_events, same as every other refund path.
     const salonDebitIdempotencyKey = `refund_salon_debit_${appointment.id}`;
-    const { data: salonDebitEntryId, error: salonDebitError } = await admin.rpc("debit_salon_purse" as never, {
-      p_tenant_id: appointment.tenant_id,
-      p_entry_type: "salon_purse_debit_refund",
-      p_reference_type: "appointment",
-      p_reference_id: appointment.id,
+    const { data: salonDebitResult, error: salonDebitError } = await admin.rpc("debit_salon_wallet_for_refund" as never, {
+      p_transaction_id: originalTransaction.id,
       p_amount: refundAmount,
-      p_currency: tenant.currency,
+      p_refund_type: "store_credit",
+      p_reason: "Cancelled appointment refunded to customer purse",
+      p_actor_id: user.id,
       p_idempotency_key: salonDebitIdempotencyKey,
+      p_refund_request_id: null,
+      p_appointment_id: appointment.id,
     } as never);
 
     if (salonDebitError) {
@@ -213,6 +212,29 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const debit = salonDebitResult as { ok: boolean; ledger_entry_id: string | null; code?: string; wallet_balance?: number; shortfall?: number; currency?: string };
+
+    if (!debit.ok) {
+      console.error("Cancelled-appointment refund blocked — insufficient recoverable funds:", {
+        tenantId: appointment.tenant_id,
+        appointmentId: appointment.id,
+        attemptedAmount: refundAmount,
+        walletBalance: debit.wallet_balance,
+      });
+      return new Response(
+        JSON.stringify({
+          error: "This salon has already withdrawn the funds for this booking, so it can't be recovered to refund the customer.",
+          code: debit.code || "INSUFFICIENT_RECOVERABLE_FUNDS",
+          walletBalance: debit.wallet_balance,
+          shortfall: debit.shortfall,
+          currency: debit.currency,
+        }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const salonDebitEntryId = debit.ledger_entry_id;
 
     // Step 2: Credit the customer purse
     const customerCreditIdempotencyKey = `cancelled_appointment_refund_${appointment.id}`;
@@ -232,16 +254,6 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const { data: originalTransaction } = await admin
-      .from("transactions")
-      .select("id")
-      .eq("appointment_id", appointment.id)
-      .eq("type", "payment")
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
 
     const { data: refundTransaction, error: refundTransactionError } = await admin
       .from("transactions")
@@ -272,11 +284,12 @@ serve(async (req) => {
       .from("refund_requests")
       .insert({
         tenant_id: appointment.tenant_id,
-        transaction_id: originalTransaction?.id || refundTransaction.id,
+        transaction_id: originalTransaction.id,
         customer_id: appointment.customer_id,
         amount: refundAmount,
         reason: "Cancelled appointment refunded to customer purse",
         refund_type: "store_credit",
+        wallet_debit_entry_id: salonDebitEntryId,
         requested_by_id: user.id,
         approved_by_id: user.id,
         approved_at: new Date().toISOString(),
@@ -302,6 +315,51 @@ serve(async (req) => {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  } catch (error) {
+    console.error("refund-cancelled-appointment error", error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const authHeader = req.headers.get("Authorization");
+
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const authed = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const admin = createClient(supabaseUrl, serviceRoleKey);
+
+    const {
+      data: { user },
+      error: userError,
+    } = await authed.auth.getUser();
+
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return await handleRefundCancelledAppointment(req, admin, user);
   } catch (error) {
     console.error("refund-cancelled-appointment error", error);
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }), {

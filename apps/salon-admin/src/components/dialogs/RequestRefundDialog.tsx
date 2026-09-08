@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,11 +13,41 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Alert, AlertDescription } from "@ui/alert";
 import { CheckCircle2, CircleDollarSign, CreditCard, Loader2, RotateCcw, TriangleAlert, WalletCards } from "lucide-react";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+
+const WITHDRAWN_FUNDS_MESSAGE =
+  "This payment has already been withdrawn, so Salon Magik can't move the money for you. Refund the customer directly and record it below.";
+
+class RefundSubmitError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+async function extractRefundError(error: unknown): Promise<RefundSubmitError> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const response = error.context as Response | undefined;
+      const payload = response ? await response.json() : null;
+      if (payload && typeof payload === "object") {
+        const message = typeof payload.error === "string" ? payload.error : "Unable to complete the refund.";
+        const code = typeof payload.code === "string" ? payload.code : undefined;
+        return new RefundSubmitError(message, code);
+      }
+    } catch {
+      // fall through to the generic handling below
+    }
+  }
+  if (error instanceof Error) return new RefundSubmitError(error.message);
+  return new RefundSubmitError("Unable to complete the refund.");
+}
 
 type RefundType = "store_credit" | "offline" | "paystack";
 type Stage = "form" | "confirm" | "submitting" | "success" | "error";
@@ -35,6 +65,12 @@ interface RefundTransaction {
   provider?: string | null;
   provider_reference?: string | null;
   customer?: { id: string; full_name: string } | null;
+}
+
+interface RecoverabilityInfo {
+  requiresWalletDebit: boolean;
+  walletBalance: number;
+  currency: string;
 }
 
 interface PendingRefund {
@@ -69,6 +105,8 @@ export function RequestRefundDialog({
   const [maxRefundAmount, setMaxRefundAmount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [recoverability, setRecoverability] = useState<RecoverabilityInfo | null>(null);
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const currency = transaction?.currency || currentTenant?.currency || "USD";
   const isApproval = Boolean(request);
@@ -81,6 +119,22 @@ export function RequestRefundDialog({
   // through Paystack.
   const canRefundViaPaystack = mode === "complete" && !isApproval && transaction?.provider === "paystack" && Boolean(transaction?.provider_reference);
 
+  const numericAmount = Number(amount);
+
+  // Advisory only — the backend (debit_salon_wallet_for_refund) is the real
+  // guarantee. If the check failed to resolve, destinations stay selectable
+  // and the backend decides at submit, per the usability NFR.
+  const walletShortfall = Boolean(
+    mode === "complete" &&
+      recoverability?.requiresWalletDebit &&
+      Number.isFinite(numericAmount) &&
+      numericAmount > 0 &&
+      numericAmount > recoverability.walletBalance,
+  );
+  const cardBlockedByWallet = canRefundViaPaystack && walletShortfall;
+  const storeCreditBlockedByWallet = mode === "complete" && !isApproval && walletShortfall;
+  const bothDestinationsBlocked = canRefundViaPaystack && cardBlockedByWallet && storeCreditBlockedByWallet;
+
   useEffect(() => {
     if (!open || !transaction) return;
     setStage("form");
@@ -88,6 +142,8 @@ export function RequestRefundDialog({
     setAmount(request ? String(request.amount) : "");
     setReason(request?.reason || "");
     setRefundType(request?.refund_type === "offline" ? "offline" : "store_credit");
+    setRecoverability(null);
+    idempotencyKeyRef.current = crypto.randomUUID();
 
     const loadRefundableAmount = async () => {
       setIsLoading(true);
@@ -110,9 +166,31 @@ export function RequestRefundDialog({
     };
 
     void loadRefundableAmount();
-  }, [open, request, transaction]);
 
-  const numericAmount = Number(amount);
+    if (mode === "complete") {
+      supabase
+        .rpc("check_refund_recoverability" as never, { p_transaction_id: transaction.id } as never)
+        .then(({ data, error }) => {
+          if (error || !data) return;
+          const result = data as { requires_wallet_debit: boolean; wallet_balance: number; currency: string };
+          setRecoverability({
+            requiresWalletDebit: result.requires_wallet_debit,
+            walletBalance: Number(result.wallet_balance),
+            currency: result.currency,
+          });
+        });
+    }
+  }, [open, request, transaction, mode]);
+
+  // If the amount is raised past what the wallet can cover after a
+  // wallet-gated destination was already selected, fall back to the one
+  // destination that's never gated on the wallet.
+  useEffect(() => {
+    if (walletShortfall && (refundType === "paystack" || refundType === "store_credit")) {
+      setRefundType("offline");
+    }
+  }, [walletShortfall, refundType]);
+
   const validationMessage = useMemo(() => {
     if (!amount || !Number.isFinite(numericAmount) || numericAmount <= 0) {
       return "Enter a refund amount greater than zero.";
@@ -139,26 +217,19 @@ export function RequestRefundDialog({
     setErrorMessage("");
 
     try {
-      if (mode === "complete" && refundType === "paystack") {
+      if (mode === "complete") {
         const { data, error } = await supabase.functions.invoke("refund-via-paystack", {
           body: {
             transactionId: transaction.id,
             amount: numericAmount,
             reason: reason.trim(),
             requestId: request?.id || null,
+            refundType,
+            idempotencyKey: idempotencyKeyRef.current,
           },
         });
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-      } else if (mode === "complete") {
-        const { error } = await supabase.rpc("complete_transaction_refund" as never, {
-          p_transaction_id: transaction.id,
-          p_amount: numericAmount,
-          p_refund_type: refundType,
-          p_reason: reason.trim(),
-          p_request_id: request?.id || null,
-        } as never);
-        if (error) throw error;
+        if (error) throw await extractRefundError(error);
+        if (data?.error) throw new RefundSubmitError(data.error, data.code);
       } else {
         const { error } = await supabase.rpc("request_transaction_refund" as never, {
           p_transaction_id: transaction.id,
@@ -172,9 +243,18 @@ export function RequestRefundDialog({
       setStage("success");
       onSuccess?.();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : `Unable to ${actionLabel.toLowerCase()}.`);
+      if (error instanceof RefundSubmitError && error.code === "INSUFFICIENT_RECOVERABLE_FUNDS") {
+        setErrorMessage(WITHDRAWN_FUNDS_MESSAGE);
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : `Unable to ${actionLabel.toLowerCase()}.`);
+      }
       setStage("error");
     }
+  };
+
+  const handleTryAgain = () => {
+    idempotencyKeyRef.current = crypto.randomUUID();
+    setStage("form");
   };
 
   const close = () => onOpenChange(false);
@@ -215,7 +295,7 @@ export function RequestRefundDialog({
             <DialogDescription className="mx-auto mt-2 max-w-sm">{errorMessage}</DialogDescription>
             <div className="mt-6 flex gap-2">
               <Button variant="outline" className="flex-1" onClick={close}>Close</Button>
-              <Button className="flex-1" onClick={() => setStage("form")}>
+              <Button className="flex-1" onClick={handleTryAgain}>
                 <RotateCcw className="mr-2 h-4 w-4" />Try again
               </Button>
             </div>
@@ -298,30 +378,43 @@ export function RequestRefundDialog({
                     {canRefundViaPaystack && (
                       <button
                         type="button"
+                        disabled={cardBlockedByWallet}
                         onClick={() => setRefundType("paystack")}
                         className={cn(
                           "rounded-xl border p-4 text-left transition-colors",
-                          refundType === "paystack" ? "border-primary bg-primary/5" : "hover:border-primary/40",
+                          cardBlockedByWallet
+                            ? "cursor-not-allowed opacity-60"
+                            : refundType === "paystack" ? "border-primary bg-primary/5" : "hover:border-primary/40",
                         )}
                       >
                         <CreditCard className="mb-3 h-5 w-5 text-primary" />
                         <p className="text-sm font-medium">Refund via Paystack</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Goes back to the customer's card. Not always possible — depends on Paystack's own settlement state.</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {cardBlockedByWallet
+                            ? "Unavailable — this payment has already been paid out to your salon. Refund it to the customer directly and record it as cash / transfer."
+                            : "Goes back to the customer's card. The amount is taken from your salon balance."}
+                        </p>
                       </button>
                     )}
                     <button
                       type="button"
-                      disabled={isApproval}
+                      disabled={isApproval || storeCreditBlockedByWallet}
                       onClick={() => setRefundType("store_credit")}
                       className={cn(
                         "rounded-xl border p-4 text-left transition-colors",
-                        refundType === "store_credit" ? "border-primary bg-primary/5" : "hover:border-primary/40",
-                        isApproval && "cursor-default",
+                        storeCreditBlockedByWallet
+                          ? "cursor-not-allowed opacity-60"
+                          : refundType === "store_credit" ? "border-primary bg-primary/5" : "hover:border-primary/40",
+                        isApproval && !storeCreditBlockedByWallet && "cursor-default",
                       )}
                     >
                       <WalletCards className="mb-3 h-5 w-5 text-primary" />
                       <p className="text-sm font-medium">Salon balance</p>
-                      <p className="mt-1 text-xs text-muted-foreground">Immediately available as store credit.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {storeCreditBlockedByWallet
+                          ? "Unavailable — store credit is funded from your salon balance, which no longer holds this payment."
+                          : "Immediately available as store credit."}
+                      </p>
                     </button>
                     <button
                       type="button"
@@ -338,6 +431,9 @@ export function RequestRefundDialog({
                       <p className="mt-1 text-xs text-muted-foreground">Handled outside Salon Magik.</p>
                     </button>
                   </div>
+                  {bothDestinationsBlocked && (
+                    <p className="text-xs text-muted-foreground">{WITHDRAWN_FUNDS_MESSAGE}</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
