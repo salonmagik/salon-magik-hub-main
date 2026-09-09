@@ -13,7 +13,7 @@ backend-enforced, not just UI copy — covering both refund-via-paystack and
 refund-cancelled-appointment.
 
 ## co-owner-role: Support a second owner on a salon
-- status: in-progress
+- status: done
 - checkpoint: true
 
 There is currently no concept of a co-owner anywhere in the schema or role checks — only the
@@ -21,6 +21,18 @@ single tenant owner created via backoffice-add-tenant-owner. This item covers th
 permission foundation: letting a salon have more than one owner-level account, and making every
 owner-gated check (RLS, edge functions, salon-admin UI) treat them equivalently. No invite flow
 yet — that is the next item.
+
+## multi-salon-owner-identity: Establish how one person spanning several salons should be modelled
+- status: in-progress
+- requires: co-owner-role
+
+Investigation only, at the user's explicit request to review the design direction before anything
+is implemented. Separates two conflated scenarios — branches within one business (locations /
+chain plan / Business Hub) versus one identity holding owner roles at several separate `tenants`
+(blocked today by `trg_enforce_single_owner_tenant`) — and establishes what actually depends on
+the single-owner-per-tenant guarantee. Planner bounced it back for five commercial facts (plan
+price ladder, trials/promos, per-plan allowances, how salons are created, delinquency handling);
+three are answered, two remain. Brief: docs/research/2026-09-09-multi-salon-owner-identity.md.
 
 ## co-owner-invite: Invite and accept flow for a co-owner
 - status: pending
