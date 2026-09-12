@@ -1,3 +1,5 @@
+Status: implemented
+
 # Multi-Salon Owner Identity — Implementation Design
 
 Relaxes the single-owner-per-identity rule as a reviewed, recorded exception; makes co-ownership
