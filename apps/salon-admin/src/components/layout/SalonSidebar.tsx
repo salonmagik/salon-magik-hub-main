@@ -68,6 +68,7 @@ import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
 import { NewDeviceReviewModal } from "@/components/session/NewDeviceReviewModal";
 import { isModuleAllowedInContext, ROUTE_DEFINITIONS } from "@/lib/contextAccess";
+import { roleLabel } from "@/lib/roleLabels";
 import {
   Tooltip,
   TooltipContent,
@@ -94,11 +95,12 @@ import {
 
 // User profile section component
 function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExpanded: boolean; isMobileOpen: boolean; onCloseMobile: () => void }) {
-  const { user, profile } = useAuth();
+  const { user, profile, currentRole } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
 
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
+  const displayRoleLabel = roleLabel(currentRole);
   const initials = displayName
     .split(" ")
     .filter(Boolean)
@@ -138,6 +140,9 @@ function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExp
             <p className="text-xs text-white/70 truncate">
               {displayEmail}
             </p>
+            {displayRoleLabel && (
+              <p className="text-[11px] text-white/60 truncate">{displayRoleLabel}</p>
+            )}
           </div>
         )}
         {(isExpanded || isMobileOpen) && (
@@ -382,6 +387,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const staffOperationsAddon = useStaffOperationsAddon();
   const {
     currentTenant,
+    currentRole,
     activeContextType,
     activeLocationId,
     availableContexts,
@@ -456,6 +462,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
                 { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
+                // Only owners can reach the owners roster — a manager who can
+                // use owner_hub would otherwise see a nav link that always
+                // dead-ends at OWNER_ACCESS_DENIED (edge case 8).
+                ...(currentRole === "owner" ? [{ label: "Owners", icon: Users, path: "/salon/business-settings?tab=owners" }] : []),
                 { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
                 { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
               ],
@@ -472,6 +482,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
               { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
+              ...(currentRole === "owner" ? [{ label: "Owners", icon: Users, path: "/salon/business-settings?tab=owners" }] : []),
               { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
               { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
             ],
@@ -501,7 +512,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       }
       return item;
     });
-  }, [activeContextType, availableContexts, canUseOwnerHub, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading, staffOperationsAddon.isEnabled]);
+  }, [activeContextType, availableContexts, canUseOwnerHub, currentRole, currentTenant?.plan, hasPermission, isAssignmentPending, permissionsLoading, staffOperationsAddon.isEnabled]);
 
   const contextValue = useMemo(() => {
     if (activeContextType === "owner_hub") return "owner_hub";

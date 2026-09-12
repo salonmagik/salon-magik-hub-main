@@ -22,3 +22,4 @@ export {
   type TypeCountRow,
   type TransactionFilters,
 } from "./useBackofficeTransactions";
+export { useOwnerStanding, type OwnerStanding, type OwnerStandingSalon } from "./useOwnerStanding";

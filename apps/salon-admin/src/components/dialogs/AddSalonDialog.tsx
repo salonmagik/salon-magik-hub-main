@@ -53,6 +53,24 @@ interface ChainUnlockRequest {
 
 const SELF_SERVE_CHAIN_LOCATION_LIMIT = 10;
 
+/**
+ * States the branch-versus-business distinction at the point of choice
+ * (FR-23) — shown in all four render branches below, since the at-limit
+ * and chain-unlock branches are precisely where an owner is most likely to
+ * conclude "I'll just open a separate salon instead" without realizing
+ * that's a different, separately-billed business requiring its own
+ * reviewed approval, not something this dialog can do.
+ */
+function BranchVsBusinessGuidance() {
+  return (
+    <p data-testid="branch-vs-business-guidance" className="text-xs text-muted-foreground border-t pt-3">
+      This adds a <strong>branch</strong> to your existing business — same subscription, same team,
+      same billing. A separate, independently-billed <strong>business</strong> (a different salon
+      brand under its own account) isn't self-serve; contact support if that's what you need.
+    </p>
+  );
+}
+
 export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
   const { currentTenant, refreshTenants } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
@@ -257,6 +275,9 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               Your request to unlock up to {chainUnlockRequest?.requested_locations} branches is still pending approval.
             </DialogDescription>
           </DialogHeader>
+          <div className={DIALOG_BODY_PADDING}>
+            <BranchVsBusinessGuidance />
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
@@ -294,6 +315,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
                 </p>
               </AlertDescription>
             </Alert>
+            <BranchVsBusinessGuidance />
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -337,6 +359,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
                 </div>
               </AlertDescription>
             </Alert>
+            <BranchVsBusinessGuidance />
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
@@ -422,6 +445,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             />
           </div>
+          <BranchVsBusinessGuidance />
         </div>
 
           <DialogFooter>

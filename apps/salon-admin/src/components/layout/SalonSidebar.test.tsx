@@ -249,3 +249,74 @@ describe("SalonSidebar access refresh modal", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/salon/reports");
   });
 });
+
+describe("SalonSidebar UserProfileSection role label", () => {
+  function renderWithRole(currentRole: string | null) {
+    mockedUseAuth.mockReturnValue({
+      user: { id: "11111111-1111-1111-1111-111111111111", email: "staff@test.com" },
+      profile: { full_name: "Team User" },
+      currentTenant: {
+        id: "tenant-1",
+        name: "Tenant",
+        slug: "tenant",
+        plan: "solo",
+        subscription_status: "active",
+      },
+      tenants: [{ id: "tenant-1", name: "Tenant", slug: "tenant" }],
+      activeContextType: "location",
+      activeLocationId: "loc-1",
+      availableContexts: [{ type: "location", locationId: "loc-1", label: "Main Location" }],
+      isAssignmentPending: false,
+      currentRole,
+      setActiveContext: vi.fn(),
+      getFirstAllowedRoute: vi.fn().mockResolvedValue("/salon/appointments"),
+      refreshTenants: vi.fn(),
+    } as any);
+    mockedUsePermissions.mockReturnValue({
+      hasPermission: vi.fn().mockReturnValue(true),
+      isLoading: false,
+    } as any);
+    mockedUseNotifications.mockReturnValue({
+      notifications: [],
+      unreadCount: 0,
+      urgentNotifications: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      markAsRead: vi.fn(),
+      markAllAsRead: vi.fn(),
+    } as any);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <MemoryRouter initialEntries={["/salon/appointments"]}>
+            <SalonSidebar>
+              <div>Child Content</div>
+            </SalonSidebar>
+          </MemoryRouter>
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+  }
+
+  // The sidebar renders its content twice (mobile drawer + desktop rail),
+  // so the role label appears twice too — same convention as the existing
+  // "Reports" link assertions above (getAllByRole(...)[0]).
+  it.each([
+    ["owner", "Owner"],
+    ["manager", "Manager"],
+    ["receptionist", "Receptionist"],
+    ["staff", "Front desk staff"],
+  ] as const)("renders the role label for %s", (role, label) => {
+    renderWithRole(role);
+    expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+  });
+
+  it("omits the role label when currentRole is null", () => {
+    renderWithRole(null);
+    expect(screen.queryAllByText("Owner").length).toBe(0);
+    expect(screen.queryAllByText("Manager").length).toBe(0);
+  });
+});

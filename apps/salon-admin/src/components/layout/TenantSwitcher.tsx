@@ -10,14 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner",
-  manager: "Manager",
-  supervisor: "Supervisor",
-  receptionist: "Receptionist",
-  staff: "Front desk staff",
-};
+import { ROLE_LABELS } from "@/lib/roleLabels";
 
 function TenantAvatar({ name, logoUrl, className }: { name: string; logoUrl?: string | null; className?: string }) {
   if (logoUrl) {

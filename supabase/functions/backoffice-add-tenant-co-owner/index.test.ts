@@ -225,6 +225,22 @@ Deno.test("target owns another salon returns 409", async () => {
   assertEquals(body.error.includes("already owns another salon"), true);
 });
 
+// AC-6: a target covered by a multi-salon-ownership grant is no longer
+// reported as already_owner_other_tenant — check_owner_invite_email's DB
+// body now suppresses that reason when a grant covers the target tenant
+// (20260909120000_multi_salon_owner_identity.sql), so from this function's
+// point of view it is simply available and the happy path proceeds.
+Deno.test("target with a covering grant is not refused as already_owner_other_tenant (AC-6)", async () => {
+  const { admin, authClient, inserts } = createMocks({
+    owners: [owner1],
+    availability: { available: true },
+  });
+  const res = await handleAddTenantCoOwner(makeRequest(baseBody()), admin, authClient);
+  assertEquals(res.status, 200);
+  const auditInserts = inserts.filter((i) => i.table === "audit_logs");
+  assertEquals(auditInserts.length, 1);
+});
+
 Deno.test("happy path returns 200 and writes one co_owner_added audit log", async () => {
   const { admin, authClient, inserts } = createMocks({ owners: [owner1] });
   const res = await handleAddTenantCoOwner(makeRequest(baseBody()), admin, authClient);

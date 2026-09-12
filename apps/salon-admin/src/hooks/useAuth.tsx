@@ -45,6 +45,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LAST_AUTH_METHOD_KEY = "auth:last_method";
+const LAST_TENANT_KEY_PREFIX = "salonmagik.lastTenantId.";
+const getLastTenantKey = (userId: string) => `${LAST_TENANT_KEY_PREFIX}${userId}`;
 
 const persistLastAuthMethod = (method: "google") => {
   if (typeof window === "undefined") return;
@@ -210,11 +212,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Force sign out - clears session and resets state
-  const forceSignOut = async () => {
+  const forceSignOut = async (userId?: string) => {
     console.log("Forcing sign out - user data not found");
     await supabase.auth.signOut();
     lastHydratedSessionRef.current = null;
-    localStorage.removeItem("currentTenantId");
+    if (userId) localStorage.removeItem(getLastTenantKey(userId));
     Object.keys(localStorage)
       .filter((key) => key.startsWith(CONTEXT_STORAGE_PREFIX))
       .forEach((key) => localStorage.removeItem(key));
@@ -543,7 +545,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setTimeout(async () => {
               const { user: verifiedUserResult, retryable } = await getVerifiedAuthUser(session);
               if (!verifiedUserResult && !retryable) {
-                await forceSignOut();
+                await forceSignOut(session.user.id);
                 return;
               }
               // On a retryable network error, fall back to the
@@ -573,14 +575,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 if (createError) {
                   console.error("Failed to create profile:", createError);
-                  await forceSignOut();
+                  await forceSignOut(verifiedUser.id);
                   return;
                 }
                 profile = newProfile;
               }
-              
+
               // Get stored tenant preference or use first tenant
-              const storedTenantId = localStorage.getItem("currentTenantId");
+              const storedTenantId = localStorage.getItem(getLastTenantKey(verifiedUser.id));
               const currentTenant = tenants.find((t) => t.id === storedTenantId) || tenants[0] || null;
               const contextState = currentTenant
                 ? await resolveContexts(verifiedUser.id, currentTenant.id, roles)
@@ -661,7 +663,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         lastHydratedSessionRef.current = hydrationKey;
         const { user: verifiedUserResult, retryable } = await getVerifiedAuthUser(session);
         if (!verifiedUserResult && !retryable) {
-          await forceSignOut();
+          await forceSignOut(session.user.id);
           return () => {
             subscription.unsubscribe();
           };
@@ -694,15 +696,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (createError) {
             console.error("Failed to create profile on init:", createError);
-            await forceSignOut();
+            await forceSignOut(verifiedUser.id);
             return () => {
               subscription.unsubscribe();
             };
           }
           profile = newProfile;
         }
-        
-        const storedTenantId = localStorage.getItem("currentTenantId");
+
+        const storedTenantId = localStorage.getItem(getLastTenantKey(verifiedUser.id));
         const currentTenant = tenants.find((t) => t.id === storedTenantId) || tenants[0] || null;
         const contextState = currentTenant
           ? await resolveContexts(verifiedUser.id, currentTenant.id, roles)
@@ -779,7 +781,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, isLoading: true }));
     await supabase.auth.signOut();
     lastHydratedSessionRef.current = null;
-    localStorage.removeItem("currentTenantId");
+    // The last-used-salon key is deliberately NOT cleared here (AD-10) — it
+    // survives sign-out so the same user lands back in the same salon next
+    // time, on the same device.
     Object.keys(localStorage)
       .filter((key) => key.startsWith(CONTEXT_STORAGE_PREFIX))
       .forEach((key) => localStorage.removeItem(key));
@@ -787,7 +791,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const setCurrentTenant = (tenant: Tenant) => {
-    localStorage.setItem("currentTenantId", tenant.id);
+    if (state.user) localStorage.setItem(getLastTenantKey(state.user.id), tenant.id);
     setState((prev) => ({ ...prev, currentTenant: tenant, isLoading: true }));
     setTimeout(async () => {
       if (!state.user) return;

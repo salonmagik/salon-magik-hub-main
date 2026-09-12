@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import { EmptyState } from "@ui/empty-state";
 import { AddTenantOwnerDialog } from "@/components/AddTenantOwnerDialog";
 import { AddCoOwnerDialog } from "@/components/AddCoOwnerDialog";
+import { MultiSalonOwnershipDialog } from "@/components/MultiSalonOwnershipDialog";
 import { MigrateTenantBillingDialog } from "@/components/MigrateTenantBillingDialog";
 
 interface ChainUnlockRequestRow {
@@ -76,6 +77,7 @@ export default function TenantsPage() {
    const [addOwnerTenant, setAddOwnerTenant] = useState<TenantWithStats | null>(null);
    const [addCoOwnerTenant, setAddCoOwnerTenant] = useState<TenantWithStats | null>(null);
    const [migrateBillingTenant, setMigrateBillingTenant] = useState<TenantWithStats | null>(null);
+   const [grantMultiSalonIdentity, setGrantMultiSalonIdentity] = useState<TenantWithStats["owners"][number] | null>(null);
 
    const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
      queryKey: ["chain-unlock-requests"],
@@ -366,6 +368,12 @@ export default function TenantsPage() {
                                    Add co-owner
                                  </DropdownMenuItem>
                                )}
+                               {tenant.owners.length >= 1 && backofficeUser?.role === "super_admin" && (
+                                 <DropdownMenuItem onClick={() => setGrantMultiSalonIdentity(tenant.owners[0])}>
+                                   <Crown className="mr-2 h-4 w-4" />
+                                   Grant additional-salon ownership
+                                 </DropdownMenuItem>
+                               )}
                                {backofficeUser?.role === "super_admin" &&
                                  tenant.subscription_status === "active" &&
                                  !tenant.next_billing_at && (
@@ -609,6 +617,12 @@ export default function TenantsPage() {
        <AddCoOwnerDialog
          tenant={addCoOwnerTenant ? { id: addCoOwnerTenant.id, name: addCoOwnerTenant.name } : null}
          onOpenChange={(open) => !open && setAddCoOwnerTenant(null)}
+         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
+       />
+
+       <MultiSalonOwnershipDialog
+         identity={grantMultiSalonIdentity}
+         onOpenChange={(open) => !open && setGrantMultiSalonIdentity(null)}
          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["backoffice-tenants"] })}
        />
 

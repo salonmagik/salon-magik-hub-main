@@ -78,6 +78,7 @@ import {
 	Sparkles,
 	Minus,
 	Plus,
+	Users,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -114,6 +115,7 @@ import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
+import { SalonOwnersTab } from "@/components/settings/SalonOwnersTab";
 import { formatCurrency } from "@shared/currency";
 import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
@@ -139,6 +141,7 @@ const BASE_SETTINGS_TABS = [
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
 	{ id: "custom-domain", label: "Custom Domain", icon: Globe },
+	{ id: "owners", label: "Owners", icon: Users },
 ] as const;
 
 const weekDays = [
@@ -203,6 +206,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	} | null>(null);
 	const {
 		currentTenant,
+		currentRole,
 		profile,
 		user,
 		activeContextType,
@@ -328,13 +332,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "notifications", label: "Notifications", icon: Bell },
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
-			];
+				{ id: "owners", label: "Owners", icon: Users },
+			].filter((tab) => tab.id !== "owners" || currentRole === "owner");
 		}
 		if (resolvedScope === "subscription") {
 			return [{ id: "subscription", label: "Subscription", icon: Zap }];
 		}
-		return BASE_SETTINGS_TABS;
-	}, [resolvedScope]);
+		return BASE_SETTINGS_TABS.filter((tab) => tab.id !== "owners" || currentRole === "owner");
+	}, [resolvedScope, currentRole]);
 
 	const [activeTab, setActiveTab] = useState(() => {
 		if (resolvedScope === "subscription") return "subscription";
@@ -4545,6 +4550,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				</div>
 			)}
 			{activeTab === "sessions" && <ActiveSessionsTab />}
+			{activeTab === "owners" && <SalonOwnersTab />}
 		</>
 	);
 
