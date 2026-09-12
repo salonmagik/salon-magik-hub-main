@@ -38,6 +38,9 @@ import { cn } from "@shared/utils";
    DropdownMenu,
    DropdownMenuContent,
    DropdownMenuItem,
+   DropdownMenuSub,
+   DropdownMenuSubContent,
+   DropdownMenuSubTrigger,
    DropdownMenuTrigger,
  } from "@ui/dropdown-menu";
  import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown, Info, RefreshCcw } from "lucide-react";
@@ -368,11 +371,29 @@ export default function TenantsPage() {
                                    Add co-owner
                                  </DropdownMenuItem>
                                )}
-                               {tenant.owners.length >= 1 && backofficeUser?.role === "super_admin" && (
+                               {tenant.owners.length === 1 && backofficeUser?.role === "super_admin" && (
                                  <DropdownMenuItem onClick={() => setGrantMultiSalonIdentity(tenant.owners[0])}>
                                    <Crown className="mr-2 h-4 w-4" />
                                    Grant additional-salon ownership
                                  </DropdownMenuItem>
+                               )}
+                               {tenant.owners.length >= 2 && backofficeUser?.role === "super_admin" && (
+                                 <DropdownMenuSub>
+                                   <DropdownMenuSubTrigger>
+                                     <Crown className="mr-2 h-4 w-4" />
+                                     Grant additional-salon ownership
+                                   </DropdownMenuSubTrigger>
+                                   <DropdownMenuSubContent>
+                                     {tenant.owners.map((owner) => (
+                                       <DropdownMenuItem
+                                         key={owner.userId}
+                                         onClick={() => setGrantMultiSalonIdentity(owner)}
+                                       >
+                                         {owner.fullName || owner.email || "Unnamed owner"}
+                                       </DropdownMenuItem>
+                                     ))}
+                                   </DropdownMenuSubContent>
+                                 </DropdownMenuSub>
                                )}
                                {backofficeUser?.role === "super_admin" &&
                                  tenant.subscription_status === "active" &&
