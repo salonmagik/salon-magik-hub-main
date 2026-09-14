@@ -1,0 +1,1072 @@
+{
+  "cells": [
+    {
+      "cell_id": "PAY-BOOK-OK-GHS",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-OK-NGN",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-FAIL-GHS",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "FAIL",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-FAIL-NGN",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "FAIL",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-ABD-C-GHS",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-ABD-C-NGN",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-ABD-N-GHS",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "ABD-N",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-ABD-N-NGN",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "ABD-N",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-DUP-GHS",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-DUP-NGN",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "REF",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "REF",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-OK-GHS",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-OK-NGN",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-FAIL-GHS",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "FAIL",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-FAIL-NGN",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "FAIL",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-ABD-C-GHS",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-ABD-C-NGN",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-ABD-N-GHS",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only — for every other intent, an abandoned no-charge session leaves only an orphaned payment_intents row, which BOOK-ABD-N already covers as a shared-path property."
+    },
+    {
+      "cell_id": "PAY-CPT-ABD-N-NGN",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only — for every other intent, an abandoned no-charge session leaves only an orphaned payment_intents row, which BOOK-ABD-N already covers as a shared-path property."
+    },
+    {
+      "cell_id": "PAY-CPT-DUP-GHS",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-DUP-NGN",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "REF",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "REF",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-OK-GHS",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "GHS",
+      "intent": "SPT",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-OK-NGN",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "NGN",
+      "intent": "SPT",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-FAIL-GHS",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "GHS",
+      "intent": "SPT",
+      "scenario": "FAIL",
+      "applicable": false,
+      "reason_if_not_applicable": "The failure branch in processWebhook is intent-independent and is covered by BOOK-FAIL/SUB-FAIL — n/a-covered-elsewhere, not n/a-untested."
+    },
+    {
+      "cell_id": "PAY-SPT-FAIL-NGN",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "NGN",
+      "intent": "SPT",
+      "scenario": "FAIL",
+      "applicable": false,
+      "reason_if_not_applicable": "The failure branch in processWebhook is intent-independent and is covered by BOOK-FAIL/SUB-FAIL — n/a-covered-elsewhere, not n/a-untested."
+    },
+    {
+      "cell_id": "PAY-SPT-ABD-C-GHS",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "GHS",
+      "intent": "SPT",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-ABD-C-NGN",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "NGN",
+      "intent": "SPT",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-ABD-N-GHS",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "GHS",
+      "intent": "SPT",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-SPT-ABD-N-NGN",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "NGN",
+      "intent": "SPT",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-SPT-DUP-GHS",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "GHS",
+      "intent": "SPT",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-DUP-NGN",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "NGN",
+      "intent": "SPT",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SPT-REF-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "SPT",
+      "scenario": "REF",
+      "applicable": false,
+      "reason_if_not_applicable": "No product refund path reaches a salon-purse-topup transaction (refund is reached from the salon-admin refund dialog against a customer-facing transaction, or via cancelled-appointment) — the absence is itself recorded as a finding, not a passing cell."
+    },
+    {
+      "cell_id": "PAY-SPT-REF-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "SPT",
+      "scenario": "REF",
+      "applicable": false,
+      "reason_if_not_applicable": "No product refund path reaches a salon-purse-topup transaction (refund is reached from the salon-admin refund dialog against a customer-facing transaction, or via cancelled-appointment) — the absence is itself recorded as a finding, not a passing cell."
+    },
+    {
+      "cell_id": "PAY-INV-OK-GHS",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-OK-NGN",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-FAIL-GHS",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "FAIL",
+      "applicable": false,
+      "reason_if_not_applicable": "The failure branch in processWebhook is intent-independent and is covered by BOOK-FAIL/SUB-FAIL — n/a-covered-elsewhere, not n/a-untested."
+    },
+    {
+      "cell_id": "PAY-INV-FAIL-NGN",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "FAIL",
+      "applicable": false,
+      "reason_if_not_applicable": "The failure branch in processWebhook is intent-independent and is covered by BOOK-FAIL/SUB-FAIL — n/a-covered-elsewhere, not n/a-untested."
+    },
+    {
+      "cell_id": "PAY-INV-ABD-C-GHS",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-ABD-C-NGN",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-ABD-N-GHS",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-INV-ABD-N-NGN",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-INV-DUP-GHS",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-DUP-NGN",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "REF",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "REF",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-MSG-OK-GHS",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "GHS",
+      "intent": "MSG",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-MSG-OK-NGN",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "NGN",
+      "intent": "MSG",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-MSG-FAIL-GHS",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "GHS",
+      "intent": "MSG",
+      "scenario": "FAIL",
+      "applicable": false,
+      "reason_if_not_applicable": "The failure branch in processWebhook is intent-independent and is covered by BOOK-FAIL/SUB-FAIL — n/a-covered-elsewhere, not n/a-untested."
+    },
+    {
+      "cell_id": "PAY-MSG-FAIL-NGN",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "NGN",
+      "intent": "MSG",
+      "scenario": "FAIL",
+      "applicable": false,
+      "reason_if_not_applicable": "The failure branch in processWebhook is intent-independent and is covered by BOOK-FAIL/SUB-FAIL — n/a-covered-elsewhere, not n/a-untested."
+    },
+    {
+      "cell_id": "PAY-MSG-ABD-C-GHS",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "GHS",
+      "intent": "MSG",
+      "scenario": "ABD-C",
+      "applicable": false,
+      "reason_if_not_applicable": "Messaging credit purchase has no abandoned-but-charged product surface distinct from BOOK-ABD-C's coverage of the shared webhook path."
+    },
+    {
+      "cell_id": "PAY-MSG-ABD-C-NGN",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "NGN",
+      "intent": "MSG",
+      "scenario": "ABD-C",
+      "applicable": false,
+      "reason_if_not_applicable": "Messaging credit purchase has no abandoned-but-charged product surface distinct from BOOK-ABD-C's coverage of the shared webhook path."
+    },
+    {
+      "cell_id": "PAY-MSG-ABD-N-GHS",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "GHS",
+      "intent": "MSG",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-MSG-ABD-N-NGN",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "NGN",
+      "intent": "MSG",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-MSG-DUP-GHS",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "GHS",
+      "intent": "MSG",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-MSG-DUP-NGN",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "NGN",
+      "intent": "MSG",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-MSG-REF-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "MSG",
+      "scenario": "REF",
+      "applicable": false,
+      "reason_if_not_applicable": "No product refund path reaches a messaging-credit-purchase transaction — the absence is itself recorded as a finding, not a passing cell."
+    },
+    {
+      "cell_id": "PAY-MSG-REF-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "MSG",
+      "scenario": "REF",
+      "applicable": false,
+      "reason_if_not_applicable": "No product refund path reaches a messaging-credit-purchase transaction — the absence is itself recorded as a finding, not a passing cell."
+    },
+    {
+      "cell_id": "PAY-SUB-OK-GHS",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "GHS",
+      "intent": "SUB",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-OK-NGN",
+      "requirement_ids": [
+        "FR-6",
+        "FR-7",
+        "FR-8"
+      ],
+      "currency": "NGN",
+      "intent": "SUB",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-FAIL-GHS",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "GHS",
+      "intent": "SUB",
+      "scenario": "FAIL",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-FAIL-NGN",
+      "requirement_ids": [
+        "FR-9"
+      ],
+      "currency": "NGN",
+      "intent": "SUB",
+      "scenario": "FAIL",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-ABD-C-GHS",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "GHS",
+      "intent": "SUB",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-ABD-C-NGN",
+      "requirement_ids": [
+        "FR-10"
+      ],
+      "currency": "NGN",
+      "intent": "SUB",
+      "scenario": "ABD-C",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-ABD-N-GHS",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "GHS",
+      "intent": "SUB",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-SUB-ABD-N-NGN",
+      "requirement_ids": [
+        "FR-11"
+      ],
+      "currency": "NGN",
+      "intent": "SUB",
+      "scenario": "ABD-N",
+      "applicable": false,
+      "reason_if_not_applicable": "ABD-N is BOOK-only (see CPT)."
+    },
+    {
+      "cell_id": "PAY-SUB-DUP-GHS",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "GHS",
+      "intent": "SUB",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-DUP-NGN",
+      "requirement_ids": [
+        "FR-12"
+      ],
+      "currency": "NGN",
+      "intent": "SUB",
+      "scenario": "DUP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-SUB-REF-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "SUB",
+      "scenario": "REF",
+      "applicable": false,
+      "reason_if_not_applicable": "Subscription activation has no refund product surface in scope for this run."
+    },
+    {
+      "cell_id": "PAY-SUB-REF-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "SUB",
+      "scenario": "REF",
+      "applicable": false,
+      "reason_if_not_applicable": "Subscription activation has no refund product surface in scope for this run."
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-OK-GHS",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "GHS",
+      "intent": "TRANSPORT",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-OK-NGN",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "NGN",
+      "intent": "TRANSPORT",
+      "scenario": "OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-TAMPERED-GHS",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "GHS",
+      "intent": "TRANSPORT",
+      "scenario": "TAMPERED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-TAMPERED-NGN",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "NGN",
+      "intent": "TRANSPORT",
+      "scenario": "TAMPERED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-WRONG-CURRENCY-SECRET-GHS",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "GHS",
+      "intent": "TRANSPORT",
+      "scenario": "WRONG-CURRENCY-SECRET",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-WRONG-CURRENCY-SECRET-NGN",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "NGN",
+      "intent": "TRANSPORT",
+      "scenario": "WRONG-CURRENCY-SECRET",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-MALFORMED-GHS",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "GHS",
+      "intent": "TRANSPORT",
+      "scenario": "MALFORMED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-TRANSPORT-MALFORMED-NGN",
+      "requirement_ids": [
+        "FR-6"
+      ],
+      "currency": "NGN",
+      "intent": "TRANSPORT",
+      "scenario": "MALFORMED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-OK-GHS",
+      "requirement_ids": [
+        "FR-16"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-OK-NGN",
+      "requirement_ids": [
+        "FR-16"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-OK",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-FAILED-GHS",
+      "requirement_ids": [
+        "FR-17"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-FAILED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-FAILED-NGN",
+      "requirement_ids": [
+        "FR-17"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-FAILED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-REVERSED-GHS",
+      "requirement_ids": [
+        "FR-17"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-REVERSED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-REVERSED-NGN",
+      "requirement_ids": [
+        "FR-17"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-REVERSED",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-DUP-REQ-GHS",
+      "requirement_ids": [
+        "FR-18"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-DUP-REQ",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-DUP-REQ-NGN",
+      "requirement_ids": [
+        "FR-18"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-DUP-REQ",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-DUP-EVT-GHS",
+      "requirement_ids": [
+        "FR-21"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-DUP-EVT",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-DUP-EVT-NGN",
+      "requirement_ids": [
+        "FR-21"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-DUP-EVT",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-OVER-GHS",
+      "requirement_ids": [
+        "FR-19"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-OVER",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-OVER-NGN",
+      "requirement_ids": [
+        "FR-19"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-OVER",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-FLOOR-GHS",
+      "requirement_ids": [
+        "FR-19"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-FLOOR",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-FLOOR-NGN",
+      "requirement_ids": [
+        "FR-19"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-FLOOR",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-OTP-GHS",
+      "requirement_ids": [
+        "FR-20"
+      ],
+      "currency": "GHS",
+      "intent": "PAYOUT",
+      "scenario": "W-OTP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAYOUT-W-OTP-NGN",
+      "requirement_ids": [
+        "FR-20"
+      ],
+      "currency": "NGN",
+      "intent": "PAYOUT",
+      "scenario": "W-OTP",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-a-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "REF-a",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-a-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "REF-a",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-b-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "REF-b",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-b-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "REF-b",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-c-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "BOOK",
+      "scenario": "REF-c",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-BOOK-REF-c-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "BOOK",
+      "scenario": "REF-c",
+      "applicable": true
+    }
+  ]
+}
