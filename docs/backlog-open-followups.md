@@ -60,3 +60,20 @@ The customer-facing view/pay/reschedule page (apps/client-portal/src/pages/Clien
 plus components/BookingActions.tsx) is functionally correct; only its appearance is in question.
 Blocked on direction — no specific complaints or target look have been stated, and inventing a
 redesign brief would be guessing at scope.
+
+## backoffice-co-owner-grant-broken: backoffice-add-tenant-co-owner looks permanently broken
+- status: fixed
+
+Raised by principal while designing co-owner-invite, as a defect needing its own item. The function
+calls `get_tenant_owners` with the service-role client (index.ts:143), but that function self-gated on
+`has_backoffice_role(auth.uid(), 'super_admin')`; a service-role JWT carries no `sub`, so `auth.uid()`
+was null and the gate was always false, raising BACKOFFICE_ACCESS_DENIED before any co-owner logic
+ran — confirmed live against a real Supabase stack
+(`docs/research/2026-09-14-backoffice-co-owner-grant-analysis.md`).
+
+Fixed in migration `20260914120000_get_tenant_owners_service_role.sql`: `get_tenant_owners` now admits
+a `service_role` caller (via `auth.role() is distinct from 'service_role'`) alongside the existing
+super_admin gate, matching how the sibling `check_owner_invite_email` RPC is already granted in the
+same migration. Grants no new capability — service_role already bypasses RLS. Covered by
+`supabase/tests/co_owner_foundation.sql` (T-8, service-role case) and
+`supabase/functions/backoffice-add-tenant-co-owner/index.integration.test.ts`, both green.

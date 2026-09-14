@@ -202,6 +202,18 @@ begin
     raise exception 'get_tenant_owners should return exactly 2 active owners';
   end if;
 
+  -- get_tenant_owners: service-role caller is admitted without a JWT sub
+  -- (backoffice-add-tenant-co-owner's calling shape). Clear the sub first -
+  -- otherwise it shadows the claims JSON and auth.role() effectively still
+  -- resolves as if a user were attached.
+  perform set_config('request.jwt.claim.sub', '', true);
+  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  select count(*) into v_owner_count from public.get_tenant_owners(v_tenant_id);
+  if v_owner_count <> 2 then
+    raise exception 'get_tenant_owners should admit a service-role caller and return 2 owners, got %', v_owner_count;
+  end if;
+  perform set_config('request.jwt.claims', '', true);
+
   -- ==========================================================
   -- check_owner_invite_email (T-7)
   -- ==========================================================
