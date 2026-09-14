@@ -101,7 +101,7 @@ terminal page), but the orphan holds an email address that then becomes permanen
 Needs a sweeper or expiry-time cleanup.
 
 ## temp-password-entropy: generateSecurePassword uses Math.random()
-- status: in-progress
+- status: implemented
 
 Not cryptographically secure, and it now guards owner-level credentials via the co-owner invite flow.
 Reused as-is there deliberately, to avoid silently diverging the staff and owner invitation flows —

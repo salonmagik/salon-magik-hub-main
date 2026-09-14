@@ -1,6 +1,6 @@
 # Implementation Design — temp-password-entropy
 
-Backlog item: `docs/backlog-open-followups.md` → `## temp-password-entropy: generateSecurePassword uses Math.random()` (status: in-progress)
+Backlog item: `docs/backlog-open-followups.md` → `## temp-password-entropy: generateSecurePassword uses Math.random()` (status: implemented)
 
 ---
 
