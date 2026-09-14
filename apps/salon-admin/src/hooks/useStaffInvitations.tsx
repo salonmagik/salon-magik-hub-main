@@ -53,7 +53,12 @@ export function useStaffInvitations() {
 
       if (fetchError) throw fetchError;
 
-      setInvitations((data as StaffInvitation[]) || []);
+      // Owner invitations (role='owner') are a co-owner-invite concern with
+      // their own RLS-gated surface (SalonOwnersTab) — excluded here so they
+      // never leak into the Staff page's pending list, whose revoke button
+      // is wired to the unrestricted cancelInvitation below.
+      const staffOnly = ((data as StaffInvitation[]) || []).filter((i) => i.role !== "owner");
+      setInvitations(staffOnly);
     } catch (err) {
       console.error("Error fetching invitations:", err);
       setError(err as Error);

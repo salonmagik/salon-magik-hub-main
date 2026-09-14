@@ -64,6 +64,17 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
     return <Navigate to="/complete-signup" replace />;
   }
 
+  // A brand-new co-owner invitee has zero tenants, so hasCompletedOnboarding
+  // is false and the onboarding redirect below would send them to create
+  // their own salon before they ever see the acceptance page (AD-5 of
+  // co-owner-invite.design.md). An invitee who already has tenants
+  // (promote-in-place) is never redirected — they keep working and see a
+  // banner instead (PendingCoOwnerInviteBanner).
+  const hasPendingCoOwnerInvite = user?.user_metadata?.pending_co_owner_invite === true;
+  if (hasPendingCoOwnerInvite && !hasCompletedOnboarding && location.pathname !== "/accept-co-owner") {
+    return <Navigate to="/accept-co-owner" replace />;
+  }
+
   // If onboarding is required but not completed, redirect to onboarding
   if (requireOnboarding && !hasCompletedOnboarding) {
     return <Navigate to="/onboarding" replace />;
@@ -153,6 +164,13 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
 
   if (needsGoogleProfileCompletion(user)) {
     return <Navigate to="/complete-signup" replace />;
+  }
+
+  // Same AD-5 hazard as ProtectedRoute above: without this, a brand-new
+  // co-owner invitee would land on /onboarding (this route) and create a
+  // junk salon before ever seeing the acceptance page.
+  if (!hasCompletedOnboarding && user?.user_metadata?.pending_co_owner_invite === true) {
+    return <Navigate to="/accept-co-owner" replace />;
   }
 
   // If onboarding is already completed, go to salon

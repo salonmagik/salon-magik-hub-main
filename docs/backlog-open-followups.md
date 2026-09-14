@@ -35,7 +35,7 @@ price ladder, trials/promos, per-plan allowances, how salons are created, delinq
 three are answered, two remain. Brief: docs/research/2026-09-09-multi-salon-owner-identity.md.
 
 ## co-owner-invite: Invite and accept flow for a co-owner
-- status: in-progress (design complete; implementation handed to Codex externally, outside this pipeline)
+- status: in-progress (design complete; implemented in this pipeline, pending review)
 - requires: co-owner-role
 
 Let an existing owner invite someone as a second owner, and let that person accept and get in.
@@ -53,26 +53,50 @@ subaccount/split code can be deleted. ~82 references across supabase/functions r
 process-salon-withdrawal, retry-paystack-subaccount, and others). Blocked on your verdict — this
 cannot be dispatched until you confirm the new path is safe and say which code is dead.
 
-## booking-detail-redesign: Cosmetic pass on the customer booking-details page
-- status: blocked
+## booking-detail-modal-padding: Action modals have no side padding
+- status: pending
 
-The customer-facing view/pay/reschedule page (apps/client-portal/src/pages/ClientBookingDetailPage.tsx
-plus components/BookingActions.tsx) is functionally correct; only its appearance is in question.
-Blocked on direction — no specific complaints or target look have been stated, and inventing a
-redesign brief would be guessing at scope.
+Direction given by the user (2026-09-14), which unblocks the former `booking-detail-redesign` item:
+the complaint is not the page, it is the action modals in
+apps/client-portal/src/components/BookingActions.tsx (running-late / reschedule / cancel dialogs).
+Their DialogContent has no horizontal padding or margin, so text and controls run into the sides of
+the modal.
+
+Scope is that spacing fix only. ClientBookingDetailPage.tsx itself was never the complaint and
+should not be redesigned — the earlier "cosmetic pass on the page" framing was a misreading.
+
+## payments-e2e-verification: End-to-end payments verification before beta
+- status: pending
+- checkpoint: true
+
+Top-priority goal (2026-09-14, user): the product goes to beta users only once payments are proven
+end to end. Covers the full path — checkout session, Paystack redirect, webhook processing
+(payment-webhook-gh / payment-webhook-ng), payment recording, receipts, and payout/withdrawal —
+against the dev Supabase project and Paystack test keys.
+
+This is also the gate on `subaccount-split-cleanup`: ~82 references to the superseded payout-split
+path cannot be deleted until this run produces a go/no-go verdict on the new path. The two items
+are one decision.
+
+Needs a written test plan before implementation — scope the matrix (currencies GH/NG, success,
+failure, abandoned, duplicate webhook, refund) rather than ad-hoc clicking.
 
 ## multi-salon-db-verification: Execute the multi-salon owner DB tests against a live Postgres
-- status: blocked
+- status: pending
 
-Carried over from the multi-salon-owner-identity review (IMPORTANT finding, Round 1, unchanged in
-Round 2): neither implementer nor reviewer could execute the SQL layer live, because the only local
-Docker Supabase stack on this machine belongs to a different project ref and holds the default
-ports. Needs `supabase db reset` plus `supabase/tests/multi_salon_owner_identity.sql`, the
-`co_owner_foundation.sql` regression, the gate-erosion audit query from the design's Verification
-section, and `supabase gen types typescript --local` to refresh the four new/changed RPCs (types are
-currently stale; call sites cast around it consistently with ~86 pre-existing sites). Blocked on a
-free local Supabase instance or a CI run — dispatching it into the same environment would just
-repeat the failure. Review: .claudespace/s/fabf7e44-523d-44e0-8159-dd198b969ab8/reports/multi-salon-owner-identity-review.md
+UNBLOCKED (2026-09-14, user): run these against the **dev** Supabase project, not prod. The user
+will supply the dev URL. Dev may be emptied, with one hard constraint: **the super admin user must
+survive the reset** — re-provision it (provision-super-admin) if `db reset` drops it, and confirm
+it can still sign in before declaring the run green.
+
+The earlier "needs a free local Docker stack" framing was wrong: a local stack was only ever one way
+to get a disposable Postgres, and dev serves that purpose. Do NOT point any destructive step at prod.
+
+Needs: `supabase/tests/multi_salon_owner_identity.sql`, the `co_owner_foundation.sql` regression, the
+gate-erosion audit query from the multi-salon-owner-identity design's Verification section, and
+`supabase gen types typescript --local` to refresh the four new/changed RPCs (types are stale; call
+sites cast around it, consistent with ~86 pre-existing sites).
+Review: .claudespace/s/fabf7e44-523d-44e0-8159-dd198b969ab8/reports/multi-salon-owner-identity-review.md
 
 ## backoffice-co-owner-grant-broken: backoffice-add-tenant-co-owner looks permanently broken
 - status: done
@@ -101,7 +125,7 @@ terminal page), but the orphan holds an email address that then becomes permanen
 Needs a sweeper or expiry-time cleanup.
 
 ## temp-password-entropy: generateSecurePassword uses Math.random()
-- status: implemented
+- status: done
 
 Not cryptographically secure, and it now guards owner-level credentials via the co-owner invite flow.
 Reused as-is there deliberately, to avoid silently diverging the staff and owner invitation flows —
