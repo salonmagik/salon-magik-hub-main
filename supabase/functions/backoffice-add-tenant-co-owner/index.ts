@@ -4,6 +4,7 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { wrapEmailTemplate, heading, paragraph, smallText, createButton, createCredentialBox, buildFromAddress } from "../_shared/email-template.ts";
 import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
 import { requireSuperAdminWithFreshTotp } from "../_shared/backoffice-elevated-auth.ts";
+import { generateSecurePassword } from "../_shared/secure-password.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -17,15 +18,6 @@ interface TenantOwner {
   userId: string;
   fullName: string | null;
   email: string;
-}
-
-function generateSecurePassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  const specials = "!@#$%&*";
-  let password = "";
-  for (let i = 0; i < 8; i++) password += chars.charAt(Math.floor(Math.random() * chars.length));
-  for (let i = 0; i < 2; i++) password += specials.charAt(Math.floor(Math.random() * specials.length));
-  return password;
 }
 
 function buildNewCoOwnerEmail(firstName: string, tenantName: string, loginEmail: string, tempPassword: string, loginLink: string) {

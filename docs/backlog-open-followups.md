@@ -23,7 +23,7 @@ owner-gated check (RLS, edge functions, salon-admin UI) treat them equivalently.
 yet — that is the next item.
 
 ## multi-salon-owner-identity: Establish how one person spanning several salons should be modelled
-- status: in-progress
+- status: done
 - requires: co-owner-role
 
 Investigation only, at the user's explicit request to review the design direction before anything
@@ -35,7 +35,7 @@ price ladder, trials/promos, per-plan allowances, how salons are created, delinq
 three are answered, two remain. Brief: docs/research/2026-09-09-multi-salon-owner-identity.md.
 
 ## co-owner-invite: Invite and accept flow for a co-owner
-- status: pending
+- status: in-progress (design complete; implementation handed to Codex externally, outside this pipeline)
 - requires: co-owner-role
 
 Let an existing owner invite someone as a second owner, and let that person accept and get in.
@@ -61,8 +61,21 @@ plus components/BookingActions.tsx) is functionally correct; only its appearance
 Blocked on direction — no specific complaints or target look have been stated, and inventing a
 redesign brief would be guessing at scope.
 
+## multi-salon-db-verification: Execute the multi-salon owner DB tests against a live Postgres
+- status: blocked
+
+Carried over from the multi-salon-owner-identity review (IMPORTANT finding, Round 1, unchanged in
+Round 2): neither implementer nor reviewer could execute the SQL layer live, because the only local
+Docker Supabase stack on this machine belongs to a different project ref and holds the default
+ports. Needs `supabase db reset` plus `supabase/tests/multi_salon_owner_identity.sql`, the
+`co_owner_foundation.sql` regression, the gate-erosion audit query from the design's Verification
+section, and `supabase gen types typescript --local` to refresh the four new/changed RPCs (types are
+currently stale; call sites cast around it consistently with ~86 pre-existing sites). Blocked on a
+free local Supabase instance or a CI run — dispatching it into the same environment would just
+repeat the failure. Review: .claudespace/s/fabf7e44-523d-44e0-8159-dd198b969ab8/reports/multi-salon-owner-identity-review.md
+
 ## backoffice-co-owner-grant-broken: backoffice-add-tenant-co-owner looks permanently broken
-- status: fixed
+- status: done
 
 Raised by principal while designing co-owner-invite, as a defect needing its own item. The function
 calls `get_tenant_owners` with the service-role client (index.ts:143), but that function self-gated on
@@ -77,3 +90,30 @@ super_admin gate, matching how the sibling `check_owner_invite_email` RPC is alr
 same migration. Grants no new capability — service_role already bypasses RLS. Covered by
 `supabase/tests/co_owner_foundation.sql` (T-8, service-role case) and
 `supabase/functions/backoffice-add-tenant-co-owner/index.integration.test.ts`, both green.
+
+## invite-expiry-orphan-cleanup: Expired co-owner invitations leave an orphan account
+- status: pending
+- requires: co-owner-invite
+
+The co-owner-invite design deletes the account it created on *revoke*, but nothing deletes on
+*expiry*, because no scheduled job was in scope. Not an access problem (the invitee lands on a
+terminal page), but the orphan holds an email address that then becomes permanently un-invitable.
+Needs a sweeper or expiry-time cleanup.
+
+## temp-password-entropy: generateSecurePassword uses Math.random()
+- status: done
+
+Not cryptographically secure, and it now guards owner-level credentials via the co-owner invite flow.
+Reused as-is there deliberately, to avoid silently diverging the staff and owner invitation flows —
+so this item should move both to crypto.getRandomValues together. Also covers the related
+pre-existing gap that `send-staff-invitation` has no server-side role whitelist; only the UI has ever
+prevented `role: "owner"` being sent to it.
+
+Implemented via a shared `supabase/functions/_shared/secure-password.ts` module (crypto.getRandomValues,
+rejection sampling), replacing all four in-repo `Math.random()` copies of the generator — not just the
+two this item originally named. `backoffice-add-tenant-owner` and `backoffice-add-tenant-co-owner` were
+folded in during implementation planning, since both minted owner-level credentials with the same
+insecure generator and were the same duplicated function this item's central act deletes. See
+`docs/design/temp-password-entropy.design.md` for the full design and deferrals (existing-row audit,
+migrating `provision-super-admin`/`create-backoffice-admin` onto the shared module, a `user_roles.role`
+CHECK constraint).

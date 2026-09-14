@@ -10,6 +10,7 @@ import {
   buildFromAddress,
 } from "../_shared/email-template.ts";
 import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
+import { generateSecurePassword } from "../_shared/secure-password.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -19,33 +20,21 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Roles this endpoint may grant. Intentionally excludes "owner" — that
+// privilege is only ever granted via send-co-owner-invitation or the
+// backoffice add-owner/add-co-owner functions. Matches
+// InviteStaffDialog.tsx's roleOptions exactly.
+const ALLOWED_INVITE_ROLES = ["manager", "supervisor", "receptionist", "staff"] as const;
+type InviteRole = typeof ALLOWED_INVITE_ROLES[number];
+
 interface InvitationRequest {
   firstName?: string;
   lastName?: string;
   email?: string;
   phone?: string | null;
-  role?: string;
+  role?: InviteRole;
   invitationId?: string;
   resend?: boolean;
-}
-
-// Generate secure temporary password
-function generateSecurePassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  const specials = "!@#$%&*";
-  let password = "";
-  
-  // 8 alphanumeric chars
-  for (let i = 0; i < 8; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  
-  // 2 special chars
-  for (let i = 0; i < 2; i++) {
-    password += specials.charAt(Math.floor(Math.random() * specials.length));
-  }
-  
-  return password;
 }
 
 function buildInvitationEmailContent(
@@ -198,6 +187,18 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
+      // Guards against replaying a row whose stored role predates this
+      // check, or was written by another path — reusing/re-mailing it
+      // would be a second route to the same privilege escalation this
+      // endpoint is meant to block on the new-invitation branch below.
+      if (!ALLOWED_INVITE_ROLES.includes(existingInvitation.role)) {
+        console.error("Rejected resend: invalid stored role", existingInvitation.role);
+        return new Response(
+          JSON.stringify({ error: "Invalid role" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
       // Use existing temp password and extend expiry
       tempPassword = existingInvitation.temp_password || generateSecurePassword();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -240,6 +241,14 @@ const handler = async (req: Request): Promise<Response> => {
       if (!firstName || !lastName || !email || !role) {
         return new Response(
           JSON.stringify({ error: "Missing required fields" }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
+      if (!ALLOWED_INVITE_ROLES.includes(role)) {
+        console.error("Rejected invitation: invalid role", role);
+        return new Response(
+          JSON.stringify({ error: "Invalid role" }),
           { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
         );
       }
