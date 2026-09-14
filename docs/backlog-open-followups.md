@@ -101,7 +101,7 @@ terminal page), but the orphan holds an email address that then becomes permanen
 Needs a sweeper or expiry-time cleanup.
 
 ## temp-password-entropy: generateSecurePassword uses Math.random()
-- status: done
+- status: in-progress
 
 Not cryptographically secure, and it now guards owner-level credentials via the co-owner invite flow.
 Reused as-is there deliberately, to avoid silently diverging the staff and owner invitation flows —
@@ -110,10 +110,19 @@ pre-existing gap that `send-staff-invitation` has no server-side role whitelist;
 prevented `role: "owner"` being sent to it.
 
 Implemented via a shared `supabase/functions/_shared/secure-password.ts` module (crypto.getRandomValues,
-rejection sampling), replacing all four in-repo `Math.random()` copies of the generator — not just the
-two this item originally named. `backoffice-add-tenant-owner` and `backoffice-add-tenant-co-owner` were
-folded in during implementation planning, since both minted owner-level credentials with the same
-insecure generator and were the same duplicated function this item's central act deletes. See
+rejection sampling), replacing three of the four in-repo `Math.random()` copies of the generator:
+`send-staff-invitation`, `backoffice-add-tenant-owner`, and `backoffice-add-tenant-co-owner`. The latter
+two were folded in during implementation planning, since both minted owner-level credentials with the
+same insecure generator and were the same duplicated function this item's central act deletes. See
 `docs/design/temp-password-entropy.design.md` for the full design and deferrals (existing-row audit,
 migrating `provision-super-admin`/`create-backoffice-admin` onto the shared module, a `user_roles.role`
 CHECK constraint).
+
+**Known gap, deliberately not fixed here:** `send-co-owner-invitation/index.ts` still has its own local
+`Math.random()`-based copy of the generator on disk in this worktree. That file is externally-authored
+WIP for the separate `co-owner-invite` item ("implementation handed to Codex externally, outside this
+pipeline" — see that entry below) with zero prior commits and no test coverage; it has never been
+committed or deployed, so there is no live vulnerability yet. Do not commit that file as a side effect of
+an unrelated change. Whoever brings `co-owner-invite` through this pipeline should apply the same fix
+(delete its local generator, import `generateSecurePassword` from `_shared/secure-password.ts`) before
+that file is committed for the first time.
