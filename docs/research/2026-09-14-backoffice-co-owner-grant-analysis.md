@@ -4,7 +4,7 @@
 **Role:** analyst
 **Upstream:** [`docs/research/2026-09-14-backoffice-co-owner-grant-broken.md`](./2026-09-14-backoffice-co-owner-grant-broken.md) (researcher — static analysis)
 **Backlog item:** `backoffice-co-owner-grant-broken`
-**Status:** reproduced, fix decided, handed to implementer
+**Status:** implemented
 
 ---
 
