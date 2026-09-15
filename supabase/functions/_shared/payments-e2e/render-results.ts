@@ -21,9 +21,43 @@ interface Manifest {
   cells: ManifestCell[];
 }
 
+function manifestPath(): string {
+  return Deno.env.get("PAYMENTS_E2E_MANIFEST_PATH") ?? "docs/test-plans/payments-e2e.cells.json";
+}
+
+function verdictPath(): string {
+  return Deno.env.get("PAYMENTS_E2E_VERDICT_PATH") ?? "docs/test-plans/payments-e2e.verdict.md";
+}
+
+function resultsPath(): string {
+  return Deno.env.get("PAYMENTS_E2E_RESULTS_PATH") ?? "docs/test-plans/payments-e2e.results.md";
+}
+
 async function loadManifest(): Promise<Manifest> {
-  const raw = await Deno.readTextFile("docs/test-plans/payments-e2e.cells.json");
+  const raw = await Deno.readTextFile(manifestPath());
   return JSON.parse(raw);
+}
+
+/**
+ * Reads the hand-written verdict (design AD-R1). This script never writes
+ * verdictPath() — absence or an empty file are both valid pre-verdict states,
+ * not errors, so both fall back to the placeholder and warn on stderr rather
+ * than throwing.
+ */
+async function loadVerdictBody(): Promise<string | undefined> {
+  const path = verdictPath();
+  let raw: string;
+  try {
+    raw = await Deno.readTextFile(path);
+  } catch {
+    console.error(`WARNING: ${path} not found — rendering the placeholder. Author the verdict there (design AD-10).`);
+    return undefined;
+  }
+  if (!raw.trim()) {
+    console.error(`WARNING: ${path} is empty — rendering the placeholder. This is more likely a truncated write than an intentional state.`);
+    return undefined;
+  }
+  return raw.trimEnd();
 }
 
 function resultBadge(result: EvidenceRecord["result"] | "not-run"): string {
@@ -39,10 +73,12 @@ function resultBadge(result: EvidenceRecord["result"] | "not-run"): string {
   }
 }
 
-async function main() {
+export async function main() {
   const manifest = await loadManifest();
   const evidence = await readEvidence();
   const byCellId = new Map(evidence.map((e) => [e.cell_id, e]));
+  const manifestCellIds = new Set(manifest.cells.map((c) => c.cell_id));
+  const orphaned = evidence.filter((e) => !manifestCellIds.has(e.cell_id));
 
   const lines: string[] = [];
   lines.push("# Payments E2E — Results");
@@ -95,17 +131,37 @@ async function main() {
   }
   lines.push("");
 
+  if (orphaned.length > 0) {
+    lines.push("## Orphaned evidence");
+    lines.push("");
+    lines.push("_Evidence records whose `cell_id` has no matching manifest cell — not counted in the totals above (design AD-R5)._");
+    lines.push("");
+    lines.push("| Cell id | Result | Note |");
+    lines.push("|---|---|---|");
+    for (const record of orphaned) {
+      lines.push(`| ${record.cell_id} | ${resultBadge(record.result)} | ${record.note.replace(/\|/g, "\\|")} |`);
+    }
+    lines.push("");
+  }
+
   lines.push("## Verdict");
   lines.push("");
-  lines.push("_This section is written by the run's verdict author against the evidence above (design AD-10) — it is not auto-derived, and render-results.ts never fills it in._");
-  lines.push("");
-  lines.push("- **(a) Payout path — go/no-go:** _TODO, resting on cells: ..._");
-  lines.push("- **(b) subaccount-split-cleanup unblocked:** _TODO_");
-  lines.push("- **(c) beta launch unblocked:** _TODO_");
+  const verdictBody = await loadVerdictBody();
+  if (verdictBody) {
+    lines.push(verdictBody);
+  } else {
+    lines.push("_This section is written by the run's verdict author against the evidence above (design AD-10) — it is not auto-derived, and render-results.ts never fills it in._");
+    lines.push("");
+    lines.push(`_No verdict has been authored yet — write it to \`${verdictPath()}\`._`);
+    lines.push("");
+    lines.push("- **(a) Payout path — go/no-go:** _TODO, resting on cells: ..._");
+    lines.push("- **(b) subaccount-split-cleanup unblocked:** _TODO_");
+    lines.push("- **(c) beta launch unblocked:** _TODO_");
+  }
   lines.push("");
 
-  await Deno.writeTextFile("docs/test-plans/payments-e2e.results.md", lines.join("\n") + "\n");
-  console.log(`Wrote docs/test-plans/payments-e2e.results.md (${passCount} pass, ${failCount} fail, ${naCount} n/a, ${notRunCount} not-run)`);
+  await Deno.writeTextFile(resultsPath(), lines.join("\n") + "\n");
+  console.log(`Wrote ${resultsPath()} (${passCount} pass, ${failCount} fail, ${naCount} n/a, ${notRunCount} not-run)`);
 }
 
 if (import.meta.main) {
