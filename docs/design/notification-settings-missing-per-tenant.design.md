@@ -1,6 +1,6 @@
 # Implementation Design — notification-settings-missing-per-tenant
 
-Status: approved for implementation
+Status: implemented
 Date: 2026-09-15
 Author: principal (autonomous mode)
 
