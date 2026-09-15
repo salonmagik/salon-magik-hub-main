@@ -310,10 +310,12 @@ export async function seedPaymentIntent(
  */
 // Tables with a NO ACTION (not CASCADE) foreign key to tenants.id that this
 // harness can actually cause rows in — processWebhook writes `notifications`
-// via createTenantNotification, which otherwise blocks the tenant delete
-// below with a foreign key violation. Deleted explicitly, before the tenant,
-// rather than relying on cascade.
-const NON_CASCADING_TENANT_CHILD_TABLES = ["notifications"] as const;
+// via createTenantNotification, `audit_logs` via log_audit_event (e.g.
+// complete_transaction_refund), and `message_logs` via the notification
+// email path, any of which otherwise blocks the tenant delete below with a
+// foreign key violation. Deleted explicitly, before the tenant, rather than
+// relying on cascade.
+const NON_CASCADING_TENANT_CHILD_TABLES = ["notifications", "audit_logs", "message_logs"] as const;
 
 export async function cleanup(admin: AnyClient, cellTag: string, authUserIds: string[] = []): Promise<void> {
   const { data: tenants, error: selectError } = await admin.from("tenants").select("id").ilike("name", `${cellTag}%`);

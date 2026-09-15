@@ -26,7 +26,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { loadEnv, requirePaystackKey } from "./env.ts";
 import { recordCell } from "./evidence.ts";
 import { deliverOverHttp, signPayload, type PaystackEvent } from "./webhook-replay.ts";
-import { assertTierAWebhookReachable } from "./tier-a.ts";
+import { tierAPrecondition } from "./tier-a.ts";
 import type { Currency } from "./matrix.ts";
 
 const env = loadEnv();
@@ -44,11 +44,13 @@ async function attempt(
   kind: string,
   run: (key: string) => Promise<{ ok: boolean; note: string; response?: unknown }>,
 ) {
-  // Driving the *deployed* payment-webhook-gh/-ng function requires the
-  // signing secret configured in the served function's own environment,
-  // separate from this test process's env (see file header) — the same
-  // "needs external deployment configuration" shape AD-R4 gates on.
-  const gate = assertTierAWebhookReachable(env, currency);
+  // This makes a real HTTP call directly to the deployed function itself
+  // (never through Paystack), so it only needs the base Tier A precondition
+  // — PAYMENTS_E2E_TIER_A_WEBHOOK_URL is a different concept (the endpoint
+  // Paystack's own dashboard is configured to call) and doesn't apply here.
+  // The served function's own signing-secret configuration (see file
+  // header) is a separate, undetectable-from-here precondition.
+  const gate = tierAPrecondition(env, currency);
   if (!gate.met) {
     await recordCell({
       cell_id: cellId,
