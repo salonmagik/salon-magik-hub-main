@@ -104,6 +104,16 @@ export const REFUND_REQUIREMENT_IDS: Record<RefundSubCell, string[]> = {
   "REF-c": ["FR-13"],
 };
 
+/**
+ * Intents where the REF scenario is applicable (design section 14.3). REF
+ * never produces a recordable cell of its own — it is decomposed into
+ * REF-a/b/c for each of these intents (AD-R3) — so this is derived from the
+ * applicability table rather than hardcoded, keeping REF removed from the
+ * base intent×scenario loop consistent with which intents actually get
+ * REF-a/b/c sub-cells.
+ */
+export const REF_APPLICABLE_INTENTS: Intent[] = INTENTS.filter((intent) => isApplicable(intent, "REF"));
+
 export function cellId(intent: Intent, scenario: Scenario, currency: Currency): string {
   return `PAY-${intent}-${scenario}-${currency}`;
 }

@@ -10,13 +10,14 @@ import {
   CURRENCIES,
   PAYOUT_CELL_IDS,
   PAYOUT_REQUIREMENT_IDS,
+  REF_APPLICABLE_INTENTS,
   REFUND_REQUIREMENT_IDS,
   REFUND_SUB_CELLS,
   REQUIREMENT_IDS_BY_SCENARIO,
   TRANSPORT_CELL_IDS,
 } from "./matrix.ts";
 
-interface ManifestCell {
+export interface ManifestCell {
   cell_id: string;
   requirement_ids: string[];
   currency: string;
@@ -26,10 +27,17 @@ interface ManifestCell {
   reason_if_not_applicable?: string;
 }
 
-function buildCells(): ManifestCell[] {
+export function buildCells(): ManifestCell[] {
   const cells: ManifestCell[] = [];
 
   for (const row of applicabilityMatrix()) {
+    // REF is applicable-only decomposed into REF-a/b/c below (AD-R3); skip
+    // the parent row here for those intents only — emitting it would create
+    // a phantom cell no suite can ever record against. Intents where REF is
+    // not applicable at all (SPT/MSG/SUB) keep their n/a row here, same as
+    // before, since that documents *why* REF doesn't apply rather than
+    // asserting an obligation nothing can discharge.
+    if (row.scenario === "REF" && REF_APPLICABLE_INTENTS.includes(row.intent)) continue;
     for (const currency of CURRENCIES) {
       cells.push({
         cell_id: cellId(row.intent, row.scenario, currency),
@@ -69,24 +77,49 @@ function buildCells(): ManifestCell[] {
     }
   }
 
-  for (const sub of REFUND_SUB_CELLS) {
-    for (const currency of CURRENCIES) {
-      cells.push({
-        cell_id: `PAY-BOOK-${sub}-${currency}`,
-        requirement_ids: REFUND_REQUIREMENT_IDS[sub],
-        currency,
-        intent: "BOOK",
-        scenario: sub,
-        applicable: true,
-      });
+  for (const intent of REF_APPLICABLE_INTENTS) {
+    for (const sub of REFUND_SUB_CELLS) {
+      for (const currency of CURRENCIES) {
+        cells.push({
+          cell_id: `PAY-${intent}-${sub}-${currency}`,
+          requirement_ids: REFUND_REQUIREMENT_IDS[sub],
+          currency,
+          intent,
+          scenario: sub,
+          applicable: true,
+        });
+      }
     }
   }
 
   return cells;
 }
 
+const PHANTOM_REF_PATTERN = /-REF-(?!a-|b-|c-)/;
+
+export function assertManifestInvariants(cells: ManifestCell[]): void {
+  const seen = new Set<string>();
+  for (const cell of cells) {
+    if (seen.has(cell.cell_id)) {
+      throw new Error(`generate-manifest: duplicate cell_id ${cell.cell_id}`);
+    }
+    seen.add(cell.cell_id);
+    // Only an *applicable* bare-REF cell is phantom — it is the one that can
+    // never gain evidence and renders NOT RUN forever. A not-applicable
+    // bare-REF cell (SPT/MSG/SUB) legitimately documents why REF doesn't
+    // apply to that intent and expects no evidence at all.
+    if (cell.applicable && PHANTOM_REF_PATTERN.test(cell.cell_id)) {
+      throw new Error(
+        `generate-manifest: ${cell.cell_id} is a phantom REF parent cell — REF must be decomposed into REF-a/b/c (AD-R3)`,
+      );
+    }
+  }
+}
+
 async function main() {
-  const manifest = { cells: buildCells() };
+  const cells = buildCells();
+  assertManifestInvariants(cells);
+  const manifest = { cells };
   await Deno.writeTextFile("docs/test-plans/payments-e2e.cells.json", JSON.stringify(manifest, null, 2) + "\n");
   console.log(`Wrote docs/test-plans/payments-e2e.cells.json with ${manifest.cells.length} cells`);
 }

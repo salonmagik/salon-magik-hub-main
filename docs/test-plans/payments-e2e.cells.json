@@ -105,26 +105,6 @@
       "applicable": true
     },
     {
-      "cell_id": "PAY-BOOK-REF-GHS",
-      "requirement_ids": [
-        "FR-13"
-      ],
-      "currency": "GHS",
-      "intent": "BOOK",
-      "scenario": "REF",
-      "applicable": true
-    },
-    {
-      "cell_id": "PAY-BOOK-REF-NGN",
-      "requirement_ids": [
-        "FR-13"
-      ],
-      "currency": "NGN",
-      "intent": "BOOK",
-      "scenario": "REF",
-      "applicable": true
-    },
-    {
       "cell_id": "PAY-CPT-OK-GHS",
       "requirement_ids": [
         "FR-6",
@@ -228,26 +208,6 @@
       "currency": "NGN",
       "intent": "CPT",
       "scenario": "DUP",
-      "applicable": true
-    },
-    {
-      "cell_id": "PAY-CPT-REF-GHS",
-      "requirement_ids": [
-        "FR-13"
-      ],
-      "currency": "GHS",
-      "intent": "CPT",
-      "scenario": "REF",
-      "applicable": true
-    },
-    {
-      "cell_id": "PAY-CPT-REF-NGN",
-      "requirement_ids": [
-        "FR-13"
-      ],
-      "currency": "NGN",
-      "intent": "CPT",
-      "scenario": "REF",
       "applicable": true
     },
     {
@@ -486,26 +446,6 @@
       "currency": "NGN",
       "intent": "INV",
       "scenario": "DUP",
-      "applicable": true
-    },
-    {
-      "cell_id": "PAY-INV-REF-GHS",
-      "requirement_ids": [
-        "FR-13"
-      ],
-      "currency": "GHS",
-      "intent": "INV",
-      "scenario": "REF",
-      "applicable": true
-    },
-    {
-      "cell_id": "PAY-INV-REF-NGN",
-      "requirement_ids": [
-        "FR-13"
-      ],
-      "currency": "NGN",
-      "intent": "INV",
-      "scenario": "REF",
       "applicable": true
     },
     {
@@ -1065,6 +1005,126 @@
       ],
       "currency": "NGN",
       "intent": "BOOK",
+      "scenario": "REF-c",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-a-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "REF-a",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-a-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "REF-a",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-b-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "REF-b",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-b-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "REF-b",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-c-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "CPT",
+      "scenario": "REF-c",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-CPT-REF-c-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "CPT",
+      "scenario": "REF-c",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-a-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "REF-a",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-a-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "REF-a",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-b-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "REF-b",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-b-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
+      "scenario": "REF-b",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-c-GHS",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "GHS",
+      "intent": "INV",
+      "scenario": "REF-c",
+      "applicable": true
+    },
+    {
+      "cell_id": "PAY-INV-REF-c-NGN",
+      "requirement_ids": [
+        "FR-13"
+      ],
+      "currency": "NGN",
+      "intent": "INV",
       "scenario": "REF-c",
       "applicable": true
     }
