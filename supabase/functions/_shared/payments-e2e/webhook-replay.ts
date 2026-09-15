@@ -216,7 +216,7 @@ export function buildChargeSuccessEvent(input: ChargeSuccessFixtureInput): Payst
         is_deposit: input.isDeposit ?? false,
         service_amount: input.serviceAmount,
       },
-      customer: { email: `harness-${input.reference}@e2e.test` },
+      customer: { email: `harness-${input.reference}@e2e.example.com` },
     },
   };
 }

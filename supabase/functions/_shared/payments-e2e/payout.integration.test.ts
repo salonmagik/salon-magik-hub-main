@@ -82,7 +82,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const before = { wallet: await snapshotWallet(admin, tenant.id) };
 
       // A signed-in user with no role at all on this tenant.
-      const outsiderEmail = `${cellTag}-outsider@e2e.test`;
+      const outsiderEmail = `${cellTag}-outsider@e2e.example.com`;
       const { data: outsiderUser } = await admin.auth.admin.createUser({ email: outsiderEmail, password: "Outsider!Pass123", email_confirm: true });
       const loginClient = createClient(env.supabaseUrl, env.anonKey, { auth: { persistSession: false } });
       const { data: session } = await loginClient.auth.signInWithPassword({ email: outsiderEmail, password: "Outsider!Pass123" });

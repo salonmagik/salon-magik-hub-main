@@ -386,7 +386,7 @@ async function sptOkOutcome(tenant: SeededTenant, currency: Currency, cellTag: s
     amount: 75,
     intentType: "salon_purse_topup",
     reference,
-    customerEmail: "salon-topup@e2e.test",
+    customerEmail: "salon-topup@e2e.example.com",
     customerName: "Salon Topup",
   });
 
@@ -528,7 +528,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         amount: 20,
         intentType: "messaging_credit_purchase",
         reference,
-        customerEmail: "msg-credits@e2e.test",
+        customerEmail: "msg-credits@e2e.example.com",
         customerName: "Messaging Credits",
       });
 
@@ -593,7 +593,7 @@ async function subOkOutcome(tenant: SeededTenant, cellTag: string): Promise<Cell
       channel: "card",
       metadata: { tenant_id: tenant.id, intent: "subscription_activation", billing_cycle: "monthly" },
       authorization: { authorization_code: "AUTH_e2e_test", reusable: true },
-      customer: { customer_code: "CUS_e2e_test", email: "sub@e2e.test" },
+      customer: { customer_code: "CUS_e2e_test", email: "sub@e2e.example.com" },
     },
   });
 

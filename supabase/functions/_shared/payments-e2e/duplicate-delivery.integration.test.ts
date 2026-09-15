@@ -181,7 +181,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         amount: 50,
         intentType: "salon_purse_topup",
         reference,
-        customerEmail: "salon-topup@e2e.test",
+        customerEmail: "salon-topup@e2e.example.com",
         customerName: "Salon Topup",
       });
 
@@ -254,7 +254,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         amount: 10,
         intentType: "messaging_credit_purchase",
         reference,
-        customerEmail: "msg@e2e.test",
+        customerEmail: "msg@e2e.example.com",
         customerName: "Messaging Credits",
       });
 

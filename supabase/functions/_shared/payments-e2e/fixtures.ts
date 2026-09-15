@@ -74,7 +74,7 @@ export async function seedOwner(
   cellTag: string,
   tenantId: string,
 ): Promise<SeededOwner> {
-  const email = `${cellTag}-owner@e2e.test`;
+  const email = `${cellTag}-owner@e2e.example.com`;
   const password = "E2eOwner!Pass123";
 
   const { data: user, error: userError } = await admin.auth.admin.createUser({
@@ -121,7 +121,7 @@ export async function seedCustomer(
 ): Promise<SeededCustomer & { client?: AnyClient }> {
   let userId: string | null = null;
   let client: AnyClient | undefined;
-  const email = `${cellTag}-customer@e2e.test`;
+  const email = `${cellTag}-customer@e2e.example.com`;
 
   if (opts.withAuthUser && opts.env) {
     const password = "E2eCustomer!Pass123";
