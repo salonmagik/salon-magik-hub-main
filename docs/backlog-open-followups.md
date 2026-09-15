@@ -56,8 +56,13 @@ the code being deleted). See docs/test-plans/payments-e2e.results.md "Verdict (b
 across supabase/functions remain (_shared/paystack-helpers.ts, payment-webhook-processor.ts,
 create-payment-session, process-salon-withdrawal, retry-paystack-subaccount, and others).
 
+REAFFIRMED (2026-09-15, payments-e2e-verification resume pass): unchanged. The fresh verdict repeats
+the same narrow "yes, unblocked" answer against a materially larger body of real evidence (Tier A now
+ran against the dev project) — nothing newly evidenced implicates the split code.
+
 ## payments-e2e-verification: End-to-end payments verification before beta
-- status: blocked
+- status: implemented (resume pass complete 2026-09-15; fresh verdict produced against real Tier A/B
+  evidence; remaining gap tracked as `payments-e2e-tier-a-initiation-calls` below)
 - checkpoint: true
 
 Top-priority goal (2026-09-14, user): the product goes to beta users only once payments are proven
@@ -81,6 +86,132 @@ here does not reopen that.
 Two confirmed defects from this run, tracked separately below: `payout-refund-wallet-not-debited`
 and `duplicate-webhook-not-idempotent`.
 
+CREDENTIALS SUPPLIED (2026-09-15, user) — no longer blocked. `supabase/functions/.env` in this
+worktree (gitignored, mode 600) now holds both `sk_test_` Paystack keys, `PAYMENTS_E2E_ACK`,
+`PAYMENTS_E2E_FORBIDDEN_PROJECT_REFS` (prod ref `xbkjgqaagwzxpzpiehov`), `PAYMENTS_E2E_TIER=A`, and
+the dev project's `SUPABASE_URL`/anon/service-role keys (ref `yqahjtsizbqwxdbjzsli` — verified
+service_role JWT, ref matches the URL, and is NOT the forbidden ref). That file is loaded by
+`supabase functions serve`, NOT by `deno test`: the run must `set -a; source supabase/functions/.env;
+set +a` first or the guard fails closed.
+
+RESUME PASS COMPLETE (2026-09-15): all four steps from the note above are done — see
+docs/design/payments-e2e-verification-resume.design.md and its AD-R1..AD-R6. The verdict now lives
+in `docs/test-plans/payments-e2e.verdict.md` (never destroyed by a re-render); `CPT-FAIL`,
+`CPT-ABD-C`, `SPT-ABD-C`, `INV-ABD-C`, `SUB-ABD-C` are closed; every `recordCell()` call site carries
+`before`/`after`; Tier A ran for real against the dev project with real `sk_test_` credentials.
+
+Along the way this pass found and fixed a harness bug that had nothing to do with credentials:
+Paystack's `/transaction/initialize` rejects any email using the `.test` TLD outright (confirmed
+directly against the live API) — every fixture-seeded email used `@e2e.test`, which silently blocked
+every cell reaching a real Paystack call regardless of key availability. Fixed by switching to
+`@e2e.example.com` (RFC 2606 reserved). This is why `PAY-BOOK-OK-*` and `PAY-TRANSPORT-*` now pass
+for real where the prior run recorded them as credential-blocked.
+
+Genuinely still unproven, and out of this pass's scope: the *initiating* Paystack calls for
+`REF-a` (refund-via-paystack) and payout transfer initiation (`W-DUP-REQ`/`W-FLOOR`/`W-OTP`) were
+never implemented against `paystack-test-client.ts` in this or the prior pass — the Tier A
+precondition is met (a real key is present) but no call is made, so these are honestly recorded
+`not-run`, not assumed passing. Tracked as its own item below
+(`payments-e2e-tier-a-initiation-calls`).
+
+Fresh verdict (docs/test-plans/payments-e2e.verdict.md): payout path and beta launch remain NO-GO —
+C-3 (`payout-refund-wallet-not-debited`) is now triply-confirmed (static read, local RPC, dev-project
+RPC) and is the primary blocker, no longer a coverage gap. `subaccount-split-cleanup` remains
+unblocked on its own narrow question, unchanged.
+
+## payments-e2e-tier-a-initiation-calls: Implement the actual Tier A Paystack-initiating calls the harness only gates today
+- status: pending
+- requires: payments-e2e-verification
+
+Filed from the payments-e2e-verification resume pass (2026-09-15). `tier-a.ts`'s
+`tierAPrecondition()`/`assertTierAWebhookReachable()` correctly gate `REF-a` (refund-via-paystack),
+`PAYOUT-W-DUP-REQ`, `PAYOUT-W-FLOOR`, and `PAYOUT-W-OTP`, but none of the four actually calls
+Paystack — they record `not-run` with "Tier A precondition met, but this cell is not implemented in
+this pass" even when a real key is present, which is honest but leaves FR-18/FR-20 (duplicate-request
+refusal, OTP) and the refund-initiation half of FR-13 permanently unevidenced until someone writes
+the calls.
+
+`W-DUP-REQ`/`W-FLOOR`/`W-OTP` are the more tractable half: `paystack-test-client.ts` already has
+`initializeTransaction`/`fetchTransfer`/`fetchBalance`, and `process-salon-withdrawal` can be driven
+directly (as `payout.integration.test.ts` already does for the other payout cells) with a currency's
+real key present — the work is wiring a real transfer attempt through it and asserting the guard/OTP
+behavior against Paystack's actual response, not inventing a new call mechanism.
+
+`REF-a` is harder: `refund-via-paystack` needs a transaction reference Paystack itself recognizes as
+completed, which requires a real hosted-checkout charge — nothing in this harness drives that without
+a human at a browser (design AD-R4, "Rejected: Automate the hosted-checkout card completion"). Closing
+this one likely means either accepting a manual, human-completed checkout as a one-time step per run,
+or scoping it out of the harness permanently and stating that in the design.: Reminders and digest skip every tenant that never saved settings
+- status: pending
+- priority: next (user: "Fix", 2026-09-15 — confirmed on prod too)
+
+CONFIRMED LIVE against dev (2026-09-15, ref yqahjtsizbqwxdbjzsli). This is the root cause of the
+user's original report — `email-delivery-audit` fixed failure *visibility*, but a tenant that never
+enters the loop produces no failure to make visible.
+
+`send-appointment-reminders/index.ts` loads its work list with a bare
+`select tenant_id, email_appointment_reminders, sms_appointment_reminders, reminder_hours_before
+from notification_settings` and iterates the rows it gets back. No migration inserts a
+`notification_settings` row per tenant, and there is no trigger on tenant creation — a row appears
+only when a salon saves the notification settings page. Any tenant that never did is invisible to the
+job forever. `send-daily-digest` reads the same table and has the same hole.
+
+Evidence on dev: 8 rows in `tenants`, 1 row in `notification_settings`. The only two upcoming
+scheduled appointments belong to tenants `6c3952b8-42c8-4640-a603-c8d4659e6675` and
+`9211985f-d616-49b2-8891-a95bf6c8e72c`, neither of which has a settings row — which is why every
+30-minute run returns `{"ok":true,"emailsSent":0,"smsSent":0,"errors":0}`. Infrastructure is
+confirmed healthy and is NOT the cause: both cron jobs are registered and firing on schedule, all
+four vault secrets exist with correct function URLs, `net._http_response` shows a steady stream of
+200s, and the Resend domain `salonmagik.com` is verified with a valid key.
+
+Fix shape is a design decision, not a given: either backfill a default `notification_settings` row
+for every existing tenant plus a trigger on tenant creation, or change both jobs to iterate `tenants`
+and left-join settings, applying documented defaults when absent. The second avoids a class of bug
+where a newly created tenant is silently excluded until a backfill runs, but changes what "off by
+default" means — `digest_frequency` defaults to `off` deliberately, so the digest's default must stay
+opt-in while reminders' must not.
+
+UX DECISION (2026-09-15, conductor, user asked for the call — treat as settled, do not relitigate):
+
+- Email reminders default **on** for every tenant. A reminder about the customer's own booking is a
+  service message, not marketing; withholding it is the worse outcome.
+- SMS reminders default **off**. SMS consumes comms credits, so turning it on by default would spend
+  a salon's money on sends it never requested. Opt-in only.
+- **Two reminders per appointment by default: 24 hours before AND 30 minutes before** (user,
+  2026-09-15, explicit). Do NOT change any salon's existing `reminder_hours_before` value — the
+  defaults apply unless the salon has set its own.
+
+  SCHEMA IMPLICATION, needs a design decision: the current model cannot express this.
+  `reminder_hours_before` is a single integer, and the eligibility predicate keys off
+  `last_reminder_sent_at is null` — so once the 24h reminder sends, the appointment leaves the query
+  permanently and the 30-minute one can never fire. The per-appointment tracking columns added by
+  `email-delivery-audit` (`reminder_attempt_count`, `last_reminder_attempt_at`, `reminder_failed_at`)
+  are single-send shaped for the same reason. This needs per-offset state — e.g. a
+  `appointment_reminder_sends` row per (appointment, offset), or explicit per-offset columns — plus a
+  settings shape that holds a list of offsets rather than one integer. Whichever is chosen must keep
+  the existing retry logic (max 3 attempts, never past `scheduled_start`) working per offset rather
+  than per appointment.
+- `digest_frequency` stays **off** by default — an internal owner report is a different consent
+  question from a customer-facing reminder.
+- **No throttle or suppression window on the first run.** The eligibility predicate is already
+  self-bounding (`scheduled_start >= now()` within the window, so it cannot reach into the past); the
+  worst case is one email per appointment in the next 24 hours, which is exactly the behaviour the
+  bug has been suppressing. Delaying it would withhold correct reminders from customers whose
+  appointments are imminent.
+- Instead of a throttle, ship a **one-time notice in salon-admin** ("appointment reminders are now
+  on", linking to the notification settings page) so an owner can see and change it before their
+  customers are emailed. That addresses the real risk — an owner surprised by outbound mail — without
+  penalising customers for a platform bug.
+
+Also worth settling in the same pass: the one configured tenant has `reminder_hours_before = 2`,
+so even it only catches appointments starting within 2 hours — confirm that is the intended default
+rather than an artifact.
+
+Not yet checked on prod. The same four queries should be run there before this is considered
+understood: `cron.job`, `cron.job_run_details`, `net._http_response`, and the tenants vs
+notification_settings row counts.
+
+
 ## payout-refund-wallet-not-debited: Salon wallet is not debited when a payment is refunded
 - status: pending
 - checkpoint: true
@@ -94,6 +225,11 @@ a salon can withdraw money that has already been returned to the customer. Also 
 `refund-cancelled-appointment` (same underlying RPC). Payout-path concern, not a split/subaccount
 one — does not block `subaccount-split-cleanup`. Beta-launch concern per
 docs/test-plans/payments-e2e.results.md's verdict.
+
+RE-CONFIRMED (2026-09-15, payments-e2e-verification resume pass, cells PAY-BOOK-REF-b-GHS/NGN):
+same defect, now reproduced against the dev Supabase project's real schema, not just the local
+stack — triple confirmation (static read, local RPC call, dev-project RPC call). This is now the
+verdict's primary reason for a payout-path no-go, not a coverage gap.
 
 ## payments-e2e-refund-webhook-unhandled: Webhook processor has no refund.* event handler
 - status: pending
@@ -126,6 +262,12 @@ not the money. `salon_purse_topup`, `invoice_payment`, and `subscription_activat
 idempotent (no transactions row is written on those branches at all, or the code explicitly guards
 on prior state). Beta-launch concern per docs/test-plans/payments-e2e.results.md's verdict.
 
+RE-CONFIRMED (2026-09-15, payments-e2e-verification resume pass): same three intents, same shape,
+re-run against both the local stack and the dev project's real schema. Still exercised via a
+directly-seeded `payment_intents` row rather than one obtained from a real `create-payment-session`
+call (same documented deviation as the prior run — the processor branch under test doesn't care how
+the row it reads came to exist, so this doesn't weaken the finding).
+
 ## booking-detail-modal-padding: Action modals have no side padding
 - status: pending
 
@@ -141,18 +283,32 @@ should not be redesigned — the earlier "cosmetic pass on the page" framing was
 ## multi-salon-db-verification: Execute the multi-salon owner DB tests against a live Postgres
 - status: pending
 
-UNBLOCKED (2026-09-14, user): run these against the **dev** Supabase project, not prod. The user
-will supply the dev URL. Dev may be emptied, with one hard constraint: **the super admin user must
-survive the reset** — re-provision it (provision-super-admin) if `db reset` drops it, and confirm
-it can still sign in before declaring the run green.
+UNBLOCKED (2026-09-14, user): run these against the **dev** Supabase project (ref
+`yqahjtsizbqwxdbjzsli`), not prod. Do NOT point any destructive step at prod.
 
-The earlier "needs a free local Docker stack" framing was wrong: a local stack was only ever one way
-to get a disposable Postgres, and dev serves that purpose. Do NOT point any destructive step at prod.
+AMENDED (2026-09-15, user): use `supabase db push`, NEVER `supabase db reset` — here and in every
+future item. CI applies migrations to prod with `db push`, so the same command has to succeed on
+local/dev first or the deploy is untested. `db reset` is not an acceptable substitute: it destroys
+dev data (the super admin included) and, by replaying migrations into an empty database, proves
+something CI never does. **If `db push` fails — ordering, a non-idempotent migration, an object
+that already exists, drift — fixing the migrations so it succeeds is in scope for this item, not a
+reason to fall back to reset.** That failure is the bug; it would otherwise surface during the
+prod deploy.
 
-Needs: `supabase/tests/multi_salon_owner_identity.sql`, the `co_owner_foundation.sql` regression, the
-gate-erosion audit query from the multi-salon-owner-identity design's Verification section, and
-`supabase gen types typescript --local` to refresh the four new/changed RPCs (types are stale; call
-sites cast around it, consistent with ~86 pre-existing sites).
+The four test files are `begin; ... rollback;` and clean up after themselves, so they need no empty
+database — only a schema current with this branch's migrations, which `db push` provides. The super
+admin therefore survives by construction; if anything does drop it, re-provision via
+provision-super-admin and confirm sign-in before declaring the run green.
+
+Needs: `supabase/tests/multi_salon_owner_identity.sql` (aborts with "schema is incomplete" unless all
+five new routines exist — that check is the signal `db push` worked), the `co_owner_foundation.sql`
+regression, the gate-erosion audit query from the multi-salon-owner-identity design's Verification
+section, and `supabase gen types typescript --project-id yqahjtsizbqwxdbjzsli` (NOT `--local`, which
+targets a local stack) to refresh the four new/changed RPCs — types are stale; call sites cast around
+it, consistent with ~86 pre-existing sites.
+
+Sequencing note: `payments-e2e-verification` writes test data into this same dev project. Neither
+item destroys data now that reset is off the table, but run them one at a time.
 Review: .claudespace/s/fabf7e44-523d-44e0-8159-dd198b969ab8/reports/multi-salon-owner-identity-review.md
 
 ## backoffice-co-owner-grant-broken: backoffice-add-tenant-co-owner looks permanently broken
@@ -209,8 +365,8 @@ an unrelated change. Whoever brings `co-owner-invite` through this pipeline shou
 that file is committed for the first time.
 
 ## email-delivery-audit: Audit every outbound email path — digest and reminders are not sending
-- status: implemented (code fix reviewed and passed 2026-09-15; live production verification per
-  the runbook still needs to be run by someone with production access)
+- status: done (code fix reviewed and passed 2026-09-15; live production verification per
+  docs/email-delivery-verification-runbook.md still owed by someone with production access)
 
 Raised by the user (2026-09-15): the daily digest does not send and email reminders do not work.
 Those two are the known symptoms, not the scope — the item covers every outbound email the platform
@@ -274,3 +430,31 @@ Filed from `email-delivery-audit` (GAP-4, 2026-09-15). No bounce/complaint webho
 Resend accepted but that later bounced is indistinguishable from one that actually reached the inbox.
 The `delivered` status value already exists in the schema (used by SMS) and is simply unused for
 email today.
+
+## backoffice-comms-tracker: Platform-wide delivery tracker for every outbound message
+- status: pending
+- requires: email-bounce-tracking
+
+Requested by the user (2026-09-15) as the consolidating answer to the four gaps found by
+`email-delivery-audit`. A view in **backoffice** (platform-wide, not per-salon) tracking every
+outbound message by type — appointment notifications, reminders, daily digest, receipts, invitations,
+password resets, waitlist/promo — showing delivered, pending, failed, and open rate where the channel
+supports it, with failure reason and recipient available for triage.
+
+Data foundation already exists: `message_logs` (provider, status, initiated_by, tenant_id) now
+receives a row on both the success and failure branch of `sendResendEmail` after `email-delivery-audit`,
+and `get_backoffice_comms_usage()` already aggregates it for billing. What is missing is the
+distinction between *accepted by Resend* and *actually delivered/opened/bounced* — that requires
+ingesting Resend webhook events, which is exactly `email-bounce-tracking`'s scope, hence the
+dependency. Sent/failed counts could ship before that lands if the item is split; delivered and open
+rate cannot.
+
+Relationship to the other three gap items: `receipts-email-delivery-logging` must land for receipts to
+appear in the tracker at all (that path writes no `message_logs` row today);
+`email-delivery-visibility` is the salon-facing counterpart (owners seeing their own failures) and
+should share the same data rather than growing a second source of truth; `cron-run-failure-alerting`
+covers the job-never-ran case, which by definition produces no message row and so cannot be seen in
+this tracker — the two are complementary, not overlapping.
+
+Scope question for planning: whether SMS (Arkesel) belongs in the same view from day one, given
+`message_logs` already carries both channels.
