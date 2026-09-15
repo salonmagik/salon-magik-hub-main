@@ -209,8 +209,8 @@ an unrelated change. Whoever brings `co-owner-invite` through this pipeline shou
 that file is committed for the first time.
 
 ## email-delivery-audit: Audit every outbound email path — digest and reminders are not sending
-- status: in-progress (code fix implemented in this pipeline, pending review; live production
-  verification per the runbook still needs to be run by someone with production access)
+- status: implemented (code fix reviewed and passed 2026-09-15; live production verification per
+  the runbook still needs to be run by someone with production access)
 
 Raised by the user (2026-09-15): the daily digest does not send and email reminders do not work.
 Those two are the known symptoms, not the scope — the item covers every outbound email the platform
