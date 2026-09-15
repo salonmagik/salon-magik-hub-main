@@ -25,6 +25,8 @@ export interface PaymentsE2EEnv {
   resendFromEmail?: string;
   tier: "A" | "B";
   paystackKeys: Partial<Record<Currency, string>>;
+  /** Deployed webhook endpoint the Paystack test account is configured to call (design AD-R4). */
+  tierAWebhookUrl?: string;
 }
 
 function currencyKeyEnvVar(currency: Currency): string {
@@ -48,6 +50,7 @@ export function loadEnv(): PaymentsE2EEnv {
     resendFromEmail: Deno.env.get("RESEND_FROM_EMAIL") ?? "noreply@salonmagik.com",
     tier,
     paystackKeys,
+    tierAWebhookUrl: Deno.env.get("PAYMENTS_E2E_TIER_A_WEBHOOK_URL") ?? undefined,
   };
 }
 

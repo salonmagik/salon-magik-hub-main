@@ -26,6 +26,7 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { loadEnv, requirePaystackKey } from "./env.ts";
 import { recordCell } from "./evidence.ts";
 import { deliverOverHttp, signPayload, type PaystackEvent } from "./webhook-replay.ts";
+import { assertTierAWebhookReachable } from "./tier-a.ts";
 import type { Currency } from "./matrix.ts";
 
 const env = loadEnv();
@@ -41,15 +42,36 @@ async function attempt(
   cellId: string,
   currency: Currency,
   kind: string,
-  run: (key: string) => Promise<{ ok: boolean; note: string }>,
+  run: (key: string) => Promise<{ ok: boolean; note: string; response?: unknown }>,
 ) {
+  // Driving the *deployed* payment-webhook-gh/-ng function requires the
+  // signing secret configured in the served function's own environment,
+  // separate from this test process's env (see file header) — the same
+  // "needs external deployment configuration" shape AD-R4 gates on.
+  const gate = assertTierAWebhookReachable(env, currency);
+  if (!gate.met) {
+    await recordCell({
+      cell_id: cellId,
+      requirement_ids: ["FR-6"],
+      currency,
+      intent: "TRANSPORT",
+      scenario: kind,
+      tier: "A",
+      result: "not-run",
+      note: gate.reason!,
+    });
+    return;
+  }
+
   let result: "pass" | "fail" = "fail";
   let note: string;
+  let after: unknown = null;
   try {
     const key = requirePaystackKey(env, currency);
     const outcome = await run(key);
     result = outcome.ok ? "pass" : "fail";
     note = outcome.note;
+    after = outcome.response ?? null;
   } catch (error) {
     note = error instanceof Error ? error.message : String(error);
   }
@@ -61,7 +83,10 @@ async function attempt(
     scenario: kind,
     tier: "A",
     result,
+    before: null,
+    after,
     note,
+    external_references: { reference: SAMPLE_EVENT.data.reference },
   });
 }
 
@@ -69,7 +94,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
   Deno.test(`transport: correctly-signed event is processed (${currency})`, async () => {
     await attempt(`PAY-TRANSPORT-OK-${currency}`, currency, "OK", async (key) => {
       const res = await deliverOverHttp({ event: SAMPLE_EVENT, currency, functionsBaseUrl: env.supabaseUrl, signingSecret: key });
-      return { ok: res.status === 200, note: `HTTP ${res.status}` };
+      return { ok: res.status === 200, note: `HTTP ${res.status}`, response: { status: res.status } };
     });
   });
 
@@ -86,7 +111,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         signatureOverride: signature,
         rawBodyOverride: tamperedBody,
       });
-      return { ok: res.status === 401, note: `HTTP ${res.status} (expected 401)` };
+      return { ok: res.status === 401, note: `HTTP ${res.status} (expected 401)`, response: { status: res.status } };
     });
   });
 
@@ -105,7 +130,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         signatureOverride: wrongSignature,
         rawBodyOverride: body,
       });
-      return { ok: res.status === 401, note: `HTTP ${res.status} (expected 401 — catches a GH/NG key-crossover misconfiguration)` };
+      return { ok: res.status === 401, note: `HTTP ${res.status} (expected 401 — catches a GH/NG key-crossover misconfiguration)`, response: { status: res.status } };
     });
   });
 
@@ -121,7 +146,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         signatureOverride: signature,
         rawBodyOverride: malformedBody,
       });
-      return { ok: res.status >= 400 && res.status < 500, note: `HTTP ${res.status} (expected 4xx, not 5xx)` };
+      return { ok: res.status >= 400 && res.status < 500, note: `HTTP ${res.status} (expected 4xx, not 5xx)`, response: { status: res.status } };
     });
   });
 }

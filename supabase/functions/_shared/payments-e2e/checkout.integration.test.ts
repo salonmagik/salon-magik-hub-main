@@ -25,6 +25,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { loadEnv, requirePaystackKey } from "./env.ts";
 import { cleanup, seedAppointment, seedCustomer, seedTenant, tag } from "./fixtures.ts";
+import { snapshotAppointment } from "./assertions.ts";
 import { recordCell } from "./evidence.ts";
 import type { Currency } from "./matrix.ts";
 
@@ -51,10 +52,13 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
     const otherCurrency: Currency = currency === "GHS" ? "NGN" : "GHS";
     let result: "pass" | "fail" = "fail";
     let note = "";
+    let before: unknown = null;
+    let after: unknown = null;
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
       const customer = await seedCustomer(admin, cellTag, tenant.id);
       const appointment = await seedAppointment(admin, cellTag, tenant, customer.id, { totalAmount: 50 });
+      before = await snapshotAppointment(admin, appointment.id);
 
       const { status, json } = await callCreatePaymentSession({
         tenantId: tenant.id,
@@ -66,6 +70,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         successUrl: "https://e2e.test/success",
         cancelUrl: "https://e2e.test/cancel",
       });
+      after = { response: { status, json }, appointment: await snapshotAppointment(admin, appointment.id) };
 
       const ok = status === 400 && typeof json.error === "string" && (json.error as string).toLowerCase().includes("currency");
       result = ok ? "pass" : "fail";
@@ -86,6 +91,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "CURRENCY-MISMATCH",
         tier: "B",
         result,
+        before,
+        after,
         note,
       });
       await cleanup(admin, cellTag);
@@ -96,6 +103,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
     const cellTag = tag(`checkout-settled-${currency}`);
     let result: "pass" | "fail" = "fail";
     let note = "";
+    let before: unknown = null;
+    let after: unknown = null;
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
       const customer = await seedCustomer(admin, cellTag, tenant.id);
@@ -104,6 +113,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         amountPaid: 50,
         paymentStatus: "fully_paid",
       });
+      before = await snapshotAppointment(admin, appointment.id);
 
       const { status, json } = await callCreatePaymentSession({
         tenantId: tenant.id,
@@ -115,6 +125,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         successUrl: "https://e2e.test/success",
         cancelUrl: "https://e2e.test/cancel",
       });
+      after = { response: { status, json }, appointment: await snapshotAppointment(admin, appointment.id) };
 
       const ok = status === 409;
       result = ok ? "pass" : "fail";
@@ -132,6 +143,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "ALREADY-SETTLED",
         tier: "B",
         result,
+        before,
+        after,
         note,
       });
       await cleanup(admin, cellTag);
@@ -142,9 +155,12 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
     const cellTag = tag(`checkout-noauth-${currency}`);
     let result: "pass" | "fail" = "fail";
     let note = "";
+    let before: unknown = null;
+    let after: unknown = null;
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
       const customer = await seedCustomer(admin, cellTag, tenant.id);
+      before = { payment_intents: (await admin.from("payment_intents").select("id", { count: "exact" }).eq("tenant_id", tenant.id)).count };
 
       const { status, json } = await callCreatePaymentSession({
         tenantId: tenant.id,
@@ -157,6 +173,10 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         intentType: "customer_purse_topup",
         customerId: customer.id,
       });
+      after = {
+        response: { status, json },
+        payment_intents: (await admin.from("payment_intents").select("id", { count: "exact" }).eq("tenant_id", tenant.id)).count,
+      };
 
       const ok = status === 401;
       result = ok ? "pass" : "fail";
@@ -174,6 +194,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "UNAUTHENTICATED",
         tier: "B",
         result,
+        before,
+        after,
         note,
       });
       await cleanup(admin, cellTag);
@@ -184,12 +206,15 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
     const cellTag = tag(`checkout-ok-${currency}`);
     let result: "pass" | "fail" = "fail";
     let note = "";
+    let before: unknown = null;
+    let after: unknown = null;
     try {
       requirePaystackKey(env, currency);
 
       const tenant = await seedTenant(admin, cellTag, { currency });
       const customer = await seedCustomer(admin, cellTag, tenant.id);
       const appointment = await seedAppointment(admin, cellTag, tenant, customer.id, { totalAmount: 50 });
+      before = { payment_intents: (await admin.from("payment_intents").select("id", { count: "exact" }).eq("tenant_id", tenant.id)).count };
 
       const { status, json } = await callCreatePaymentSession({
         tenantId: tenant.id,
@@ -201,6 +226,10 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         successUrl: "https://e2e.test/success",
         cancelUrl: "https://e2e.test/cancel",
       });
+      after = {
+        response: { status, checkoutUrlPresent: typeof json.checkoutUrl === "string", reference: json.reference, error: json.error },
+        payment_intents: (await admin.from("payment_intents").select("id", { count: "exact" }).eq("tenant_id", tenant.id)).count,
+      };
 
       const ok = status === 200 && typeof json.checkoutUrl === "string";
       result = ok ? "pass" : "fail";
@@ -218,6 +247,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "OK",
         tier: "B",
         result,
+        before,
+        after,
         note: note || "not attempted",
       });
       await cleanup(admin, cellTag);

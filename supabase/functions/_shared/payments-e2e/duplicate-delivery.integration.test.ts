@@ -37,6 +37,8 @@ interface DupOutcome {
   /** True only if the second delivery changed nothing at all. */
   idempotent: boolean;
   divergence: string;
+  before: unknown;
+  after: unknown;
 }
 
 async function record(cellId: string, currency: Currency, intent: string, outcome: DupOutcome) {
@@ -50,6 +52,8 @@ async function record(cellId: string, currency: Currency, intent: string, outcom
     // DUP is expected to fail today (design 14.3) — recording the real
     // outcome either way, never skipped, never forced to pass.
     result: outcome.idempotent ? "pass" : "fail",
+    before: outcome.before,
+    after: outcome.after,
     note: outcome.idempotent ? "second delivery was a genuine no-op" : outcome.divergence,
   });
 }
@@ -85,6 +89,13 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         },
       };
 
+      const before = {
+        appointment: await snapshotAppointment(admin, appointment.id),
+        transactions: await countTransactions(admin, { tenantId: tenant.id, appointmentId: appointment.id, type: "payment" }),
+        invoices: await countInvoices(admin, tenant.id, appointment.id),
+        wallet: await snapshotWallet(admin, tenant.id),
+      };
+
       await deliverTwice(event);
 
       const after = await snapshotAppointment(admin, appointment.id);
@@ -105,6 +116,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         divergence: divergences.length
           ? `${divergences.join("; ")}. Wallet credit ${walletProtected ? "was correctly protected by idempotency" : "was NOT protected — doubled"} (balance=${wallet.balance}).`
           : "no divergence",
+        before,
+        after: { appointment: after, transactions, invoices, wallet },
       });
 
       // The wallet-credit idempotency guarantee is a separate, narrower
@@ -131,6 +144,11 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerName: customer.fullName,
       });
 
+      const before = {
+        purse: (await admin.from("customer_purses").select("balance").eq("customer_id", customer.id).maybeSingle()).data,
+        transactions: await countTransactions(admin, { tenantId: tenant.id, customerId: customer.id, type: "purse_topup" }),
+      };
+
       await deliverTwice({
         event: "charge.success",
         data: { reference, amount: 2000, channel: "card", metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id, customer_id: customer.id } },
@@ -146,6 +164,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         divergence: idempotent
           ? "no divergence"
           : `purse balance=${purse?.balance} (expected 20), transactions=${transactions.count} (expected 1). Ledger idempotency entries=${ledger} (expected 1).`,
+        before,
+        after: { purse, transactions, ledger },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -165,6 +185,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerName: "Salon Topup",
       });
 
+      const before = { wallet: await snapshotWallet(admin, tenant.id) };
+
       await deliverTwice({
         event: "charge.success",
         data: { reference, amount: 5000, channel: "card", metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id } },
@@ -175,6 +197,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-SPT-DUP-${currency}`, currency, "SPT", {
         idempotent,
         divergence: idempotent ? "no divergence" : `wallet balance=${wallet.balance} (expected 50, protected by idempotency key)`,
+        before,
+        after: { wallet },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -196,6 +220,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerName: customer.fullName,
       });
 
+      const before = { wallet: await snapshotWallet(admin, tenant.id) };
+
       await deliverTwice({
         event: "charge.success",
         data: {
@@ -211,6 +237,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-INV-DUP-${currency}`, currency, "INV", {
         idempotent,
         divergence: idempotent ? "no divergence" : `wallet balance=${wallet.balance} (expected 39.8, protected by idempotency key on the invoice credit)`,
+        before,
+        after: { wallet },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -230,6 +258,11 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerName: "Messaging Credits",
       });
 
+      const before = {
+        credits: (await admin.from("communication_credits").select("balance").eq("tenant_id", tenant.id).maybeSingle()).data,
+        purchaseCount: (await admin.from("messaging_credit_purchases").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id)).count,
+      };
+
       await deliverTwice({
         event: "charge.success",
         data: { reference, amount: 1000, channel: "card", metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id, credits: "200" } },
@@ -247,6 +280,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         divergence: idempotent
           ? "no divergence"
           : `messaging_credit_purchases rows=${count} (expected 1), communication_credits.balance=${credits?.balance} — this branch has no idempotency key at all, unlike the wallet-credit branches`,
+        before,
+        after: { credits, purchaseCount: count },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -258,6 +293,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
       const reference = `${cellTag}-ref`;
+
+      const before = (await admin.from("tenants").select("subscription_status, next_billing_at").eq("id", tenant.id).single()).data;
 
       await deliverTwice({
         event: "charge.success",
@@ -276,6 +313,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-SUB-DUP-${currency}`, currency, "SUB", {
         idempotent,
         divergence: idempotent ? "no divergence — guarded on next_billing_at being unset" : `unexpected tenant state: ${JSON.stringify(tenantAfter)}`,
+        before,
+        after: tenantAfter,
       });
     } finally {
       await cleanup(admin, cellTag);

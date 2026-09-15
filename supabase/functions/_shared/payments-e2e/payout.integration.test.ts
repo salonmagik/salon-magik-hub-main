@@ -27,11 +27,12 @@
 
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { loadEnv, requirePaystackKey } from "./env.ts";
+import { loadEnv } from "./env.ts";
 import { cleanup, seedOwner, seedPayoutDestination, seedTenant, seedWalletBalance, tag } from "./fixtures.ts";
 import { getWithdrawal, snapshotWallet } from "./assertions.ts";
 import { recordCell } from "./evidence.ts";
 import { buildTransferEvent, deliverToProcessor } from "./webhook-replay.ts";
+import { tierAPrecondition } from "./tier-a.ts";
 import { handleProcessSalonWithdrawal } from "../../process-salon-withdrawal/index.ts";
 import type { Currency } from "./matrix.ts";
 
@@ -78,6 +79,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const tenant = await seedTenant(admin, cellTag, { currency });
       const destination = await seedPayoutDestination(admin, cellTag, tenant, { currency });
       await seedWalletBalance(admin, tenant.id, 500);
+      const before = { wallet: await snapshotWallet(admin, tenant.id) };
 
       // A signed-in user with no role at all on this tenant.
       const outsiderEmail = `${cellTag}-outsider@e2e.test`;
@@ -96,6 +98,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         admin,
         { id: outsiderUser!.user.id, email: outsiderEmail },
       );
+      const after = { response: { status: res.status }, wallet: await snapshotWallet(admin, tenant.id) };
 
       const ok = res.status === 403;
       await recordCell({
@@ -106,6 +109,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "AUTH",
         tier: "B",
         result: ok ? "pass" : "fail",
+        before,
+        after,
         note: ok ? "non-member correctly refused with 403" : `expected 403, got ${res.status}`,
       });
       assertEquals(ok, true);
@@ -148,6 +153,11 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         reference_id: crypto.randomUUID(),
       });
 
+      const before = {
+        wallet: await snapshotWallet(admin, tenant.id),
+        withdrawalCount: (await admin.from("salon_withdrawals").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id)).count,
+      };
+
       const res = await handleProcessSalonWithdrawal(
         withdrawalRequest({ tenantId: tenant.id, payoutDestinationId: destination.id, amount: 150 }),
         owner.client,
@@ -159,6 +169,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const ok = res.status >= 400 && res.status < 500 && typeof body.error === "string";
       const { count: withdrawalCount } = await admin.from("salon_withdrawals").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id);
       const noWithdrawalCreated = withdrawalCount === 0;
+      const after = { response: { status: res.status, error: body.error }, wallet: await snapshotWallet(admin, tenant.id), withdrawalCount };
 
       await recordCell({
         cell_id: `PAYOUT-W-OVER-${currency}`,
@@ -168,6 +179,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "W-OVER",
         tier: "B",
         result: ok && noWithdrawalCreated ? "pass" : "fail",
+        before,
+        after,
         note: ok && noWithdrawalCreated
           ? `refused with ${res.status}: ${body.error}`
           : `expected a 4xx with a reason and no withdrawal row; got status=${res.status}, error=${body.error}, withdrawalCount=${withdrawalCount}`,
@@ -181,24 +194,25 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
     }
   });
 
-  Deno.test(`payout: W-DUP-REQ / W-FLOOR / W-OTP — blocked without a live Paystack test key (${currency})`, async () => {
+  Deno.test(`payout: W-DUP-REQ / W-FLOOR / W-OTP — Tier A, not attempted in this pass (${currency})`, async () => {
+    // These require a transfer actually initiated against Paystack
+    // (design AD-R4) — not attempted here regardless of precondition, same
+    // reasoning as REF-a (see refund.integration.test.ts): "not attempted"
+    // is a distinct, honest fact from "attempted and failed", and a fail
+    // record would need before/after state that never existed (AD-R2).
+    const gate = tierAPrecondition(env, currency);
     for (const kind of ["W-DUP-REQ", "W-FLOOR", "W-OTP"] as const) {
-      let note: string;
-      try {
-        requirePaystackKey(env, currency);
-        note = "a live key is present but this cell is not implemented in this pass — see implementer report";
-      } catch (error) {
-        note = error instanceof Error ? error.message : String(error);
-      }
       await recordCell({
         cell_id: `PAYOUT-${kind}-${currency}`,
-        requirement_ids: ["FR-18"],
+        requirement_ids: kind === "W-OTP" ? ["FR-20"] : kind === "W-DUP-REQ" ? ["FR-18"] : ["FR-19"],
         currency,
         intent: "PAYOUT",
         scenario: kind,
         tier: "A",
-        result: "fail",
-        note,
+        result: "not-run",
+        note: gate.met
+          ? "Tier A precondition met, but this cell is not implemented in this pass — see implementer report"
+          : gate.reason!,
       });
     }
   });
@@ -210,6 +224,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const destination = await seedPayoutDestination(admin, cellTag, tenant, { currency });
       const wallet = await seedWalletBalance(admin, tenant.id, 300);
       const withdrawal = await seedInFlightWithdrawal(tenant.id, wallet.walletId, destination.id, currency, 100, cellTag);
+      const before = { wallet: await snapshotWallet(admin, tenant.id), withdrawal: await getWithdrawal(admin, withdrawal.id) };
 
       await deliverToProcessor({
         event: buildTransferEvent({ type: "transfer.success", withdrawalId: withdrawal.id, reference: withdrawal.reference }),
@@ -229,6 +244,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "W-OK",
         tier: "B",
         result: ok ? "pass" : "fail",
+        before,
+        after: { wallet: walletAfter, withdrawal: withdrawalAfter },
         note: ok
           ? "wallet debited by exactly the amount, withdrawal completed"
           : `wallet balance=${walletAfter.balance} (expected 200), withdrawal status=${withdrawalAfter.status} (expected completed)`,
@@ -246,6 +263,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const destination = await seedPayoutDestination(admin, cellTag, tenant, { currency });
       const wallet = await seedWalletBalance(admin, tenant.id, 300);
       const withdrawal = await seedInFlightWithdrawal(tenant.id, wallet.walletId, destination.id, currency, 100, cellTag);
+      const before = { wallet: await snapshotWallet(admin, tenant.id), withdrawal: await getWithdrawal(admin, withdrawal.id) };
 
       await deliverToProcessor({
         event: buildTransferEvent({ type: "transfer.failed", withdrawalId: withdrawal.id, reference: withdrawal.reference, status: "failed" }),
@@ -265,6 +283,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "W-FAILED",
         tier: "B",
         result: ok ? "pass" : "fail",
+        before,
+        after: { wallet: walletAfter, withdrawal: withdrawalAfter },
         note: ok ? "wallet untouched, withdrawal marked failed" : `wallet balance=${walletAfter.balance} (expected 300), withdrawal status=${withdrawalAfter.status}`,
       });
       assertEquals(ok, true);
@@ -280,6 +300,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const destination = await seedPayoutDestination(admin, cellTag, tenant, { currency });
       const wallet = await seedWalletBalance(admin, tenant.id, 300);
       const withdrawal = await seedInFlightWithdrawal(tenant.id, wallet.walletId, destination.id, currency, 100, cellTag);
+      const before = { wallet: await snapshotWallet(admin, tenant.id), withdrawal: await getWithdrawal(admin, withdrawal.id) };
 
       await deliverToProcessor({
         event: buildTransferEvent({ type: "transfer.reversed", withdrawalId: withdrawal.id, reference: withdrawal.reference, status: "reversed" }),
@@ -299,6 +320,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "W-REVERSED",
         tier: "B",
         result: ok ? "pass" : "fail",
+        before,
+        after: { wallet: walletAfter, withdrawal: withdrawalAfter },
         note: ok ? "wallet untouched, withdrawal marked failed" : `wallet balance=${walletAfter.balance} (expected 300), withdrawal status=${withdrawalAfter.status}`,
       });
       assertEquals(ok, true);
@@ -315,6 +338,7 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const wallet = await seedWalletBalance(admin, tenant.id, 300);
       const withdrawal = await seedInFlightWithdrawal(tenant.id, wallet.walletId, destination.id, currency, 100, cellTag);
       const event = buildTransferEvent({ type: "transfer.success", withdrawalId: withdrawal.id, reference: withdrawal.reference });
+      const before = { wallet: await snapshotWallet(admin, tenant.id) };
 
       await deliverToProcessor({ event, supabaseUrl: env.supabaseUrl, supabaseServiceKey: env.serviceRoleKey });
       await deliverToProcessor({ event, supabaseUrl: env.supabaseUrl, supabaseServiceKey: env.serviceRoleKey });
@@ -330,6 +354,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         scenario: "W-DUP-EVT",
         tier: "B",
         result: ok ? "pass" : "fail",
+        before,
+        after: { wallet: walletAfter },
         note: ok
           ? "wallet debited exactly once across two deliveries — protected both by the 'already completed' short-circuit and the ledger idempotency key"
           : `wallet balance=${walletAfter.balance} (expected 200 — debited once, not twice)`,

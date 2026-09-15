@@ -55,6 +55,8 @@ async function deliver(event: PaystackEvent) {
 interface CellOutcome {
   ok: boolean;
   note: string;
+  before: unknown;
+  after: unknown;
 }
 
 async function record(cellId: string, requirementIds: string[], currency: Currency, intent: string, scenario: string, outcome: CellOutcome) {
@@ -66,6 +68,8 @@ async function record(cellId: string, requirementIds: string[], currency: Curren
     scenario,
     tier: "B",
     result: outcome.ok ? "pass" : "fail",
+    before: outcome.before,
+    after: outcome.after,
     note: outcome.note,
   });
   assertEquals(outcome.ok, true, outcome.note);
@@ -85,6 +89,14 @@ async function bookOkOutcome(tenant: SeededTenant, currency: Currency, cellTag: 
     customerEmail: customer.email,
     customerName: customer.fullName,
   });
+
+  const before = {
+    appointment: await snapshotAppointment(admin, appointment.id),
+    transactions: await countTransactions(admin, { tenantId: tenant.id, appointmentId: appointment.id, type: "payment", currency }),
+    invoices: await countInvoices(admin, tenant.id, appointment.id),
+    wallet: await snapshotWallet(admin, tenant.id),
+    intent: await getPaymentIntent(admin, paymentIntent.id),
+  };
 
   await deliver(buildChargeSuccessEvent({
     reference,
@@ -115,7 +127,12 @@ async function bookOkOutcome(tenant: SeededTenant, currency: Currency, cellTag: 
   ] as const;
 
   const failed = checks.filter(([pass]) => !pass);
-  return { ok: failed.length === 0, note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held" };
+  return {
+    ok: failed.length === 0,
+    note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+    before,
+    after: { appointment: after, transactions, invoices, wallet, intent: intentAfter },
+  };
 }
 
 for (const currency of ["GHS", "NGN"] as Currency[]) {
@@ -138,6 +155,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-BOOK-ABD-C-${currency}`, ["FR-10"], currency, "BOOK", "ABD-C", {
         ok: outcome.ok,
         note: `${outcome.note} (verify-booking-payment never invoked in this harness for any cell, OK included — see file header)`,
+        before: outcome.before,
+        after: outcome.after,
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -160,6 +179,14 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerName: customer.fullName,
       });
 
+      const before = {
+        appointment: await snapshotAppointment(admin, appointment.id),
+        transactions: await countTransactions(admin, { tenantId: tenant.id, appointmentId: appointment.id }),
+        invoices: await countInvoices(admin, tenant.id, appointment.id),
+        wallet: await snapshotWallet(admin, tenant.id),
+        intent: await getPaymentIntent(admin, paymentIntent.id),
+      };
+
       await deliver(buildChargeFailedEvent({ reference, amount: 60, currency, paymentIntentId: paymentIntent.id, tenantId: tenant.id }));
 
       const after = await snapshotAppointment(admin, appointment.id);
@@ -179,6 +206,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-BOOK-FAIL-${currency}`, ["FR-9"], currency, "BOOK", "FAIL", {
         ok: failed.length === 0,
         note: failed.length ? failed.map(([, m]) => m).join("; ") : "no partial record on failure, as expected",
+        before,
+        after: { appointment: after, transactions, invoices, wallet, intent: intentAfter },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -200,7 +229,15 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerEmail: customer.email,
         customerName: customer.fullName,
       });
-      // No webhook ever delivered — this is the point of ABD-N.
+      // No webhook ever delivered — this is the point of ABD-N. before/after
+      // are taken back-to-back around the (deliberate) no-op, so a pass
+      // record still carries the state pair AD-R2 requires.
+      const before = {
+        appointment: await snapshotAppointment(admin, appointment.id),
+        transactions: await countTransactions(admin, { tenantId: tenant.id, appointmentId: appointment.id }),
+        wallet: await snapshotWallet(admin, tenant.id),
+        intent: await getPaymentIntent(admin, paymentIntent.id),
+      };
 
       const after = await snapshotAppointment(admin, appointment.id);
       const transactions = await countTransactions(admin, { tenantId: tenant.id, appointmentId: appointment.id });
@@ -217,6 +254,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-BOOK-ABD-N-${currency}`, ["FR-11"], currency, "BOOK", "ABD-N", {
         ok: failed.length === 0,
         note: failed.length ? failed.map(([, m]) => m).join("; ") : `orphaned payment_intent remains '${intentAfter.status}', distinguishable from completed`,
+        before,
+        after: { appointment: after, transactions, wallet, intent: intentAfter },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -226,9 +265,77 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
 
 // --- CPT (customer_purse_topup) -----------------------------------------
 
+async function cptOkOutcome(tenant: SeededTenant, currency: Currency, cellTag: string): Promise<CellOutcome> {
+  const customer = await seedCustomer(admin, cellTag, tenant.id);
+  const reference = `${cellTag}-ref`;
+  const paymentIntent = await seedPaymentIntent(admin, tenant, {
+    amount: 30,
+    intentType: "customer_purse_topup",
+    reference,
+    customerEmail: customer.email,
+    customerName: customer.fullName,
+  });
+
+  const before = {
+    purse: (await admin.from("customer_purses").select("balance, currency").eq("customer_id", customer.id).maybeSingle()).data,
+    transactions: await countTransactions(admin, { tenantId: tenant.id, customerId: customer.id, type: "purse_topup", currency }),
+  };
+
+  await deliver({
+    event: "charge.success",
+    data: {
+      reference,
+      amount: 3000,
+      channel: "card",
+      metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id, customer_id: customer.id },
+    },
+  });
+
+  const { data: purse } = await admin.from("customer_purses").select("balance, currency").eq("customer_id", customer.id).maybeSingle();
+  const transactions = await countTransactions(admin, { tenantId: tenant.id, customerId: customer.id, type: "purse_topup", currency });
+
+  const checks = [
+    [purse?.balance === 30, `expected purse balance 30, got ${purse?.balance}`],
+    [purse?.currency === currency, `purse currency mismatch: ${purse?.currency}`],
+    [transactions.count === 1, `expected exactly 1 purse_topup transaction, got ${transactions.count}`],
+  ] as const;
+  const failed = checks.filter(([pass]) => !pass);
+  return {
+    ok: failed.length === 0,
+    note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+    before,
+    after: { purse, transactions },
+  };
+}
+
 for (const currency of ["GHS", "NGN"] as Currency[]) {
   Deno.test(`webhook-recording: CPT-OK (${currency})`, async () => {
     const cellTag = tag(`wh-cpt-ok-${currency}`);
+    try {
+      const tenant = await seedTenant(admin, cellTag, { currency });
+      const outcome = await cptOkOutcome(tenant, currency, cellTag);
+      await record(`PAY-CPT-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "CPT", "OK", outcome);
+    } finally {
+      await cleanup(admin, cellTag);
+    }
+  });
+
+  Deno.test(`webhook-recording: CPT-ABD-C (${currency})`, async () => {
+    const cellTag = tag(`wh-cpt-abdc-${currency}`);
+    try {
+      const tenant = await seedTenant(admin, cellTag, { currency });
+      const outcome = await cptOkOutcome(tenant, currency, cellTag);
+      await record(`PAY-CPT-ABD-C-${currency}`, ["FR-10"], currency, "CPT", "ABD-C", {
+        ...outcome,
+        note: `${outcome.note} (browser-return path is never invoked by this harness — design §14.3: ABD-C's expected outcome is identical to OK)`,
+      });
+    } finally {
+      await cleanup(admin, cellTag);
+    }
+  });
+
+  Deno.test(`webhook-recording: CPT-FAIL (${currency})`, async () => {
+    const cellTag = tag(`wh-cpt-fail-${currency}`);
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
       const customer = await seedCustomer(admin, cellTag, tenant.id);
@@ -241,28 +348,29 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerName: customer.fullName,
       });
 
-      await deliver({
-        event: "charge.success",
-        data: {
-          reference,
-          amount: 3000,
-          channel: "card",
-          metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id, customer_id: customer.id },
-        },
-      });
+      const before = {
+        purse: (await admin.from("customer_purses").select("balance, currency").eq("customer_id", customer.id).maybeSingle()).data,
+        transactions: await countTransactions(admin, { tenantId: tenant.id, customerId: customer.id, type: "purse_topup", currency }),
+        intent: await getPaymentIntent(admin, paymentIntent.id),
+      };
+
+      await deliver(buildChargeFailedEvent({ reference, amount: 30, currency, paymentIntentId: paymentIntent.id, tenantId: tenant.id }));
 
       const { data: purse } = await admin.from("customer_purses").select("balance, currency").eq("customer_id", customer.id).maybeSingle();
       const transactions = await countTransactions(admin, { tenantId: tenant.id, customerId: customer.id, type: "purse_topup", currency });
+      const intentAfter = await getPaymentIntent(admin, paymentIntent.id);
 
       const checks = [
-        [purse?.balance === 30, `expected purse balance 30, got ${purse?.balance}`],
-        [purse?.currency === currency, `purse currency mismatch: ${purse?.currency}`],
-        [transactions.count === 1, `expected exactly 1 purse_topup transaction, got ${transactions.count}`],
+        [(purse?.balance ?? 0) === 0, `expected no purse credit, got balance ${purse?.balance}`],
+        [transactions.count === 0, `expected 0 purse_topup transactions, got ${transactions.count}`],
+        [intentAfter.status === "failed", `payment_intent status expected failed, got ${intentAfter.status}`],
       ] as const;
       const failed = checks.filter(([pass]) => !pass);
-      await record(`PAY-CPT-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "CPT", "OK", {
+      await record(`PAY-CPT-FAIL-${currency}`, ["FR-9"], currency, "CPT", "FAIL", {
         ok: failed.length === 0,
-        note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+        note: failed.length ? failed.map(([, m]) => m).join("; ") : "no partial record on failure, as expected",
+        before,
+        after: { purse, transactions, intent: intentAfter },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -272,36 +380,62 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
 
 // --- SPT (salon_purse_topup) ---------------------------------------------
 
+async function sptOkOutcome(tenant: SeededTenant, currency: Currency, cellTag: string): Promise<CellOutcome> {
+  const reference = `${cellTag}-ref`;
+  const paymentIntent = await seedPaymentIntent(admin, tenant, {
+    amount: 75,
+    intentType: "salon_purse_topup",
+    reference,
+    customerEmail: "salon-topup@e2e.test",
+    customerName: "Salon Topup",
+  });
+
+  const before = {
+    wallet: await snapshotWallet(admin, tenant.id),
+    ledgerCount: await countLedgerEntries(admin, { tenantId: tenant.id, entryType: "salon_purse_topup" }),
+  };
+
+  await deliver({
+    event: "charge.success",
+    data: { reference, amount: 7500, channel: "card", metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id } },
+  });
+
+  const wallet = await snapshotWallet(admin, tenant.id);
+  const ledgerCount = await countLedgerEntries(admin, { tenantId: tenant.id, entryType: "salon_purse_topup" });
+
+  const checks = [
+    [wallet.balance === 75, `expected wallet balance 75 (salon_purse_topup credits the raw amount, no platform charge deducted), got ${wallet.balance}`],
+    [ledgerCount === 1, `expected exactly 1 salon_purse_topup ledger entry, got ${ledgerCount}`],
+  ] as const;
+  const failed = checks.filter(([pass]) => !pass);
+  return {
+    ok: failed.length === 0,
+    note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held. NOTE: this webhook branch inserts no transactions row for salon_purse_topup — see implementer report.",
+    before,
+    after: { wallet, ledgerCount },
+  };
+}
+
 for (const currency of ["GHS", "NGN"] as Currency[]) {
   Deno.test(`webhook-recording: SPT-OK (${currency})`, async () => {
     const cellTag = tag(`wh-spt-ok-${currency}`);
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
-      const reference = `${cellTag}-ref`;
-      const paymentIntent = await seedPaymentIntent(admin, tenant, {
-        amount: 75,
-        intentType: "salon_purse_topup",
-        reference,
-        customerEmail: "salon-topup@e2e.test",
-        customerName: "Salon Topup",
-      });
+      const outcome = await sptOkOutcome(tenant, currency, cellTag);
+      await record(`PAY-SPT-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "SPT", "OK", outcome);
+    } finally {
+      await cleanup(admin, cellTag);
+    }
+  });
 
-      await deliver({
-        event: "charge.success",
-        data: { reference, amount: 7500, channel: "card", metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id } },
-      });
-
-      const wallet = await snapshotWallet(admin, tenant.id);
-      const ledgerCount = await countLedgerEntries(admin, { tenantId: tenant.id, entryType: "salon_purse_topup" });
-
-      const checks = [
-        [wallet.balance === 75, `expected wallet balance 75 (salon_purse_topup credits the raw amount, no platform charge deducted), got ${wallet.balance}`],
-        [ledgerCount === 1, `expected exactly 1 salon_purse_topup ledger entry, got ${ledgerCount}`],
-      ] as const;
-      const failed = checks.filter(([pass]) => !pass);
-      await record(`PAY-SPT-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "SPT", "OK", {
-        ok: failed.length === 0,
-        note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held. NOTE: this webhook branch inserts no transactions row for salon_purse_topup — see implementer report.",
+  Deno.test(`webhook-recording: SPT-ABD-C (${currency})`, async () => {
+    const cellTag = tag(`wh-spt-abdc-${currency}`);
+    try {
+      const tenant = await seedTenant(admin, cellTag, { currency });
+      const outcome = await sptOkOutcome(tenant, currency, cellTag);
+      await record(`PAY-SPT-ABD-C-${currency}`, ["FR-10"], currency, "SPT", "ABD-C", {
+        ...outcome,
+        note: `${outcome.note} (browser-return path is never invoked by this harness — design §14.3: ABD-C's expected outcome is identical to OK)`,
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -311,44 +445,70 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
 
 // --- INV (invoice_payment) ------------------------------------------------
 
+async function invOkOutcome(tenant: SeededTenant, currency: Currency, cellTag: string): Promise<CellOutcome> {
+  const customer = await seedCustomer(admin, cellTag, tenant.id);
+  const invoice = await seedInvoice(admin, cellTag, tenant.id, customer.id, { total: 45, status: "sent" });
+  const reference = `${cellTag}-ref`;
+  const paymentIntent = await seedPaymentIntent(admin, tenant, {
+    amount: 45,
+    intentType: "invoice_payment",
+    reference,
+    customerEmail: customer.email,
+    customerName: customer.fullName,
+  });
+
+  const before = {
+    invoice: (await admin.from("invoices").select("status, paid_at").eq("id", invoice.id).single()).data,
+    wallet: await snapshotWallet(admin, tenant.id),
+  };
+
+  await deliver({
+    event: "charge.success",
+    data: {
+      reference,
+      amount: 4500,
+      channel: "card",
+      metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id, invoice_id: invoice.id, service_amount: 45 },
+    },
+  });
+
+  const { data: invoiceAfter } = await admin.from("invoices").select("status, paid_at").eq("id", invoice.id).single();
+  const wallet = await snapshotWallet(admin, tenant.id);
+
+  const checks = [
+    [invoiceAfter?.status === "paid", `expected invoice status paid, got ${invoiceAfter?.status}`],
+    [!!invoiceAfter?.paid_at, `expected paid_at to be set`],
+    [wallet.balance === 44.77, `expected wallet credited net of 0.5% platform charge (44.77), got ${wallet.balance}`],
+  ] as const;
+  const failed = checks.filter(([pass]) => !pass);
+  return {
+    ok: failed.length === 0,
+    note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+    before,
+    after: { invoice: invoiceAfter, wallet },
+  };
+}
+
 for (const currency of ["GHS", "NGN"] as Currency[]) {
   Deno.test(`webhook-recording: INV-OK (${currency})`, async () => {
     const cellTag = tag(`wh-inv-ok-${currency}`);
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
-      const customer = await seedCustomer(admin, cellTag, tenant.id);
-      const invoice = await seedInvoice(admin, cellTag, tenant.id, customer.id, { total: 45, status: "sent" });
-      const reference = `${cellTag}-ref`;
-      const paymentIntent = await seedPaymentIntent(admin, tenant, {
-        amount: 45,
-        intentType: "invoice_payment",
-        reference,
-        customerEmail: customer.email,
-        customerName: customer.fullName,
-      });
+      const outcome = await invOkOutcome(tenant, currency, cellTag);
+      await record(`PAY-INV-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "INV", "OK", outcome);
+    } finally {
+      await cleanup(admin, cellTag);
+    }
+  });
 
-      await deliver({
-        event: "charge.success",
-        data: {
-          reference,
-          amount: 4500,
-          channel: "card",
-          metadata: { payment_intent_id: paymentIntent.id, tenant_id: tenant.id, invoice_id: invoice.id, service_amount: 45 },
-        },
-      });
-
-      const { data: invoiceAfter } = await admin.from("invoices").select("status, paid_at").eq("id", invoice.id).single();
-      const wallet = await snapshotWallet(admin, tenant.id);
-
-      const checks = [
-        [invoiceAfter?.status === "paid", `expected invoice status paid, got ${invoiceAfter?.status}`],
-        [!!invoiceAfter?.paid_at, `expected paid_at to be set`],
-        [wallet.balance === 44.77, `expected wallet credited net of 0.5% platform charge (44.77), got ${wallet.balance}`],
-      ] as const;
-      const failed = checks.filter(([pass]) => !pass);
-      await record(`PAY-INV-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "INV", "OK", {
-        ok: failed.length === 0,
-        note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+  Deno.test(`webhook-recording: INV-ABD-C (${currency})`, async () => {
+    const cellTag = tag(`wh-inv-abdc-${currency}`);
+    try {
+      const tenant = await seedTenant(admin, cellTag, { currency });
+      const outcome = await invOkOutcome(tenant, currency, cellTag);
+      await record(`PAY-INV-ABD-C-${currency}`, ["FR-10"], currency, "INV", "ABD-C", {
+        ...outcome,
+        note: `${outcome.note} (browser-return path is never invoked by this harness — design §14.3: ABD-C's expected outcome is identical to OK)`,
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -371,6 +531,11 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
         customerEmail: "msg-credits@e2e.test",
         customerName: "Messaging Credits",
       });
+
+      const before = {
+        credits: (await admin.from("communication_credits").select("balance").eq("tenant_id", tenant.id).maybeSingle()).data,
+        purchaseCount: (await admin.from("messaging_credit_purchases").select("id", { count: "exact" }).eq("tenant_id", tenant.id)).count,
+      };
 
       await deliver({
         event: "charge.success",
@@ -397,6 +562,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-MSG-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "MSG", "OK", {
         ok: failed.length === 0,
         note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+        before,
+        after: { credits, purchaseCount: count, firstPurchaseCredits: purchases?.[0]?.credits },
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -409,41 +576,71 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
 // special-cased ahead of the intent_type switch — no payment_intents row is
 // required for this branch to run.
 
+async function subOkOutcome(tenant: SeededTenant, cellTag: string): Promise<CellOutcome> {
+  const reference = `${cellTag}-ref`;
+
+  const before = (await admin
+    .from("tenants")
+    .select("subscription_status, next_billing_at, billing_cycle, paystack_authorization_code")
+    .eq("id", tenant.id)
+    .single()).data;
+
+  await deliver({
+    event: "charge.success",
+    data: {
+      reference,
+      amount: 1000,
+      channel: "card",
+      metadata: { tenant_id: tenant.id, intent: "subscription_activation", billing_cycle: "monthly" },
+      authorization: { authorization_code: "AUTH_e2e_test", reusable: true },
+      customer: { customer_code: "CUS_e2e_test", email: "sub@e2e.test" },
+    },
+  });
+
+  const { data: tenantAfter } = await admin
+    .from("tenants")
+    .select("subscription_status, next_billing_at, billing_cycle, paystack_authorization_code")
+    .eq("id", tenant.id)
+    .single();
+
+  const checks = [
+    [tenantAfter?.subscription_status === "active", `expected subscription_status active, got ${tenantAfter?.subscription_status}`],
+    [!!tenantAfter?.next_billing_at, `expected next_billing_at to be set`],
+    [tenantAfter?.billing_cycle === "monthly", `expected billing_cycle monthly, got ${tenantAfter?.billing_cycle}`],
+    [tenantAfter?.paystack_authorization_code === "AUTH_e2e_test", `expected stored authorization code, got ${tenantAfter?.paystack_authorization_code}`],
+  ] as const;
+  const failed = checks.filter(([pass]) => !pass);
+  return {
+    ok: failed.length === 0,
+    note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+    before,
+    after: tenantAfter,
+  };
+}
+
 for (const currency of ["GHS", "NGN"] as Currency[]) {
   Deno.test(`webhook-recording: SUB-OK (${currency})`, async () => {
     const cellTag = tag(`wh-sub-ok-${currency}`);
     try {
       const tenant = await seedTenant(admin, cellTag, { currency });
-      const reference = `${cellTag}-ref`;
+      const outcome = await subOkOutcome(tenant, cellTag);
+      await record(`PAY-SUB-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "SUB", "OK", outcome);
+    } finally {
+      await cleanup(admin, cellTag);
+    }
+  });
 
-      await deliver({
-        event: "charge.success",
-        data: {
-          reference,
-          amount: 1000,
-          channel: "card",
-          metadata: { tenant_id: tenant.id, intent: "subscription_activation", billing_cycle: "monthly" },
-          authorization: { authorization_code: "AUTH_e2e_test", reusable: true },
-          customer: { customer_code: "CUS_e2e_test", email: "sub@e2e.test" },
-        },
-      });
-
-      const { data: tenantAfter } = await admin
-        .from("tenants")
-        .select("subscription_status, next_billing_at, billing_cycle, paystack_authorization_code")
-        .eq("id", tenant.id)
-        .single();
-
-      const checks = [
-        [tenantAfter?.subscription_status === "active", `expected subscription_status active, got ${tenantAfter?.subscription_status}`],
-        [!!tenantAfter?.next_billing_at, `expected next_billing_at to be set`],
-        [tenantAfter?.billing_cycle === "monthly", `expected billing_cycle monthly, got ${tenantAfter?.billing_cycle}`],
-        [tenantAfter?.paystack_authorization_code === "AUTH_e2e_test", `expected stored authorization code, got ${tenantAfter?.paystack_authorization_code}`],
-      ] as const;
-      const failed = checks.filter(([pass]) => !pass);
-      await record(`PAY-SUB-OK-${currency}`, ["FR-6", "FR-7", "FR-8"], currency, "SUB", "OK", {
-        ok: failed.length === 0,
-        note: failed.length ? failed.map(([, m]) => m).join("; ") : "all OK invariants held",
+  // Edge case 7 (design): a fresh, dedicated tenant with no subscription —
+  // never the OK cell's tenant reused — so ABD-C cannot be confounded by an
+  // already-active subscription.
+  Deno.test(`webhook-recording: SUB-ABD-C (${currency})`, async () => {
+    const cellTag = tag(`wh-sub-abdc-${currency}`);
+    try {
+      const tenant = await seedTenant(admin, cellTag, { currency });
+      const outcome = await subOkOutcome(tenant, cellTag);
+      await record(`PAY-SUB-ABD-C-${currency}`, ["FR-10"], currency, "SUB", "ABD-C", {
+        ...outcome,
+        note: `${outcome.note} (browser-return path is never invoked by this harness — design §14.3: ABD-C's expected outcome is identical to OK)`,
       });
     } finally {
       await cleanup(admin, cellTag);
@@ -456,6 +653,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       const tenant = await seedTenant(admin, cellTag, { currency, platformPercentageCharge: 0.5 });
       const reference = `${cellTag}-ref`;
 
+      const before = (await admin.from("tenants").select("subscription_status").eq("id", tenant.id).single()).data;
+
       await deliver(buildChargeFailedEvent({ reference, amount: 1000, currency, tenantId: tenant.id, paymentIntentId: "" }));
 
       const { data: tenantAfter } = await admin.from("tenants").select("subscription_status").eq("id", tenant.id).single();
@@ -463,6 +662,8 @@ for (const currency of ["GHS", "NGN"] as Currency[]) {
       await record(`PAY-SUB-FAIL-${currency}`, ["FR-9"], currency, "SUB", "FAIL", {
         ok,
         note: ok ? "subscription not activated on a failed charge, as expected" : `subscription_status unexpectedly ${tenantAfter?.subscription_status}`,
+        before,
+        after: tenantAfter,
       });
     } finally {
       await cleanup(admin, cellTag);
