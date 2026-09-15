@@ -33,6 +33,39 @@ declare
   v_customer_d constant uuid := '20000000-0000-0000-0000-000000000032';
   v_txn_d1 constant uuid := '20000000-0000-0000-0000-000000000033';
 
+  -- Scenario E: AD-N1 regression — full refund of a transaction credited
+  -- net of a 0.5% platform fee debits exactly the net, no block
+  v_tenant_e constant uuid := '20000000-0000-0000-0000-000000000040';
+  v_owner_e constant uuid := '20000000-0000-0000-0000-000000000041';
+  v_customer_e constant uuid := '20000000-0000-0000-0000-000000000042';
+  v_txn_e1 constant uuid := '20000000-0000-0000-0000-000000000043';
+
+  -- Scenario F: two partial refunds summing to the full credited amount
+  -- debit exactly the total credited, no rounding residue
+  v_tenant_f constant uuid := '20000000-0000-0000-0000-000000000050';
+  v_owner_f constant uuid := '20000000-0000-0000-0000-000000000051';
+  v_customer_f constant uuid := '20000000-0000-0000-0000-000000000052';
+  v_txn_f1 constant uuid := '20000000-0000-0000-0000-000000000053';
+
+  -- Scenario G: transaction with no wallet credit at all — no debit, no
+  -- block, refund completes
+  v_tenant_g constant uuid := '20000000-0000-0000-0000-000000000060';
+  v_owner_g constant uuid := '20000000-0000-0000-0000-000000000061';
+  v_customer_g constant uuid := '20000000-0000-0000-0000-000000000062';
+  v_txn_g1 constant uuid := '20000000-0000-0000-0000-000000000063';
+
+  -- Scenario H: refund_gross_amount mismatch is rejected by the guard
+  v_tenant_h constant uuid := '20000000-0000-0000-0000-000000000070';
+  v_owner_h constant uuid := '20000000-0000-0000-0000-000000000071';
+  v_customer_h constant uuid := '20000000-0000-0000-0000-000000000072';
+  v_txn_h1 constant uuid := '20000000-0000-0000-0000-000000000073';
+
+  -- Scenario I: p_allow_negative debits past zero and still records a block
+  v_tenant_i constant uuid := '20000000-0000-0000-0000-000000000080';
+  v_owner_i constant uuid := '20000000-0000-0000-0000-000000000081';
+  v_customer_i constant uuid := '20000000-0000-0000-0000-000000000082';
+  v_txn_i1 constant uuid := '20000000-0000-0000-0000-000000000083';
+
   v_result jsonb;
   v_entry_id uuid;
   v_entry_id_2 uuid;
@@ -58,14 +91,24 @@ begin
     (v_owner_b, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-b@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
     (v_owner_c, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-c@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
     (v_staff_c, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'staff-c@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
-    (v_owner_d, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-d@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
+    (v_owner_d, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-d@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+    (v_owner_e, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-e@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+    (v_owner_f, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-f@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+    (v_owner_g, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-g@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+    (v_owner_h, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-h@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now()),
+    (v_owner_i, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'owner-i@test.local', '', now(), '{}'::jsonb, '{}'::jsonb, now(), now());
 
   insert into public.tenants (id, name, slug, country, currency, timezone)
   values
     (v_tenant_a, 'Refund Clawback A', 'refund-clawback-a', 'GH', 'GHS', 'Africa/Accra'),
     (v_tenant_b, 'Refund Clawback B', 'refund-clawback-b', 'GH', 'GHS', 'Africa/Accra'),
     (v_tenant_c, 'Refund Clawback C', 'refund-clawback-c', 'GH', 'GHS', 'Africa/Accra'),
-    (v_tenant_d, 'Refund Clawback D', 'refund-clawback-d', 'GH', 'GHS', 'Africa/Accra');
+    (v_tenant_d, 'Refund Clawback D', 'refund-clawback-d', 'GH', 'GHS', 'Africa/Accra'),
+    (v_tenant_e, 'Refund Clawback E', 'refund-clawback-e', 'GH', 'GHS', 'Africa/Accra'),
+    (v_tenant_f, 'Refund Clawback F', 'refund-clawback-f', 'GH', 'GHS', 'Africa/Accra'),
+    (v_tenant_g, 'Refund Clawback G', 'refund-clawback-g', 'GH', 'GHS', 'Africa/Accra'),
+    (v_tenant_h, 'Refund Clawback H', 'refund-clawback-h', 'GH', 'GHS', 'Africa/Accra'),
+    (v_tenant_i, 'Refund Clawback I', 'refund-clawback-i', 'GH', 'GHS', 'Africa/Accra');
 
   insert into public.user_roles (user_id, tenant_id, role, is_active)
   values
@@ -73,14 +116,24 @@ begin
     (v_owner_b, v_tenant_b, 'owner', true),
     (v_owner_c, v_tenant_c, 'owner', true),
     (v_staff_c, v_tenant_c, 'staff', true),
-    (v_owner_d, v_tenant_d, 'owner', true);
+    (v_owner_d, v_tenant_d, 'owner', true),
+    (v_owner_e, v_tenant_e, 'owner', true),
+    (v_owner_f, v_tenant_f, 'owner', true),
+    (v_owner_g, v_tenant_g, 'owner', true),
+    (v_owner_h, v_tenant_h, 'owner', true),
+    (v_owner_i, v_tenant_i, 'owner', true);
 
   insert into public.customers (id, tenant_id, full_name, email)
   values
     (v_customer_a, v_tenant_a, 'Customer A', 'customer-a@test.local'),
     (v_customer_b, v_tenant_b, 'Customer B', 'customer-b@test.local'),
     (v_customer_c, v_tenant_c, 'Customer C', 'customer-c@test.local'),
-    (v_customer_d, v_tenant_d, 'Customer D', 'customer-d@test.local');
+    (v_customer_d, v_tenant_d, 'Customer D', 'customer-d@test.local'),
+    (v_customer_e, v_tenant_e, 'Customer E', 'customer-e@test.local'),
+    (v_customer_f, v_tenant_f, 'Customer F', 'customer-f@test.local'),
+    (v_customer_g, v_tenant_g, 'Customer G', 'customer-g@test.local'),
+    (v_customer_h, v_tenant_h, 'Customer H', 'customer-h@test.local'),
+    (v_customer_i, v_tenant_i, 'Customer I', 'customer-i@test.local');
 
   -- A trigger auto-creates a zero-balance salon_wallets row for every new
   -- tenant, so fund the wallets with an update rather than an insert.
@@ -88,6 +141,11 @@ begin
   update public.salon_wallets set balance = 50 where tenant_id = v_tenant_b;
   update public.salon_wallets set balance = 500 where tenant_id = v_tenant_c;
   update public.salon_wallets set balance = 300 where tenant_id = v_tenant_d;
+  update public.salon_wallets set balance = 99.50 where tenant_id = v_tenant_e;
+  update public.salon_wallets set balance = 99.50 where tenant_id = v_tenant_f;
+  update public.salon_wallets set balance = 0 where tenant_id = v_tenant_g;
+  update public.salon_wallets set balance = 100 where tenant_id = v_tenant_h;
+  update public.salon_wallets set balance = 20 where tenant_id = v_tenant_i;
 
   insert into public.transactions (
     id, tenant_id, customer_id, type, method, amount, currency,
@@ -100,7 +158,40 @@ begin
     (v_txn_b2, v_tenant_b, v_customer_b, 'payment', 'purse', 30, 'GHS', 'customer_purse', 'ref-b2', 'completed', v_owner_b),
     (v_txn_c1, v_tenant_c, v_customer_c, 'payment', 'card', 500, 'GHS', 'paystack', 'ref-c1', 'completed', v_owner_c),
     (v_txn_c2, v_tenant_c, v_customer_c, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-c2', 'completed', v_owner_c),
-    (v_txn_d1, v_tenant_d, v_customer_d, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-d1', 'completed', v_owner_d);
+    (v_txn_d1, v_tenant_d, v_customer_d, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-d1', 'completed', v_owner_d),
+    (v_txn_e1, v_tenant_e, v_customer_e, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-e1', 'completed', v_owner_e),
+    (v_txn_f1, v_tenant_f, v_customer_f, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-f1', 'completed', v_owner_f),
+    (v_txn_g1, v_tenant_g, v_customer_g, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-g1', 'completed', v_owner_g),
+    (v_txn_h1, v_tenant_h, v_customer_h, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-h1', 'completed', v_owner_h),
+    (v_txn_i1, v_tenant_i, v_customer_i, 'payment', 'card', 100, 'GHS', 'paystack', 'ref-i1', 'completed', v_owner_i);
+
+  -- debit_salon_wallet_for_refund now computes the amount to debit from the
+  -- wallet ledger's own credit entries (refund_wallet_debit_amount) rather
+  -- than trusting the refund amount passed in, so every scenario below that
+  -- expects a specific debit amount needs a matching salon-wallet credit
+  -- entry to derive it from, attributed by gateway_reference exactly as
+  -- payment-webhook-processor.ts's card path does. Tests 6-9 deliberately
+  -- refund only part (150) of a larger (500) credited transaction — see
+  -- pro-rata handling in refund_wallet_debit_amount.
+  insert into public.wallet_ledger_entries (
+    tenant_id, wallet_type, wallet_id, entry_type, currency, amount,
+    balance_before, balance_after, reference_type, reference_id, gateway_reference
+  )
+  select w.tenant_id, 'salon', w.id, 'salon_purse_credit_booking', 'GHS', v.credited, 0, v.credited, 'appointment', null, v.gw
+  from public.salon_wallets w
+  join (values
+    (v_tenant_a, 100, 'ref-a1'),
+    (v_tenant_a, 200, 'ref-a2'),
+    (v_tenant_b, 100, 'ref-b1'),
+    (v_tenant_c, 500, 'ref-c1'),
+    (v_tenant_d, 100, 'ref-d1'),
+    (v_tenant_e, 99.50, 'ref-e1'),
+    (v_tenant_f, 99.50, 'ref-f1'),
+    -- v_tenant_g deliberately has no matching credit row (scenario G: the
+    -- credit_salon_purse call on the original charge was swallowed).
+    (v_tenant_h, 100, 'ref-h1'),
+    (v_tenant_i, 100, 'ref-i1')
+  ) as v(tenant_id, credited, gw) on v.tenant_id = w.tenant_id;
 
   -- ===================== Test 1: sufficient balance debits and ledgers =====================
 
@@ -391,6 +482,155 @@ begin
   where tenant_id = v_tenant_d and entry_type = 'salon_purse_reversal';
   if v_count <> 1 then
     raise exception 'Test 14 failed: expected exactly one reversal ledger row, got %', v_count;
+  end if;
+
+  -- ===================== AD-N1 regression tests =====================
+  -- These are the cases the tests above (which seed salon_wallets.balance
+  -- directly rather than a real credited wallet_ledger_entries row) cannot
+  -- reach: docs/design/payout-refund-wallet-not-debited.design.md AD-N1.
+
+  -- ===== New test 10: full refund of a transaction credited net of a 0.5%
+  -- fee debits exactly the net and does not block =====
+
+  perform set_config('request.jwt.claim.sub', v_owner_e::text, true);
+
+  v_result := public.debit_salon_wallet_for_refund(
+    v_txn_e1, 100, 'paystack', 'Full refund of fee-netted credit', v_owner_e, 'clawback-e1'
+  );
+  if (v_result ->> 'ok')::boolean is not true then
+    raise exception 'New test 10 failed: expected ok:true (got %)', v_result;
+  end if;
+  if v_result ->> 'ledger_entry_id' is null then
+    raise exception 'New test 10 failed: expected a ledger_entry_id, got none';
+  end if;
+
+  select balance into v_balance from public.salon_wallets where tenant_id = v_tenant_e;
+  if v_balance <> 0 then
+    raise exception 'New test 10 failed: wallet should be debited to exactly 0.00, got %', v_balance;
+  end if;
+
+  if exists (select 1 from public.refund_block_events where tenant_id = v_tenant_e) then
+    raise exception 'New test 10 failed: a fully-recoverable net-of-fee refund must not be blocked';
+  end if;
+
+  -- ===== New test 11: two partial refunds summing to the full amount debit
+  -- exactly the total credited, no rounding residue =====
+
+  perform set_config('request.jwt.claim.sub', v_owner_f::text, true);
+
+  v_result := public.debit_salon_wallet_for_refund(
+    v_txn_f1, 40, 'paystack', 'Partial refund 1 of 2', v_owner_f, 'clawback-f1-p1'
+  );
+  if (v_result ->> 'ok')::boolean is not true then
+    raise exception 'New test 11 failed: partial refund 1 should succeed (got %)', v_result;
+  end if;
+  v_entry_id := (v_result ->> 'ledger_entry_id')::uuid;
+
+  select balance into v_balance from public.salon_wallets where tenant_id = v_tenant_f;
+  if v_balance <> 59.70 then
+    raise exception 'New test 11 failed: expected 99.50 - 39.80 = 59.70 after the first tranche, got %', v_balance;
+  end if;
+
+  perform public.complete_transaction_refund(v_txn_f1, 40, 'paystack', 'Partial refund 1 of 2', null, v_entry_id);
+
+  v_result := public.debit_salon_wallet_for_refund(
+    v_txn_f1, 60, 'paystack', 'Partial refund 2 of 2 (settles the rest)', v_owner_f, 'clawback-f1-p2'
+  );
+  if (v_result ->> 'ok')::boolean is not true then
+    raise exception 'New test 11 failed: partial refund 2 should succeed (got %)', v_result;
+  end if;
+  v_entry_id := (v_result ->> 'ledger_entry_id')::uuid;
+
+  select balance into v_balance from public.salon_wallets where tenant_id = v_tenant_f;
+  if v_balance <> 0 then
+    raise exception 'New test 11 failed: the final tranche should absorb the rounding remainder, leaving exactly 0.00, got %', v_balance;
+  end if;
+
+  perform public.complete_transaction_refund(v_txn_f1, 60, 'paystack', 'Partial refund 2 of 2', null, v_entry_id);
+
+  -- ===== New test 12: transaction with no wallet credit at all — no debit,
+  -- no block, refund completes =====
+
+  perform set_config('request.jwt.claim.sub', v_owner_g::text, true);
+
+  v_result := public.debit_salon_wallet_for_refund(
+    v_txn_g1, 100, 'paystack', 'Credit never landed', v_owner_g, 'clawback-g1'
+  );
+  if (v_result ->> 'ok')::boolean is not true or v_result ->> 'ledger_entry_id' is not null then
+    raise exception 'New test 12 failed: expected ok:true with a null ledger_entry_id (got %)', v_result;
+  end if;
+
+  select balance into v_balance from public.salon_wallets where tenant_id = v_tenant_g;
+  if v_balance <> 0 then
+    raise exception 'New test 12 failed: wallet must not be touched, got %', v_balance;
+  end if;
+
+  if exists (select 1 from public.refund_block_events where tenant_id = v_tenant_g) then
+    raise exception 'New test 12 failed: no wallet credit must not be treated as a block';
+  end if;
+
+  v_refund_id := public.complete_transaction_refund(v_txn_g1, 100, 'paystack', 'Credit never landed', null, null);
+  if v_refund_id is null then
+    raise exception 'New test 12 failed: refund should complete even with no wallet debit entry, since none was owed';
+  end if;
+
+  -- ===== New test 13: refund_gross_amount mismatch is rejected by the guard =====
+
+  perform set_config('request.jwt.claim.sub', v_owner_h::text, true);
+
+  v_result := public.debit_salon_wallet_for_refund(
+    v_txn_h1, 100, 'paystack', 'Full refund', v_owner_h, 'clawback-h1'
+  );
+  v_entry_id := (v_result ->> 'ledger_entry_id')::uuid;
+  if v_entry_id is null then
+    raise exception 'New test 13 setup failed: expected a wallet debit entry id for tenant H';
+  end if;
+
+  v_raised := false;
+  begin
+    perform public.complete_transaction_refund(v_txn_h1, 50, 'paystack', 'Amount does not match the debit', null, v_entry_id);
+  exception
+    when others then
+      if sqlerrm like 'REFUND_WALLET_DEBIT_INVALID%' then
+        v_raised := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_raised then
+    raise exception 'New test 13 failed: a debit stamped for a different gross amount should be rejected';
+  end if;
+
+  -- ===== New test 14: p_allow_negative debits past zero and still records
+  -- a block event (AD-N5 seam, no caller uses this yet) =====
+
+  perform set_config('request.jwt.claim.sub', v_owner_i::text, true);
+
+  v_result := public.debit_salon_wallet_for_refund(
+    v_txn_i1, 100, 'paystack', 'Out-of-band arrears', v_owner_i, 'clawback-i1', null, null, true
+  );
+  if (v_result ->> 'ok')::boolean is not true then
+    raise exception 'New test 14 failed: p_allow_negative should still succeed (got %)', v_result;
+  end if;
+  if v_result ->> 'ledger_entry_id' is null then
+    raise exception 'New test 14 failed: expected a ledger_entry_id even when driving the balance negative';
+  end if;
+
+  select balance into v_balance from public.salon_wallets where tenant_id = v_tenant_i;
+  if v_balance <> -80 then
+    raise exception 'New test 14 failed: expected balance 20 - 100 = -80, got %', v_balance;
+  end if;
+
+  if not exists (
+    select 1 from public.refund_block_events
+    where tenant_id = v_tenant_i
+      and transaction_id = v_txn_i1
+      and attempted_amount = 100
+      and wallet_balance_at_attempt = 20
+      and shortfall = 80
+      and block_code = 'INSUFFICIENT_RECOVERABLE_FUNDS'
+  ) then
+    raise exception 'New test 14 failed: p_allow_negative must still leave an arrears record in refund_block_events';
   end if;
 end;
 $$;

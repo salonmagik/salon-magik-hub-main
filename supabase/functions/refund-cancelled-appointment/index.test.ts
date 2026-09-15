@@ -163,3 +163,44 @@ Deno.test("a sufficient wallet debits, credits the customer, and completes the r
   assertEquals(rpcCalls.some((c) => c.fn === "credit_customer_purse"), true);
   assertEquals(inserted.some((i) => i.table === "refund_requests" && i.row.wallet_debit_entry_id === "ledger-1"), true);
 });
+
+Deno.test("AD-N6: two refund attempts on one appointment each take their own debit, keyed per attempt not per appointment", async () => {
+  const first = createMockAdmin({});
+  const secondCall = createMockAdmin({});
+
+  const res1 = await handleRefundCancelledAppointment(makeRequest({ appointmentId: "appointment-1" }), first.admin, owner);
+  const res2 = await handleRefundCancelledAppointment(makeRequest({ appointmentId: "appointment-1" }), secondCall.admin, owner);
+
+  assertEquals(res1.status, 200);
+  assertEquals(res2.status, 200);
+
+  const key1 = first.rpcCalls.find((c) => c.fn === "debit_salon_wallet_for_refund")?.params.p_idempotency_key as string;
+  const key2 = secondCall.rpcCalls.find((c) => c.fn === "debit_salon_wallet_for_refund")?.params.p_idempotency_key as string;
+
+  assertEquals(key1.startsWith("refund_salon_debit_appointment-1_"), true);
+  assertEquals(key2.startsWith("refund_salon_debit_appointment-1_"), true);
+  assertEquals(key1 === key2, false);
+});
+
+Deno.test("AD-N6: a caller-supplied idempotencyKey makes a retry reuse the same debit key", async () => {
+  const { admin, rpcCalls } = createMockAdmin({});
+
+  await handleRefundCancelledAppointment(
+    makeRequest({ appointmentId: "appointment-1", idempotencyKey: "retry-token-1" }),
+    admin,
+    owner,
+  );
+  await handleRefundCancelledAppointment(
+    makeRequest({ appointmentId: "appointment-1", idempotencyKey: "retry-token-1" }),
+    admin,
+    owner,
+  );
+
+  const keys = rpcCalls
+    .filter((c) => c.fn === "debit_salon_wallet_for_refund")
+    .map((c) => c.params.p_idempotency_key);
+
+  assertEquals(keys.length, 2);
+  assertEquals(keys[0], keys[1]);
+  assertEquals(keys[0], "refund_salon_debit_appointment-1_retry-token-1");
+});

@@ -12,6 +12,13 @@ withdrawn the money leaves the platform absorbing the refund. Needs a real eligi
 backend-enforced, not just UI copy — covering both refund-via-paystack and
 refund-cancelled-appointment.
 
+CONFIRMED GENUINELY DONE (2026-09-15, per docs/design/payout-refund-wallet-not-debited.design.md):
+this item and `payout-refund-wallet-not-debited` are the same defect from two angles (UI destination
+gating vs. the wallet debit itself). The gating UI, `check_refund_recoverability`, and the enforcement
+RPC (`debit_salon_wallet_for_refund`, non-bypassable via `complete_transaction_refund`'s guard) landed
+together on `feat/refund-card-clawback-safeguard` (commit `ffc1740`), adopted onto this branch and
+corrected in this pass — see that item for the correction that was needed before it actually worked.
+
 ## co-owner-role: Support a second owner on a salon
 - status: done
 - checkpoint: true
@@ -216,7 +223,10 @@ notification_settings row counts.
 
 
 ## payout-refund-wallet-not-debited: Salon wallet is not debited when a payment is refunded
-- status: in-progress
+- status: done-local (fixed and reviewed 2026-09-15, per
+  docs/design/payout-refund-wallet-not-debited.design.md; dev-project migration push + edge function
+  deploy still outstanding — awaiting the user's authorization for a direct dev-project deploy, same
+  gate as notification-settings-missing-per-tenant)
 - checkpoint: true
 
 Confirmed live (2026-09-14, payments-e2e-verification run, cells PAY-BOOK-REF-b-GHS/NGN):
@@ -234,6 +244,26 @@ same defect, now reproduced against the dev Supabase project's real schema, not 
 stack — triple confirmation (static read, local RPC call, dev-project RPC call). This is now the
 verdict's primary reason for a payout-path no-go, not a coverage gap.
 
+FIXED (2026-09-15, per docs/design/payout-refund-wallet-not-debited.design.md): adopted an existing,
+complete implementation of this exact fix from an unmerged branch (`feat/refund-card-clawback-safeguard`,
+commit `ffc1740`) rather than building a second one — a non-bypassable enforcement RPC
+(`debit_salon_wallet_for_refund`) now debits the salon wallet *before* the irreversible external effect
+on every in-product refund path (card, store-credit, offline), with `complete_transaction_refund`
+refusing to record a wallet-drawing refund without proof of that debit. The adopted version debited the
+*gross* refund amount, but the wallet is only ever credited net of the platform fee — at the default 0.5%
+fee this blocked every full refund of a lone payment, exactly the failure `PAY-BOOK-REF-b-{GHS,NGN}`
+caught. Corrected to derive the actual debit from the wallet ledger's own credit entries
+(`refund_wallet_debit_amount`), never from the gross amount or the tenant's current fee setting.
+Insufficient balance still blocks the refund and records `refund_block_events` (unchanged); an explicit
+but unused seam (`p_allow_negative`) is left for the separate, still-open out-of-band-refund item below.
+`refund-cancelled-appointment` picked up the same gross-amount bug and a second, adjacent one (a
+per-appointment idempotency key that silently swallowed a second partial refund on the same
+appointment) — both fixed in the same pass. `PAY-BOOK-REF-b-GHS/NGN` now record `pass` against the
+local stack (`before.balance=99.5 → after.balance=0`); re-run against dev once the deploy below lands.
+See the implementer report for the full account, including one deviation from the design (a guard
+edge case needed a small completion beyond what the design's text specified) and the outstanding
+dev-project deploy.
+
 ## payments-e2e-refund-webhook-unhandled: Webhook processor has no refund.* event handler
 - status: pending
 
@@ -246,6 +276,15 @@ product-side record at all, and an in-product refund that Paystack later complet
 recorded optimistically at request time and never reconciled against the final outcome. Whether an
 out-of-band refund being invisible to the product is acceptable for beta salons is a business call
 this backlog item does not resolve on its own (carried from the PRD as an open question).
+
+SEAM LEFT (2026-09-15, per docs/design/payout-refund-wallet-not-debited.design.md AD-N5): whoever
+implements the `refund.*` handler this item needs will hit the same debit-before-effect ordering that
+`payout-refund-wallet-not-debited`'s fix relies on — an out-of-band refund arrives *after* the money is
+already gone, so there is nothing left to block. `debit_salon_wallet_for_refund` already has a
+`p_allow_negative` parameter for exactly this (drives the balance negative, still records
+`refund_block_events` as the arrears record) — unused by any caller today. The handler should call it
+with `p_allow_negative := true` rather than bypassing the enforcement RPC or re-deriving its own
+wallet-debit logic.
 
 ## duplicate-webhook-not-idempotent: A duplicate charge.success delivery double-records BOOK/CPT/MSG payments
 - status: pending

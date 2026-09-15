@@ -10,12 +10,21 @@
 // that precondition doesn't hold, never silently skipped.
 //
 // REF-b's defining question — does completing a refund debit the salon
-// wallet (C-3)? — is answered entirely inside complete_transaction_refund,
-// a Postgres RPC that never touches Paystack. This suite calls that RPC
-// directly (as an authenticated owner, since it gates on auth.uid()) to get
-// real evidence for C-3 without needing a Paystack key. This is narrower
-// than the full REF-b cell (it doesn't prove refund-via-paystack's own
-// plumbing), and is recorded as such. It runs at Tier B.
+// wallet (C-3)? — was answered entirely inside complete_transaction_refund
+// until the refund-clawback safeguard
+// (docs/design/payout-refund-wallet-not-debited.design.md) moved the debit
+// itself into debit_salon_wallet_for_refund, called before the irreversible
+// external effect; complete_transaction_refund now only validates proof of
+// that debit and raises without it (REFUND_WALLET_DEBIT_REQUIRED). Calling
+// complete_transaction_refund alone, as this cell used to, therefore no
+// longer debits anything and no longer exercises the architecture that
+// actually enforces C-3 — it would just raise. This suite instead drives
+// both RPCs in the real order (debit, then complete), as a real caller
+// would, using the service-role client for the debit (its grants are
+// service_role-only) and the seeded owner for complete_transaction_refund
+// (it gates on auth.uid()). This is narrower than the full REF-b cell (it
+// doesn't prove refund-via-paystack's own HTTP plumbing), and is recorded
+// as such. It runs at Tier B, Paystack-free.
 //
 // REF-c (out-of-band refund) is Tier-A-only by design (a refund issued
 // directly against Paystack, no in-product action) — it cannot be attempted
@@ -100,7 +109,7 @@ for (const intent of REF_APPLICABLE_INTENTS) {
       });
     });
 
-    Deno.test(`refund: REF-b — complete_transaction_refund does not debit the salon wallet (${intent}, ${currency})`, async () => {
+    Deno.test(`refund: REF-b — completing a refund debits the salon wallet (${intent}, ${currency})`, async () => {
       const cellTag = tag(`ref-b-${intent.toLowerCase()}-${currency}`);
       try {
         const tenant = await seedTenant(admin, cellTag, { currency });
@@ -157,15 +166,38 @@ for (const intent of REF_APPLICABLE_INTENTS) {
           .eq("type", "payment")
           .single();
 
-        // complete_transaction_refund gates on auth.uid() being an
+        // Step 1: take the wallet debit through the enforcement RPC, exactly
+        // as refund-via-paystack does before it ever calls Paystack. Uses
+        // the service-role client — debit_salon_wallet_for_refund's grants
+        // are service_role-only, same as the real edge function.
+        const debitIdempotencyKey = `${cellTag}-debit`;
+        const { data: debitResult, error: debitError } = await admin.rpc("debit_salon_wallet_for_refund" as never, {
+          p_transaction_id: originalTransaction!.id,
+          p_amount: 100,
+          p_refund_type: "paystack",
+          p_reason: "e2e refund reconciliation check",
+          p_actor_id: owner.userId,
+          p_idempotency_key: debitIdempotencyKey,
+          p_refund_request_id: null,
+          p_appointment_id: appointment.id,
+        } as never);
+
+        assertEquals(debitError, null, `debit_salon_wallet_for_refund should not fault: ${JSON.stringify(debitError)}`);
+        const debit = debitResult as { ok: boolean; ledger_entry_id: string | null };
+        assertEquals(debit.ok, true, `debit should not be blocked: ${JSON.stringify(debit)}`);
+
+        // Step 2: complete_transaction_refund gates on auth.uid() being an
         // owner/manager of the transaction's tenant — call it as the real
-        // seeded owner, not the service-role admin client.
+        // seeded owner, not the service-role admin client. It requires
+        // proof of the debit above (p_wallet_debit_entry_id) for a
+        // wallet-drawing refund type and raises without it.
         const { data: refundId, error: refundError } = await owner.client.rpc("complete_transaction_refund" as never, {
           p_transaction_id: originalTransaction!.id,
           p_amount: 100,
           p_refund_type: "paystack",
           p_reason: "e2e refund reconciliation check",
           p_request_id: null,
+          p_wallet_debit_entry_id: debit.ledger_entry_id,
         } as never);
 
         assertEquals(refundError, null, `complete_transaction_refund should succeed: ${JSON.stringify(refundError)}`);
@@ -180,17 +212,15 @@ for (const intent of REF_APPLICABLE_INTENTS) {
           intent,
           scenario: "REF-b",
           tier: "B",
-          result: debited ? "pass" : "fail",
+          result: debited && walletAfter.balance === 0 ? "pass" : "fail",
           before: walletBefore,
           after: walletAfter,
-          note: debited
-            ? `wallet correctly reduced from ${walletBefore.balance} to ${walletAfter.balance}`
-            : `C-3 confirmed: complete_transaction_refund (refund id ${refundId}) recorded the refund but wallet balance is unchanged (${walletBefore.balance} -> ${walletAfter.balance}). This is narrower than the full refund-via-paystack cell — see file header.`,
+          note: debited && walletAfter.balance === 0
+            ? `wallet correctly reduced from ${walletBefore.balance} to ${walletAfter.balance} (refund id ${refundId}, debit entry ${debit.ledger_entry_id})`
+            : `wallet balance unexpectedly ${walletBefore.balance} -> ${walletAfter.balance} for refund id ${refundId}. This is narrower than the full refund-via-paystack cell — see file header.`,
         });
 
-        // This assertion is expected to fail today (C-3) — the test itself is
-        // allowed to fail, per design 14.3 ("This cell is expected to fail").
-        assertEquals(debited, true, `expected wallet debited on refund (C-3 predicts it will not be)`);
+        assertEquals(walletAfter.balance, 0, `expected the full net credit debited on a full refund`);
       } finally {
         await cleanup(admin, cellTag, []);
       }

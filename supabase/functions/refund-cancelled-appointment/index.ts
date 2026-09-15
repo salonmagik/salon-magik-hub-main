@@ -22,7 +22,7 @@ export async function handleRefundCancelledAppointment(
   user: Pick<User, "id">,
 ): Promise<Response> {
   try {
-    const { appointmentId, transactionId } = await req.json();
+    const { appointmentId, transactionId, idempotencyKey } = await req.json();
     if (!appointmentId && !transactionId) {
       return new Response(JSON.stringify({ error: "Appointment or transaction is required" }), {
         status: 400,
@@ -193,7 +193,15 @@ export async function handleRefundCancelledAppointment(
     // Step 1: Debit the salon wallet first — via the shared enforcement RPC
     // so a blocked attempt (the salon already withdrew this money) is
     // recorded in refund_block_events, same as every other refund path.
-    const salonDebitIdempotencyKey = `refund_salon_debit_${appointment.id}`;
+    // Keyed per refund attempt, not per appointment — debit_salon_purse
+    // returns the *existing* entry for a repeated key, so a key scoped only
+    // to the appointment would make a second, genuinely separate partial
+    // refund on the same appointment silently debit nothing while still
+    // crediting the customer a second time. Callers that want retry
+    // idempotency (as opposed to two independent refunds) pass a stable
+    // idempotencyKey, same scheme as refund-via-paystack.
+    const refundAttemptId = idempotencyKey || crypto.randomUUID();
+    const salonDebitIdempotencyKey = `refund_salon_debit_${appointment.id}_${refundAttemptId}`;
     const { data: salonDebitResult, error: salonDebitError } = await admin.rpc("debit_salon_wallet_for_refund" as never, {
       p_transaction_id: originalTransaction.id,
       p_amount: refundAmount,
