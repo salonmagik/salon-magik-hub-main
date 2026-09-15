@@ -166,6 +166,10 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       navigate("/salon/customers");
       return;
     }
+    if (notification.type === "system" && notification.entity_type === "notification_settings") {
+      navigate("/salon/settings?tab=notifications");
+      return;
+    }
   };
 
   const handleAppointmentAction = async (

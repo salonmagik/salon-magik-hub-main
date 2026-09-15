@@ -61,8 +61,8 @@ the same narrow "yes, unblocked" answer against a materially larger body of real
 ran against the dev project) — nothing newly evidenced implicates the split code.
 
 ## payments-e2e-verification: End-to-end payments verification before beta
-- status: implemented (resume pass complete 2026-09-15; fresh verdict produced against real Tier A/B
-  evidence; remaining gap tracked as `payments-e2e-tier-a-initiation-calls` below)
+- status: done (resume pass reviewed and passed 2026-09-15; verdict in
+  docs/test-plans/payments-e2e.verdict.md — beta NO-GO, subaccount-split-cleanup unblocked)
 - checkpoint: true
 
 Top-priority goal (2026-09-14, user): the product goes to beta users only once payments are proven
@@ -141,8 +141,13 @@ behavior against Paystack's actual response, not inventing a new call mechanism.
 completed, which requires a real hosted-checkout charge — nothing in this harness drives that without
 a human at a browser (design AD-R4, "Rejected: Automate the hosted-checkout card completion"). Closing
 this one likely means either accepting a manual, human-completed checkout as a one-time step per run,
-or scoping it out of the harness permanently and stating that in the design.: Reminders and digest skip every tenant that never saved settings
-- status: pending
+or scoping it out of the harness permanently and stating that in the design.
+
+## notification-settings-missing-per-tenant: Reminders and digest skip every tenant that never saved settings
+- status: implemented (local pass complete 2026-09-15, per
+  docs/design/notification-settings-missing-per-tenant.design.md; dev migration push + edge
+  function deploy + dev end-to-end verification blocked — needs explicit user permission for a
+  direct dev-project deploy outside CI, see implementer report)
 - priority: next (user: "Fix", 2026-09-15 — confirmed on prod too)
 
 CONFIRMED LIVE against dev (2026-09-15, ref yqahjtsizbqwxdbjzsli). This is the root cause of the
@@ -458,3 +463,38 @@ this tracker — the two are complementary, not overlapping.
 
 Scope question for planning: whether SMS (Arkesel) belongs in the same view from day one, given
 `message_logs` already carries both channels.
+
+## reminder-30min-offset-not-configurable: 30-minute reminder nudge cannot be disabled independently
+- status: open
+
+Filed from `notification-settings-missing-per-tenant` (OQ-1, docs/design/notification-settings-missing-per-tenant.design.md).
+`AD-2` of that design derives a tenant's reminder offsets as `[reminder_hours_before * 60, 30]` rather
+than storing them, so a salon cannot currently disable the 30-minute nudge independently of its long
+reminder (it can still disable all reminders per channel). If salons ask for it, the migration path
+is a `reminder_offsets_minutes integer[]` column backfilled from the derivation, plus a settings-page
+control. Not built.
+
+## drop-deprecated-appointment-reminder-columns: Remove last_reminder_sent_at and friends from appointments
+- status: open
+
+Filed from `notification-settings-missing-per-tenant` (OQ-2, docs/design/notification-settings-missing-per-tenant.design.md).
+`last_reminder_sent_at`, `reminder_attempt_count`, `last_reminder_attempt_at` and `reminder_failed_at`
+on `appointments` became write-dead once `appointment_reminder_sends` replaced them as the reminder
+eligibility/retry state (AD-3/AD-8). Drop them once the dispatch table has run a full cycle in
+production, together with a `packages/supabase-client` types regeneration.
+
+## reschedule-reminder-cycle-reset: Should rescheduling an appointment reset its reminder cycle?
+- status: open (product decision, not engineering)
+
+Filed from `notification-settings-missing-per-tenant` (OQ-3, docs/design/notification-settings-missing-per-tenant.design.md).
+Today a reminder already sent for an offset is not re-sent when the appointment moves to a new
+`scheduled_start`. Arguably a customer whose 3pm booking moves to Friday should be reminded again.
+Out of the reported bug's scope; needs a product call before any engineering follow-up.
+
+## appointment-reminder-sends-pruning: No retention policy for appointment_reminder_sends
+- status: open
+
+Filed from `notification-settings-missing-per-tenant` (OQ-4, docs/design/notification-settings-missing-per-tenant.design.md).
+Rows accumulate at ≤2 per appointment that reaches a reminder window, with no pruning. Irrelevant at
+current volume (single-digit tenants); worth a periodic delete of rows whose appointment started more
+than ~90 days ago before the table gets large.

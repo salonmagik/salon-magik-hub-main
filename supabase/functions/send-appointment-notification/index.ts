@@ -336,13 +336,6 @@ const handler = async (req: Request): Promise<Response> => {
       credits_used: 0,
     });
 
-    if (action === "reminder") {
-      await supabase
-        .from("appointments")
-        .update({ last_reminder_sent_at: new Date().toISOString() })
-        .eq("id", appointmentId);
-    }
-
     return new Response(
       JSON.stringify({ success: true, emailId: emailData.id }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },

@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -346,6 +341,67 @@ export type Database = {
           },
         ]
       }
+      appointment_reminder_sends: {
+        Row: {
+          appointment_id: string
+          attempt_count: number
+          created_at: string
+          failed_at: string | null
+          id: string
+          last_attempt_at: string | null
+          offset_minutes: number
+          sent_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_id: string
+          attempt_count?: number
+          created_at?: string
+          failed_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          offset_minutes: number
+          sent_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string
+          attempt_count?: number
+          created_at?: string
+          failed_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          offset_minutes?: number
+          sent_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_reminder_sends_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminder_sends_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminder_sends_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointment_services: {
         Row: {
           appointment_id: string
@@ -436,6 +492,7 @@ export type Database = {
           is_gifted: boolean
           is_unscheduled: boolean
           is_walk_in: boolean
+          last_reminder_attempt_at: string | null
           last_reminder_sent_at: string | null
           location_id: string
           notes: string | null
@@ -445,6 +502,8 @@ export type Database = {
           proposed_message: string | null
           proposed_start: string | null
           purse_amount_used: number
+          reminder_attempt_count: number
+          reminder_failed_at: string | null
           reschedule_count: number
           scheduled_end: string | null
           scheduled_start: string | null
@@ -478,6 +537,7 @@ export type Database = {
           is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
+          last_reminder_attempt_at?: string | null
           last_reminder_sent_at?: string | null
           location_id: string
           notes?: string | null
@@ -487,6 +547,8 @@ export type Database = {
           proposed_message?: string | null
           proposed_start?: string | null
           purse_amount_used?: number
+          reminder_attempt_count?: number
+          reminder_failed_at?: string | null
           reschedule_count?: number
           scheduled_end?: string | null
           scheduled_start?: string | null
@@ -520,6 +582,7 @@ export type Database = {
           is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
+          last_reminder_attempt_at?: string | null
           last_reminder_sent_at?: string | null
           location_id?: string
           notes?: string | null
@@ -529,6 +592,8 @@ export type Database = {
           proposed_message?: string | null
           proposed_start?: string | null
           purse_amount_used?: number
+          reminder_attempt_count?: number
+          reminder_failed_at?: string | null
           reschedule_count?: number
           scheduled_end?: string | null
           scheduled_start?: string | null
@@ -1079,6 +1144,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "billing_dunning_notices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "billing_dunning_notices_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -3490,6 +3562,66 @@ export type Database = {
           },
           {
             foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      owner_multi_salon_grants: {
+        Row: {
+          approved_by: string
+          consumed_at: string | null
+          expires_at: string
+          granted_at: string
+          id: string
+          reason: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          standing_snapshot: Json
+          tenant_id: string | null
+          user_id: string
+        }
+        Insert: {
+          approved_by: string
+          consumed_at?: string | null
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          reason: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          standing_snapshot: Json
+          tenant_id?: string | null
+          user_id: string
+        }
+        Update: {
+          approved_by?: string
+          consumed_at?: string | null
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          reason?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          standing_snapshot?: Json
+          tenant_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_multi_salon_grants_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "owner_multi_salon_grants_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -8483,6 +8615,10 @@ export type Database = {
         }
         Returns: string
       }
+      advance_billing_anchor: {
+        Args: { p_billing_cycle: string; p_due_at: string }
+        Returns: string
+      }
       apply_plan_configuration: {
         Args: {
           p_branches: number
@@ -8525,6 +8661,10 @@ export type Database = {
           unit_price: number
           used: number
         }[]
+      }
+      assess_owner_multi_salon_standing: {
+        Args: { p_user_id: string }
+        Returns: Json
       }
       assign_staff_locations: {
         Args: {
@@ -8995,18 +9135,6 @@ export type Database = {
           total_price: number
         }[]
       }
-      advance_billing_anchor: {
-        Args: { p_billing_cycle: string; p_due_at: string }
-        Returns: string
-      }
-      request_subscription_cancellation: {
-        Args: { p_note: string; p_reason: string; p_tenant_id: string }
-        Returns: string
-      }
-      resume_subscription: {
-        Args: { p_tenant_id: string }
-        Returns: string
-      }
       compute_current_addon_total: {
         Args: { p_tenant_id: string }
         Returns: {
@@ -9014,6 +9142,10 @@ export type Database = {
           breakdown: Json
           currency: string
         }[]
+      }
+      compute_owner_multi_salon_standing: {
+        Args: { p_user_id: string }
+        Returns: Json
       }
       compute_plan_configuration: {
         Args: { p_branches: number; p_seats: number; p_tenant_id: string }
@@ -9069,6 +9201,15 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      create_owner_multi_salon_grant: {
+        Args: {
+          p_approved_by: string
+          p_reason: string
+          p_tenant_id: string
+          p_user_id: string
+        }
+        Returns: Json
       }
       create_tenant_addon_quote_snapshot: {
         Args: {
@@ -9366,6 +9507,24 @@ export type Database = {
           services_rescheduled: number
         }[]
       }
+      get_due_appointment_reminders: {
+        Args: { p_now?: string }
+        Returns: {
+          appointment_id: string
+          attempt_count: number
+          customer_email: string
+          customer_id: string
+          customer_name: string
+          customer_phone: string
+          email_enabled: boolean
+          offset_minutes: number
+          scheduled_start: string
+          sms_enabled: boolean
+          tenant_id: string
+          tenant_name: string
+          tenant_sms_sender_name: string
+        }[]
+      }
       get_effective_trial_window: {
         Args: { p_tenant_id: string }
         Returns: {
@@ -9423,6 +9582,18 @@ export type Database = {
           waitlist_enabled: boolean
         }[]
       }
+      get_my_pending_co_owner_invitation: {
+        Args: never
+        Returns: {
+          email: string
+          expires_at: string
+          invitation_id: string
+          invited_by_name: string
+          requires_password_change: boolean
+          tenant_id: string
+          tenant_name: string
+        }[]
+      }
       get_public_catalog_payload: {
         Args: {
           p_country_code?: string
@@ -9435,6 +9606,15 @@ export type Database = {
       get_sales_promo_email_vars: {
         Args: { p_origin?: string; p_promo_code_id: string }
         Returns: Json
+      }
+      get_salon_owners: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          email: string
+          full_name: string
+          granted_at: string
+          user_id: string
+        }[]
       }
       get_salon_wallet_availability: {
         Args: { p_tenant_id: string }
@@ -9605,6 +9785,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      list_tenant_owners_service: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          email: string
+          full_name: string
+          granted_at: string
+          user_id: string
+        }[]
+      }
       list_tenant_staff_members: {
         Args: {
           p_context_type?: string
@@ -9727,6 +9916,10 @@ export type Database = {
         Args: { p_appointment_id: string }
         Returns: boolean
       }
+      request_subscription_cancellation: {
+        Args: { p_note: string; p_reason: string; p_tenant_id: string }
+        Returns: string
+      }
       request_transaction_refund: {
         Args: {
           p_amount: number
@@ -9750,8 +9943,13 @@ export type Database = {
         Returns: string
       }
       resolve_user_contexts: { Args: { p_tenant_id: string }; Returns: Json }
+      resume_subscription: { Args: { p_tenant_id: string }; Returns: string }
       revive_location: {
         Args: { p_location_id: string; p_tenant_id: string }
+        Returns: Json
+      }
+      revoke_owner_multi_salon_grant: {
+        Args: { p_grant_id: string; p_reason: string; p_revoked_by: string }
         Returns: Json
       }
       seed_default_role_permissions: {
@@ -9981,12 +10179,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -10010,11 +10208,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -10035,11 +10233,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -10060,11 +10258,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -10077,11 +10275,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -10181,3 +10379,4 @@ export const Constants = {
     },
   },
 } as const
+
