@@ -144,14 +144,8 @@ this one likely means either accepting a manual, human-completed checkout as a o
 or scoping it out of the harness permanently and stating that in the design.
 
 ## notification-settings-missing-per-tenant: Reminders and digest skip every tenant that never saved settings
-- status: implemented, local pass reviewed (2026-09-15, per
-  docs/design/notification-settings-missing-per-tenant.design.md); reviewer found and this pass
-  fixed a settle-step bug corrupting per-offset attempt_count on collapse (see commit `bc80513`),
-  with a new integration regression test; dev migration push + edge function deploy + dev
-  end-to-end verification still blocked — needs the user to grant explicit permission for a direct
-  dev-project deploy outside CI (the environment's auto-mode classifier denies `supabase link`/`db
-  push --linked` against the dev project ref as a "Production Deploy" action even though it targets
-  dev, not prod), or to run that step themselves — see implementer report
+- status: done-local (code reviewed and PASSED 2026-09-15 after a round-2 fix; NOT YET LIVE —
+  the dev-project migration push and function deploy are still outstanding, see below)
 - priority: next (user: "Fix", 2026-09-15 — confirmed on prod too)
 
 CONFIRMED LIVE against dev (2026-09-15, ref yqahjtsizbqwxdbjzsli). This is the root cause of the
@@ -222,7 +216,7 @@ notification_settings row counts.
 
 
 ## payout-refund-wallet-not-debited: Salon wallet is not debited when a payment is refunded
-- status: pending
+- status: in-progress
 - checkpoint: true
 
 Confirmed live (2026-09-14, payments-e2e-verification run, cells PAY-BOOK-REF-b-GHS/NGN):
@@ -502,3 +496,18 @@ Filed from `notification-settings-missing-per-tenant` (OQ-4, docs/design/notific
 Rows accumulate at ≤2 per appointment that reaches a reminder window, with no pruning. Irrelevant at
 current volume (single-digit tenants); worth a periodic delete of rows whose appointment started more
 than ~90 days ago before the table gets large.
+
+## manual-reminder-cooldown-inert: The manual "Send reminder" button no longer rate-limits
+- status: pending
+
+Raised by reviewer as an OPTIONAL finding on `notification-settings-missing-per-tenant` (2026-09-15),
+and a direct, disclosed consequence of that design's AD-8 rather than an implementation mistake.
+`apps/salon-admin/src/pages/salon/AppointmentsPage.tsx:1701` (`getReminderCooldownInfo`) disables the
+manual "Send reminder" button for 30 minutes by reading `appointments.last_reminder_sent_at` — but
+AD-8 deprecated that column platform-wide and nothing writes it any more. Confirmed by grep to be its
+only remaining reader, so the cooldown is now permanently inert: an owner can click "Send reminder"
+repeatedly with no rate limit, emailing the customer each time.
+
+Fix shape is a product call: wire the cooldown to the new `appointment_reminder_sends` table, or use a
+client-side debounce, or decide a manual button needs no cooldown at all.
+
