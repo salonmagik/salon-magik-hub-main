@@ -1,5 +1,7 @@
 # Implementation Design — payments-e2e-verification
 
+Status: implemented (Tier B harness + execution, reviewed and passed 2026-09-15). Tier A execution remains blocked on the user supplying real Paystack test-mode credentials — see `docs/backlog-open-followups.md` → `payments-e2e-verification` for the exact remaining gap.
+
 Backlog item: `docs/backlog-open-followups.md` → `## payments-e2e-verification: End-to-end payments verification before beta` (status: in-progress, checkpoint, gating `subaccount-split-cleanup`)
 
 ---
