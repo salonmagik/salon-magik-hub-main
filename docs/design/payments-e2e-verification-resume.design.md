@@ -1,5 +1,8 @@
 # Payments E2E Verification — Resume Pass: Implementation Design
 
+Status: implemented (reviewed and passed 2026-09-15). See
+`.claudespace/s/0739740e-5540-4c70-a82e-ba8a55417027/reports/payments-e2e-verification-resume-review.md`.
+
 # References
 
 - Technical Brief: `docs/research/2026-09-15-payments-e2e-verification-resume.md`
