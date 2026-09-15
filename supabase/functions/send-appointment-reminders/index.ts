@@ -229,8 +229,15 @@ serve(async (req) => {
           }
         }
 
-        // Settle: nextReminderState decides the outcome once for the
-        // group (AD-5), applied identically to every offset row in it.
+        // Settle: nextReminderState decides the sent_at/failed_at outcome
+        // once for the group (AD-5) — the design's Data Flow step 6 calls
+        // for exactly these two fields to be applied identically to every
+        // offset row. attempt_count is deliberately excluded from this
+        // write: it was already correctly incremented per-row by the claim
+        // step above, and each offset's own attempt history (not the
+        // group's) is what AD-3 requires to stay independent — writing the
+        // group-derived value here would silently jump a less-attempted
+        // offset (e.g. the 30-minute one) past its own true attempt count.
         const nextState = nextReminderState(
           {
             prev: { attemptCount: maxAttemptCount },
@@ -250,7 +257,6 @@ serve(async (req) => {
           .update({
             sent_at: nextState.sentAt,
             failed_at: nextState.failedAt,
-            attempt_count: nextState.attemptCount,
           })
           .eq("appointment_id", appointmentId)
           .in("offset_minutes", offsetMinutesList);
