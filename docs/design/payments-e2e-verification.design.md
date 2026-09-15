@@ -99,6 +99,10 @@ This is the same shape as the existing precedent, which imports `handleAddTenant
 
 ### AD-7 — Evidence is emitted as structured records; the results document is rendered from them
 
+> **Amended by AD-R2** (`docs/design/payments-e2e-verification-resume.design.md`) — before/after and, for
+> Paystack-calling cells, external_references are now runtime-enforced by `recordCell()`, not merely
+> collected on a best-effort basis. See the amendment for the exact scope and the exemption for `n/a`/`not-run`.
+
 **Decision.** Every cell appends one JSON record to `docs/test-plans/payments-e2e.evidence.jsonl` — cell id, requirement ids, currency, intent, scenario, tier, result (`pass` | `fail` | `n/a` | `not-run`), the before/after snapshot of every row it asserted on, external references (Paystack reference, withdrawal reference), timestamp, and a free-text note. `docs/test-plans/payments-e2e.results.md` is generated from that file.
 
 **Reasoning.** The PRD forbids a pass claim backed by recollection and requires that no cell be silently missing. If evidence is a byproduct of execution rather than something written up afterwards, both properties hold mechanically: an unrun cell has no record and renders as `not-run`, and a pass carries the state that justified it. Rendering rather than hand-writing the results table also removes the most likely place for a false "go" to enter — transcription.
@@ -118,6 +122,11 @@ This is the same shape as the existing precedent, which imports `handleAddTenant
 **Reasoning.** The verdict's only value is its independence. A run that repaired the money path while verifying it would be attesting to its own changes, and the PRD forbids it in three separate places. This is stated as a decision so that reviewer can check it as a diff-shaped property: any production-code change in this run's diff is a review failure, regardless of merit.
 
 ### AD-10 — The verdict is scoped to the payout path and stated as two separable answers
+
+> **Amended by AD-R1** (`docs/design/payments-e2e-verification-resume.design.md`) — the verdict now lives in
+> its own hand-written file, `docs/test-plans/payments-e2e.verdict.md`, which `render-results.ts` inlines
+> verbatim. This section's shape (three named statements with resting cell ids) is unchanged; only its
+> storage location moved, to stop a re-render from destroying it.
 
 **Decision.** `payments-e2e.results.md` ends with a verdict section stating (a) go/no-go on the payout path, (b) whether `subaccount-split-cleanup` is thereby unblocked, (c) whether beta launch is thereby unblocked — as separate statements, each with the cell ids it rests on, plus any conditions attached to a "go".
 
@@ -384,3 +393,16 @@ Steps 5–9 are independent of each other and can be reordered if a cell blocks;
 - **Unresolved, needs a business call (carried from the PRD):** whether an out-of-band refund is acceptable for beta salons. C-2 sharpens this — an out-of-band refund is currently *invisible to the product*, so "acceptable" would mean accepting silent ledger divergence. This cannot be decided from the code.
 - **Unresolved:** whether existing recorded payments in dev (or prod) have already diverged through duplicate deliveries, and who owns correcting them. The run should record whether it can tell from `transactions`/`wallet_ledger_entries` shape, but deciding the remediation is not this run's call.
 - **Unresolved, may block Tier A:** whether Paystack **test** credentials exist for *both* GH and NG. If one is missing, that currency's Tier A cells are recorded `n/a` and the verdict must state the gap — evidence from one currency is explicitly not evidence for the other.
+
+---
+
+# Amendments
+
+- **2026-09-15 — `docs/design/payments-e2e-verification-resume.design.md`.** A resume pass, after the first
+  run produced a NO-GO verdict under a credentials-blocked environment. Amends AD-7 (AD-R2: runtime-enforced
+  before/after and external_references) and AD-10 (AD-R1: the verdict moves to its own hand-written,
+  never-generated file). Also introduces AD-R3 (REF decomposition generalised to CPT/INV, phantom manifest
+  cells removed), AD-R4 (Tier A split into a server-to-server precondition and a stricter
+  browser-checkout-required precondition), and AD-R5 (orphaned evidence surfaced instead of silently
+  dropped). See that document for the full decisions and reasoning; this file's own text is otherwise
+  unchanged, per its own AD-R6.
