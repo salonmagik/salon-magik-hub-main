@@ -1,3 +1,5 @@
+Status: implemented
+
 # References
 
 - Backlog item: `docs/backlog-open-followups.md` → `payout-refund-wallet-not-debited` (line 224), on branch `feat/second-owner-foundation`
