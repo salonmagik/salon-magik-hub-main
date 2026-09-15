@@ -42,7 +42,7 @@ export async function checkAndAlertLowSmsBalance(
     if (options?.resendApiKey) {
       const recipients = await getSalonRecipients(supabase, tenantId, ["owner", "manager"]);
       if (recipients.length > 0) {
-        await sendResendEmail({
+        const result = await sendResendEmail({
           resendApiKey: options.resendApiKey,
           fromEmail: options.resendFromEmail || "noreply@salonmagik.com",
           to: recipients.map((r: { email: string }) => r.email),
@@ -56,7 +56,15 @@ export async function checkAndAlertLowSmsBalance(
               messages sent by SMS will stop going out until you top up.
             </p>
           `,
+          log: {
+            supabase,
+            tenantId,
+            templateType: "low_balance_alert",
+          },
         });
+        if (!result.sent) {
+          console.warn(`Failed to notify salon ${tenantId} of low balance:`, result.error);
+        }
       }
     }
 

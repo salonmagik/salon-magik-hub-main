@@ -224,6 +224,7 @@ const sendTransactionAlerts = async (input: {
   tenantName?: string | null;
   currency?: string | null;
   customerName?: string | null;
+  customerId?: string | null;
   amount: number;
   gateway: "paystack";
   title: string;
@@ -253,14 +254,23 @@ const sendTransactionAlerts = async (input: {
   const recipients = await getSalonRecipients(input.supabase, input.tenantId, ["owner", "manager"]);
   if (recipients.length === 0) return;
 
-  await sendResendEmail({
+  const result = await sendResendEmail({
     resendApiKey: input.resendApiKey,
     fromEmail: input.resendFromEmail!,
     to: recipients.map((recipient) => recipient.email),
     subject: input.title,
     salonName: input.tenantName || undefined,
     htmlContent: input.htmlContent,
+    log: {
+      supabase: input.supabase,
+      tenantId: input.tenantId,
+      templateType: "payment_alert",
+      customerId: input.customerId,
+    },
   });
+  if (!result.sent) {
+    console.warn(`Failed to send transaction alert email for tenant ${input.tenantId}:`, result.error);
+  }
 };
 
 // Process webhook asynchronously to avoid timeouts
@@ -487,6 +497,7 @@ export async function processWebhook(
                 tenantName: tenant?.name,
                 currency: tenant?.currency,
                 customerName: customer?.full_name,
+                customerId: primaryAppointment.customer_id,
                 amount: totalPaymentAmount,
                 gateway: event.gateway,
                 title: `${isDeposit ? "Deposit received" : "Payment received"} at ${tenant?.name || "your salon"}`,
@@ -713,6 +724,7 @@ export async function processWebhook(
                   tenantName: tenant?.name,
                   currency: tenant?.currency,
                   customerName: customer?.full_name,
+                  customerId,
                   amount,
                   gateway: event.gateway,
                   title: `Purse top-up received at ${tenant?.name || "your salon"}`,

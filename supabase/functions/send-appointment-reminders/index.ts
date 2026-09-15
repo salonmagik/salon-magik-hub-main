@@ -11,6 +11,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { nextReminderState, MAX_REMINDER_ATTEMPTS } from "./reminder-state.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,25 +64,32 @@ serve(async (req) => {
     let emailsSent = 0;
     let smsSent = 0;
     let errors = 0;
+    let exhausted = 0;
 
     for (const setting of settings ?? []) {
       const hoursAhead = setting.reminder_hours_before ?? 24;
       const windowEnd = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
-      // Give a 30-minute buffer backwards so a reminder doesn't get skipped
-      // if the cron fires slightly late.
-      const windowStart = new Date(now.getTime() - 30 * 60 * 1000);
+      // The window starts at now, not now - 30min (AD-9): a reminder must
+      // never be sent after the appointment has already started. The far
+      // edge of the window (now + hoursAhead) still catches every
+      // still-future appointment regardless of how late the cron fires, so
+      // this costs nothing except the behaviour FR-9 forbids.
+      const windowStart = now;
 
-      // Find appointments needing a reminder in this tenant
+      // Find appointments needing a reminder in this tenant (AD-7
+      // eligibility predicate).
       const { data: appointments, error: apptError } = await supabase
         .from("appointments")
         .select(
-          "id, tenant_id, customer_id, scheduled_start, last_reminder_sent_at, customers!appointments_customer_id_fkey(full_name, email, phone)",
+          "id, tenant_id, customer_id, scheduled_start, last_reminder_sent_at, reminder_attempt_count, customers!appointments_customer_id_fkey(full_name, email, phone)",
         )
         .eq("tenant_id", setting.tenant_id)
         .eq("status", "scheduled")
         .gte("scheduled_start", windowStart.toISOString())
         .lte("scheduled_start", windowEnd.toISOString())
-        .is("last_reminder_sent_at", null);
+        .is("last_reminder_sent_at", null)
+        .is("reminder_failed_at", null)
+        .lt("reminder_attempt_count", MAX_REMINDER_ATTEMPTS);
 
       if (apptError) {
         console.error(
@@ -100,16 +108,29 @@ serve(async (req) => {
         .maybeSingle();
 
       for (const appt of appointments ?? []) {
+        // Re-check in memory: the appointment's start may have passed
+        // between the query and this send on a slow run (§9).
+        if (appt.scheduled_start && new Date(appt.scheduled_start).getTime() <= Date.now()) {
+          continue;
+        }
+
         const customer = appt.customers as {
           full_name: string | null;
           email: string | null;
           phone: string | null;
         } | null;
 
-        // Email reminder
-        if (setting.email_appointment_reminders && customer?.email) {
+        const emailEnabled = Boolean(setting.email_appointment_reminders && customer?.email);
+        const smsEnabled = Boolean(setting.sms_appointment_reminders && customer?.phone);
+        let emailOk = false;
+        let smsOk = false;
+
+        // Email reminder — the callee (send-appointment-notification)
+        // writes both the success and failure message_logs row itself
+        // (AD-10); this caller only needs to check response.ok.
+        if (emailEnabled) {
           try {
-            await fetch(
+            const response = await fetch(
               `${supabaseUrl}/functions/v1/send-appointment-notification`,
               {
                 method: "POST",
@@ -123,7 +144,12 @@ serve(async (req) => {
                 }),
               },
             );
-            emailsSent++;
+            if (response.ok) {
+              emailOk = true;
+              emailsSent++;
+            } else {
+              errors++;
+            }
           } catch (err) {
             console.error(
               `Email reminder failed for appointment ${appt.id}:`,
@@ -134,9 +160,9 @@ serve(async (req) => {
         }
 
         // SMS reminder
-        if (setting.sms_appointment_reminders && customer?.phone) {
+        if (smsEnabled && customer) {
           try {
-            const senderName = resolveArkeselSenderId(customer.phone, tenant?.sms_sender_name, "promotional");
+            const senderName = resolveArkeselSenderId(customer.phone!, tenant?.sms_sender_name, "promotional");
 
             const apptDate = appt.scheduled_start
               ? new Date(appt.scheduled_start).toLocaleString("en-US", {
@@ -155,11 +181,12 @@ serve(async (req) => {
               `on ${apptDate}. See you soon!`;
 
             await sendArkeselSMS({
-              to: customer.phone,
+              to: customer.phone!,
               from: senderName,
               message,
               useCase: "promotional",
             });
+            smsOk = true;
             smsSent++;
             await supabase.from("message_logs").insert({
               tenant_id: setting.tenant_id,
@@ -195,21 +222,50 @@ serve(async (req) => {
           }
         }
 
-        // Mark reminder as sent regardless of which channels succeeded,
-        // so we don't retry endlessly on a bad phone/email.
-        await supabase
+        // Single end-of-appointment state update (AD-8): any channel
+        // succeeded -> marked reminded, never retried; all enabled
+        // channels failed -> attempt counted, retried up to
+        // MAX_REMINDER_ATTEMPTS, then terminal.
+        const nextState = nextReminderState(
+          {
+            prev: { reminderAttemptCount: appt.reminder_attempt_count ?? 0 },
+            emailOk,
+            smsOk,
+            anyChannelEnabled: emailEnabled || smsEnabled,
+          },
+          now,
+        );
+
+        if (nextState.reminderFailedAt) {
+          exhausted++;
+        }
+
+        const { error: updateError } = await supabase
           .from("appointments")
-          .update({ last_reminder_sent_at: now.toISOString() })
+          .update({
+            last_reminder_sent_at: nextState.lastReminderSentAt,
+            last_reminder_attempt_at: nextState.lastReminderAttemptAt,
+            reminder_attempt_count: nextState.reminderAttemptCount,
+            reminder_failed_at: nextState.reminderFailedAt,
+          })
           .eq("id", appt.id);
+
+        if (updateError) {
+          // The appointment stays eligible and is retried next run — the
+          // attempt isn't counted, which is safe because it's bounded by
+          // the 3-attempt cap once the write succeeds (§10).
+          console.error(`Failed to update reminder state for appointment ${appt.id}:`, updateError);
+          errors++;
+        }
       }
     }
 
     console.log(
-      `Reminder run complete: ${emailsSent} emails, ${smsSent} SMS, ${errors} errors`,
+      `Reminder run complete: ${emailsSent} emails, ${smsSent} SMS, ${errors} errors, ${exhausted} exhausted`,
     );
 
     return new Response(
-      JSON.stringify({ ok: true, emailsSent, smsSent, errors }),
+      JSON.stringify({ ok: true, emailsSent, smsSent, errors, exhausted }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: unknown) {

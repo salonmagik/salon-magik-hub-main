@@ -44,7 +44,7 @@ including the temp-password onboarding convention already used for staff rather 
 Covers the invite UI in salon-admin, sending, acceptance, and revoking a pending invite.
 
 ## subaccount-split-cleanup: Permanently remove the old payout-split code path
-- status: unblocked
+- status: pending
 - checkpoint: true
 
 UNBLOCKED (2026-09-14, payments-e2e-verification run): the run's verdict is that
@@ -207,3 +207,70 @@ committed or deployed, so there is no live vulnerability yet. Do not commit that
 an unrelated change. Whoever brings `co-owner-invite` through this pipeline should apply the same fix
 (delete its local generator, import `generateSecurePassword` from `_shared/secure-password.ts`) before
 that file is committed for the first time.
+
+## email-delivery-audit: Audit every outbound email path — digest and reminders are not sending
+- status: in-progress (code fix implemented in this pipeline, pending review; live production
+  verification per the runbook still needs to be run by someone with production access)
+
+Raised by the user (2026-09-15): the daily digest does not send and email reminders do not work.
+Those two are the known symptoms, not the scope — the item covers every outbound email the platform
+sends (Resend transactional sends, scheduled/cron-driven sends, receipts, invitations, notifications),
+establishing for each whether it actually reaches a recipient today, and fixing what is broken.
+
+Investigate first: find every send path and every scheduler/trigger that is supposed to fire one,
+confirm live rather than from source alone where possible, and separate "never fires" from "fires but
+fails to deliver". Fix the confirmed defects. Gaps that turn out to be missing capability rather than
+breakage (emails we should be sending and aren't) are to be written up and flagged to the user, and
+filed as their own backlog items — not silently built here.
+
+Implemented: `_shared/salon-notifications.ts`'s `sendResendEmail` now returns a result and writes a
+`message_logs` row on both branches (previously it silently swallowed Resend failures); all 8 call
+sites (10 send points) updated to act on the result; the appointment-reminders job now checks the
+downstream send's response and retries a failed reminder up to 3 attempts, never past the appointment
+start time; the daily digest reports per-recipient success/failure instead of an unconditional
+`{ success: true }`. Design: `docs/design/email-delivery-audit.design.md`. Live verification
+(FR-11 to FR-13) is `docs/email-delivery-verification-runbook.md`, not yet executed — needs production
+Supabase/Resend account access nobody in this pipeline holds.
+
+Four gaps found during this work and filed as their own items, per the original request's instruction
+not to silently build missing capability: `email-delivery-visibility`, `receipts-email-delivery-logging`,
+`cron-run-failure-alerting`, `email-bounce-tracking` (below).
+
+## email-delivery-visibility: Owners have no way to see that an email failed
+- status: open
+
+Filed from `email-delivery-audit` (GAP-1, 2026-09-15). The delivery-logging fix in that item records
+every email send's outcome in `message_logs`, but nothing surfaces a failure to the owner or salon —
+there is no view (e.g. Settings → Notifications, or the messaging log) and no in-app notification when
+a tenant's sends start failing. Explicitly deferred by that item's Planning Brief (Out of Scope: "a new
+owner-facing UI for email delivery status or failure alerts").
+
+## receipts-email-delivery-logging: `_shared/receipts.ts` reports send failures but writes no delivery record
+- status: open
+
+Filed from `email-delivery-audit` (GAP-2, 2026-09-15). `_shared/receipts.ts` defines its own local
+`sendResendEmail` (not the shared helper) which already returns `{ sent, error }` and already reports
+provider rejection, missing API key, and network exceptions to its callers — but it writes no
+`message_logs` row on either branch, so subscription-billing email (cancellation confirmation,
+dunning, payment-failed) is undiagnosable the same way the shared-helper paths were before this fix.
+Out of `email-delivery-audit`'s scope because its sends are platform-billing email with different
+tenant context than the operational paths that item covers. Should adopt the same `log` context
+pattern (`_shared/salon-notifications.ts`'s `EmailLogContext`) once someone picks this up.
+
+## cron-run-failure-alerting: Nothing watches for a cron job going silently no-op
+- status: open
+
+Filed from `email-delivery-audit` (GAP-3, 2026-09-15). Nothing watches `cron.job_run_details`. If a
+Vault secret referenced by `send-daily-digest` or `send-appointment-reminders` is missing or wrong,
+`net.http_post(url := NULL)` fails and the job is a permanent silent no-op — the exact failure mode
+that item's source analysis could not rule out without live database access. Needs a periodic check
+or an alert on consecutive failed runs.
+
+## email-bounce-tracking: Resend accepting a message is not the same as delivering it
+- status: open
+
+Filed from `email-delivery-audit` (GAP-4, 2026-09-15). No bounce/complaint webhook is consumed, so
+`message_logs.status` never advances past `sent` to `delivered` or `failed` for email — a message
+Resend accepted but that later bounced is indistinguishable from one that actually reached the inbox.
+The `delivered` status value already exists in the schema (used by SMS) and is simply unused for
+email today.

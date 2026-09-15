@@ -422,7 +422,7 @@ export async function handleProcessSalonWithdrawal(
         const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
         for (const owner of owners) {
           if (!owner.email) continue;
-          await sendResendEmail({
+          const result = await sendResendEmail({
             resendApiKey: Deno.env.get("RESEND_API_KEY"),
             fromEmail: resendFromEmail,
             to: [owner.email],
@@ -432,7 +432,15 @@ export async function handleProcessSalonWithdrawal(
               heading("Withdrawal requested") +
               paragraph(`A withdrawal of ${amount} ${wallet.currency} was requested for <strong>${tenantRow?.name || "your salon"}</strong>.`) +
               paragraph("If you didn't request this, contact support immediately."),
+            log: {
+              supabase: serviceSupabase,
+              tenantId,
+              templateType: "withdrawal_requested",
+            },
           });
+          if (!result.sent) {
+            console.warn(`Failed to notify owner ${owner.email} of withdrawal request:`, result.error);
+          }
         }
       } catch (notifyError) {
         console.error("Error notifying owners of withdrawal request:", notifyError);

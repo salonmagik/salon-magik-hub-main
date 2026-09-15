@@ -335,7 +335,7 @@ export async function handleCreatePayoutDestination(
       const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
       for (const owner of owners) {
         if (!owner.email) continue;
-        await sendResendEmail({
+        const result = await sendResendEmail({
           resendApiKey: Deno.env.get("RESEND_API_KEY"),
           fromEmail: resendFromEmail,
           to: [owner.email],
@@ -345,7 +345,15 @@ export async function handleCreatePayoutDestination(
             heading("Payout destination updated") +
             paragraph(`A payout destination was added or changed for <strong>${tenant.name}</strong>.`) +
             paragraph("If you didn't make this change, contact support immediately."),
+          log: {
+            supabase: serviceSupabase,
+            tenantId,
+            templateType: "payout_destination_changed",
+          },
         });
+        if (!result.sent) {
+          console.warn(`Failed to notify owner ${owner.email} of payout destination change:`, result.error);
+        }
       }
     } catch (notifyError) {
       console.error("Error notifying owners of payout destination change:", notifyError);

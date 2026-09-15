@@ -131,7 +131,7 @@ serve(async (req) => {
     if (notificationSettings.email_cancellations) {
       const recipients = await getSalonRecipients(admin, appointment.tenant_id, ["owner", "manager"]);
       if (recipients.length > 0) {
-        await sendResendEmail({
+        const result = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
@@ -145,7 +145,16 @@ serve(async (req) => {
             paragraph(`<strong>Branch:</strong> ${locationName}`) +
             paragraph(`<strong>Items:</strong> ${servicesList}`) +
             paragraph(`<strong>Reason:</strong> ${reason.trim()}`),
+          log: {
+            supabase: admin,
+            tenantId: appointment.tenant_id,
+            templateType: "booking_cancelled_salon",
+            customerId: appointment.customer_id,
+          },
         });
+        if (!result.sent) {
+          console.warn("Failed to notify salon of client cancellation:", result.error);
+        }
       }
     }
 

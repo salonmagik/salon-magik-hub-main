@@ -975,7 +975,7 @@ serve(async (req) => {
     });
 
     if (customer.email) {
-      await sendResendEmail({
+      const result = await sendResendEmail({
         resendApiKey,
         fromEmail: resendFromEmail,
         to: [customer.email],
@@ -992,7 +992,16 @@ serve(async (req) => {
             ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
             : "") +
           paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
+        log: {
+          supabase,
+          tenantId,
+          templateType: "booking_confirmation_customer",
+          customerId,
+        },
       });
+      if (!result.sent) {
+        console.warn("Failed to send booking confirmation to customer:", result.error);
+      }
     }
 
     // Tell each gift recipient about their gift — their customer record
@@ -1006,14 +1015,14 @@ serve(async (req) => {
         "https://app.salonmagik.com"
       ).replace(/\/+$/, "");
 
-      for (const { recipient, itemNames } of giftRecipientsToNotify.values()) {
+      for (const { recipient, customerId: giftRecipientCustomerId, itemNames } of giftRecipientsToNotify.values()) {
         const recipientEmail = normalizeEmail(recipient.email);
         const itemsListHtml = itemNames.map((name) => `<li>${name}</li>`).join("");
         const senderLine = recipient.hideSender
           ? paragraph("Someone has sent you a gift!")
           : paragraph(`<strong>${customerFullName}</strong> has sent you a gift!`);
 
-        await sendResendEmail({
+        const giftResult = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: [recipientEmail],
@@ -1028,7 +1037,16 @@ serve(async (req) => {
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             paragraph(`Log into the client portal with this email address (<strong>${recipientEmail}</strong>) to view your gift and manage your visit.`) +
             createButton("Log in to view your gift", `${clientPortalBase}/login`),
+          log: {
+            supabase,
+            tenantId,
+            templateType: "booking_gift_recipient",
+            customerId: giftRecipientCustomerId,
+          },
         });
+        if (!giftResult.sent) {
+          console.warn("Failed to send gift notification to recipient:", giftResult.error);
+        }
       }
     }
 
@@ -1036,7 +1054,7 @@ serve(async (req) => {
     if (notificationSettings.email_new_bookings) {
       const recipients = await getSalonRecipients(supabase, tenantId, ["owner", "manager"]);
       if (recipients.length > 0) {
-        await sendResendEmail({
+        const salonResult = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
@@ -1052,7 +1070,16 @@ serve(async (req) => {
             paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`) +
             `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
             reviewActionsHtml,
+          log: {
+            supabase,
+            tenantId,
+            templateType: "booking_notification_salon",
+            customerId,
+          },
         });
+        if (!salonResult.sent) {
+          console.warn("Failed to notify salon of new booking:", salonResult.error);
+        }
       }
     }
 
