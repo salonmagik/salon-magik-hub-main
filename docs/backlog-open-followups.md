@@ -144,10 +144,14 @@ this one likely means either accepting a manual, human-completed checkout as a o
 or scoping it out of the harness permanently and stating that in the design.
 
 ## notification-settings-missing-per-tenant: Reminders and digest skip every tenant that never saved settings
-- status: implemented (local pass complete 2026-09-15, per
-  docs/design/notification-settings-missing-per-tenant.design.md; dev migration push + edge
-  function deploy + dev end-to-end verification blocked — needs explicit user permission for a
-  direct dev-project deploy outside CI, see implementer report)
+- status: implemented, local pass reviewed (2026-09-15, per
+  docs/design/notification-settings-missing-per-tenant.design.md); reviewer found and this pass
+  fixed a settle-step bug corrupting per-offset attempt_count on collapse (see commit `bc80513`),
+  with a new integration regression test; dev migration push + edge function deploy + dev
+  end-to-end verification still blocked — needs the user to grant explicit permission for a direct
+  dev-project deploy outside CI (the environment's auto-mode classifier denies `supabase link`/`db
+  push --linked` against the dev project ref as a "Production Deploy" action even though it targets
+  dev, not prod), or to run that step themselves — see implementer report
 - priority: next (user: "Fix", 2026-09-15 — confirmed on prod too)
 
 CONFIRMED LIVE against dev (2026-09-15, ref yqahjtsizbqwxdbjzsli). This is the root cause of the
