@@ -4,6 +4,7 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
+import { quoteWithdrawal } from "@shared/withdrawal-fees";
 import { formatCurrency } from "@shared/currency";
 import {
   Dialog,
@@ -50,15 +51,22 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   const [error, setError] = useState<string>("");
 
   // Get minimum withdrawal amount based on currency
-  const minWithdrawal = currency === "NGN" ? 1000 : 50;
+  const minWithdrawal = currency === "NGN" ? 500 : 50;
   const walletBalance = Number(wallet?.balance || 0);
-  // Fall back to the raw wallet balance while availability is still loading
-  // so the dialog doesn't briefly claim $0 is withdrawable.
-  const availableBalance = availability ? availability.available : walletBalance;
+  // Do not allow a withdrawal until cleared availability is known.
+  const availableBalance = availability?.available ?? 0;
   const pendingBalance = availability?.pending ?? 0;
   const nextSettlementAt = availability?.nextSettlementAt
     ? new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })
     : null;
+
+  const destination = destinations.find((item) => item.id === selectedDestinationId);
+  let quote: ReturnType<typeof quoteWithdrawal> | null = null;
+  let quoteError = "";
+  if (amount && destination) {
+    try { quote = quoteWithdrawal(Number(amount), currency, destination.destination_type); }
+    catch (error) { quoteError = error instanceof Error ? error.message : "Invalid withdrawal"; }
+  }
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -82,10 +90,16 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       return `Minimum withdrawal is ${formatCurrency(minWithdrawal, currency)}`;
     }
 
-    if (numValue > availableBalance) {
+    if (!Number.isFinite(numValue)) return "Please enter a valid amount";
+    let totalDebit = numValue;
+    if (destination) {
+      try { totalDebit = quoteWithdrawal(numValue, currency, destination.destination_type).totalDebit; }
+      catch (error) { return error instanceof Error ? error.message : "Invalid withdrawal"; }
+    }
+    if (totalDebit > availableBalance) {
       return pendingBalance > 0
         ? `Only ${formatCurrency(availableBalance, currency)} has cleared and is available to withdraw right now. The rest is still settling.`
-        : `Insufficient balance. Available: ${formatCurrency(availableBalance, currency)}`;
+        : `Insufficient balance to cover the amount and fees. Available: ${formatCurrency(availableBalance, currency)}`;
     }
 
     return null;
@@ -114,6 +128,10 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       return;
     }
 
+    if (!quote || !availability || availabilityLoading) {
+      setError("Wait for your balance and fee quote before withdrawing");
+      return;
+    }
     setIsSubmitting(true);
     setError("");
 
@@ -122,6 +140,8 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
         tenantId,
         payoutDestinationId: selectedDestinationId,
         amount: Number(amount),
+        acceptedTotalDebit: quote.totalDebit,
+        feeVersion: quote.feeVersion,
       });
 
       if (result) {
@@ -144,7 +164,8 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   };
 
   const isLoading = walletLoading || destinationsLoading;
-  const canSubmit = !isSubmitting && !error && amount && selectedDestinationId && !isLoading;
+  const currentError = quoteError || (amount ? validateAmount(amount) : "");
+  const canSubmit = !isSubmitting && !currentError && !!quote && !!availability && !availabilityLoading && !isLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -221,7 +242,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               ) : (
                 <Select
                   value={selectedDestinationId}
-                  onValueChange={setSelectedDestinationId}
+                  onValueChange={(value) => { setSelectedDestinationId(value); setError(""); }}
                 >
                   <SelectTrigger id="destination">
                     <SelectValue placeholder="Select destination" />
@@ -242,7 +263,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
 
             {/* Amount Input */}
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount ({currency})</Label>
+              <Label htmlFor="amount">Amount to receive ({currency})</Label>
               <Input
                 id="amount"
                 type="number"
@@ -255,11 +276,22 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               />
             </div>
 
+            {quote && (
+              <div className="rounded-lg border p-3 space-y-2 text-sm" aria-live="polite">
+                <div className="flex justify-between"><span>You receive</span><span>{formatCurrency(quote.amount, currency)}</span></div>
+                <div className="flex justify-between"><span>Paystack transfer fee</span><span>{formatCurrency(quote.transferFee, currency)}</span></div>
+                {quote.stampDuty > 0 && <div className="flex justify-between"><span>Stamp duty</span><span>{formatCurrency(quote.stampDuty, currency)}</span></div>}
+                <div className="flex justify-between border-t pt-2 font-semibold"><span>Total wallet deduction</span><span>{formatCurrency(quote.totalDebit, currency)}</span></div>
+                <p className="text-xs text-muted-foreground">Your salon pays these charges. No Salon Magik markup. Funds and fees are reserved while the transfer is pending.</p>
+                {quote.stampDuty > 0 && <p className="text-xs text-muted-foreground">Once applied by Paystack, stamp duty is non-refundable, including if the transfer is reversed.</p>}
+              </div>
+            )}
+
             {/* Error Message */}
-            {error && (
+            {(currentError || error) && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{currentError || error}</AlertDescription>
               </Alert>
             )}
           </div>

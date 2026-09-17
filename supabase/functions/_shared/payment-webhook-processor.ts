@@ -20,6 +20,7 @@ export interface WebhookEvent {
     invoiceId?: string;
     credits?: number;
     amount?: number;
+    currency?: string;
     serviceAmount?: number;
     processingFeeAmount?: number;
     channel?: string;
@@ -1031,6 +1032,25 @@ export async function processWebhook(
       const withdrawalId = withdrawalIdMatch[1];
       console.log(`Processing ${event.type} for withdrawal ${withdrawalId}`);
 
+      // Fee-bearing withdrawals use atomic accounting; legacy records retain
+      // their original zero-fee policy.
+      const { data: feeWithdrawal, error: feeLookupError } = await supabase
+        .from("salon_withdrawals").select("fee_version, paystack_reference, amount, currency")
+        .eq("id", withdrawalId).single();
+      if (feeLookupError) throw feeLookupError;
+      if (feeWithdrawal?.fee_version) {
+        if (feeWithdrawal.paystack_reference !== event.data.reference
+          || Number(feeWithdrawal.amount) !== event.data.amount || feeWithdrawal.currency !== event.data.currency) {
+          throw new Error("Transfer reference, amount or currency mismatch");
+        }
+        const { error } = await supabase.rpc("finalize_fee_bearing_withdrawal", {
+          p_withdrawal_id: withdrawalId,
+          p_outcome: event.type === "transfer.success" ? "success" : event.type === "transfer.reversed" ? "reversed" : "failed",
+        });
+        if (error) throw error;
+        return;
+      }
+
       if (event.type === "transfer.success") {
         // Fetch withdrawal record to get tenant_id, amount, and currency
         const { data: withdrawal, error: fetchError } = await supabase
@@ -1110,5 +1130,6 @@ export async function processWebhook(
     console.log("Webhook processing completed:", event.type, event.gateway);
   } catch (error) {
     console.error("Error in async webhook processing:", error);
+    if (event.type.startsWith("transfer.")) throw error;
   }
 }

@@ -115,6 +115,7 @@ import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
+import { PaymentReturnFeedback } from "@/components/PaymentReturnFeedback";
 import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch" | "subscription";
@@ -675,7 +676,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		if (scope === "auto") return;
 
 		const topupStatus = searchParams.get("topup");
-		const subscriptionStatus = searchParams.get("subscription");
 
 		if (topupStatus === "success") {
 			setPaymentSuccessModal({
@@ -700,213 +700,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			setSearchParams(newParams, { replace: true });
 		}
 
-		if (subscriptionStatus === "success") {
-			// currentTenant loads asynchronously after a hard redirect back from
-			// Paystack — wait for it instead of consuming the URL params before
-			// we're able to actually verify the payment.
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			// Paystack appends ?trxref=xxx&reference=xxx to the callback URL
-			const reference =
-				searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("subscription");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-subscription-payment", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Subscription verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description: "Contact support if your plan doesn't activate shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await refreshTenants();
-						setPaymentSuccessModal({
-							title: "Subscription activated!",
-							description: "Your plan is now active.",
-						});
-					});
-			} else {
-				refreshTenants().then(() => {
-					setPaymentSuccessModal({
-						title: "Payment received!",
-						description: "Your subscription status will update shortly.",
-					});
-				});
-			}
-		} else if (subscriptionStatus === "cancelled") {
-			toast({
-				title: "Subscription checkout cancelled",
-				description: "No subscription changes were made.",
-				variant: "destructive",
-			});
-
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("subscription");
-			setSearchParams(newParams, { replace: true });
-		}
-
-		const planConfigStatus = searchParams.get("planconfig");
-		if (planConfigStatus === "success") {
-			// Only the first-time-payer redirect fallback lands here — the stored-card
-			// path applies the change synchronously and never sets this param.
-			// currentTenant loads asynchronously after a hard redirect back from
-			// Paystack — wait for it instead of consuming the URL params (and
-			// silently skipping the verify+apply call) before it's ready.
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			const reference =
-				searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("planconfig");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-plan-configuration-payment", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Plan configuration verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description:
-									"Contact support if the change doesn't apply shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await Promise.all([refreshTenants(), refetchEntitlements()]);
-						setPaymentSuccessModal({
-							title: "Billing updated!",
-							description: "Your branches and team seats have been updated.",
-						});
-					});
-			}
-		} else if (planConfigStatus === "cancelled") {
-			toast({
-				title: "Billing update cancelled",
-				description: "No changes were made.",
-				variant: "destructive",
-			});
-
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("planconfig");
-			setSearchParams(newParams, { replace: true });
-		}
-
-		const billingRetryStatus = searchParams.get("billing");
-		if (billingRetryStatus === "update_payment_method") {
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			const reference = searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("billing");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-recurring-billing-retry-session", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Billing retry verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description: "Contact support if billing doesn't resume shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await refreshTenants();
-						setPaymentSuccessModal({
-							title: "Payment method updated!",
-							description: "Your subscription is active again and billing will continue as normal.",
-						});
-					});
-			}
-		} else if (billingRetryStatus === "update_payment_method_cancelled") {
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("billing");
-			setSearchParams(newParams, { replace: true });
-		}
-
-		const themePurchaseStatus = searchParams.get("themepurchase");
-		if (themePurchaseStatus === "success") {
-			// Only the first-time-payer redirect fallback lands here — the stored-card
-			// path applies the change synchronously and never sets this param.
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			const reference =
-				searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("themepurchase");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-theme-purchase-payment", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Theme purchase verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description:
-									"Contact support if the theme doesn't activate shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await refetchEntitlements();
-						setPaymentSuccessModal({
-							title: "Theme activated!",
-							description: "The e-commerce storefront theme is now active for your public booking page.",
-						});
-					});
-			}
-		} else if (themePurchaseStatus === "cancelled") {
-			toast({
-				title: "Theme purchase cancelled",
-				description: "No charges were made.",
-				variant: "destructive",
-			});
-
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("themepurchase");
-			setSearchParams(newParams, { replace: true });
-		}
 	}, [searchParams, setSearchParams, currentTenant?.id, scope]);
 
 	const handleTabChange = (tabId: string) => {
@@ -4563,6 +4356,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					)}
 					{settingsContent}
 				</div>
+				{scope !== "auto" && <PaymentReturnFeedback tenantId={currentTenant?.id} refresh={async () => { await Promise.all([refreshTenants(), refetchEntitlements()]); }} />}
 				<PaymentSuccessModal
 					open={!!paymentSuccessModal}
 					onClose={() => setPaymentSuccessModal(null)}
@@ -4650,6 +4444,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<div className="flex-1">{settingsContent}</div>
 				</div>
 			</div>
+			{scope !== "auto" && <PaymentReturnFeedback tenantId={currentTenant?.id} refresh={async () => { await Promise.all([refreshTenants(), refetchEntitlements()]); }} />}
 			<PaymentSuccessModal
 				open={!!paymentSuccessModal}
 				onClose={() => setPaymentSuccessModal(null)}

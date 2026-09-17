@@ -5513,6 +5513,12 @@ export type Database = {
       }
       salon_withdrawals: {
         Row: {
+          transfer_fee: number
+          stamp_duty: number
+          fee_version: string | null
+          fee_outcome: string | null
+          fee_reconciliation_required: boolean
+          wallet_debited: number
           amount: number
           currency: string
           failure_reason: string | null
@@ -5526,6 +5532,12 @@ export type Database = {
           tenant_id: string
         }
         Insert: {
+          transfer_fee?: number
+          stamp_duty?: number
+          fee_version?: string | null
+          fee_outcome?: string | null
+          fee_reconciliation_required?: boolean
+          wallet_debited?: number
           amount: number
           currency: string
           failure_reason?: string | null
@@ -5539,6 +5551,12 @@ export type Database = {
           tenant_id: string
         }
         Update: {
+          transfer_fee?: number
+          stamp_duty?: number
+          fee_version?: string | null
+          fee_outcome?: string | null
+          fee_reconciliation_required?: boolean
+          wallet_debited?: number
           amount?: number
           currency?: string
           failure_reason?: string | null

@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
         reference?: string;
         status?: string;
         amount?: number;
+        currency?: string;
         channel?: string;
         metadata?: {
           appointment_id?: string;
@@ -146,6 +147,7 @@ Deno.serve(async (req) => {
         invoiceId: metadata?.invoice_id,
         credits: metadata?.credits ? parseInt(metadata.credits) : undefined,
         amount: data.amount ? data.amount / 100 : undefined,
+        currency: data.currency,
         channel: data.channel,
         status: data.status,
         reference: data.reference,
@@ -163,8 +165,13 @@ Deno.serve(async (req) => {
       },
     };
 
-    // Process webhook asynchronously - don't await
-    processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
+    // Transfers must commit wallet accounting before acknowledgement so a
+    // database failure gets retried by Paystack instead of losing the debit.
+    if (event.type.startsWith("transfer.")) {
+      await processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
+    } else {
+      processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
+    }
 
     // Return 200 immediately to prevent Paystack timeout/retries
     return new Response(

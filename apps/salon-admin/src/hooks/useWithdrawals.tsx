@@ -9,6 +9,8 @@ interface CreateWithdrawalData {
   tenantId: string;
   payoutDestinationId: string;
   amount: number;
+  acceptedTotalDebit: number;
+  feeVersion: string;
 }
 
 export function useWithdrawals(tenantId?: string) {
@@ -75,28 +77,20 @@ export function useWithdrawals(tenantId?: string) {
         // Try to parse error details from response body
         let errorMessage = "We're unable to process your withdrawal at this time.";
         
-        if (response.error.context?.body) {
-          try {
-            const errorBody = typeof response.error.context.body === 'string' 
-              ? JSON.parse(response.error.context.body) 
-              : response.error.context.body;
-            
-            if (errorBody.error || errorBody.details) {
-              errorMessage = "We're unable to process your withdrawal at this time. " + 
-                            "This may be due to your account settings or payment provider limitations. " +
-                            "Please contact our support team for assistance.";
-            }
-          } catch (parseError) {
-            console.error("Error parsing error response:", parseError);
-          }
+        try {
+          const context = response.error.context;
+          const body = context instanceof Response ? await context.json() : response.data;
+          if (typeof body?.error === "string") errorMessage = body.error;
+        } catch {
+          // Keep the fallback when the provider returned no JSON response.
         }
-        
+
         throw new Error(errorMessage);
       }
 
       toast({
         title: "Success",
-        description: "Withdrawal processed successfully",
+        description: "Withdrawal submitted. Track its status in payout history.",
       });
       
       // Refetch withdrawals to update the list
@@ -106,7 +100,7 @@ export function useWithdrawals(tenantId?: string) {
     } catch (err) {
       console.error("Error creating withdrawal:", err);
       toast({
-        title: "Withdrawal Not Processed",
+        title: "Withdrawal request needs attention",
         description: err instanceof Error ? err.message : "We're unable to process your withdrawal at this time. Please contact support for assistance.",
         variant: "destructive",
       });

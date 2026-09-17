@@ -261,6 +261,13 @@ export default function PayoutsPage() {
                         <div key={w.id} className="flex items-center justify-between p-3 rounded-lg bg-surface">
                           <div>
                             <p className="font-medium text-sm">{sharedFormatCurrency(Number(w.amount), w.currency)}</p>
+                            {w.fee_version && <p className="text-xs text-muted-foreground">
+                              Quoted transfer fee {sharedFormatCurrency(Number(w.transfer_fee), w.currency)}
+                              {Number(w.stamp_duty) > 0 ? ` · Stamp duty ${sharedFormatCurrency(Number(w.stamp_duty), w.currency)}` : ""}
+                              {w.fee_outcome ? ` · Wallet deduction ${sharedFormatCurrency(Number(w.wallet_debited), w.currency)}` : ""}
+                            </p>}
+                            {w.fee_reconciliation_required && <p className="text-xs text-amber-700">Transfer reversed; provider fee refund awaiting reconciliation.</p>}
+
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {dest ? `${dest.account_name || dest.momo_provider} · ${dest.account_number || dest.momo_number}` : "Payout account"}
                               {w.requested_at && ` · ${format(new Date(w.requested_at), "MMM d, yyyy")}`}
