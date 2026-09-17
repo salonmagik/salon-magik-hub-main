@@ -5,7 +5,7 @@ import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
 import { quoteWithdrawal } from "@shared/withdrawal-fees";
-import { formatCurrency } from "@shared/currency";
+import { formatCurrency, getMinimumWithdrawal } from "@shared/currency";
 import {
   Dialog,
   DialogContent,
@@ -51,7 +51,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   const [error, setError] = useState<string>("");
 
   // Get minimum withdrawal amount based on currency
-  const minWithdrawal = currency === "NGN" ? 500 : 50;
+  const minWithdrawal = getMinimumWithdrawal(currency);
   const walletBalance = Number(wallet?.balance || 0);
   // Do not allow a withdrawal until cleared availability is known.
   const availableBalance = availability?.available ?? 0;
@@ -229,6 +229,12 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               </p>
             </div>
 
+            {!availabilityLoading && availableBalance < minWithdrawal && (
+              <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                Withdrawals start at {formatCurrency(minWithdrawal, currency)} plus transfer charges.
+                Your cleared balance is {formatCurrency(availableBalance, currency)}.
+              </p>
+            )}
             {/* Payout Destination Selection */}
             <div className="space-y-2">
               <Label htmlFor="destination">Payout Destination</Label>

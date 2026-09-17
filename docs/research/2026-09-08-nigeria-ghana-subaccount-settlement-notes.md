@@ -1,0 +1,11 @@
+# Notes — Nigeria/Ghana Subaccount Settlement Schedule Fix
+
+Technical Brief: `2026-09-08-nigeria-ghana-subaccount-settlement.md`
+Review: `.claudespace/s/4aa44ffc-6670-4070-adba-f7ce52c4a274/reports/nigeria-ghana-subaccount-settlement-review.md` (verdict: PASS)
+
+- What was built: `sync-subaccount-settlement-schedule` edge function + a "Stale Settlement Schedules" section on the backoffice Verification Queue page, both mirroring the existing `backoffice-refresh-subaccount-verification` pattern, to push every `salon_payout_destinations` row still on Paystack's stale `settlement_schedule` to `"manual"`.
+- Not a Nigeria/Ghana implementation gap — the subaccount creation code was already country-agnostic. The real bug: `settlement_schedule` is a write-once snapshot sent to Paystack only at subaccount *creation*; `20260906160000_payout_mode_on_demand_only.sql` flipped `payout_mode` in our own DB but never pushed the change to Paystack for pre-existing subaccounts. Nigeria just had more legacy (pre-migration) subaccounts, making the same country-blind gap more visible there.
+- The fix's core tool (`updatePaystackSubaccount` in `_shared/paystack-helpers.ts`) already existed, fully implemented, and had simply never been called from anywhere — worth remembering as a reminder to grep for "already-built-but-unused" helpers before writing a new PUT/patch call from scratch.
+- No live-Paystack backfill has been run yet (no prod/live access from any pipeline session) — the first real action after this merges promotes through the standard `development-only` → `main` → `release` pipeline, is the operator clicking "Sync Settlement Schedules" in backoffice, checking the reported `remaining` count, and re-clicking if the backlog exceeds 40 rows (unknown size going in).
+- Deliberately not fixed here, and correctly so: the `tenants.payout_mode` check constraint still technically permits the retired `'automatic'` value. Flagged in the Technical Brief itself as a separate, lower-priority cleanup — not folded into this fix.
+- This is a one-time backfill, not a recurring safeguard — if `payout_mode` semantics change again in the future, the same kind of stale-Paystack-state gap could reopen. Not built now since nothing asked for it and a recurring reconciliation job would be speculative infrastructure for a "changes approximately never" setting.

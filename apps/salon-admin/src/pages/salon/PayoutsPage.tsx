@@ -43,7 +43,7 @@ import { format } from "date-fns";
 import { cn } from "@shared/utils";
 import { WithdrawalDialog } from "@/components/billing/WithdrawalDialog";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
-import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
+import { formatCurrency as sharedFormatCurrency, getMinimumWithdrawal } from "@shared/currency";
 
 const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
   pending: { bg: "bg-warning-bg", text: "text-warning-foreground" },
@@ -93,6 +93,10 @@ export default function PayoutsPage() {
   );
 
   const currency = currentTenant?.currency || "USD";
+  const walletCurrency = wallet?.currency ?? currency;
+  const minWithdrawal = getMinimumWithdrawal(walletCurrency);
+  const currentAvailable = Number(walletAvailability?.available ?? wallet?.balance ?? 0);
+  const belowMinimum = !walletLoading && !walletAvailabilityLoading && currentAvailable < minWithdrawal;
   const availableCountries = Array.from(new Set(locations.map((loc) => loc.country))).sort();
   const effectiveCountry = availableCountries.includes(selectedCountry)
     ? selectedCountry
@@ -166,7 +170,8 @@ export default function PayoutsPage() {
 
         {/* Wallet balance */}
         <Card>
-          <CardContent className="p-5 flex items-center justify-between flex-wrap gap-4">
+          <CardContent className="p-5">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl bg-primary/10 shrink-0"><Wallet className="w-6 h-6 text-primary" /></div>
               <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
@@ -226,9 +231,40 @@ export default function PayoutsPage() {
                 </div>
               </div>
             </div>
-            <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(walletAvailability?.available ?? wallet.balance) <= 0}>
-              Request Withdrawal
-            </Button>
+            {belowMinimum ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button disabled>Request Withdrawal</Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-64 text-xs">
+                  You need {sharedFormatCurrency(minWithdrawal - currentAvailable, walletCurrency)} more to reach the {sharedFormatCurrency(minWithdrawal, walletCurrency)} minimum withdrawal.
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet}>
+                Request Withdrawal
+              </Button>
+            )}
+          </div>
+          {belowMinimum && (
+            <div className="mt-4">
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-warning"
+                  style={{ width: `${Math.min(100, (currentAvailable / minWithdrawal) * 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-1.5 text-xs text-muted-foreground">
+                <span>
+                  <span className="font-medium text-warning-foreground">{sharedFormatCurrency(currentAvailable, walletCurrency)}</span>
+                  {" "}of {sharedFormatCurrency(minWithdrawal, walletCurrency)} minimum
+                </span>
+                <span>{sharedFormatCurrency(minWithdrawal - currentAvailable, walletCurrency)} to go</span>
+              </div>
+            </div>
+          )}
           </CardContent>
         </Card>
 

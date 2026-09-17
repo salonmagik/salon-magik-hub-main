@@ -323,13 +323,17 @@ export default function SalonsOverviewPage() {
 
         {/* Quick Actions — hub context only */}
         {activeContextType === "owner_hub" && branchContexts.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour-id="tour-hub-quick-actions">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+              Quick actions
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour-id="tour-hub-quick-actions">
             {[
-                { key: "new-booking", label: "New Booking", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null, description: null as string | null },
-                { key: "pending-approvals", label: "Pending Approvals", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null, description: "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above." },
-                { key: "unpaid-balances", label: "Unpaid Balances", icon: CreditCard, destination: "/salon/appointments?tab=unscheduled&payment=unpaid", count: aggregateStats?.totalUnpaidBalances ?? null, description: "Appointments not yet fully paid or refunded — this count always reflects the current backlog, not the date range selected above." },
-                { key: "messages", label: "Messages", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null, description: null as string | null },
-              ].map(({ key, label, icon: Icon, destination, count, description }) => {
+                { key: "new-booking", label: "New Booking", caption: "Start a booking now", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null, description: null as string | null },
+                { key: "pending-approvals", label: "Pending Approvals", caption: "Awaiting your response", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null, description: "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above." },
+                { key: "unpaid-balances", label: "Unpaid Balances", caption: "Not fully paid or refunded", icon: CreditCard, destination: "/salon/appointments?tab=unscheduled&payment=unpaid", count: aggregateStats?.totalUnpaidBalances ?? null, description: "Appointments not yet fully paid or refunded — this count always reflects the current backlog, not the date range selected above." },
+                { key: "messages", label: "Messages", caption: "View conversations", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null, description: null as string | null },
+              ].map(({ key, label, caption, icon: Icon, destination, count, description }) => {
               const urgent = count !== null && count > 0;
               const filteredBranches = getBranchesForAction(key);
               return (
@@ -341,12 +345,15 @@ export default function SalonsOverviewPage() {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="group flex flex-col items-start gap-2 rounded-lg border bg-card p-4 text-left transition-all hover:border-blue-400 hover:bg-blue-50/40 dark:hover:bg-blue-950/20"
+                    className="group relative flex flex-col items-start gap-2 rounded-xl border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
                     onClick={() => triggerQuickAction(key, destination)}
                   >
+                    <span className="absolute right-3 top-3 flex h-6 w-6 -translate-x-0.5 items-center justify-center rounded-full bg-primary/10 text-primary opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100">
+                      <ChevronRight className="h-3 w-3" />
+                    </span>
                     <div className="flex w-full items-center justify-between">
-                      <div className={`rounded-md p-2 ${urgent ? "bg-destructive/10" : "bg-muted group-hover:bg-blue-100/60 dark:group-hover:bg-blue-900/30 transition-colors"}`}>
-                        <Icon className={`h-4 w-4 ${urgent ? "text-destructive" : "text-muted-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"}`} />
+                      <div className={`rounded-lg p-2 ${urgent ? "bg-destructive/10" : "bg-primary/10"}`}>
+                        <Icon className={`h-4 w-4 ${urgent ? "text-destructive" : "text-primary"}`} />
                       </div>
                       {count !== null && count > 0 && (
                         <span className="text-xs font-semibold tabular-nums rounded-full bg-destructive text-destructive-foreground px-2 py-0.5">
@@ -354,9 +361,9 @@ export default function SalonsOverviewPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex w-full items-center justify-between">
+                    <div className="w-full">
                       <span className="flex items-center gap-1">
-                        <span className="text-sm font-medium leading-tight">{label}</span>
+                        <span className="text-sm font-semibold leading-tight">{label}</span>
                         {description && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -368,9 +375,12 @@ export default function SalonsOverviewPage() {
                           </Tooltip>
                         )}
                       </span>
-                      {filteredBranches.length > 1 && (
-                        <ChevronDown className="h-3.5 w-3.5 text-blue-500/60 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      )}
+                      <span className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
+                        {caption}
+                        {filteredBranches.length > 1 && (
+                          <ChevronDown className="h-3.5 w-3.5 text-primary/60 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </span>
                     </div>
                   </button>
                 </PopoverTrigger>
@@ -398,6 +408,7 @@ export default function SalonsOverviewPage() {
               </Popover>
             );
           })}
+          </div>
           </div>
 
         )}
@@ -430,34 +441,41 @@ export default function SalonsOverviewPage() {
           </Card>
         ) : (
           <>
-            {/* Summary Stats */}
+            {/* At a glance */}
             {aggregateStats && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tour-id="tour-hub-overview">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                  At a glance
+                </p>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tour-id="tour-hub-overview">
                 <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                      <Building2 className="w-3 h-3" />
-                      Branches
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{aggregateStats.locationCount}</div>
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Branches</p>
+                      <div className="text-2xl font-bold mt-0.5">{aggregateStats.locationCount}</div>
+                    </div>
                   </CardContent>
                 </Card>
                 {currentRole === "owner" && pausedBranchCount > 0 && (
                   <Popover open={pausedBranchesPopoverOpen} onOpenChange={setPausedBranchesPopoverOpen}>
                     <PopoverTrigger asChild>
                       <button type="button" className="text-left w-full">
-                        <Card className="border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20 transition-colors hover:border-orange-400">
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400 flex items-center gap-1">
-                              <PauseCircle className="w-3 h-3" />
-                              Paused Branches
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{pausedBranchCount}</div>
-                            <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">Tap to revive a branch</p>
+                        <Card className="relative border-warning/30 bg-warning-bg/40 transition-all hover:-translate-y-0.5 hover:border-warning/60 hover:shadow-md">
+                          <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning-foreground">
+                            Tap to review
+                            <ChevronRight className="h-2.5 w-2.5" />
+                          </span>
+                          <CardContent className="p-4 flex items-start gap-3">
+                            <div className="rounded-lg bg-warning/15 p-2.5 shrink-0">
+                              <PauseCircle className="h-4 w-4 text-warning-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-warning-foreground">Paused Branches</p>
+                              <div className="text-2xl font-bold text-warning-foreground mt-0.5">{pausedBranchCount}</div>
+                            </div>
                           </CardContent>
                         </Card>
                       </button>
@@ -493,80 +511,87 @@ export default function SalonsOverviewPage() {
                 )}
                 {canViewRevenueAnalytics && (
                   <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                        <Coins className="w-3 h-3" />
-                        Total Inflow
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3 w-3 cursor-default" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-56 text-xs">
-                            Completed payments across all branches in the selected date range.
-                          </TooltipContent>
-                        </Tooltip>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {formatCurrency(aggregateStats.totalRevenue, aggregateStats.revenueCurrency)}
+                    <CardContent className="p-4 flex items-start gap-3">
+                      <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                        <Coins className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          Total Inflow
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-3 w-3 cursor-default" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-56 text-xs">
+                              Completed payments across all branches in the selected date range.
+                            </TooltipContent>
+                          </Tooltip>
+                        </p>
+                        <div className="text-2xl font-bold mt-0.5">
+                          {formatCurrency(aggregateStats.totalRevenue, aggregateStats.revenueCurrency)}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
                 )}
                 <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      Bookings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{aggregateStats.totalBookings}</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                      <Users className="w-3 h-3" />
-                      Staff Online
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-56 text-xs">
-                          Staff currently clocked in, across all branches.
-                        </TooltipContent>
-                      </Tooltip>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-success">
-                      {aggregateStats.totalStaffOnline}
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="rounded-lg bg-muted p-2.5 shrink-0">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Bookings</p>
+                      <div className="text-2xl font-bold mt-0.5">{aggregateStats.totalBookings}</div>
                     </div>
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      Outstanding
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-56 text-xs">
-                          Appointments that are scheduled, started, or paused — not yet completed or cancelled.
-                        </TooltipContent>
-                      </Tooltip>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold text-warning-foreground">
-                      {aggregateStats.totalOutstanding}
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="rounded-lg bg-success-bg p-2.5 shrink-0">
+                      <Users className="h-4 w-4 text-success" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        Staff Online
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            Staff currently clocked in, across all branches.
+                          </TooltipContent>
+                        </Tooltip>
+                      </p>
+                      <div className="text-2xl font-bold text-success mt-0.5">
+                        {aggregateStats.totalStaffOnline}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
+                <Card>
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="rounded-lg bg-warning-bg p-2.5 shrink-0">
+                      <Clock className="h-4 w-4 text-warning-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                        Outstanding
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            Appointments that are scheduled, started, or paused — not yet completed or cancelled.
+                          </TooltipContent>
+                        </Tooltip>
+                      </p>
+                      <div className="text-2xl font-bold text-warning-foreground mt-0.5">
+                        {aggregateStats.totalOutstanding}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                </div>
               </div>
             )}
 

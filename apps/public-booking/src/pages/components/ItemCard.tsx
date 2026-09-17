@@ -3,6 +3,7 @@ import { ShoppingBag, Calendar, Clock, Package as PackageIcon, MapPin } from "lu
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { useBookingCart, type BranchOption } from "@/hooks";
 import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
@@ -344,8 +345,9 @@ function ItemDetailDialog({
           <DialogTitle>{name}</DialogTitle>
           <DialogDescription>{typeLabel} details</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div>
           <ImageSlider images={imageUrls} alt={name} className="h-56 w-full" enablePreview />
+          <div className={DIALOG_BODY_PADDING}>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="text-xl font-bold">{formatCurrency(price, currency)}</div>
@@ -389,6 +391,7 @@ function ItemDetailDialog({
                 <DialogCtaIcon className="h-4 w-4" />{dialogCtaLabel}
               </Button>
             )}
+          </div>
           </div>
         </div>
       </DialogContent>
