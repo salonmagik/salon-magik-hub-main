@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import {
   useBackofficeTransactions,
@@ -85,9 +86,10 @@ function presetRange(days: number) {
 }
 
 export default function TransactionsPage() {
+  const [searchParams] = useSearchParams();
   const [datePreset, setDatePreset] = useState<string>("30d");
   const [range, setRange] = useState(() => presetRange(30));
-  const [tenantId, setTenantId] = useState<string>("all");
+  const [tenantId, setTenantId] = useState<string>(() => searchParams.get("tenant_id") || "all");
   const [currency, setCurrency] = useState<string>("all");
   const [method, setMethod] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");

@@ -298,6 +298,25 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!emailResponse.ok) {
       console.error("Resend API error:", emailData);
+      const errorKind = emailResponse.status === 401 || emailResponse.status === 403
+        ? "auth"
+        : emailResponse.status === 422
+          ? "recipient"
+          : "provider";
+      const errorMessage = `${errorKind}: ${emailData.message || "Failed to send email"}`;
+      await supabase.from("message_logs").insert({
+        tenant_id: appointment.tenant_id,
+        customer_id: appointment.customer?.id,
+        channel: "email",
+        template_type: templateType,
+        recipient: customerEmail,
+        subject: emailSubject,
+        status: "failed",
+        provider: "resend",
+        initiated_by: "system",
+        credits_used: 0,
+        error_message: errorMessage.slice(0, 1000),
+      });
       throw new Error(emailData.message || "Failed to send email");
     }
 
@@ -316,13 +335,6 @@ const handler = async (req: Request): Promise<Response> => {
       initiated_by: "system",
       credits_used: 0,
     });
-
-    if (action === "reminder") {
-      await supabase
-        .from("appointments")
-        .update({ last_reminder_sent_at: new Date().toISOString() })
-        .eq("id", appointmentId);
-    }
 
     return new Response(
       JSON.stringify({ success: true, emailId: emailData.id }),

@@ -7,7 +7,7 @@ import { Button } from "./button";
 export interface OutcomeDialogProps {
   open: boolean;
   onClose: () => void;
-  status?: "success" | "loading" | "error" | "cancelled";
+  status?: "success" | "loading" | "error" | "cancelled" | "pending";
   title: string;
   description: string;
   detail?: ReactNode;

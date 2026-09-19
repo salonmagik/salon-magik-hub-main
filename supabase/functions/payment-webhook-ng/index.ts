@@ -90,6 +90,11 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (typeof body.event === "string" && body.event.startsWith("refund.")) {
+      console.info("Paystack refund webhook acknowledged; in-app Paystack refunds are disabled", { event: body.event });
+      return new Response(JSON.stringify({ received: true, handled: false, reason: "paystack_refunds_disabled" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const paystackEvent = body as {
       event: string;
       data: {
@@ -113,6 +118,7 @@ Deno.serve(async (req) => {
           billing_cycle?: string;
           service_amount?: string | number;
           processing_fee_amount?: string | number;
+          salon_net_amount?: string | number;
         };
         authorization?: {
           authorization_code?: string;
@@ -162,18 +168,14 @@ Deno.serve(async (req) => {
         customerEmail: data.customer?.email,
         serviceAmount: metadata?.service_amount ? parseFloat(String(metadata.service_amount)) : undefined,
         processingFeeAmount: metadata?.processing_fee_amount ? parseFloat(String(metadata.processing_fee_amount)) : undefined,
+        salonNetAmount: metadata?.salon_net_amount ? parseFloat(String(metadata.salon_net_amount)) : undefined,
       },
     };
 
-    // Transfers must commit wallet accounting before acknowledgement so a
-    // database failure gets retried by Paystack instead of losing the debit.
-    if (event.type.startsWith("transfer.")) {
-      await processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
-    } else {
-      processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
-    }
+    // Acknowledge only after processing commits; failures must be retried.
+    await processWebhook(event, supabaseUrl, supabaseServiceKey, resendApiKey, resendFromEmail);
 
-    // Return 200 immediately to prevent Paystack timeout/retries
+    // Return 200 only after the financial updates have committed.
     return new Response(
       JSON.stringify({ received: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

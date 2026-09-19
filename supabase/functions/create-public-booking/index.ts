@@ -12,7 +12,7 @@ import {
   validateCurrencyMatch,
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
-import { computeBookingCharge, getPaymentFeeSettings, SUBACCOUNT_SPLIT_ENABLED } from "../_shared/payment-fee-calculator.ts";
+import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -975,7 +975,7 @@ serve(async (req) => {
     });
 
     if (customer.email) {
-      await sendResendEmail({
+      const result = await sendResendEmail({
         resendApiKey,
         fromEmail: resendFromEmail,
         to: [customer.email],
@@ -992,7 +992,16 @@ serve(async (req) => {
             ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
             : "") +
           paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
+        log: {
+          supabase,
+          tenantId,
+          templateType: "booking_confirmation_customer",
+          customerId,
+        },
       });
+      if (!result.sent) {
+        console.warn("Failed to send booking confirmation to customer:", result.error);
+      }
     }
 
     // Tell each gift recipient about their gift — their customer record
@@ -1006,14 +1015,14 @@ serve(async (req) => {
         "https://app.salonmagik.com"
       ).replace(/\/+$/, "");
 
-      for (const { recipient, itemNames } of giftRecipientsToNotify.values()) {
+      for (const { recipient, customerId: giftRecipientCustomerId, itemNames } of giftRecipientsToNotify.values()) {
         const recipientEmail = normalizeEmail(recipient.email);
         const itemsListHtml = itemNames.map((name) => `<li>${name}</li>`).join("");
         const senderLine = recipient.hideSender
           ? paragraph("Someone has sent you a gift!")
           : paragraph(`<strong>${customerFullName}</strong> has sent you a gift!`);
 
-        await sendResendEmail({
+        const giftResult = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: [recipientEmail],
@@ -1028,7 +1037,16 @@ serve(async (req) => {
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             paragraph(`Log into the client portal with this email address (<strong>${recipientEmail}</strong>) to view your gift and manage your visit.`) +
             createButton("Log in to view your gift", `${clientPortalBase}/login`),
+          log: {
+            supabase,
+            tenantId,
+            templateType: "booking_gift_recipient",
+            customerId: giftRecipientCustomerId,
+          },
         });
+        if (!giftResult.sent) {
+          console.warn("Failed to send gift notification to recipient:", giftResult.error);
+        }
       }
     }
 
@@ -1036,7 +1054,7 @@ serve(async (req) => {
     if (notificationSettings.email_new_bookings) {
       const recipients = await getSalonRecipients(supabase, tenantId, ["owner", "manager"]);
       if (recipients.length > 0) {
-        await sendResendEmail({
+        const salonResult = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
@@ -1052,7 +1070,16 @@ serve(async (req) => {
             paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`) +
             `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
             reviewActionsHtml,
+          log: {
+            supabase,
+            tenantId,
+            templateType: "booking_notification_salon",
+            customerId,
+          },
         });
+        if (!salonResult.sent) {
+          console.warn("Failed to notify salon of new booking:", salonResult.error);
+        }
       }
     }
 
@@ -1107,36 +1134,6 @@ serve(async (req) => {
           effectiveCurrency
         });
 
-        let storeSubaccountCode: string | null = null;
-
-        {
-          const { data: payoutDest, error: payoutDestError } = await supabase
-            .from("salon_payout_destinations")
-            .select("paystack_subaccount_code")
-            .eq("tenant_id", tenantId)
-            .eq("is_default", true)
-            .maybeSingle();
-
-          if (payoutDestError) {
-            console.error("Error looking up default payout destination:", payoutDestError);
-          }
-
-          if (payoutDest?.paystack_subaccount_code) {
-            storeSubaccountCode = payoutDest.paystack_subaccount_code;
-          } else {
-            // No default destination, or it has no subaccount yet — the
-            // charge will still go through, but undivided into Salon
-            // Magik's own Paystack account instead of splitting to the
-            // salon. That used to happen silently; log it loudly so it
-            // shows up in function logs instead of only in a bank
-            // statement weeks later.
-            console.error("No usable payout subaccount for tenant — booking payment will NOT split to the salon.", {
-              tenantId,
-              hasDestinationRow: !!payoutDest,
-            });
-          }
-        }
-
         const primaryAppointmentId = createdAppointmentIds[0];
         const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
 
@@ -1146,7 +1143,6 @@ serve(async (req) => {
           platformServiceChargePercent: Number(tenant.platform_percentage_charge ?? feeSettings.defaultPlatformServiceChargePercent),
           customerFacingFeePercent: feeSettings.customerFacingFeePercent,
           serviceChargeBorneByCustomer: Boolean(tenant.platform_service_charge_borne_by_customer),
-          hasSubaccount: Boolean(storeSubaccountCode),
         });
 
         // Store payment intent
@@ -1170,6 +1166,7 @@ serve(async (req) => {
               platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
               customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
               amount_charged_to_paystack: bookingCharge.amountToChargePaystack,
+              salon_net_amount: bookingCharge.salonNetAmount,
             },
           })
           .select("id")
@@ -1217,26 +1214,9 @@ serve(async (req) => {
               service_amount: paymentAmount,
               platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
               customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
-              store_subaccount_code: storeSubaccountCode || "",
+              salon_net_amount: bookingCharge.salonNetAmount,
             },
           };
-
-          // Unplugged 2026-09-06, pending a test verdict — not deleted, just
-          // not applied. Subaccount splits silently don't apply while a
-          // subaccount is unverified (the root cause of a real payment once
-          // landing in Salon Magik's own account instead of the salon's),
-          // and /transfer-based withdrawals never depended on subaccounts
-          // to begin with. Every charge lands undivided in Salon Magik's
-          // main balance now; credit_salon_purse below is what tracks the
-          // salon's share for withdrawal. Re-enable by restoring the two
-          // lines inside this `if` once testing confirms it's safe to
-          // delete this block instead.
-          if (SUBACCOUNT_SPLIT_ENABLED && storeSubaccountCode) {
-            paystackPayload.subaccount = storeSubaccountCode;
-            if (bookingCharge.transactionChargeMinor > 0) {
-              paystackPayload.transaction_charge = bookingCharge.transactionChargeMinor;
-            }
-          }
 
           console.log('Paystack payment initiation', paystackPayload)
 

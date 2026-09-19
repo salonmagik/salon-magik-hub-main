@@ -22,7 +22,7 @@ export async function handleRefundCancelledAppointment(
   user: Pick<User, "id">,
 ): Promise<Response> {
   try {
-    const { appointmentId, transactionId } = await req.json();
+    const { appointmentId, transactionId, idempotencyKey } = await req.json();
     if (!appointmentId && !transactionId) {
       return new Response(JSON.stringify({ error: "Appointment or transaction is required" }), {
         status: 400,
@@ -67,7 +67,7 @@ export async function handleRefundCancelledAppointment(
       .from("user_roles")
       .select("role")
       .eq("tenant_id", appointment.tenant_id)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id).eq("is_active", true);
 
     if (rolesError || !roles?.some((entry) => entry.role === "owner" || entry.role === "manager")) {
       return new Response(JSON.stringify({ error: "You do not have permission to process refunds" }), {
@@ -190,130 +190,14 @@ export async function handleRefundCancelledAppointment(
       );
     }
 
-    // Step 1: Debit the salon wallet first — via the shared enforcement RPC
-    // so a blocked attempt (the salon already withdrew this money) is
-    // recorded in refund_block_events, same as every other refund path.
-    const salonDebitIdempotencyKey = `refund_salon_debit_${appointment.id}`;
-    const { data: salonDebitResult, error: salonDebitError } = await admin.rpc("debit_salon_wallet_for_refund" as never, {
-      p_transaction_id: originalTransaction.id,
-      p_amount: refundAmount,
-      p_refund_type: "store_credit",
-      p_reason: "Cancelled appointment refunded to customer purse",
-      p_actor_id: user.id,
-      p_idempotency_key: salonDebitIdempotencyKey,
-      p_refund_request_id: null,
-      p_appointment_id: appointment.id,
-    } as never);
-
-    if (salonDebitError) {
-      console.error("Error debiting salon purse for refund:", salonDebitError);
-      return new Response(
-        JSON.stringify({ error: salonDebitError.message || "Failed to debit salon purse" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const debit = salonDebitResult as { ok: boolean; ledger_entry_id: string | null; code?: string; wallet_balance?: number; shortfall?: number; currency?: string };
-
-    if (!debit.ok) {
-      console.error("Cancelled-appointment refund blocked — insufficient recoverable funds:", {
-        tenantId: appointment.tenant_id,
-        appointmentId: appointment.id,
-        attemptedAmount: refundAmount,
-        walletBalance: debit.wallet_balance,
-      });
-      return new Response(
-        JSON.stringify({
-          error: "This salon has already withdrawn the funds for this booking, so it can't be recovered to refund the customer.",
-          code: debit.code || "INSUFFICIENT_RECOVERABLE_FUNDS",
-          walletBalance: debit.wallet_balance,
-          shortfall: debit.shortfall,
-          currency: debit.currency,
-        }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const salonDebitEntryId = debit.ledger_entry_id;
-
-    // Step 2: Credit the customer purse
-    const customerCreditIdempotencyKey = `cancelled_appointment_refund_${appointment.id}`;
-    const { data: creditEntryId, error: creditError } = await admin.rpc("credit_customer_purse" as never, {
-      p_tenant_id: appointment.tenant_id,
-      p_customer_id: appointment.customer_id,
-      p_amount: refundAmount,
-      p_currency: tenant.currency,
-      p_idempotency_key: customerCreditIdempotencyKey,
-      p_gateway_reference: appointment.booking_reference || appointment.id,
-    } as never);
-
-    if (creditError) {
-      console.error("Error crediting customer purse for refund:", creditError);
-      return new Response(JSON.stringify({ error: creditError.message || "Failed to credit customer purse" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { data: refundTransaction, error: refundTransactionError } = await admin
-      .from("transactions")
-      .insert({
-        tenant_id: appointment.tenant_id,
-        customer_id: appointment.customer_id,
-        appointment_id: appointment.id,
-        amount: refundAmount,
-        type: "refund",
-        method: "purse",
-        currency: tenant.currency,
-        status: "completed",
-        provider: "customer_purse",
-        provider_reference: typeof salonDebitEntryId === "string" ? salonDebitEntryId : null,
-        created_by_id: user.id,
-      })
-      .select("id")
-      .single();
-
-    if (refundTransactionError || !refundTransaction) {
-      return new Response(JSON.stringify({ error: refundTransactionError?.message || "Failed to create refund transaction" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    await admin
-      .from("refund_requests")
-      .insert({
-        tenant_id: appointment.tenant_id,
-        transaction_id: originalTransaction.id,
-        customer_id: appointment.customer_id,
-        amount: refundAmount,
-        reason: "Cancelled appointment refunded to customer purse",
-        refund_type: "store_credit",
-        wallet_debit_entry_id: salonDebitEntryId,
-        requested_by_id: user.id,
-        approved_by_id: user.id,
-        approved_at: new Date().toISOString(),
-        status: "completed",
-      });
-
-    const { error: appointmentUpdateError } = await admin
-      .from("appointments")
-      .update({
-        payment_status: "refunded_full",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", appointment.id);
-
-    if (appointmentUpdateError) {
-      return new Response(JSON.stringify({ error: appointmentUpdateError.message || "Refund recorded but failed to update appointment" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ success: true, refundAmount, refundTransactionId: refundTransaction.id }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const { data: result, error: refundError } = await admin.rpc("complete_local_refund", {
+      p_transaction_id: originalTransaction.id, p_amount: refundAmount, p_refund_type: "store_credit",
+      p_reason: "Cancelled appointment refunded as store credit", p_actor_id: user.id,
+      p_key: idempotencyKey || `cancelled-appointment:${appointment.id}:${refundAmount}`, p_request_id: null,
+    });
+    if (refundError) throw refundError;
+    return new Response(JSON.stringify({ ...result, refundAmount, refundTransactionId: result?.refundId }), {
+      status: result?.success ? 200 : 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("refund-cancelled-appointment error", error);
@@ -324,7 +208,7 @@ export async function handleRefundCancelledAppointment(
   }
 }
 
-serve(async (req) => {
+if (import.meta.main) serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

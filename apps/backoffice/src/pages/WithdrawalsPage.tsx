@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
+import { Button } from "@ui/button";
 import {
   Select,
   SelectContent,
@@ -19,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@ui/table";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 
@@ -34,7 +35,10 @@ interface WithdrawalRow {
   failure_reason: string | null;
   paystack_transfer_code: string | null;
   requested_at: string;
+  transfer_fee: number | null;
+  stamp_duty: number | null;
   tenants: { name: string | null } | null;
+  salon_wallets: { balance: number; currency: string } | null;
   salon_payout_destinations: {
     account_name: string | null;
     account_number: string | null;
@@ -60,7 +64,7 @@ export default function WithdrawalsPage() {
       const { data, error } = await (supabase
         .from("salon_withdrawals" as any)
         .select(
-          "id, tenant_id, amount, currency, status, failure_reason, paystack_transfer_code, requested_at, tenants(name), salon_payout_destinations(account_name, account_number, momo_provider, momo_number)",
+          "id, tenant_id, amount, currency, status, failure_reason, paystack_transfer_code, requested_at, transfer_fee, stamp_duty, tenants(name), salon_wallets(balance, currency), salon_payout_destinations(account_name, account_number, momo_provider, momo_number)",
         )
         .order("requested_at", { ascending: false })
         .limit(200) as any);
@@ -130,11 +134,13 @@ export default function WithdrawalsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Salon</TableHead>
+                    <TableHead>Wallet balance</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Destination</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Reason</TableHead>
                     <TableHead>Requested</TableHead>
+                    <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -144,6 +150,9 @@ export default function WithdrawalsPage() {
                     return (
                       <TableRow key={w.id}>
                         <TableCell className="font-medium">{w.tenants?.name || "—"}</TableCell>
+                        <TableCell className="text-xs">
+                          {w.salon_wallets ? formatCurrency(Number(w.salon_wallets.balance), w.salon_wallets.currency) : "—"}
+                        </TableCell>
                         <TableCell className="font-variant-numeric-tabular">
                           {formatCurrency(Number(w.amount), w.currency)}
                         </TableCell>
@@ -162,6 +171,13 @@ export default function WithdrawalsPage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {format(new Date(w.requested_at), "MMM d, yyyy HH:mm")}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={`/transactions?tenant_id=${encodeURIComponent(w.tenant_id)}`}>
+                              Transactions <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                            </a>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );

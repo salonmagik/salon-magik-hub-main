@@ -87,7 +87,7 @@ async function handleArkeselResponse(response: Response, operation: string): Pro
   if ((body?.status as string) !== "success") {
     throw new Error((body?.message as string) || `Arkesel ${operation} returned status: ${body?.status}`);
   }
-  return body as ArkeselSMSResponse;
+  return body as unknown as ArkeselSMSResponse;
 }
 
 // Build the request body for an Arkesel send call.

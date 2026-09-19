@@ -1,6 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency, createPaystackSubaccount } from "../_shared/paystack-helpers.ts";
-import { getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
+import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -100,10 +99,22 @@ Deno.serve(async (req) => {
     // Use service role for database operations
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch tenant details for subaccount creation
+    const { data: membership, error: membershipError } = await serviceSupabase.from("user_roles")
+      .select("role").eq("tenant_id", tenantId).eq("user_id", user.id).eq("is_active", true);
+    if (membershipError || !membership?.some((role) => ["owner", "manager"].includes(role.role))) {
+      return new Response(JSON.stringify({ error: "Only salon owners and managers can manage payout accounts" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!((country === "NG" && currency === "NGN" && destinationType === "bank") ||
+      (country === "GH" && currency === "GHS" && ["bank", "mobile_money"].includes(destinationType)))) {
+      return new Response(JSON.stringify({ error: "Unsupported payout country, currency or destination" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Confirm the tenant exists before creating its transfer recipient.
     const { data: tenant, error: tenantError } = await serviceSupabase
       .from("tenants")
-      .select("name, platform_percentage_charge, payout_mode")
+      .select("name, currency")
       .eq("id", tenantId)
       .single();
 
@@ -112,6 +123,11 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "Failed to fetch tenant details" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (tenant.currency !== currency) {
+      return new Response(JSON.stringify({ error: "Payout currency must match the salon currency" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Get currency-specific Paystack key
@@ -125,16 +141,11 @@ Deno.serve(async (req) => {
       );
     }
     const paystackSecretKey = paystackKeyResult.key;
-    const feeSettings = await getPaymentFeeSettings(serviceSupabase);
 
     // Create Paystack recipient
     let paystackRecipientCode: string;
-    let paystackSubaccountCode: string | null = null;
-    let paystackSubaccountId: number | null = null;
-    let paystackSubaccountActive: boolean | null = null;
-    let paystackSubaccountError: string | null = null;
-    let tenantPaymentStatus = "pending_bank_account";
-    let tenantPaymentError: string | null = null;
+    const tenantPaymentStatus = "ready";
+    const tenantPaymentError = null;
 
     if (destinationType === "bank") {
       // Determine recipient type based on country
@@ -142,6 +153,7 @@ Deno.serve(async (req) => {
 
       const paystackResponse = await fetch("https://api.paystack.co/transferrecipient", {
         method: "POST",
+        signal: AbortSignal.timeout(15_000),
         headers: {
           "Authorization": `Bearer ${paystackSecretKey}`,
           "Content-Type": "application/json",
@@ -167,31 +179,11 @@ Deno.serve(async (req) => {
 
       paystackRecipientCode = paystackData.data.recipient_code;
 
-      // Try to create Paystack subaccount
-      try {
-        const subaccountData = await createPaystackSubaccount(currency.toUpperCase(), {
-          business_name: tenant.name || `Salon ${tenantId}`,
-          settlement_bank: bankCode!,
-          account_number: accountNumber!,
-          percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent, // make sure percentage is in right format 0.5 is 0.5%
-          primary_contact_email: user.email,
-          settlement_schedule: tenant.payout_mode === "on_demand" ? "manual" : "auto",
-        });
-
-        paystackSubaccountCode = subaccountData.subaccount_code;
-        paystackSubaccountId = subaccountData.id;
-        paystackSubaccountActive = subaccountData.active;
-        tenantPaymentStatus = "ready";
-      } catch (err: any) {
-        console.error("Error creating subaccount:", err);
-        paystackSubaccountError = err.message || "Unknown error creating subaccount";
-        tenantPaymentStatus = "failed";
-        tenantPaymentError = paystackSubaccountError;
-      }
     } else {
       // Mobile money recipient
       const paystackResponse = await fetch("https://api.paystack.co/transferrecipient", {
         method: "POST",
+        signal: AbortSignal.timeout(15_000),
         headers: {
           "Authorization": `Bearer ${paystackSecretKey}`,
           "Content-Type": "application/json",
@@ -218,33 +210,6 @@ Deno.serve(async (req) => {
 
       paystackRecipientCode = paystackData.data.recipient_code;
 
-      // Mobile money subaccounts use the same /subaccount endpoint as bank
-      // accounts — settlement_bank takes the momo network's Paystack bank
-      // code and account_number takes the phone number, mirroring the
-      // recipient call just above. Previously this branch stopped after
-      // creating the recipient, so no momo destination ever got a
-      // subaccount and every booking split for it silently fell through
-      // to the platform's own account.
-      try {
-        const subaccountData = await createPaystackSubaccount(currency.toUpperCase(), {
-          business_name: tenant.name || `Salon ${tenantId}`,
-          settlement_bank: momoProvider!.toUpperCase(),
-          account_number: momoNumber!,
-          percentage_charge: tenant.platform_percentage_charge || feeSettings.defaultPlatformServiceChargePercent,
-          primary_contact_email: user.email,
-          settlement_schedule: tenant.payout_mode === "on_demand" ? "manual" : "auto",
-        });
-
-        paystackSubaccountCode = subaccountData.subaccount_code;
-        paystackSubaccountId = subaccountData.id;
-        paystackSubaccountActive = subaccountData.active;
-        tenantPaymentStatus = "ready";
-      } catch (err: any) {
-        console.error("Error creating momo subaccount:", err);
-        paystackSubaccountError = err.message || "Unknown error creating subaccount";
-        tenantPaymentStatus = "failed";
-        tenantPaymentError = paystackSubaccountError;
-      }
     }
 
     // A tenant's first-ever destination always becomes default, regardless
@@ -292,11 +257,6 @@ Deno.serve(async (req) => {
         momo_provider: momoProvider || null,
         momo_number: momoNumber || null,
         paystack_recipient_code: paystackRecipientCode,
-        paystack_subaccount_code: paystackSubaccountCode,
-        paystack_subaccount_id: paystackSubaccountId,
-        paystack_subaccount_active: paystackSubaccountActive,
-        settlement_schedule: paystackSubaccountCode ? (tenant.payout_mode === "on_demand" ? "manual" : "auto") : null,
-        paystack_subaccount_error: paystackSubaccountError,
         is_default: effectiveIsDefault,
       })
       .select()
@@ -310,8 +270,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Update tenant's payment_setup_status — both destination types now
-    // attempt subaccount creation, so both need this reflected.
+    // A verified transfer recipient makes the payout destination ready.
     const { error: tenantUpdateError } = await serviceSupabase
       .from("tenants")
       .update({

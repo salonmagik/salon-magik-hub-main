@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
   createTenantNotification,
   getSalonRecipients,
@@ -23,6 +23,7 @@ export interface WebhookEvent {
     currency?: string;
     serviceAmount?: number;
     processingFeeAmount?: number;
+    salonNetAmount?: number;
     channel?: string;
     status?: string;
     reference?: string;
@@ -36,6 +37,12 @@ export interface WebhookEvent {
     customerCode?: string;
     customerEmail?: string;
   };
+}
+
+async function recordGatewayPayment(supabase: SupabaseClient, record: Record<string, unknown>) {
+  const result = await supabase.rpc("record_gateway_payment", { p_record: record });
+  if (result.error) throw result.error;
+  return result;
 }
 
 function isValidUUID(value: string): boolean {
@@ -80,7 +87,7 @@ function isTransferEvent(eventType: string): boolean {
 }
 
 async function debitWalletWithRetry(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   tenantId: string,
   withdrawalId: string,
   amount: number,
@@ -139,7 +146,7 @@ function calculateProportionalAmount(
 }
 
 async function validateTenant(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   tenantId: string,
   context: string
 ): Promise<{ name: string | null; currency: string; platform_percentage_charge?: number | null; logo_url?: string | null; payout_mode?: string | null }> {
@@ -168,7 +175,7 @@ async function validateTenant(
 }
 
 async function validateWalletCurrency(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   tenantId: string,
   expectedCurrency: string
 ): Promise<void> {
@@ -225,13 +232,14 @@ const sendTransactionAlerts = async (input: {
   tenantName?: string | null;
   currency?: string | null;
   customerName?: string | null;
+  customerId?: string | null;
   amount: number;
   gateway: "paystack";
   title: string;
   description: string;
   entityId?: string | null;
   htmlContent: string;
-  supabase: ReturnType<typeof createClient>;
+  supabase: SupabaseClient;
   resendApiKey?: string | null;
   resendFromEmail?: string | null;
 }) => {
@@ -254,14 +262,23 @@ const sendTransactionAlerts = async (input: {
   const recipients = await getSalonRecipients(input.supabase, input.tenantId, ["owner", "manager"]);
   if (recipients.length === 0) return;
 
-  await sendResendEmail({
+  const result = await sendResendEmail({
     resendApiKey: input.resendApiKey,
     fromEmail: input.resendFromEmail!,
     to: recipients.map((recipient) => recipient.email),
     subject: input.title,
     salonName: input.tenantName || undefined,
     htmlContent: input.htmlContent,
+    log: {
+      supabase: input.supabase,
+      tenantId: input.tenantId,
+      templateType: "payment_alert",
+      customerId: input.customerId,
+    },
   });
+  if (!result.sent) {
+    console.warn(`Failed to send transaction alert email for tenant ${input.tenantId}:`, result.error);
+  }
 };
 
 // Process webhook asynchronously to avoid timeouts
@@ -277,7 +294,7 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent, billingCycle, authorizationCode, authorizationReusable, customerCode, customerEmail } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, salonNetAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent, billingCycle, authorizationCode, authorizationReusable, customerCode, customerEmail } = event.data;
 
       const actualServiceAmount = serviceAmount ?? amount;
       const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
@@ -407,7 +424,7 @@ export async function processWebhook(
                   .eq("id", entry.id);
 
                 if (appointmentError) {
-                  console.error("Error updating appointment:", appointmentError);
+                  throw appointmentError;
                 }
               }
 
@@ -435,7 +452,7 @@ export async function processWebhook(
               if (splitPurseAmount && splitPurseAmount > 0 && splitCustomerId && paymentGroupId) {
                 console.log(`Recording reserved balance portion: ${splitPurseAmount} for customer ${splitCustomerId}`);
                 try {
-                  await supabase.from("transactions").insert({
+                  await recordGatewayPayment(supabase, {
                     tenant_id: primaryAppointment.tenant_id,
                     customer_id: splitCustomerId,
                     appointment_id: primaryAppointment.id,
@@ -460,7 +477,7 @@ export async function processWebhook(
               // actually charged the customer's card (which includes
               // Paystack's own processing fee and Salon Magik's fees) — see
               // actualServiceAmount above.
-              await supabase.from("transactions").insert({
+              await recordGatewayPayment(supabase, {
                 tenant_id: primaryAppointment.tenant_id,
                 customer_id: primaryAppointment.customer_id,
                 appointment_id: primaryAppointment.id,
@@ -488,6 +505,7 @@ export async function processWebhook(
                 tenantName: tenant?.name,
                 currency: tenant?.currency,
                 customerName: customer?.full_name,
+                customerId: primaryAppointment.customer_id,
                 amount: totalPaymentAmount,
                 gateway: event.gateway,
                 title: `${isDeposit ? "Deposit received" : "Payment received"} at ${tenant?.name || "your salon"}`,
@@ -554,7 +572,7 @@ export async function processWebhook(
                               "Content-Type": "application/json",
                             },
                             body: JSON.stringify({
-                              from: buildFromAddress({ mode: "salon", salonName: tenant.name, fromEmail: resendFromEmail! }),
+                              from: buildFromAddress({ mode: "salon", salonName: tenant.name ?? undefined, fromEmail: resendFromEmail! }),
                               to: authUser.user.email,
                               subject: `${isDeposit ? "Deposit Received" : "New Paid Booking"} at ${tenant.name}`,
                               html: wrapEmailTemplate(
@@ -569,7 +587,7 @@ export async function processWebhook(
                             </ul>
                             <p>Please review the booking in your dashboard.</p>
                           `,
-                                { mode: "salon", salonName: tenant.name, salonLogoUrl: tenant.logo_url ?? undefined },
+                                { mode: "salon", salonName: tenant.name ?? undefined, salonLogoUrl: tenant.logo_url ?? undefined },
                               ),
                             }),
                           });
@@ -637,10 +655,10 @@ export async function processWebhook(
                 // salon-issued store credit never increases payout balance.
                 const totalAmountForSalon = actualServiceAmount;
 
-                let finalCreditAmount = totalAmountForSalon;
-                if (tenant.platform_percentage_charge) {
-                   finalCreditAmount = Number((totalAmountForSalon * (1 - (tenant.platform_percentage_charge / 100))).toFixed(2));
-                }
+                // The checkout freezes the salon share in signed Paystack
+                // metadata. Recomputing with the salon's current settings can
+                // change the economics after the customer has already paid.
+                const finalCreditAmount = salonNetAmount ?? totalAmountForSalon;
 
                 console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
 
@@ -656,12 +674,12 @@ export async function processWebhook(
                 });
 
                 if (creditError) {
-                  console.error("Error crediting salon purse:", creditError);
+                  throw creditError;
                 } else {
                   console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
                 }
               } catch (purseError) {
-                console.error("Exception crediting salon purse:", purseError);
+                throw purseError;
               }
             }
           }
@@ -689,9 +707,9 @@ export async function processWebhook(
               });
 
               if (creditError) {
-                console.error("Error crediting customer purse:", creditError);
+                throw creditError;
               } else {
-                const { error: transactionError } = await supabase.from("transactions").insert({
+                const { error: transactionError } = await recordGatewayPayment(supabase, {
                   tenant_id: tenantId,
                   customer_id: customerId,
                   appointment_id: null,
@@ -706,7 +724,7 @@ export async function processWebhook(
                 });
 
                 if (transactionError) {
-                  console.error("Error recording purse topup transaction:", transactionError);
+                  throw transactionError;
                 }
 
                 await sendTransactionAlerts({
@@ -714,6 +732,7 @@ export async function processWebhook(
                   tenantName: tenant?.name,
                   currency: tenant?.currency,
                   customerName: customer?.full_name,
+                  customerId,
                   amount,
                   gateway: event.gateway,
                   title: `Purse top-up received at ${tenant?.name || "your salon"}`,
@@ -732,7 +751,7 @@ export async function processWebhook(
                 console.log(`Customer purse credited: ${amount} ${tenant.currency} for customer ${customerId}`);
               }
             } catch (purseError) {
-              console.error("Exception crediting customer purse:", purseError);
+              throw purseError;
             }
           } else {
             console.error("Missing required fields for customer_purse_topup:", { customerId, tenantId, amount });
@@ -761,12 +780,12 @@ export async function processWebhook(
               });
 
               if (creditError) {
-                console.error("Error crediting salon purse:", creditError);
+                throw creditError;
               } else {
                 console.log(`Salon purse credited: ${amount} ${salonTenant.currency} for tenant ${salonTenantId}`);
               }
             } catch (purseError) {
-              console.error("Exception crediting salon purse:", purseError);
+              throw purseError;
             }
           } else {
             console.error("Missing required fields for salon_purse_topup:", { salonTenantId, amount, paymentIntentId });
@@ -789,16 +808,14 @@ export async function processWebhook(
                 .eq("id", invoiceId);
 
               if (invoiceUpdateError) {
-                console.error("Error updating invoice:", invoiceUpdateError);
+                throw invoiceUpdateError;
               }
 
               // Validate salon wallet currency matches tenant currency
               await validateWalletCurrency(supabase, tenantId, invoiceTenant.currency);
 
-              let finalCreditAmount = actualServiceAmount;
-              if (invoiceTenant.platform_percentage_charge) {
-                 finalCreditAmount = Number((actualServiceAmount * (1 - (invoiceTenant.platform_percentage_charge / 100))).toFixed(2));
-              }
+              if (actualServiceAmount == null) throw new Error("Invoice payment is missing its service amount");
+              const finalCreditAmount = salonNetAmount ?? actualServiceAmount;
 
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: tenantId,
@@ -812,10 +829,10 @@ export async function processWebhook(
               });
 
               if (creditError) {
-                console.error("Error crediting salon purse for invoice:", creditError);
+                throw creditError;
               }
             } catch (invoiceError) {
-              console.error("Exception processing invoice payment:", invoiceError);
+              throw invoiceError;
             }
           } else {
             console.error("Missing required fields for invoice_payment:", { invoiceId, amount, tenantId });
@@ -832,53 +849,12 @@ export async function processWebhook(
             const messagingTenant = await validateTenant(supabase, messagingTenantId, "messaging credit purchase");
 
             try {
-              const { data: existingCredits } = await supabase
-                .from("communication_credits")
-                .select("id, balance")
-                .eq("tenant_id", messagingTenantId)
-                .single();
-
-              if (existingCredits) {
-                const { error: updateError } = await supabase
-                  .from("communication_credits")
-                  .update({
-                    balance: existingCredits.balance + credits,
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq("tenant_id", messagingTenantId);
-
-                if (updateError) {
-                  console.error("Error updating communication_credits balance:", updateError);
-                }
-              } else {
-                const { error: insertError } = await supabase
-                  .from("communication_credits")
-                  .insert({
-                    tenant_id: messagingTenantId,
-                    balance: credits,
-                    updated_at: new Date().toISOString(),
-                  });
-
-                if (insertError) {
-                  console.error("Error inserting communication_credits:", insertError);
-                }
-              }
-
-              const { error: purchaseInsertError } = await supabase
-                .from("messaging_credit_purchases")
-                .insert({
-                  tenant_id: messagingTenantId,
-                  credits,
-                  currency: messagingTenant.currency,
-                  amount: messagingAmount,
-                  paid_via: "paystack",
-                  payment_intent_id: messagingPaymentIntentId,
-                  gateway_reference: reference,
-                });
-
-              if (purchaseInsertError) {
-                console.error("Error inserting messaging_credit_purchases:", purchaseInsertError);
-              }
+              const { data: purchase, error: purchaseError } = await supabase.rpc("complete_messaging_credit_purchase", {
+                p_tenant_id: messagingTenantId, p_payment_intent_id: messagingPaymentIntentId,
+                p_reference: reference, p_credits: credits, p_amount: messagingAmount, p_currency: messagingTenant.currency,
+              });
+              if (purchaseError) throw purchaseError;
+              if (purchase?.duplicate) break;
 
               // Send confirmation email to tenant owner
               if (resendApiKey) {
@@ -914,7 +890,7 @@ export async function processWebhook(
                               "Content-Type": "application/json",
                             },
                             body: JSON.stringify({
-                              from: buildFromAddress({ mode: "salon", salonName: tenantDetails.name, fromEmail: resendFromEmail }),
+                              from: buildFromAddress({ mode: "salon", salonName: tenantDetails.name ?? undefined, fromEmail: resendFromEmail! }),
                               to: authUser.user.email,
                               subject: `Messaging Credits Purchased - ${tenantDetails.name}`,
                               html: wrapEmailTemplate(
@@ -946,6 +922,7 @@ export async function processWebhook(
               }
             } catch (creditPurchaseError) {
               console.error("Exception processing messaging credit purchase:", creditPurchaseError);
+              throw creditPurchaseError;
             }
           } else {
             console.error("Missing required fields for messaging_credit_purchase:", {
@@ -1130,6 +1107,6 @@ export async function processWebhook(
     console.log("Webhook processing completed:", event.type, event.gateway);
   } catch (error) {
     console.error("Error in async webhook processing:", error);
-    if (event.type.startsWith("transfer.")) throw error;
+    throw error;
   }
 }

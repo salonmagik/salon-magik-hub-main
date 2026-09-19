@@ -113,28 +113,6 @@ Deno.serve(async (req) => {
     const customerEmail = customer.email;
     const customerName = customer.full_name || "";
 
-    let storeSubaccountCode: string | null = null;
-
-    const { data: payoutDest, error: payoutDestError } = await supabase
-      .from("salon_payout_destinations")
-      .select("paystack_subaccount_code")
-      .eq("tenant_id", invoice.tenant_id)
-      .eq("is_default", true)
-      .maybeSingle();
-
-    if (payoutDestError) {
-      console.error("Error looking up default payout destination:", payoutDestError);
-    }
-
-    if (payoutDest?.paystack_subaccount_code) {
-      storeSubaccountCode = payoutDest.paystack_subaccount_code;
-    } else {
-      console.error("No usable payout subaccount for tenant — invoice payment will NOT split to the salon.", {
-        tenantId: invoice.tenant_id,
-        hasDestinationRow: !!payoutDest,
-      });
-    }
-
     const tenantRecord = invoice.tenants as any;
     const feeSettings = await getPaymentFeeSettings(supabase);
     const bookingCharge = computeBookingCharge({
@@ -142,7 +120,6 @@ Deno.serve(async (req) => {
       platformServiceChargePercent: Number(tenantRecord.platform_percentage_charge ?? feeSettings.defaultPlatformServiceChargePercent),
       customerFacingFeePercent: feeSettings.customerFacingFeePercent,
       serviceChargeBorneByCustomer: Boolean(tenantRecord.platform_service_charge_borne_by_customer),
-      hasSubaccount: Boolean(storeSubaccountCode),
     });
 
     // Create payment intent with intent_type='invoice_payment'
@@ -164,6 +141,7 @@ Deno.serve(async (req) => {
           service_amount: invoice.total,
           platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
           customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
+          salon_net_amount: bookingCharge.salonNetAmount,
           amount_charged_to_paystack: bookingCharge.amountToChargePaystack,
         },
       })
@@ -195,16 +173,8 @@ Deno.serve(async (req) => {
         service_amount: invoice.total,
         platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
         customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
-        store_subaccount_code: storeSubaccountCode || "",
       },
     };
-
-    if (storeSubaccountCode) {
-      paystackPayload.subaccount = storeSubaccountCode;
-      if (bookingCharge.transactionChargeMinor > 0) {
-        paystackPayload.transaction_charge = bookingCharge.transactionChargeMinor;
-      }
-    }
 
     // Initialize Paystack transaction
     const paystackResponse = await fetch("https://api.paystack.co/transaction/initialize", {

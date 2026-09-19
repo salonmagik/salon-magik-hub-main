@@ -1,30 +1,4 @@
-/**
- * Booking-payment fee math, confirmed against a real Paystack test-mode
- * transaction (see payments-rails plan, Step 3) before being written here.
- *
- * Confirmed empirically: Paystack's own card-processing fee is computed and
- * added on top of whatever `amount` we send, automatically, whenever the
- * transaction carries a subaccount (default bearer is "customer" — the
- * platform never has to compute or pass that fee itself). What we DO have to
- * control ourselves is how `amount` (the pre-Paystack-fee total) splits
- * between the salon's subaccount and Salon Magik, via the `transaction_charge`
- * parameter on /transaction/initialize — passing it overrides the
- * subaccount's stored percentage_charge for that one transaction, which is
- * what lets a flat "customer-facing fee" sit on top without also being
- * re-split by the subaccount's own percentage.
- */
-
-// Unplugged 2026-09-06, pending a test verdict — not deleted, just not
-// applied at charge time (see create-public-booking and create-payment-session,
-// the two call sites that gate sending `subaccount`/`transaction_charge` to
-// Paystack on this flag). Subaccount splits silently don't apply while a
-// subaccount is unverified — the root cause of a real payment once landing
-// in Salon Magik's own account instead of the salon's — and /transfer-based
-// withdrawals never depended on subaccounts to begin with, so every charge
-// now lands undivided in Salon Magik's main balance; credit_salon_purse is
-// what tracks the salon's share for withdrawal instead. Flip back to `true`
-// once testing confirms it's safe to delete this instead.
-export const SUBACCOUNT_SPLIT_ENABLED = false;
+/** Booking fees and salon wallet share. All collections settle to the platform. */
 
 export interface BookingChargeInput {
   /** True price owed for the service, in major currency units (e.g. naira, not kobo). */
@@ -35,16 +9,12 @@ export interface BookingChargeInput {
   customerFacingFeePercent: number;
   /** If true, the salon's own platform service charge is billed to the customer instead of deducted from the salon's share. */
   serviceChargeBorneByCustomer: boolean;
-  /** Whether this booking has a usable destination subaccount to split with. */
-  hasSubaccount: boolean;
 }
 
 export interface BookingChargeResult {
   /** Amount to send as `amount` on /transaction/initialize, major units. */
   amountToChargePaystack: number;
-  /** Amount to send as `transaction_charge` on /transaction/initialize, minor units. Omit the param entirely when this is 0. */
-  transactionChargeMinor: number;
-  /** What the salon's subaccount will net from this transaction (excludes Paystack's own card fee, which never touches the split). */
+  /** Amount credited to the salon wallet after platform fees. */
   salonNetAmount: number;
   /** Salon Magik's cut of the true service price. */
   platformServiceChargeAmount: number;
@@ -58,19 +28,6 @@ function roundMoney(value: number): number {
 
 export function computeBookingCharge(input: BookingChargeInput): BookingChargeResult {
   const servicePrice = Math.max(0, Number(input.servicePrice) || 0);
-
-  if (!input.hasSubaccount) {
-    // Nothing to split — the whole amount already lands in Salon Magik's
-    // main account, so there's no separate "salon share" to protect and no
-    // customer-facing fee to layer on top of it.
-    return {
-      amountToChargePaystack: servicePrice,
-      transactionChargeMinor: 0,
-      salonNetAmount: 0,
-      platformServiceChargeAmount: 0,
-      customerFacingFeeAmount: 0,
-    };
-  }
 
   const platformServiceChargeAmount = roundMoney(
     (servicePrice * Math.max(0, Number(input.platformServiceChargePercent) || 0)) / 100,
@@ -87,11 +44,9 @@ export function computeBookingCharge(input: BookingChargeInput): BookingChargeRe
     ? servicePrice
     : roundMoney(servicePrice - platformServiceChargeAmount);
 
-  const transactionChargeMinor = Math.round((amountToChargePaystack - salonNetAmount) * 100);
 
   return {
     amountToChargePaystack,
-    transactionChargeMinor,
     salonNetAmount,
     platformServiceChargeAmount,
     customerFacingFeeAmount,
