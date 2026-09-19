@@ -29,6 +29,12 @@ begin
    if v_op.transaction_id<>p_transaction_id or v_op.amount is distinct from p_amount or v_op.refund_type<>p_refund_type then raise exception 'Refund key mismatch'; end if;
    return jsonb_build_object('success',true,'refundId',v_op.refund_id,'duplicate',true);
  end if;
+ if p_request_id is not null then
+   update refund_requests
+   set amount=p_amount, refund_type=p_refund_type, reason=trim(p_reason), updated_at=now()
+   where id=p_request_id and transaction_id=p_transaction_id and status='pending';
+   if not found then raise exception 'Refund request is no longer pending'; end if;
+ end if;
  v_debit := debit_salon_wallet_for_refund(p_transaction_id,p_amount,p_refund_type,p_reason,p_actor_id,'local-refund:'||p_key,p_request_id,v_t.appointment_id,false);
  if not (v_debit->>'ok')::boolean then
    return v_debit||jsonb_build_object('success',false,'error','This salon has insufficient recoverable funds for the refund');

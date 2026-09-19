@@ -269,7 +269,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
 
             {/* Amount Input */}
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount to receive ({currency})</Label>
+              <Label htmlFor="amount">Withdrawal amount ({currency})</Label>
               <Input
                 id="amount"
                 type="number"
@@ -284,8 +284,8 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
 
             {quote && (
               <div className="rounded-lg border p-3 space-y-2 text-sm" aria-live="polite">
-                <div className="flex justify-between"><span>You receive</span><span>{formatCurrency(quote.amount, currency)}</span></div>
-                <div className="flex justify-between"><span>Paystack transfer fee</span><span>{formatCurrency(quote.transferFee, currency)}</span></div>
+                <div className="flex justify-between"><span>Amount sent to payout account</span><span>{formatCurrency(quote.amount, currency)}</span></div>
+                <div className="flex justify-between"><span>Paystack transfer fee (salon pays)</span><span>{formatCurrency(quote.transferFee, currency)}</span></div>
                 {quote.stampDuty > 0 && <div className="flex justify-between"><span>Stamp duty</span><span>{formatCurrency(quote.stampDuty, currency)}</span></div>}
                 <div className="flex justify-between border-t pt-2 font-semibold"><span>Total wallet deduction</span><span>{formatCurrency(quote.totalDebit, currency)}</span></div>
                 <p className="text-xs text-muted-foreground">Your salon pays these charges. No Salon Magik markup. Funds and fees are reserved while the transfer is pending.</p>

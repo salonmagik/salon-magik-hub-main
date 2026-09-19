@@ -351,7 +351,13 @@ export default function ClientRefundsPage() {
                     </div>
                     <div className="shrink-0 min-[420px]:text-right">
                       <p className="font-semibold">{formatCurrency(Number(refund.amount), refund.tenant?.currency)}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{refund.refund_type === "store_credit" ? "Salon balance" : "Cash / transfer"}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {refund.refund_type === "store_credit"
+                          ? "Salon balance"
+                          : refund.status === "pending"
+                            ? "Refund method decided by the salon"
+                            : "Cash / transfer"}
+                      </p>
                     </div>
                   </div>
                 ))}

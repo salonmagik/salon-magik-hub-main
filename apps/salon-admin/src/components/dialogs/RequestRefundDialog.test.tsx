@@ -49,4 +49,22 @@ describe("RequestRefundDialog", () => {
     await waitFor(() => expect(screen.getByText(/store credit is funded from your salon balance/i)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: /Cash \/ transfer/i })).not.toBeDisabled();
   });
+
+  it("lets an elevated approver change the requested amount and destination", async () => {
+    render(
+      <RequestRefundDialog
+        open
+        onOpenChange={vi.fn()}
+        transaction={transaction}
+        mode="complete"
+        request={{ id: "request-1", amount: 75, reason: "Partial service", refund_type: "offline" }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByDisplayValue("75")).toBeInTheDocument());
+    expect(screen.getByRole("spinbutton")).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /Salon balance/i })).not.toBeDisabled();
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "150" } });
+    fireEvent.click(screen.getByRole("button", { name: /Salon balance/i }));
+    expect(screen.getByText(/choose the amount you are approving/i)).toBeInTheDocument();
+  });
 });

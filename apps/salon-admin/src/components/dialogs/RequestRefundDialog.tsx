@@ -364,14 +364,13 @@ export function RequestRefundDialog({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <button
                       type="button"
-                      disabled={isApproval || storeCreditBlockedByWallet}
+                      disabled={storeCreditBlockedByWallet}
                       onClick={() => setRefundType("store_credit")}
                       className={cn(
                         "rounded-xl border p-4 text-left transition-colors",
                         storeCreditBlockedByWallet
                           ? "cursor-not-allowed opacity-60"
                           : refundType === "store_credit" ? "border-primary bg-primary/5" : "hover:border-primary/40",
-                        isApproval && !storeCreditBlockedByWallet && "cursor-default",
                       )}
                     >
                       <WalletCards className="mb-3 h-5 w-5 text-primary" />
@@ -384,12 +383,10 @@ export function RequestRefundDialog({
                     </button>
                     <button
                       type="button"
-                      disabled={isApproval}
                       onClick={() => setRefundType("offline")}
                       className={cn(
                         "rounded-xl border p-4 text-left transition-colors",
                         refundType === "offline" ? "border-primary bg-primary/5" : "hover:border-primary/40",
-                        isApproval && "cursor-default",
                       )}
                     >
                       <CircleDollarSign className="mb-3 h-5 w-5 text-primary" />
@@ -408,18 +405,16 @@ export function RequestRefundDialog({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="refund-amount">Amount</Label>
-                    {!isApproval && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-primary"
-                        onClick={() => setAmount(maxRefundAmount.toFixed(2))}
-                        disabled={isLoading || maxRefundAmount <= 0}
-                      >
-                        All
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-primary"
+                      onClick={() => setAmount(maxRefundAmount.toFixed(2))}
+                      disabled={isLoading || maxRefundAmount <= 0}
+                    >
+                      All
+                    </Button>
                   </div>
                   <Input
                     id="refund-amount"
@@ -428,7 +423,6 @@ export function RequestRefundDialog({
                     max={maxRefundAmount}
                     step="0.01"
                     value={amount}
-                    disabled={isApproval}
                     onChange={(event) => {
                       const next = event.target.value;
                       if (next === "" || Number(next) <= maxRefundAmount) setAmount(next);
@@ -436,6 +430,12 @@ export function RequestRefundDialog({
                     placeholder="0.00"
                   />
                 </div>
+
+                {isApproval && request && (
+                  <p className="rounded-lg bg-primary/5 p-3 text-sm text-primary">
+                    Requested amount: {formatCurrency(Number(request.amount), currency)}. Choose the amount you are approving and whether it becomes salon credit or a direct transfer.
+                  </p>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="refund-reason">Reason</Label>
