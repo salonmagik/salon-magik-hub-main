@@ -5572,6 +5572,7 @@ export type Database = {
           created_at: string
           currency: string
           id: string
+          location_id: string | null
           tenant_id: string
           updated_at: string
         }
@@ -5580,6 +5581,7 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
+          location_id?: string | null
           tenant_id: string
           updated_at?: string
         }
@@ -5588,6 +5590,7 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
+          location_id?: string | null
           tenant_id?: string
           updated_at?: string
         }
@@ -5595,14 +5598,14 @@ export type Database = {
           {
             foreignKeyName: "fk_salon_wallets_tenant"
             columns: ["tenant_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "public_booking_tenants"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "fk_salon_wallets_tenant"
             columns: ["tenant_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -5618,6 +5621,7 @@ export type Database = {
           wallet_debited: number
           amount: number
           currency: string
+          location_id: string | null
           failure_reason: string | null
           id: string
           payout_destination_id: string
@@ -5639,6 +5643,7 @@ export type Database = {
           currency: string
           failure_reason?: string | null
           id?: string
+          location_id?: string | null
           payout_destination_id: string
           paystack_reference?: string | null
           paystack_transfer_code?: string | null
@@ -5658,6 +5663,7 @@ export type Database = {
           currency?: string
           failure_reason?: string | null
           id?: string
+          location_id?: string | null
           payout_destination_id?: string
           paystack_reference?: string | null
           paystack_transfer_code?: string | null
@@ -8253,6 +8259,7 @@ export type Database = {
           gateway_reference: string | null
           id: string
           idempotency_key: string | null
+          location_id: string | null
           metadata: Json
           reference_id: string | null
           reference_type: string | null
@@ -8271,6 +8278,7 @@ export type Database = {
           gateway_reference?: string | null
           id?: string
           idempotency_key?: string | null
+          location_id?: string | null
           metadata?: Json
           reference_id?: string | null
           reference_type?: string | null
@@ -8289,6 +8297,7 @@ export type Database = {
           gateway_reference?: string | null
           id?: string
           idempotency_key?: string | null
+          location_id?: string | null
           metadata?: Json
           reference_id?: string | null
           reference_type?: string | null
@@ -9321,6 +9330,7 @@ export type Database = {
           p_reference_id: string
           p_reference_type: string
           p_tenant_id: string
+          p_location_id?: string | null
         }
         Returns: string
       }
@@ -9348,6 +9358,7 @@ export type Database = {
           p_reference_id: string
           p_reference_type: string
           p_tenant_id: string
+          p_location_id?: string | null
         }
         Returns: string
       }
@@ -9598,7 +9609,7 @@ export type Database = {
         Returns: Json
       }
       get_salon_wallet_availability: {
-        Args: { p_tenant_id: string }
+        Args: { p_tenant_id: string; p_location_id?: string | null }
         Returns: {
           available: number
           balance: number

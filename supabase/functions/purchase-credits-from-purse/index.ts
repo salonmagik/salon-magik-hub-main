@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
       .from("salon_wallets")
       .select("*")
       .eq("tenant_id", tenantId)
+      .is("location_id", null)
       .single();
 
     if (walletError || !walletData) {

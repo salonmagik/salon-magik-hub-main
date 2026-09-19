@@ -33,17 +33,21 @@ import { cn } from "@shared/utils";
 interface WithdrawalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  locationId?: string | null;
+  onWithdrawalCreated?: () => void | Promise<void>;
 }
 
-export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) {
+export function WithdrawalDialog({ open, onOpenChange, locationId = null, onWithdrawalCreated }: WithdrawalDialogProps) {
   const { currentTenant } = useAuth();
   const tenantId = currentTenant?.id;
   const currency = currentTenant?.currency || "NGN";
 
-  const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId);
-  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId);
+  const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId, locationId);
+  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId, locationId);
   const { destinations, isLoading: destinationsLoading } = usePayoutDestinations(tenantId);
-  const { createWithdrawal } = useWithdrawals(tenantId);
+  const { createWithdrawal } = useWithdrawals(tenantId, locationId);
+
+  const scopedDestinations = destinations.filter((item) => !item.location_id || item.location_id === locationId);
 
   const [selectedDestinationId, setSelectedDestinationId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -60,7 +64,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
     ? new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })
     : null;
 
-  const destination = destinations.find((item) => item.id === selectedDestinationId);
+  const destination = scopedDestinations.find((item) => item.id === selectedDestinationId);
   let quote: ReturnType<typeof quoteWithdrawal> | null = null;
   let quoteError = "";
   if (amount && destination) {
@@ -139,6 +143,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       const result = await createWithdrawal({
         tenantId,
         payoutDestinationId: selectedDestinationId,
+        locationId,
         amount: Number(amount),
         acceptedTotalDebit: quote.totalDebit,
         feeVersion: quote.feeVersion,
@@ -149,6 +154,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
         onOpenChange(false);
         setSelectedDestinationId("");
         setAmount("");
+        await onWithdrawalCreated?.();
       }
     } catch (err) {
       console.error("Error processing withdrawal:", err);
@@ -238,7 +244,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
             {/* Payout Destination Selection */}
             <div className="space-y-2">
               <Label htmlFor="destination">Payout Destination</Label>
-              {destinations.length === 0 ? (
+              {scopedDestinations.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
@@ -254,7 +260,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
                     <SelectValue placeholder="Select destination" />
                   </SelectTrigger>
                   <SelectContent>
-                    {destinations.map((dest) => (
+                    {scopedDestinations.map((dest) => (
                       <SelectItem key={dest.id} value={dest.id}>
                         {dest.destination_type === "bank"
                           ? `${dest.bank_name} - ${dest.account_number}`
@@ -313,7 +319,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
           </Button>
           <Button
             onClick={handleWithdraw}
-            disabled={!canSubmit || destinations.length === 0}
+            disabled={!canSubmit || scopedDestinations.length === 0}
           >
             {isSubmitting ? (
               <>

@@ -183,6 +183,7 @@ async function validateWalletCurrency(
     .from("salon_wallets")
     .select("currency")
     .eq("tenant_id", tenantId)
+    .is("location_id", null)
     .single();
 
   if (walletError) {

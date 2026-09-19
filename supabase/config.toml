@@ -13,7 +13,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-appointment-notification]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-password-reset]
 verify_jwt = false
@@ -149,7 +149,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-invoice]
-verify_jwt = false
+verify_jwt = true
+
+[functions.send-booking-approval-email]
+verify_jwt = true
 
 [functions.verify-bank-account]
 verify_jwt = false

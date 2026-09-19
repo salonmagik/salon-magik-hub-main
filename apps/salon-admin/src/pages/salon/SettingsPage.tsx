@@ -343,7 +343,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
 
-	const { wallet } = useSalonWallet(currentTenant?.id);
+	const settingsWalletLocationId = activeContextType === "location" ? activeLocationId : null;
+	const { wallet } = useSalonWallet(currentTenant?.id, settingsWalletLocationId);
 	// Online booking can't be turned on without a payout account — enforced
 	// at the DB level too (trg_enforce_online_booking_requires_payout), this
 	// just disables the toggle with an explanation instead of a raw DB error.

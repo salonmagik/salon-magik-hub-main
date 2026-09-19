@@ -277,7 +277,16 @@ export default function ReportsPage() {
         </div>
 
         {/* Stat Chips */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-tour-id="tour-reports-stats">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7" data-tour-id="tour-reports-stats">
+          <StatChip
+            label="Total earned"
+            value={fmt(stats.totalEarned)}
+            sub="lifetime in Salon Magik"
+            description="Lifetime earnings credited to the selected salon or branch wallet. This includes booking and invoice credits and is separate from the current withdrawal balance."
+            icon={Banknote}
+            color="bg-[#e3f3eb] text-[#2e7d5b]"
+            loading={isLoading}
+          />
           <StatChip
             label="Inflow"
             value={fmt(stats.totalRevenue)}

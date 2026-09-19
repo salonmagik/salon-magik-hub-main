@@ -10,6 +10,7 @@ import {
   buildFromAddress,
 } from "../_shared/email-template.ts";
 import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
+import { secureRandomFromAlphabet } from "../_shared/secure-random.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -33,19 +34,7 @@ interface InvitationRequest {
 function generateSecurePassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const specials = "!@#$%&*";
-  let password = "";
-  
-  // 8 alphanumeric chars
-  for (let i = 0; i < 8; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  
-  // 2 special chars
-  for (let i = 0; i < 2; i++) {
-    password += specials.charAt(Math.floor(Math.random() * specials.length));
-  }
-  
-  return password;
+  return secureRandomFromAlphabet(chars, 8) + secureRandomFromAlphabet(specials, 2);
 }
 
 function buildInvitationEmailContent(

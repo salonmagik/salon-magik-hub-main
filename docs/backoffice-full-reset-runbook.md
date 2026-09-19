@@ -1,8 +1,7 @@
-# Backoffice Full Reset Runbook (Dev / Staging / Prod)
+# Backoffice Data Reset Runbook (Operator Controlled)
 
 ## Scope
-This runbook wipes backoffice-domain data, sales ops/KYC/revenue-ops data, and backoffice auth users.
-It also resets marketing master toggles (`waitlist_enabled`, `other_countries_interest_enabled`) to OFF.
+This runbook documents the controls around a destructive reset. The reset SQL is intentionally not stored in this repository. Only an approved database operator should perform it in the target Supabase project after confirming the environment and backup.
 
 ## Pre-flight (per environment)
 1. Confirm target project ref:
@@ -19,14 +18,11 @@ Run migrations before reset:
 - `supabase db push --include-all --yes`
 
 ## Execute destructive reset
-In Supabase SQL editor (target env), run:
-- `supabase/scripts/reset_backoffice_domain.sql`
+Use the organization’s restricted database-operations procedure or a separately stored, access-controlled migration. Do not paste destructive reset SQL into application code, edge functions, or a public repository.
 
 ## Re-seed baseline
 1. Ensure `backoffice_allowed_domains` includes `salonmagik.com`.
-2. Create/provision super admin via edge function flow:
-   - deploy function if needed: `supabase functions deploy provision-super-admin`
-   - run provisioning flow with intended super-admin email
+2. Create/provision the super admin through the protected operator flow. The bootstrap function requires the separately managed `PROVISION_SUPER_ADMIN_SECRET`.
 3. Sign in as super admin and complete 2FA setup.
 
 ## Post-reset validation

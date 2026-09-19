@@ -595,7 +595,7 @@ serve(async (req) => {
     }
     const promotionalDiscount = voucherBalanceAmount === 0 ? voucherDiscount : 0;
     const chargeableTotal = Math.max(0, totalAmount - promotionalDiscount);
-    const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    const reference = `BK${Date.now().toString(36).toUpperCase()}${crypto.randomUUID().replaceAll("-", "").slice(0, 6).toUpperCase()}`;
     const createdAppointmentIds: string[] = [];
     const approvalRequired = tenant.auto_confirm_bookings === false;
     let allocatedPromotionDiscount = 0;

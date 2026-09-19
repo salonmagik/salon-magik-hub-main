@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { secureRandomDigits } from "../_shared/secure-random.ts";
 import { getClientIp, checkIpOtpRateLimit } from "../_shared/otp-ip-throttle.ts";
 import { wrapEmailTemplate, paragraph, heading, smallText, buildFromAddress } from "../_shared/email-template.ts";
 
@@ -14,7 +15,7 @@ const OTP_TTL_MINUTES = 10;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return secureRandomDigits(6);
 }
 
 async function hashOtp(otp: string): Promise<string> {

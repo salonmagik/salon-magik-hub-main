@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1047,12 +1048,45 @@ export default function MessagingPage() {
     setMessage(value);
   };
 
-  const renderEmailPreview = (body: string) =>
-    body
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/_(.+?)_/g, "<em>$1</em>")
-      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
-      .replace(/\n/g, "<br />");
+  const renderEmailPreview = (body: string): ReactNode => {
+    const renderInline = (line: string): ReactNode[] => {
+      const parts = line.split(/(\*\*[^*]+\*\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g);
+      return parts.map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={index}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("_") && part.endsWith("_")) {
+          return <em key={index}>{part.slice(1, -1)}</em>;
+        }
+        const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (linkMatch) {
+          const [, label, rawHref] = linkMatch;
+          let href: string | null = null;
+          try {
+            const parsed = new URL(rawHref, window.location.origin);
+            if (parsed.protocol === "http:" || parsed.protocol === "https:") href = parsed.href;
+          } catch {
+            href = null;
+          }
+          return href ? (
+            <a key={index} href={href} target="_blank" rel="noreferrer" className="underline">
+              {label}
+            </a>
+          ) : (
+            <span key={index}>{label}</span>
+          );
+        }
+        return <span key={index}>{part}</span>;
+      });
+    };
+
+    return body.split("\n").map((line, index) => (
+      <span key={index}>
+        {renderInline(line)}
+        {index < body.split("\n").length - 1 ? <br /> : null}
+      </span>
+    ));
+  };
 
   const isAudienceComplete =
     audienceMode === "single" ? Boolean(singleCustomerId) : audienceMode === "group";
@@ -1813,10 +1847,9 @@ export default function MessagingPage() {
                               </div>
                               <div
                                 className="max-h-48 overflow-y-auto rounded-xl border bg-white p-3.5 text-sm leading-7 text-gray-800"
-                                dangerouslySetInnerHTML={{
-                                  __html: previewBody ? renderEmailPreview(previewBody) : "Your email will appear here.",
-                                }}
-                              />
+                              >
+                                {previewBody ? renderEmailPreview(previewBody) : "Your email will appear here."}
+                              </div>
                             </div>
                           ) : (
                             <div className="rounded-2xl bg-slate-950 px-4 py-3.5 text-sm leading-7 text-white">

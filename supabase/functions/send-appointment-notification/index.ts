@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
+import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -152,9 +153,18 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const actorResult = await resolveRequestActor(req, {
+      supabaseUrl,
+      anonKey: supabaseAnonKey,
+      serviceRoleKey: supabaseServiceKey,
+      corsHeaders,
+    });
+    if ("response" in actorResult) return actorResult.response;
 
     const { appointmentId, action, reason, newDate, newTime }: NotificationRequest = await req.json();
 
@@ -182,6 +192,14 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Failed to fetch appointment:", JSON.stringify(aptError));
       throw new Error(`Appointment not found: ${aptError?.message || "unknown"}`);
     }
+
+    const membershipError = await requireTenantMembership(
+      supabase,
+      actorResult.actor,
+      [appointment.tenant_id],
+      corsHeaders,
+    );
+    if (membershipError) return membershipError;
 
     const customerEmail = appointment.customer?.email;
     if (!customerEmail) {

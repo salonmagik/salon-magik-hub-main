@@ -4,7 +4,7 @@ import type { Tables } from "@supabase-client";
 
 export type SalonWallet = Tables<"salon_wallets">;
 
-export function useSalonWallet(tenantId?: string) {
+export function useSalonWallet(tenantId?: string, locationId?: string | null) {
   const [wallet, setWallet] = useState<SalonWallet | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -19,11 +19,14 @@ export function useSalonWallet(tenantId?: string) {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from("salon_wallets")
         .select("*")
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
+        .eq("tenant_id", tenantId);
+      query = locationId
+        ? query.eq("location_id", locationId)
+        : query.is("location_id", null);
+      const { data, error: fetchError } = await query.maybeSingle();
 
       if (fetchError) throw fetchError;
 
@@ -34,13 +37,13 @@ export function useSalonWallet(tenantId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, locationId]);
 
   useEffect(() => {
     if (tenantId) {
       fetchWallet();
     }
-  }, [tenantId, fetchWallet]);
+  }, [tenantId, locationId, fetchWallet]);
 
   return {
     wallet,

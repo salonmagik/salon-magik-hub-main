@@ -8,6 +8,7 @@ import {
   smallText,
   buildFromAddress,
 } from "../_shared/email-template.ts";
+import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +28,7 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
@@ -36,6 +38,14 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const actorResult = await resolveRequestActor(req, {
+      supabaseUrl,
+      anonKey: supabaseAnonKey,
+      serviceRoleKey: supabaseServiceKey,
+      corsHeaders,
+    });
+    if ("response" in actorResult) return actorResult.response;
 
     const { invoiceId }: InvoiceEmailData = await req.json();
 
@@ -64,6 +74,14 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const membershipError = await requireTenantMembership(
+      supabase,
+      actorResult.actor,
+      [invoice.tenant_id],
+      corsHeaders,
+    );
+    if (membershipError) return membershipError;
 
     const customer = invoice.customers as { full_name: string; email: string } | null;
     const tenant = invoice.tenants as { name: string; currency: string } | null;

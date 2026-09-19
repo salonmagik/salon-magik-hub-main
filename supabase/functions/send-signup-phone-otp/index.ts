@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { secureRandomDigits } from "../_shared/secure-random.ts";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { getClientIp, checkIpOtpRateLimit } from "../_shared/otp-ip-throttle.ts";
 
@@ -20,7 +21,7 @@ const corsHeaders = {
 const OTP_TTL_MINUTES = 10;
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return secureRandomDigits(6);
 }
 
 async function hashOtp(otp: string): Promise<string> {

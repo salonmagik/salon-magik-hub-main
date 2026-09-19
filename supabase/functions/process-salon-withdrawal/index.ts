@@ -10,6 +10,8 @@ const corsHeaders = {
 
 interface WithdrawalRequest {
   tenantId: string;
+  /** null explicitly selects the central/unassigned wallet; a UUID selects one branch wallet. */
+  locationId?: string | null;
   payoutDestinationId: string;
   amount: number;
   acceptedTotalDebit: number;
@@ -53,7 +55,7 @@ Deno.serve(async (req) => {
     }
 
     const body: WithdrawalRequest = await req.json();
-    const { tenantId, payoutDestinationId, amount } = body;
+    const { tenantId, payoutDestinationId, amount, locationId = null } = body;
 
     // Validate required fields
     if (!tenantId || !payoutDestinationId || !amount) {
@@ -72,6 +74,19 @@ Deno.serve(async (req) => {
 
     // Use service role for database operations
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    if (locationId) {
+      const { data: location } = await serviceSupabase
+        .from("locations")
+        .select("id")
+        .eq("id", locationId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (!location) {
+        return new Response(JSON.stringify({ error: "Selected branch does not belong to this salon" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
 
     const { data: membership, error: membershipError } = await serviceSupabase
       .from("user_roles").select("role").eq("tenant_id", tenantId)
@@ -93,6 +108,7 @@ Deno.serve(async (req) => {
       .from("salon_withdrawals")
       .select("id, status, amount, requested_at")
       .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .eq("payout_destination_id", payoutDestinationId)
       .in("status", ["pending", "awaiting_otp"])
       .order("requested_at", { ascending: false })
@@ -125,6 +141,7 @@ Deno.serve(async (req) => {
       .from("salon_withdrawals")
       .select("id, status, requested_at")
       .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .eq("payout_destination_id", payoutDestinationId)
       .eq("amount", amount)
       .gte("requested_at", timeWindowStart)
@@ -160,6 +177,7 @@ Deno.serve(async (req) => {
       .from("salon_wallets")
       .select("*")
       .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .single();
 
     if (walletError || !wallet) {
@@ -198,6 +216,10 @@ Deno.serve(async (req) => {
 
     if (payoutDestination.currency !== wallet.currency) {
       return new Response(JSON.stringify({ error: "Payout destination currency does not match wallet" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (payoutDestination.location_id && payoutDestination.location_id !== locationId) {
+      return new Response(JSON.stringify({ error: "This payout account is assigned to a different branch" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     let quote;
@@ -241,7 +263,7 @@ Deno.serve(async (req) => {
     // surface as Paystack's opaque "balance not enough" error. Check our own
     // settlement estimate first so we can give a clear explanation instead.
     const { data: availabilityRows, error: availabilityError } = await serviceSupabase
-      .rpc("get_salon_wallet_availability", { p_tenant_id: tenantId });
+      .rpc("get_salon_wallet_availability", { p_tenant_id: tenantId, p_location_id: locationId });
 
     if (availabilityError) {
       console.error("Error computing wallet availability:", availabilityError);
@@ -309,6 +331,7 @@ Deno.serve(async (req) => {
         id: withdrawalId,
         tenant_id: tenantId,
         salon_wallet_id: wallet.id,
+        location_id: locationId,
         payout_destination_id: payoutDestinationId,
         currency: wallet.currency,
         amount,

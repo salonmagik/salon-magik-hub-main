@@ -531,7 +531,7 @@ begin
     raise exception 'New test 11 failed: expected 99.50 - 39.80 = 59.70 after the first tranche, got %', v_balance;
   end if;
 
-  perform public.complete_transaction_refund(v_txn_f1, 40, 'paystack', 'Partial refund 1 of 2', null, v_entry_id);
+  perform public.complete_transaction_refund(v_txn_f1, 40, 'original_method', 'Partial refund 1 of 2', null, v_entry_id);
 
   v_result := public.debit_salon_wallet_for_refund(
     v_txn_f1, 60, 'paystack', 'Partial refund 2 of 2 (settles the rest)', v_owner_f, 'clawback-f1-p2'
@@ -546,7 +546,7 @@ begin
     raise exception 'New test 11 failed: the final tranche should absorb the rounding remainder, leaving exactly 0.00, got %', v_balance;
   end if;
 
-  perform public.complete_transaction_refund(v_txn_f1, 60, 'paystack', 'Partial refund 2 of 2', null, v_entry_id);
+  perform public.complete_transaction_refund(v_txn_f1, 60, 'original_method', 'Partial refund 2 of 2', null, v_entry_id);
 
   -- ===== New test 12: transaction with no wallet credit at all — no debit,
   -- no block, refund completes =====
@@ -569,7 +569,7 @@ begin
     raise exception 'New test 12 failed: no wallet credit must not be treated as a block';
   end if;
 
-  v_refund_id := public.complete_transaction_refund(v_txn_g1, 100, 'paystack', 'Credit never landed', null, null);
+  v_refund_id := public.complete_transaction_refund(v_txn_g1, 100, 'original_method', 'Credit never landed', null, null);
   if v_refund_id is null then
     raise exception 'New test 12 failed: refund should complete even with no wallet debit entry, since none was owed';
   end if;
@@ -588,7 +588,7 @@ begin
 
   v_raised := false;
   begin
-    perform public.complete_transaction_refund(v_txn_h1, 50, 'paystack', 'Amount does not match the debit', null, v_entry_id);
+    perform public.complete_transaction_refund(v_txn_h1, 50, 'original_method', 'Amount does not match the debit', null, v_entry_id);
   exception
     when others then
       if sqlerrm like 'REFUND_WALLET_DEBIT_INVALID%' then

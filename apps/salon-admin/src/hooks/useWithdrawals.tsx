@@ -7,13 +7,14 @@ export type SalonWithdrawal = Tables<"salon_withdrawals">;
 
 interface CreateWithdrawalData {
   tenantId: string;
+  locationId?: string | null;
   payoutDestinationId: string;
   amount: number;
   acceptedTotalDebit: number;
   feeVersion: string;
 }
 
-export function useWithdrawals(tenantId?: string) {
+export function useWithdrawals(tenantId?: string, locationId?: string | null) {
   const [withdrawals, setWithdrawals] = useState<SalonWithdrawal[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -28,11 +29,14 @@ export function useWithdrawals(tenantId?: string) {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from("salon_withdrawals")
         .select("*")
         .eq("tenant_id", tenantId)
-        .order("requested_at", { ascending: false });
+      query = locationId
+        ? query.eq("location_id", locationId)
+        : query.is("location_id", null);
+      const { data, error: fetchError } = await query.order("requested_at", { ascending: false });
 
       if (fetchError) throw fetchError;
 
@@ -43,13 +47,13 @@ export function useWithdrawals(tenantId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, locationId]);
 
   useEffect(() => {
     if (tenantId) {
       fetchWithdrawals();
     }
-  }, [tenantId, fetchWithdrawals]);
+  }, [tenantId, locationId, fetchWithdrawals]);
 
   const createWithdrawal = async (
     data: CreateWithdrawalData

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
@@ -68,11 +68,13 @@ export default function PayoutsPage() {
   const [assignDestId, setAssignDestId] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [selectedWalletScope, setSelectedWalletScope] = useState<string>("__central__");
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { locations, isLoading: locationsLoading } = useSalonsOverview("today");
 
   const isOwnerHub = activeContextType === "owner_hub";
+  const selectedWalletLocationId = selectedWalletScope === "__central__" ? null : selectedWalletScope;
   // Payouts management (accounts, withdrawals, assignments) is restricted to
   // owner/manager/supervisor — stylists and receptionists never see or access it.
   const canManagePayouts = isOwnerHub && (
@@ -82,15 +84,24 @@ export default function PayoutsPage() {
   const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(
     canManagePayouts ? currentTenant?.id : undefined
   );
-  const { wallet, isLoading: walletLoading } = useSalonWallet(
-    canManagePayouts ? currentTenant?.id : undefined
+  const { wallet, isLoading: walletLoading, refetch: refetchWallet } = useSalonWallet(
+    canManagePayouts ? currentTenant?.id : undefined,
+    canManagePayouts ? selectedWalletLocationId : null,
   );
-  const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
-    canManagePayouts ? currentTenant?.id : undefined
+  const { availability: walletAvailability, isLoading: walletAvailabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(
+    canManagePayouts ? currentTenant?.id : undefined,
+    canManagePayouts ? selectedWalletLocationId : null,
   );
-  const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
-    canManagePayouts ? currentTenant?.id : undefined
+  const { withdrawals, isLoading: withdrawalsLoading, refetch: refetchWithdrawals } = useWithdrawals(
+    canManagePayouts ? currentTenant?.id : undefined,
+    canManagePayouts ? selectedWalletLocationId : null,
   );
+
+  useEffect(() => {
+    if (selectedWalletScope !== "__central__" && !locations.some((location) => location.id === selectedWalletScope)) {
+      setSelectedWalletScope("__central__");
+    }
+  }, [locations, selectedWalletScope]);
 
   const currency = currentTenant?.currency || "USD";
   const walletCurrency = wallet?.currency ?? currency;
@@ -152,6 +163,16 @@ export default function PayoutsPage() {
               Withdraw your salon balance and manage where your earnings are paid out.
             </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+          {locations.length > 1 && (
+            <Select value={selectedWalletScope} onValueChange={setSelectedWalletScope}>
+              <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__central__">Salon-wide / unassigned</SelectItem>
+                {locations.map((location) => <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           {availableCountries.length > 1 && (
             <Select value={effectiveCountry} onValueChange={setSelectedCountry}>
               <SelectTrigger className="w-[150px]">
@@ -166,6 +187,7 @@ export default function PayoutsPage() {
               </SelectContent>
             </Select>
           )}
+          </div>
         </div>
 
         {/* Wallet balance */}
@@ -188,9 +210,14 @@ export default function PayoutsPage() {
                     </Tooltip>
                   </div>
                   {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
-                    <p className="text-2xl font-semibold mt-0.5">
-                      {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
-                    </p>
+                    <>
+                      <p className="text-2xl font-semibold mt-0.5">
+                        {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "Salon-wide / unassigned wallet"}
+                      </p>
+                    </>
                   )}
                 </div>
 
@@ -412,7 +439,14 @@ export default function PayoutsPage() {
       </div>
 
       {/* Dialogs */}
-      <WithdrawalDialog open={withdrawalOpen} onOpenChange={setWithdrawalOpen} />
+      <WithdrawalDialog
+        open={withdrawalOpen}
+        onOpenChange={setWithdrawalOpen}
+        locationId={selectedWalletLocationId}
+        onWithdrawalCreated={async () => {
+          await Promise.all([refetchWallet(), refetchAvailability(), refetchWithdrawals()]);
+        }}
+      />
 
       <Dialog open={!!assigningBranchId} onOpenChange={(o) => { if (!o) { setAssigningBranchId(null); setAssignDestId(""); } }}>
         <DialogContent className="sm:max-w-md">

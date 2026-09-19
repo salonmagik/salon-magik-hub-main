@@ -13,6 +13,7 @@ export interface StaffPerformance {
 }
 
 export interface ReportStats {
+  totalEarned: number;
   totalRevenue: number;
   prevPeriodRevenue: number;
   revenueChangePercent: number | null;
@@ -41,6 +42,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
   const { currentTenant } = useAuth();
   const { scopedLocationIds, hasScope } = useLocationScope();
   const [stats, setStats] = useState<ReportStats>({
+    totalEarned: 0,
     totalRevenue: 0,
     prevPeriodRevenue: 0,
     revenueChangePercent: null,
@@ -155,6 +157,26 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
 
       const scopedAppointmentIds = aptList.map((a) => a.id);
       const scopedCustomerIds = [...new Set(aptList.map((a) => a.customer_id).filter(Boolean))];
+
+      // Wallet credits are the authoritative lifetime earnings view. Branch
+      // scopes use only that branch wallet; owner hub includes every wallet.
+      let walletQuery = supabase
+        .from("salon_wallets")
+        .select("id")
+        .eq("tenant_id", currentTenant.id);
+      if (hasScope) walletQuery = walletQuery.in("location_id", scopedLocationIds);
+      const { data: scopedWallets } = await walletQuery;
+      const walletIds = (scopedWallets || []).map((wallet) => wallet.id);
+      let totalEarned = 0;
+      if (walletIds.length > 0) {
+        const { data: earnedEntries } = await supabase
+          .from("wallet_ledger_entries")
+          .select("amount")
+          .eq("tenant_id", currentTenant.id)
+          .in("wallet_id", walletIds)
+          .in("entry_type", ["salon_purse_credit_booking", "salon_purse_credit_invoice"]);
+        totalEarned = (earnedEntries || []).reduce((sum, entry) => sum + Math.max(0, Number(entry.amount)), 0);
+      }
 
       // Build transaction query helper
       const buildTxnQuery = (from: Date, to: Date, aptIds: string[]) => {
@@ -308,6 +330,7 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
         .slice(0, 5);
 
       setStats({
+        totalEarned,
         totalRevenue,
         prevPeriodRevenue,
         revenueChangePercent,
