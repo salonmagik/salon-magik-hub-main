@@ -16,6 +16,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { nextReminderState } from "./reminder-state.ts";
+import { getReminderSmsCredits } from "./reminder-sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -190,12 +191,35 @@ serve(async (req) => {
               `this is a reminder about your appointment at ${first.tenant_name || "our salon"} ` +
               `on ${apptDate}. See you soon!`;
 
-            await sendArkeselSMS({
-              to: first.customer_phone!,
-              from: senderName,
-              message,
-              useCase: "promotional",
-            });
+            const creditsRequired = getReminderSmsCredits(message);
+            const { data: creditsReserved, error: reservationError } = await supabase.rpc(
+              "reserve_communication_credits",
+              { p_tenant_id: first.tenant_id, p_amount: creditsRequired },
+            );
+
+            if (reservationError) {
+              throw new Error(`Unable to reserve SMS credits: ${reservationError.message}`);
+            }
+            if (!creditsReserved) {
+              throw new Error(`Insufficient SMS credits (need ${creditsRequired})`);
+            }
+
+            try {
+              await sendArkeselSMS({
+                to: first.customer_phone!,
+                from: senderName,
+                message,
+                useCase: "promotional",
+              });
+            } catch (providerError) {
+              // Do not charge a salon when Arkesel rejected the message.
+              await supabase.rpc("restore_communication_credits", {
+                p_tenant_id: first.tenant_id,
+                p_amount: creditsRequired,
+              });
+              throw providerError;
+            }
+
             smsOk = true;
             smsSent++;
             await supabase.from("message_logs").insert({
@@ -208,7 +232,8 @@ serve(async (req) => {
               sent_at: new Date().toISOString(),
               provider: "arkesel_sms",
               initiated_by: "system",
-              credits_used: 0,
+              content: message,
+              credits_used: creditsRequired,
             });
           } catch (err) {
             console.error(`SMS reminder failed for appointment ${appointmentId}:`, err);

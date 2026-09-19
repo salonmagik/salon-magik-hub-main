@@ -2,6 +2,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
 import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
 import { createButton } from "../_shared/email-template.ts";
+import {
+  formatDateRange,
+  periodRange,
+  shouldSendToday,
+  type DigestFrequency,
+} from "./digest-schedule.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,45 +17,6 @@ const corsHeaders = {
 
 interface DigestRequest {
   tenantId?: string;
-}
-
-function startOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0));
-}
-
-function endOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
-}
-
-type DigestFrequency = "daily" | "weekly" | "monthly";
-
-// The cron fires once a day — frequency is decided in here, not by having
-// separate cron schedules. A weekly/monthly digest would be nearly all
-// zeros if it only ever looked at "today", so both the send-or-skip
-// decision and the aggregation window depend on which day it actually is.
-function shouldSendToday(frequency: DigestFrequency, now: Date): boolean {
-  if (frequency === "daily") return true;
-  if (frequency === "weekly") return now.getUTCDay() === 1; // Monday
-  return now.getUTCDate() === 1; // Monthly: 1st of the month
-}
-
-function periodRange(frequency: DigestFrequency, now: Date): { start: Date; end: Date; label: string } {
-  const end = endOfUtcDay(now);
-  if (frequency === "daily") {
-    return { start: startOfUtcDay(now), end, label: "today" };
-  }
-  if (frequency === "weekly") {
-    const start = startOfUtcDay(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
-    return { start, end, label: "this week" };
-  }
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
-  return { start, end, label: "this month" };
-}
-
-function formatDateRange(frequency: DigestFrequency, start: Date, end: Date): string {
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  if (frequency === "daily") return fmt(end);
-  return `${fmt(start)} – ${fmt(end)}`;
 }
 
 Deno.serve(async (req) => {
