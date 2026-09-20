@@ -43,12 +43,14 @@ function isSafeCtaUrl(value: string) {
 
 async function recordEvent(client: AnnouncementClient, announcementId: string, userId: string, eventType: string) {
   // Events are append-only with a unique key. A duplicate is expected when a
-  // user revisits an announcement, so it is deliberately non-blocking.
+  // user revisits an announcement or multiple tabs load at once. Ask
+  // PostgREST to ignore that conflict so normal revisits do not produce a
+  // noisy 409 in the browser console.
   await client.from("product_announcement_events").insert({
     announcement_id: announcementId,
     user_id: userId,
     event_type: eventType,
-  });
+  }, { onConflict: "announcement_id,user_id,event_type", ignoreDuplicates: true });
 }
 
 function playAnnouncementTone() {
