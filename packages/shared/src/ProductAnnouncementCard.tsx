@@ -59,21 +59,48 @@ function playAnnouncementTone() {
     if (!AudioContextConstructor) return;
 
     const context = new AudioContextConstructor();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const now = context.currentTime;
+    const play = () => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
 
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(880, now);
-    oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.18);
-    oscillator.addEventListener("ended", () => { void context.close(); }, { once: true });
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, now);
+      oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.18);
+      oscillator.addEventListener("ended", () => { void context.close(); }, { once: true });
+    };
+
+    // A context created outside a user gesture starts suspended in many
+    // browsers. Resume it immediately when possible, then retry on the next
+    // interaction so a newly published card can still announce itself.
+    if (context.state === "suspended") {
+      let resolved = false;
+      const unlock = () => {
+        if (resolved) return;
+        resolved = true;
+        void context.resume().then(play).catch(() => { void context.close(); });
+      };
+      window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+      window.addEventListener("keydown", unlock, { once: true });
+      void context.resume().then(() => {
+        if (!resolved && context.state === "running") unlock();
+      }).catch(() => undefined);
+      window.setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          void context.close();
+        }
+      }, 5000);
+      return;
+    }
+    play();
   } catch {
     // Browsers can reject audio before the user has interacted with the page.
   }
@@ -181,19 +208,28 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
       client
         .from("product_announcement_events")
         .select("announcement_id,event_type")
-        .eq("user_id", currentUserId)
-        .eq("event_type", "dismissed"),
+        .eq("user_id", currentUserId),
     ]);
 
     if (announcementsError) console.error("Could not load product announcements", announcementsError);
     if (eventsError) console.error("Could not load product announcement events", eventsError);
 
-    const dismissedIds = new Set((events ?? []).map((event: { announcement_id: string }) => event.announcement_id));
+    const dismissedIds = new Set(
+      (events ?? [])
+        .filter((event: { event_type: string }) => event.event_type === "dismissed")
+        .map((event: { announcement_id: string }) => event.announcement_id),
+    );
+    const viewedIds = new Set(
+      (events ?? [])
+        .filter((event: { event_type: string }) => event.event_type === "viewed")
+        .map((event: { announcement_id: string }) => event.announcement_id),
+    );
     const nextAnnouncements = ((announcementRows ?? []) as ProductAnnouncement[])
       .filter((item) => Array.isArray(item.platforms) && item.platforms.includes(platform))
       .filter((item) => !dismissedIds.has(item.id));
     const hasNewAnnouncement = loadedRef.current
-      && nextAnnouncements.some((item) => !knownAnnouncementIdsRef.current.has(item.id));
+      ? nextAnnouncements.some((item) => !knownAnnouncementIdsRef.current.has(item.id) && !viewedIds.has(item.id))
+      : nextAnnouncements.some((item) => !viewedIds.has(item.id));
     if (hasNewAnnouncement) playAnnouncementTone();
     knownAnnouncementIdsRef.current = new Set(nextAnnouncements.map((item) => item.id));
     loadedRef.current = true;
