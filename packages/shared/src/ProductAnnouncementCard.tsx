@@ -264,7 +264,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
       }}
     >
       <div
-        className="pointer-events-auto relative w-full outline-none"
+        className="pointer-events-auto relative w-full cursor-pointer rounded-[20px] outline-none focus-visible:ring-2 focus-visible:ring-[#F4C84E] focus-visible:ring-offset-2"
         style={{ height: expanded ? "auto" : `${collapsedHeight}px` }}
         tabIndex={0}
         role="group"
