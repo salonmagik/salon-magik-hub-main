@@ -200,11 +200,11 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
         .from("product_announcements")
         .select("id,title,summary,body,icon,cta_label,cta_url,platforms,status,publish_at,expires_at")
         .in("status", ["published", "scheduled"])
-        // Published-now announcements may intentionally have a null publish_at.
-        .or(`publish_at.is.null,publish_at.lte.${now}`)
-        .or(`expires_at.is.null,expires_at.gt.${now}`)
-        .order("publish_at", { ascending: false })
-        .limit(10),
+        // Date eligibility is filtered below. Keeping it out of the chained
+        // PostgREST filters avoids one `.or()` replacing another in older
+        // Supabase clients, and preserves announcements with a null publish_at.
+        .order("publish_at", { ascending: false, nullsFirst: false })
+        .limit(50),
       client
         .from("product_announcement_events")
         .select("announcement_id,event_type")
@@ -224,7 +224,13 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
         .filter((event: { event_type: string }) => event.event_type === "viewed")
         .map((event: { announcement_id: string }) => event.announcement_id),
     );
+    const nowMs = Date.parse(now);
     const nextAnnouncements = ((announcementRows ?? []) as ProductAnnouncement[])
+      .filter((item) => {
+        const publishAt = item.publish_at ? Date.parse(item.publish_at) : Number.NEGATIVE_INFINITY;
+        const expiresAt = item.expires_at ? Date.parse(item.expires_at) : Number.POSITIVE_INFINITY;
+        return publishAt <= nowMs && expiresAt > nowMs;
+      })
       .filter((item) => Array.isArray(item.platforms) && item.platforms.includes(platform))
       .filter((item) => !dismissedIds.has(item.id));
     const hasNewAnnouncement = loadedRef.current
