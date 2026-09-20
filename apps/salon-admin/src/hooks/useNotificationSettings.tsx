@@ -30,7 +30,7 @@ const defaultSettings: Omit<NotificationSettings, "id" | "tenant_id" | "location
   email_cancellations: true,
   email_transaction_alerts: true,
   in_app_transaction_alerts: true,
-  digest_frequency: "off",
+  digest_frequency: "daily",
   email_birthday_messages: true,
   reminder_hours_before: 24,
   reminder_extra_minutes_before: null,
