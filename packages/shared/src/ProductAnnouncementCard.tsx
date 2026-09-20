@@ -20,6 +20,9 @@ export interface ProductAnnouncement {
 interface AnnouncementClient {
   auth?: {
     getUser?: () => Promise<{ data: { user: { id: string } | null } }>;
+    onAuthStateChange?: (
+      callback: (_event: string, session: { user: { id: string } | null } | null) => void,
+    ) => { data: { subscription: { unsubscribe: () => void } } };
   };
   from: (table: string) => any;
   channel?: (name: string) => any;
@@ -254,6 +257,21 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
     void loadAnnouncement();
     const handleFocus = () => { void loadAnnouncement(); };
     window.addEventListener("focus", handleFocus);
+    const authSubscription = client.auth?.onAuthStateChange?.((_event, session) => {
+      // Supabase can restore INITIAL_SESSION after this component mounted. A
+      // deferred reload prevents the card from remaining empty after that
+      // first unauthenticated read, and avoids calling Supabase inside its
+      // auth callback stack.
+      window.setTimeout(() => {
+        if (!session?.user) {
+          setUserId(null);
+          setAnnouncements([]);
+          setLoading(false);
+          return;
+        }
+        void loadAnnouncement();
+      }, 0);
+    });
 
     const channel = client.channel?.(`product-announcements-${platform}`)
       ?.on("postgres_changes", {
@@ -266,6 +284,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
     return () => {
       mediaQuery.removeEventListener("change", updateViewport);
       window.removeEventListener("focus", handleFocus);
+      authSubscription?.data.subscription.unsubscribe();
       channel?.unsubscribe?.();
     };
   }, [client, loadAnnouncement, platform]);
