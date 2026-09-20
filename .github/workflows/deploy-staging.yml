@@ -105,6 +105,12 @@ jobs:
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_STAGING }}
 
       - name: Integration smoke checks
+        # The smoke suite imports the Supabase client before Vitest setup
+        # files can stub import.meta.env. Use non-secret placeholders so the
+        # deployment check remains hermetic and never targets staging data.
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
         run: pnpm test
 
       - name: Write staging promotion manifest
