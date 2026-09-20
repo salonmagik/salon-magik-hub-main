@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type ProductAnnouncementPlatform = "salon_admin" | "client_portal" | "backoffice";
 
@@ -82,16 +83,26 @@ function AnnouncementCard({
   announcement,
   onDismiss,
   onActivate,
+  interactive = true,
 }: {
   announcement: ProductAnnouncement;
   onDismiss: () => void;
   onActivate: () => void;
+  interactive?: boolean;
 }) {
   return (
     <aside
       role="status"
       aria-label={`Product announcement: ${announcement.title}`}
-      className="relative flex h-[18rem] min-h-[18rem] flex-col overflow-hidden rounded-[20px] border border-[#E8DDF7] bg-[#FFFCF8] text-[#2E1F4E] shadow-[0_20px_44px_rgba(46,31,78,0.2)]"
+      aria-hidden={!interactive}
+      className="pointer-events-auto relative flex h-[18rem] min-h-[18rem] w-full shrink-0 flex-col overflow-hidden rounded-[20px] border border-[#E8DDF7] bg-[#FFFCF8] text-[#2E1F4E] shadow-[0_20px_44px_rgba(46,31,78,0.2)]"
+      style={{
+        backgroundColor: "#FFFCF8",
+        height: "288px",
+        minHeight: "288px",
+        opacity: 1,
+        width: "100%",
+      }}
     >
       <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-[#F4C84E]/25" />
       <span aria-hidden="true" className="pointer-events-none absolute -bottom-12 -left-8 h-28 w-28 rounded-full bg-[#E9DDF7]/70" />
@@ -99,6 +110,7 @@ function AnnouncementCard({
         <button
           type="button"
           onClick={onDismiss}
+          tabIndex={interactive ? 0 : -1}
           aria-label={`Dismiss ${announcement.title}`}
           className="absolute right-3.5 top-3.5 rounded-md p-1 text-[#6E6381] transition hover:bg-[#2E1F4E]/[0.06] hover:text-[#2E1F4E]"
         >
@@ -119,6 +131,7 @@ function AnnouncementCard({
           <button
             type="button"
             onClick={onActivate}
+            tabIndex={interactive ? 0 : -1}
             className="mt-3 inline-flex w-fit items-center rounded-full bg-[#2E1F4E] px-5 py-[9px] text-[13.5px] font-semibold text-white transition hover:bg-[#402966]"
           >
             {announcement.cta_label} <span className="ml-1.5" aria-hidden="true">→</span>
@@ -131,6 +144,7 @@ function AnnouncementCard({
 
 export function ProductAnnouncementCard({ client, platform, onNavigate }: ProductAnnouncementCardProps) {
   const [announcements, setAnnouncements] = useState<ProductAnnouncement[]>([]);
+  const [expanded, setExpanded] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const loadedRef = useRef(false);
@@ -230,24 +244,76 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
 
   if (loading || !announcements.length) return null;
 
-  return (
+  const collapsedAnnouncements = announcements.slice(0, 3);
+  const displayedAnnouncements = expanded ? announcements : collapsedAnnouncements;
+  const collapsedHeight = 288 + Math.max(0, collapsedAnnouncements.length - 1) * 12;
+
+  const toggleStack = (event: React.MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button, a")) return;
+    setExpanded((current) => !current);
+  };
+
+  const overlay = (
     <div
       aria-label="Product announcements"
-      className="fixed bottom-4 right-4 z-[70] flex max-h-[calc(100dvh-2rem)] w-[min(22.5rem,calc(100vw-2rem))] flex-col gap-3 overflow-y-auto sm:bottom-6 sm:right-6"
+      className="pointer-events-none fixed bottom-4 right-4 z-[100000] flex max-h-[calc(100dvh-2rem)] w-[min(22.5rem,calc(100vw-2rem))] flex-col gap-3 overflow-y-auto sm:bottom-6 sm:right-6"
+      style={{
+        isolation: "isolate",
+        opacity: 1,
+        width: "min(360px, calc(100vw - 32px))",
+      }}
     >
-      {announcements.slice(0, 3).map((announcement) => (
-        <AnnouncementCard
-          key={announcement.id}
-          announcement={announcement}
-          onDismiss={() => dismiss(announcement)}
-          onActivate={() => activateCta(announcement)}
-        />
-      ))}
-      {announcements.length > 3 && (
-        <p className="rounded-full bg-[#FFFCF8]/95 px-3 py-1 text-center text-xs text-[#6E6381] shadow-lg">
-          +{announcements.length - 3} more announcement{announcements.length - 3 === 1 ? "" : "s"}
-        </p>
-      )}
+      <div
+        className="pointer-events-auto relative w-full outline-none"
+        style={{ height: expanded ? "auto" : `${collapsedHeight}px` }}
+        tabIndex={0}
+        role="group"
+        aria-label={`${announcements.length} product announcement${announcements.length === 1 ? "" : "s"}`}
+        onMouseEnter={() => setExpanded(true)}
+        onMouseLeave={() => setExpanded(false)}
+        onFocusCapture={() => setExpanded(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExpanded(false);
+        }}
+        onClick={toggleStack}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setExpanded((current) => !current);
+          }
+        }}
+      >
+        {displayedAnnouncements.map((announcement, index) => {
+          const isCollapsedCard = !expanded;
+          return (
+            <div
+              key={announcement.id}
+              aria-hidden={isCollapsedCard && index > 0}
+              className={isCollapsedCard ? "absolute inset-x-0 top-0 transition-[transform,opacity] duration-200 ease-out" : "relative transition-[transform,opacity] duration-200 ease-out"}
+              style={isCollapsedCard ? {
+                zIndex: displayedAnnouncements.length - index,
+                transform: `translateY(${index * 12}px) scale(${1 - index * 0.025})`,
+                opacity: index === 0 ? 1 : 0.92,
+                pointerEvents: index === 0 ? "auto" : "none",
+              } : { zIndex: displayedAnnouncements.length - index }}
+            >
+              <AnnouncementCard
+                announcement={announcement}
+                interactive={expanded || index === 0}
+                onDismiss={() => dismiss(announcement)}
+                onActivate={() => activateCta(announcement)}
+              />
+            </div>
+          );
+        })}
+        {!expanded && announcements.length > 3 && (
+          <p className="pointer-events-none absolute -bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#FFFCF8] px-3 py-1 text-center text-xs text-[#6E6381] shadow-lg">
+            +{announcements.length - 3} more announcement{announcements.length - 3 === 1 ? "" : "s"}
+          </p>
+        )}
+      </div>
     </div>
   );
+
+  return typeof document === "undefined" ? overlay : createPortal(overlay, document.body);
 }
