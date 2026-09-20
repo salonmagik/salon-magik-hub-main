@@ -95,9 +95,10 @@ function AnnouncementCard({
       role="status"
       aria-label={`Product announcement: ${announcement.title}`}
       aria-hidden={!interactive}
-      className="pointer-events-auto relative flex h-[18rem] min-h-[18rem] w-full shrink-0 flex-col overflow-hidden rounded-[20px] border border-[#E8DDF7] bg-[#FFFCF8] text-[#2E1F4E] shadow-[0_20px_44px_rgba(46,31,78,0.2)]"
+      className="pointer-events-auto relative flex h-[18rem] min-h-[18rem] w-full shrink-0 flex-col overflow-hidden rounded-[20px] border border-[#D5C5EB] bg-[#EEE5F8] text-[#2E1F4E] shadow-[0_20px_44px_rgba(46,31,78,0.24)]"
       style={{
-        backgroundColor: "#FFFCF8",
+        backgroundColor: "#EEE5F8",
+        backgroundImage: "linear-gradient(145deg, #F3ECFB 0%, #E9DDF7 100%)",
         height: "288px",
         minHeight: "288px",
         opacity: 1,
@@ -171,7 +172,6 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
         .from("product_announcements")
         .select("id,title,summary,body,icon,cta_label,cta_url,platforms,status,publish_at,expires_at")
         .in("status", ["published", "scheduled"])
-        .contains("platforms", [platform])
         // Published-now announcements may intentionally have a null publish_at.
         .or(`publish_at.is.null,publish_at.lte.${now}`)
         .or(`expires_at.is.null,expires_at.gt.${now}`)
@@ -188,7 +188,9 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
     if (eventsError) console.error("Could not load product announcement events", eventsError);
 
     const dismissedIds = new Set((events ?? []).map((event: { announcement_id: string }) => event.announcement_id));
-    const nextAnnouncements = ((announcementRows ?? []) as ProductAnnouncement[]).filter((item) => !dismissedIds.has(item.id));
+    const nextAnnouncements = ((announcementRows ?? []) as ProductAnnouncement[])
+      .filter((item) => Array.isArray(item.platforms) && item.platforms.includes(platform))
+      .filter((item) => !dismissedIds.has(item.id));
     const hasNewAnnouncement = loadedRef.current
       && nextAnnouncements.some((item) => !knownAnnouncementIdsRef.current.has(item.id));
     if (hasNewAnnouncement) playAnnouncementTone();
@@ -256,7 +258,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
   const overlay = (
     <div
       aria-label="Product announcements"
-      className="pointer-events-none fixed bottom-4 right-4 z-[100000] flex max-h-[calc(100dvh-2rem)] w-[min(22.5rem,calc(100vw-2rem))] flex-col gap-3 overflow-y-auto sm:bottom-6 sm:right-6"
+      className="pointer-events-none fixed left-4 right-4 top-[calc(4rem+env(safe-area-inset-top))] z-[100000] flex max-h-[calc(100dvh-5.5rem)] w-auto flex-col gap-3 overflow-y-auto sm:left-auto sm:right-6 sm:top-24 sm:max-h-[calc(100dvh-7rem)]"
       style={{
         isolation: "isolate",
         opacity: 1,
@@ -307,7 +309,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
           );
         })}
         {!expanded && announcements.length > 3 && (
-          <p className="pointer-events-none absolute -bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#FFFCF8] px-3 py-1 text-center text-xs text-[#6E6381] shadow-lg">
+          <p className="pointer-events-none absolute -bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#EEE5F8] px-3 py-1 text-center text-xs text-[#6E6381] shadow-lg">
             +{announcements.length - 3} more announcement{announcements.length - 3 === 1 ? "" : "s"}
           </p>
         )}
