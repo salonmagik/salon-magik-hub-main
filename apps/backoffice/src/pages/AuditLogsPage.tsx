@@ -35,6 +35,8 @@ type AuditLog = {
   entity_id: string | null;
   actor_user_id: string | null;
   tenant_id: string | null;
+  before_json: Record<string, unknown> | null;
+  after_json: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
 };
@@ -90,12 +92,16 @@ export default function AuditLogsPage() {
     const term = searchFilter.trim().toLowerCase();
     if (!term) return data?.logs || [];
     return (data?.logs || []).filter((row) => {
-      const metadata = JSON.stringify(row.metadata || {}).toLowerCase();
+      const searchable = JSON.stringify({
+        before: row.before_json,
+        after: row.after_json,
+        metadata: row.metadata,
+      }).toLowerCase();
       return (
         row.action.toLowerCase().includes(term) ||
         row.entity_type.toLowerCase().includes(term) ||
         (row.entity_id || "").toLowerCase().includes(term) ||
-        metadata.includes(term)
+        searchable.includes(term)
       );
     });
   }, [data?.logs, searchFilter]);
@@ -313,6 +319,18 @@ export default function AuditLogsPage() {
               <div><strong>Actor:</strong> <span className="font-mono">{selectedLog.actor_user_id || "-"}</span></div>
               <div><strong>Tenant:</strong> <span className="font-mono">{selectedLog.tenant_id || "-"}</span></div>
               <div><strong>Created:</strong> {new Date(selectedLog.created_at).toLocaleString()}</div>
+              <div className="space-y-2">
+                <strong>Before</strong>
+                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
+                  {JSON.stringify(selectedLog.before_json || {}, null, 2)}
+                </pre>
+              </div>
+              <div className="space-y-2">
+                <strong>After</strong>
+                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
+                  {JSON.stringify(selectedLog.after_json || {}, null, 2)}
+                </pre>
+              </div>
               <div className="space-y-2">
                 <strong>Metadata</strong>
                 <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
