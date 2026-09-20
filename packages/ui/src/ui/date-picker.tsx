@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { format, parse } from "date-fns";
+import { endOfDay, format, parse, startOfDay } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 
 import { cn } from "@shared/utils";
@@ -63,8 +63,11 @@ export function DatePicker({
           selected={value}
           onSelect={handleSelect}
           disabled={(date) => {
-            if (minDate && date < minDate) return true;
-            if (maxDate && date > maxDate) return true;
+            // Calendar values represent the start of a day, while callers
+            // commonly pass `new Date()` (which includes the current time).
+            // Compare day boundaries so today's date remains selectable.
+            if (minDate && date < startOfDay(minDate)) return true;
+            if (maxDate && date > endOfDay(maxDate)) return true;
             return false;
           }}
           defaultMonth={value || maxDate}
