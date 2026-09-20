@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { getClientIp, checkIpOtpRateLimit } from "../_shared/otp-ip-throttle.ts";
 import { sendOtpEmailFallback } from "../_shared/otp-email-fallback.ts";
+import { secureRandomDigits } from "../_shared/secure-random.ts";
 
 // Client-portal counterpart to send-phone-otp. Split into its own function
 // (rather than a client-suppliable `strict` flag on the shared one) so the
@@ -23,7 +24,7 @@ const corsHeaders = {
 const OTP_TTL_MINUTES = 10;
 
 function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return secureRandomDigits(6);
 }
 
 async function hashOtp(otp: string): Promise<string> {

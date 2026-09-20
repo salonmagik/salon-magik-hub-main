@@ -11,9 +11,10 @@ import { TopUpDialog } from "./TopUpDialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 export function SalonWalletCard() {
-  const { currentTenant } = useAuth();
-  const { wallet, isLoading, error, refetch } = useSalonWallet(currentTenant?.id);
-  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(currentTenant?.id);
+  const { currentTenant, activeContextType, activeLocationId } = useAuth();
+  const walletLocationId = activeContextType === "location" ? activeLocationId : null;
+  const { wallet, isLoading, error, refetch } = useSalonWallet(currentTenant?.id, walletLocationId);
+  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(currentTenant?.id, walletLocationId);
   const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
   const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
 
@@ -128,6 +129,7 @@ export function SalonWalletCard() {
       <WithdrawalDialog
         open={withdrawalDialogOpen}
         onOpenChange={handleWithdrawalDialogClose}
+        locationId={walletLocationId}
       />
     </Card>
   );

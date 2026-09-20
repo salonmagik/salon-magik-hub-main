@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 
 const DEFAULT_BOOKING_DOMAIN = "salonmagik.com";
 
@@ -63,6 +64,8 @@ export function resolvePublicBookingSlug(options: {
 export const resolvePublicBookingSlugSync = resolvePublicBookingSlug;
 
 export async function resolveSlugFromCustomDomain(hostname: string): Promise<string | null> {
+  if (!CUSTOM_DOMAINS_ENABLED) return null;
+
   let normalizedHost = hostname.toLowerCase();
   
   // Strip www. from the hostname before querying

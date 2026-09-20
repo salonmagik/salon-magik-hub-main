@@ -20,6 +20,7 @@ import {
   Check,
 } from "lucide-react";
 import type { ProductTourStepInput } from "@/components/onboarding/ProductTourProvider";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 
 // ─── Setup checklist metadata ───────────────────────────────────────────────
 // Lives here (not in SalonDashboard.tsx) so both SalonDashboard.tsx and
@@ -713,14 +714,14 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     section: "Business Hub",
     sectionIcon: Building2,
     label: "Business profile",
-    description: "Name, logo, address, and default currency",
+    description: "Business details, HQ, and branch currencies",
     requiresOwnerHub: true,
     buildStep: () => ({
       id: "hub.business-profile",
       path: "/salon/business-settings?tab=profile",
-      target: '[data-tour-id="tour-settings-profile"]',
+      target: '[data-tour-id="tour-business-locations"]',
       title: "Business profile",
-      content: "Your business name, logo, address, and default currency live here.",
+      content: "Your business details live here. Each branch has its own country and derived currency, and the HQ badge marks the default location created during onboarding. Payments, reports, pricing, and payouts follow the selected branch.",
     }),
   },
   {
@@ -1077,6 +1078,7 @@ export interface WalkthroughAvailabilityCtx {
 }
 
 export function isWalkthroughAvailable(walkthrough: WalkthroughDef, ctx: WalkthroughAvailabilityCtx): boolean {
+  if (walkthrough.id === "hub.custom-domain" && !CUSTOM_DOMAINS_ENABLED) return false;
   if (walkthrough.requiresOwnerHub && !ctx.canUseOwnerHub) return false;
   if (walkthrough.requiresStaffOperations && !ctx.staffOperationsEnabled) return false;
   if (walkthrough.permission && !ctx.hasPermission(walkthrough.permission)) return false;

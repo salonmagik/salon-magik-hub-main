@@ -1,6 +1,6 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useBackofficeAuth } from "@/hooks";
+import { useBackofficeAuth, useBlockedRefundsCount } from "@/hooks";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { BackofficeOnboardingGate } from "@/components/BackofficeOnboardingGate";
 import {
@@ -46,8 +46,11 @@ import {
   Percent,
   BadgeCheck,
   Banknote,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
+import { supabase } from "@/lib/supabase";
 
 interface BackofficeLayoutProps {
   children: ReactNode;
@@ -87,6 +90,7 @@ const navItems: NavItem[] = [
   { href: "/withdrawals", label: "Withdrawals", icon: Banknote, pageKey: "withdrawals" },
   { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
   { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
+  { href: "/product-announcements", label: "Product announcements", icon: Sparkles, pageKey: "settings" },
   {
     href: "/sales/campaigns",
     label: "Sales Ops",
@@ -111,6 +115,7 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, backofficeUser, signOut, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
+  const { data: blockedRefundsCount } = useBlockedRefundsCount();
   const canSeeItem = (item: NavItem) => {
     if (backofficeUser?.role === "super_admin") return true;
     if (item.pageKey && !hasBackofficePageAccess(item.pageKey)) return false;
@@ -203,6 +208,11 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
 																<item.icon className="h-4 w-4" />
 															) : null}
 															<span>{item.label}</span>
+															{item.pageKey === "transactions" && Boolean(blockedRefundsCount) && (
+																<span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground">
+																	{blockedRefundsCount}
+																</span>
+															)}
 														</Link>
 													</SidebarMenuButton>
 												</SidebarMenuItem>
@@ -305,6 +315,11 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
 								<SidebarTrigger className="h-9 w-9" />
 							</div>
 							<BackofficeOnboardingGate />
+							<ProductAnnouncementCard
+								client={supabase as any}
+								platform="backoffice"
+								onNavigate={(path) => navigate(path)}
+							/>
 							<main className="flex-1 overflow-auto">{children}</main>
 						</SidebarInset>
 					</div>

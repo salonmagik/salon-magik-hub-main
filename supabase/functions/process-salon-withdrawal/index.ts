@@ -1,6 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, getPaystackBalance } from "../_shared/paystack-helpers.ts";
 
+import { quoteWithdrawal } from "../_shared/withdrawal-fees.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -8,8 +10,12 @@ const corsHeaders = {
 
 interface WithdrawalRequest {
   tenantId: string;
+  /** null explicitly selects the central/unassigned wallet; a UUID selects one branch wallet. */
+  locationId?: string | null;
   payoutDestinationId: string;
   amount: number;
+  acceptedTotalDebit: number;
+  feeVersion: string;
 }
 
 // Duplicate detection time window (5 minutes in milliseconds)
@@ -49,7 +55,7 @@ Deno.serve(async (req) => {
     }
 
     const body: WithdrawalRequest = await req.json();
-    const { tenantId, payoutDestinationId, amount } = body;
+    const { tenantId, payoutDestinationId, amount, locationId = null } = body;
 
     // Validate required fields
     if (!tenantId || !payoutDestinationId || !amount) {
@@ -59,7 +65,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (amount <= 0) {
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
       return new Response(
         JSON.stringify({ error: "Amount must be greater than 0" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -68,6 +74,28 @@ Deno.serve(async (req) => {
 
     // Use service role for database operations
     const serviceSupabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    if (locationId) {
+      const { data: location } = await serviceSupabase
+        .from("locations")
+        .select("id")
+        .eq("id", locationId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (!location) {
+        return new Response(JSON.stringify({ error: "Selected branch does not belong to this salon" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    const { data: membership, error: membershipError } = await serviceSupabase
+      .from("user_roles").select("role").eq("tenant_id", tenantId)
+      .eq("user_id", user.id).eq("is_active", true)
+      .in("role", ["owner", "manager", "supervisor"]).limit(1);
+    if (membershipError || !membership?.length) {
+      return new Response(JSON.stringify({ error: "Not authorized to withdraw from this salon" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // =====================================================
     // STEP 1: CHECK FOR DUPLICATE WITHDRAWALS
@@ -80,8 +108,9 @@ Deno.serve(async (req) => {
       .from("salon_withdrawals")
       .select("id, status, amount, requested_at")
       .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .eq("payout_destination_id", payoutDestinationId)
-      .in("status", ["pending", "processing"])
+      .in("status", ["pending", "awaiting_otp"])
       .order("requested_at", { ascending: false })
       .limit(1);
 
@@ -112,6 +141,7 @@ Deno.serve(async (req) => {
       .from("salon_withdrawals")
       .select("id, status, requested_at")
       .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .eq("payout_destination_id", payoutDestinationId)
       .eq("amount", amount)
       .gte("requested_at", timeWindowStart)
@@ -147,6 +177,7 @@ Deno.serve(async (req) => {
       .from("salon_wallets")
       .select("*")
       .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .single();
 
     if (walletError || !wallet) {
@@ -156,6 +187,52 @@ Deno.serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Enforce the app minimum before creating a record or sending money.
+    const minWithdrawal = wallet.currency === "NGN" ? 500 : wallet.currency === "GHS" ? 50 : null;
+    if (minWithdrawal === null || amount < minWithdrawal) {
+      return new Response(
+        JSON.stringify({ error: minWithdrawal === null
+          ? "Unsupported withdrawal currency"
+          : `Minimum withdrawal is ${minWithdrawal} ${wallet.currency}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: payoutDestination, error: destinationError } = await serviceSupabase
+      .from("salon_payout_destinations")
+      .select("*")
+      .eq("id", payoutDestinationId)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (destinationError || !payoutDestination) {
+      console.error("Error fetching payout destination:", destinationError);
+      return new Response(
+        JSON.stringify({ error: "Payout destination not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (payoutDestination.currency !== wallet.currency) {
+      return new Response(JSON.stringify({ error: "Payout destination currency does not match wallet" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (payoutDestination.location_id && payoutDestination.location_id !== locationId) {
+      return new Response(JSON.stringify({ error: "This payout account is assigned to a different branch" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    let quote;
+    try { quote = quoteWithdrawal(amount, wallet.currency, payoutDestination.destination_type); }
+    catch (error) {
+      return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Invalid withdrawal" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (body.feeVersion !== quote.feeVersion || body.acceptedTotalDebit !== quote.totalDebit) {
+      return new Response(JSON.stringify({ error: "Please review the current withdrawal fees and try again", quote }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const totalDebit = quote.totalDebit;
 
     // Get currency-specific Paystack key based on wallet currency
     const paystackKeyResult = getPaystackKeyForCurrency(wallet.currency);
@@ -170,10 +247,10 @@ Deno.serve(async (req) => {
     const paystackSecretKey = paystackKeyResult.key;
 
     // Check sufficient balance early (before creating withdrawal record)
-    if (wallet.balance < amount) {
+    if (wallet.balance < totalDebit) {
       return new Response(
         JSON.stringify({
-          error: `Insufficient wallet balance. Available: ${wallet.balance} ${wallet.currency}, Required: ${amount} ${wallet.currency}`
+          error: `Insufficient wallet balance. Available: ${wallet.balance} ${wallet.currency}, Required including fees: ${totalDebit} ${wallet.currency}`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -186,15 +263,17 @@ Deno.serve(async (req) => {
     // surface as Paystack's opaque "balance not enough" error. Check our own
     // settlement estimate first so we can give a clear explanation instead.
     const { data: availabilityRows, error: availabilityError } = await serviceSupabase
-      .rpc("get_salon_wallet_availability", { p_tenant_id: tenantId });
+      .rpc("get_salon_wallet_availability", { p_tenant_id: tenantId, p_location_id: locationId });
 
     if (availabilityError) {
       console.error("Error computing wallet availability:", availabilityError);
+      return new Response(JSON.stringify({ error: "Could not confirm available wallet funds" }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } else {
       const availability = availabilityRows?.[0];
-      const availableBalance = Number(availability?.available ?? wallet.balance);
+      const availableBalance = Number(availability?.available ?? 0);
 
-      if (availableBalance < amount) {
+      if (availableBalance < totalDebit) {
         const settlementNote = availability?.next_settlement_at
           ? ` The remaining balance is expected to clear by ${new Date(availability.next_settlement_at).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}.`
           : "";
@@ -225,28 +304,13 @@ Deno.serve(async (req) => {
         { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    if (paystackRealBalance < amount) {
+    if (paystackRealBalance < totalDebit) {
       console.error(
         `[Withdrawal] Refusing withdrawal for tenant ${tenantId}: requested ${amount} ${wallet.currency}, Paystack balance only ${paystackRealBalance}.`,
       );
       return new Response(
         JSON.stringify({ error: "Your payout processor hasn't confirmed enough available funds for this withdrawal yet. Please try again shortly, or contact support if this persists." }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { data: payoutDestination, error: destinationError } = await serviceSupabase
-      .from("salon_payout_destinations")
-      .select("*")
-      .eq("id", payoutDestinationId)
-      .eq("tenant_id", tenantId)
-      .single();
-
-    if (destinationError || !payoutDestination) {
-      console.error("Error fetching payout destination:", destinationError);
-      return new Response(
-        JSON.stringify({ error: "Payout destination not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -267,9 +331,13 @@ Deno.serve(async (req) => {
         id: withdrawalId,
         tenant_id: tenantId,
         salon_wallet_id: wallet.id,
+        location_id: locationId,
         payout_destination_id: payoutDestinationId,
         currency: wallet.currency,
         amount,
+        transfer_fee: quote.transferFee,
+        stamp_duty: quote.stampDuty,
+        fee_version: quote.feeVersion,
         status: "pending",
         paystack_reference: transferReference, // Save it early for the approval webhook
       })
@@ -279,7 +347,7 @@ Deno.serve(async (req) => {
     if (withdrawalInsertError || !withdrawal) {
       console.error("Error creating withdrawal record:", withdrawalInsertError);
       return new Response(
-        JSON.stringify({ error: "Failed to create withdrawal record" }),
+        JSON.stringify({ error: "Unable to reserve the withdrawal amount and fees. Refresh your balance and try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -318,17 +386,16 @@ Deno.serve(async (req) => {
     } catch (fetchError) {
       console.error("Paystack API request failed:", fetchError);
       
-      // Mark withdrawal as failed
+      // Preserve the reservation until the provider confirms the outcome.
       await serviceSupabase
         .from("salon_withdrawals")
         .update({
-          status: "failed",
-          failure_reason: `Network error: ${fetchError.message}`,
+          failure_reason: "Transfer outcome unknown; awaiting provider confirmation",
         })
-        .eq("id", withdrawal.id);
+        .eq("id", withdrawal.id).eq("status", "pending");
 
       return new Response(
-        JSON.stringify({ error: `Failed to connect to payment provider: ${fetchError.message}` }),
+        JSON.stringify({ error: `Transfer outcome is not yet confirmed. Check withdrawal history before trying again.` }),
         { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -341,10 +408,10 @@ Deno.serve(async (req) => {
       await serviceSupabase
         .from("salon_withdrawals")
         .update({
-          status: "failed",
+          ...(paystackResponse.status < 500 ? { status: "failed" } : {}),
           failure_reason: paystackData.message || "Transfer initiation failed",
         })
-        .eq("id", withdrawal.id);
+        .eq("id", withdrawal.id).eq("status", "pending");
 
       // Return user-friendly error message
       const errorMessage = paystackData.message || "Failed to initiate transfer";
@@ -372,34 +439,25 @@ Deno.serve(async (req) => {
     // way for anyone to tell it apart from one that's genuinely just
     // clearing. Recording it as its own status lets backoffice see and act
     // on it — salons still only ever see "pending" (see PayoutsPage).
-    // NOTE: Wallet is still only debited when Paystack's webhook confirms
-    // transfer.success — this prevents debiting for a transfer that fails,
-    // is reversed, or never gets past OTP.
+    // Final outcomes atomically account for principal, fees and applied duty.
+    const { error: transferCodeError } = await serviceSupabase.from("salon_withdrawals")
+      .update({ paystack_transfer_code: paystackData.data.transfer_code }).eq("id", withdrawal.id);
+    if (transferCodeError) throw transferCodeError;
     const transferStatus = paystackData.data.status;
-    let internalStatus: "pending" | "awaiting_otp" | "failed" = "pending";
-    let failureReason: string | null = null;
-    if (transferStatus === "otp") {
-      internalStatus = "awaiting_otp";
-    } else if (transferStatus === "failed" || transferStatus === "reversed") {
-      internalStatus = "failed";
-      failureReason = `Paystack transfer status: ${transferStatus}`;
+    const isFinalFailure = ["failed", "reversed", "abandoned", "blocked", "rejected"].includes(transferStatus);
+    const internalStatus = transferStatus === "otp" ? "awaiting_otp" : isFinalFailure ? "failed" : "pending";
+    if (transferStatus === "success" || isFinalFailure) {
+      const { error } = await serviceSupabase.rpc("finalize_fee_bearing_withdrawal", {
+        p_withdrawal_id: withdrawal.id,
+        p_outcome: transferStatus === "success" ? "success" : transferStatus === "reversed" ? "reversed" : "failed",
+      });
+      if (error) throw error; // Keep funds reserved for reconciliation on failure.
+    } else {
+      const { error } = await serviceSupabase.from("salon_withdrawals")
+        .update({ status: internalStatus, paystack_transfer_code: paystackData.data.transfer_code })
+        .eq("id", withdrawal.id).eq("status", "pending");
+      if (error) throw error;
     }
-
-    const { error: updateError } = await serviceSupabase
-      .from("salon_withdrawals")
-      .update({
-        status: internalStatus,
-        paystack_transfer_code: paystackData.data.transfer_code,
-        ...(failureReason ? { failure_reason: failureReason } : {}),
-      })
-      .eq("id", withdrawal.id);
-
-    if (updateError) {
-      console.error("Error updating withdrawal status (non-critical):", updateError);
-      // Continue anyway - withdrawal is initiated, this is just a status update
-    }
-
-    console.log(`[Withdrawal] Withdrawal ${withdrawal.id} initiated, Paystack transfer status: ${transferStatus}, internal status: ${internalStatus}`);
 
     // =====================================================
     // RETURN RESPONSE
@@ -426,8 +484,11 @@ Deno.serve(async (req) => {
         withdrawal: {
           id: withdrawal.id,
           amount,
+          transferFee: quote.transferFee,
+          stampDuty: quote.stampDuty,
+          totalDebit,
           currency: wallet.currency,
-          status: "pending",
+          status: transferStatus === "success" ? "completed" : "pending",
           transferCode: paystackData.data.transfer_code,
           reference: transferReference,
           requestedAt: withdrawal.requested_at,

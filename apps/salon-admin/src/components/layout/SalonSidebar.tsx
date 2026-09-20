@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Bell,
   Plus,
+  Check,
   FileText,
   Loader2,
   Palette,
@@ -55,6 +56,7 @@ import { NotificationsPanel } from "@/components/notifications/NotificationsPane
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { useNotifications } from "@/hooks/useNotifications";
 import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerModal } from "@/components/banners";
+import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
@@ -68,6 +70,7 @@ import { AnnualLockinBanner } from "@/components/layout/AnnualLockinBanner";
 import { useStaffSessions } from "@/hooks/useStaffSessions";
 import { NewDeviceReviewModal } from "@/components/session/NewDeviceReviewModal";
 import { isModuleAllowedInContext, ROUTE_DEFINITIONS } from "@/lib/contextAccess";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 import {
   Tooltip,
   TooltipContent,
@@ -362,8 +365,40 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
   const [refreshingAccess, setRefreshingAccess] = useState(false);
   const [reviewSessionsOpen, setReviewSessionsOpen] = useState(false);
+  const [mobileNavVisible, setMobileNavVisible] = useState(true);
+  const mobileContentRef = useRef<HTMLDivElement | null>(null);
+  const lastMobileScrollTopRef = useRef(0);
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Keep the mobile dock out of the way while reading, then reveal it as soon
+  // as the user scrolls back up. The content pane is the scroll owner on the
+  // salon shell, so this remains reliable even when the browser chrome moves.
+  useEffect(() => {
+    setMobileNavVisible(true);
+    lastMobileScrollTopRef.current = 0;
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const scrollContainer = mobileContentRef.current;
+    if (!scrollContainer) return;
+
+    const onScroll = () => {
+      const nextTop = Math.max(0, scrollContainer.scrollTop);
+      const delta = nextTop - lastMobileScrollTopRef.current;
+      if (Math.abs(delta) < 4) return;
+
+      if (nextTop < 24 || delta < 0) {
+        setMobileNavVisible(true);
+      } else if (delta > 0) {
+        setMobileNavVisible(false);
+      }
+      lastMobileScrollTopRef.current = nextTop;
+    };
+
+    scrollContainer.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollContainer.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Open the new-device review modal when redirected from the security email CTA
   useEffect(() => {
@@ -454,9 +489,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
                 { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
                 { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
                 { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
-                { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
+                ...(CUSTOM_DOMAINS_ENABLED ? [{ label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" }] : []),
                 { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
-                { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+                { label: "Website Themes", icon: Palette, path: "/salon/themes-settings" },
                 { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
               ],
             };
@@ -470,9 +505,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
               { label: "Manage Branches", icon: CalendarX2, path: "/salon/business-settings?tab=branches" },
               { label: "Booking Settings", icon: User, path: "/salon/business-settings?tab=booking" },
               { label: "Notifications", icon: Bell, path: "/salon/business-settings?tab=notifications" },
-              { label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" },
+              ...(CUSTOM_DOMAINS_ENABLED ? [{ label: "Custom Domain", icon: Globe, path: "/salon/business-settings?tab=custom-domain" }] : []),
               { label: "Active Sessions", icon: Shield, path: "/salon/business-settings?tab=sessions" },
-              { label: "Themes Settings", icon: Palette, path: "/salon/themes-settings" },
+              { label: "Website Themes", icon: Palette, path: "/salon/themes-settings" },
               { label: "Audit Log", icon: FileText, path: "/salon/audit-log" },
             ],
           };
@@ -972,15 +1007,23 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											<DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
 												Business
 											</DropdownMenuLabel>
-											<DropdownMenuItem
-												onClick={() => void handleContextChange("owner_hub")}
-												className="gap-2"
-											>
-												<span className="flex h-5 w-5 items-center justify-center rounded-md bg-muted">
-													<Building2 className="h-3 w-3" />
-												</span>
-												{hubContext.label}
-											</DropdownMenuItem>
+							<DropdownMenuItem
+								onClick={() => void handleContextChange("owner_hub")}
+								aria-current={contextValue === "owner_hub" ? "page" : undefined}
+								className={cn(
+									"gap-2",
+									contextValue === "owner_hub" && "bg-[#F4C84E]/20 font-semibold text-[#2E1F4E] focus:bg-[#F4C84E]/25",
+								)}
+							>
+								<span className={cn(
+									"flex h-5 w-5 items-center justify-center rounded-md",
+									contextValue === "owner_hub" ? "bg-[#F4C84E] text-[#2E1F4E]" : "bg-muted",
+								)}>
+									<Building2 className="h-3 w-3" />
+								</span>
+								<span className="flex-1 truncate">{hubContext.label}</span>
+								{contextValue === "owner_hub" && <Check className="h-4 w-4 text-[#8A6512]" />}
+							</DropdownMenuItem>
 										</>
 									)}
 									{branchContexts.length > 0 && (
@@ -990,19 +1033,27 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												Branches
 											</DropdownMenuLabel>
 											{branchContexts.map((context) => (
-												<DropdownMenuItem
-													key={`location-${context.locationId}`}
-													onClick={() => void handleContextChange(context.locationId || "")}
-													className="gap-2"
-												>
-													<span className="flex h-5 w-5 items-center justify-center rounded-md bg-muted">
-														<MapPin className="h-3 w-3" />
-													</span>
-													<span className="flex-1 truncate">{context.label}</span>
+								<DropdownMenuItem
+									key={`location-${context.locationId}`}
+									onClick={() => void handleContextChange(context.locationId || "")}
+									aria-current={contextValue === context.locationId ? "page" : undefined}
+									className={cn(
+										"gap-2",
+										contextValue === context.locationId && "bg-[#F4C84E]/20 font-semibold text-[#2E1F4E] focus:bg-[#F4C84E]/25",
+									)}
+								>
+									<span className={cn(
+										"flex h-5 w-5 items-center justify-center rounded-md",
+										contextValue === context.locationId ? "bg-[#F4C84E] text-[#2E1F4E]" : "bg-muted",
+									)}>
+										<MapPin className="h-3 w-3" />
+									</span>
+									<span className="flex-1 truncate">{context.label}</span>
 													{context.isPaused && (
-														<span className="text-xs text-muted-foreground">Paused</span>
-													)}
-												</DropdownMenuItem>
+										<span className="text-xs text-muted-foreground">Paused</span>
+									)}
+									{contextValue === context.locationId && <Check className="h-4 w-4 text-[#8A6512]" />}
+								</DropdownMenuItem>
 											))}
 										</>
 									)}
@@ -1011,9 +1062,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</div>
 					);
 				})()}
-
-			{/* Global Banner (only when expanded) */}
-			{(isExpanded || isMobileOpen) && <GlobalBanner />}
 
 			{/* Main Navigation */}
 			<nav className="flex-1 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide px-3 space-y-1 relative z-10">
@@ -1104,7 +1152,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						{/* Sidebar - Desktop */}
 						<aside
 							className={cn(
-								"hidden lg:flex flex-col bg-primary fixed top-0 left-0 z-[60] transition-all duration-300 h-screen overflow-hidden",
+								"hidden lg:flex flex-col bg-primary fixed top-0 left-0 z-[60] transition-all duration-300 h-screen overflow-visible",
 								isExpanded ? "w-64" : "w-[72px]",
 							)}
 						>
@@ -1113,7 +1161,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							{/* Collapse Toggle */}
 							<button
 								onClick={() => setIsExpanded(!isExpanded)}
-								className="absolute -right-3 top-20 w-6 h-6 bg-white border border-border rounded-full flex items-center justify-center shadow-sm hover:bg-muted transition-colors"
+								className="absolute -right-3 top-20 z-[70] flex h-6 w-6 items-center justify-center rounded-full border border-border bg-white shadow-sm transition-colors hover:bg-muted"
+								aria-label={isExpanded ? "Collapse navigation" : "Expand navigation"}
 							>
 								<ChevronLeft
 									className={cn(
@@ -1131,6 +1180,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 								isExpanded ? "lg:ml-64" : "lg:ml-[72px]",
 							)}
 						>
+							{/* Global notices sit above the app header so they remain visible on desktop and mobile. */}
+							<GlobalBanner />
+
 							{/* Top Bar */}
 							<header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
 								<button
@@ -1222,7 +1274,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<BillingStateBanner />
 
 							{/* Page Content */}
-							<div className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
+							<div ref={mobileContentRef} className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
 								<div className="w-full min-w-0 max-w-full [&>*]:min-w-0">
 									<PromoTrialBonusBanner />
 									{children}
@@ -1230,10 +1282,17 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							</div>
 
 							{/* Mobile Bottom Navigation */}
-							<nav className="fixed bottom-0 inset-x-0 lg:hidden z-50 pb-[env(safe-area-inset-bottom)]">
+							<nav
+								aria-label="Primary mobile navigation"
+								className={cn(
+									"fixed inset-x-0 bottom-0 z-50 pb-[env(safe-area-inset-bottom)] transition-all duration-300 motion-reduce:transition-none lg:hidden",
+									mobileNavVisible
+										? "translate-y-0 opacity-100"
+										: "pointer-events-none translate-y-[calc(100%+1rem)] opacity-0",
+								)}
+							>
 								<div
-									className="mx-2.5 mb-3 flex items-center justify-around rounded-[26px] px-1.5 py-2 shadow-[0_16px_32px_rgba(46,31,78,0.35)]"
-									style={{ background: "white" }}
+									className="mx-auto mb-3 flex w-[min(94vw,27rem)] items-center justify-around gap-1 rounded-[30px] border border-white/10 bg-[#211a32]/95 px-2 py-2 shadow-[0_18px_42px_rgba(28,18,49,0.42)] backdrop-blur-xl"
 								>
 									{(activeContextType === "owner_hub"
 										? [
@@ -1292,23 +1351,26 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												key={path}
 												type="button"
 												onClick={() => navigate(path)}
-												className={cn(
-													"flex flex-1 flex-col items-center gap-[3px] rounded-2xl px-2 py-[7px] transition-colors",
-													active && "bg-[#F4C84E]",
-												)}
-											>
-												<Icon
-													strokeWidth={1.8}
-													className={cn(
-														"h-[19px] w-[19px]",
-														active ? "text-[#2E1F4E]" : "text-[#2E1F4E]",
-													)}
-												/>
-												<span
-													className={cn(
-														"text-[9.5px] font-semibold",
-														active ? "text-[#2E1F4E]" : "text-[#2E1F4E]",
-													)}
+														className={cn(
+															"group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[22px] border border-transparent px-1.5 py-1.5 transition-all duration-200 hover:bg-white/10 motion-reduce:transition-none",
+															active && "border-[#F4C84E]/30 bg-white/[0.08]",
+														)}
+												>
+														<span
+															className={cn(
+																"flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 motion-reduce:transition-none",
+																active
+																	? "bg-[#F4C84E] text-[#2E1F4E] shadow-[0_0_0_4px_rgba(244,200,78,0.14)]"
+																	: "text-white/60 group-hover:text-white/90",
+															)}
+														>
+															<Icon strokeWidth={active ? 2.2 : 1.8} className="h-[18px] w-[18px]" />
+														</span>
+														<span
+															className={cn(
+																"max-w-full truncate text-[10px] font-semibold leading-none transition-colors motion-reduce:transition-none",
+																active ? "text-white" : "text-white/60 group-hover:text-white/90",
+															)}
 												>
 													{label}
 												</span>
@@ -1322,6 +1384,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
 					{/* Blocking overlay — renders above everything when a blocking banner is active */}
 					<BlockingBannerOverlay />
+
+					<ProductAnnouncementCard
+						client={supabase as any}
+						platform="salon_admin"
+						onNavigate={(path) => navigate(path)}
+					/>
 
 					{/* Maintenance banner "Learn more" modal */}
 					<MaintenanceBannerModal />

@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClientSidebar } from "@/components/ClientSidebar";
+import { ClientRefundRequestDialog } from "@/components/ClientRefundRequestDialog";
 import { useClientTransactions, useClientBookings } from "@/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
@@ -9,6 +11,7 @@ import { CreditCard, Calendar, ArrowUpRight, ArrowDownLeft, Store, Info } from "
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import { Button } from "@ui/button";
 
 const TYPE_TOOLTIPS: Record<string, string> = {
   payment: "A payment made for a booking.",
@@ -35,6 +38,7 @@ export default function ClientHistoryPage() {
   const navigate = useNavigate();
   const { transactions, isLoading: txLoading } = useClientTransactions();
   const { bookings, isLoading: bookingsLoading } = useClientBookings("completed");
+  const [refundTransaction, setRefundTransaction] = useState<(typeof transactions)[number] | null>(null);
 
   const typeLabels: Record<string, string> = {
     payment: "Payment",
@@ -142,7 +146,13 @@ export default function ClientHistoryPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="flex items-end gap-3 text-right">
+                          {(tx.type === "payment" || tx.type === "deposit") && tx.status === "completed" && (
+                            <Button variant="outline" size="sm" onClick={() => setRefundTransaction(tx)}>
+                              Request refund
+                            </Button>
+                          )}
+                          <div>
                           <p className={`font-semibold ${getTypeColor(tx.type)}`}>
                             {tx.type === "refund" ? "+" : ""}
                             {formatCurrency(tx.amount, tx.currency)}
@@ -158,6 +168,7 @@ export default function ClientHistoryPage() {
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-56 text-xs">{STATUS_TOOLTIP}</TooltipContent>
                           </Tooltip>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -231,6 +242,16 @@ export default function ClientHistoryPage() {
           </TabsContent>
         </Tabs>
       </div>
+      <ClientRefundRequestDialog
+        open={Boolean(refundTransaction)}
+        onOpenChange={(open) => { if (!open) setRefundTransaction(null); }}
+        transaction={refundTransaction ? {
+          id: refundTransaction.id,
+          amount: Number(refundTransaction.amount),
+          currency: refundTransaction.currency,
+          tenantName: refundTransaction.tenant?.name || "the salon",
+        } : null}
+      />
     </ClientSidebar>
   );
 }

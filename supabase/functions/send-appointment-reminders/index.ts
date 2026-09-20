@@ -1,22 +1,44 @@
 /**
  * send-appointment-reminders
  *
- * Called by pg_cron every 30 minutes. Finds appointments whose reminder
- * window has opened (scheduled_start is within reminder_hours_before hours
- * from now) and sends email + SMS (if enabled) to the customer.
+ * Called by pg_cron every 10 minutes (AD-6). Fetches every due
+ * (appointment, offset) work item across the whole platform in one RPC
+ * call (AD-4), collapses same-appointment offsets into a single send
+ * (AD-5), and sends email + SMS (if enabled) to the customer.
  *
- * Idempotency: uses last_reminder_sent_at on the appointment row to avoid
- * duplicate sends. A reminder is sent at most once per appointment.
+ * Idempotency: per-offset state lives in appointment_reminder_sends
+ * (AD-3), keyed by (appointment_id, offset_minutes). Work is claimed
+ * (attempt_count incremented, last_attempt_at set) before sending, so an
+ * overlapping run sees zero eligible rows once past the 9-minute cooldown
+ * enforced by the RPC (AD-7).
  */
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
+import { nextReminderState } from "./reminder-state.ts";
+import { getReminderSmsCredits } from "./reminder-sms.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+interface DueReminderRow {
+  appointment_id: string;
+  tenant_id: string;
+  customer_id: string | null;
+  scheduled_start: string;
+  offset_minutes: number;
+  attempt_count: number;
+  email_enabled: boolean;
+  sms_enabled: boolean;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  tenant_name: string | null;
+  tenant_sms_sender_name: string | null;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -45,16 +67,14 @@ serve(async (req) => {
 
     const now = new Date();
 
-    // Load all active tenants with their notification settings
-    const { data: settings, error: settingsError } = await supabase
-      .from("notification_settings")
-      .select(
-        "tenant_id, email_appointment_reminders, sms_appointment_reminders, reminder_hours_before",
-      );
+    const { data: dueRows, error: dueError } = await supabase.rpc(
+      "get_due_appointment_reminders",
+      { p_now: now.toISOString() },
+    );
 
-    if (settingsError) {
-      console.error("Failed to load notification settings:", settingsError);
-      return new Response(JSON.stringify({ error: settingsError.message }), {
+    if (dueError) {
+      console.error("Failed to load due appointment reminders:", dueError);
+      return new Response(JSON.stringify({ error: dueError.message }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -63,53 +83,66 @@ serve(async (req) => {
     let emailsSent = 0;
     let smsSent = 0;
     let errors = 0;
+    let exhausted = 0;
 
-    for (const setting of settings ?? []) {
-      const hoursAhead = setting.reminder_hours_before ?? 24;
-      const windowEnd = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
-      // Give a 30-minute buffer backwards so a reminder doesn't get skipped
-      // if the cron fires slightly late.
-      const windowStart = new Date(now.getTime() - 30 * 60 * 1000);
-
-      // Find appointments needing a reminder in this tenant
-      const { data: appointments, error: apptError } = await supabase
-        .from("appointments")
-        .select(
-          "id, tenant_id, customer_id, scheduled_start, last_reminder_sent_at, customers!appointments_customer_id_fkey(full_name, email, phone)",
-        )
-        .eq("tenant_id", setting.tenant_id)
-        .eq("status", "scheduled")
-        .gte("scheduled_start", windowStart.toISOString())
-        .lte("scheduled_start", windowEnd.toISOString())
-        .is("last_reminder_sent_at", null);
-
-      if (apptError) {
-        console.error(
-          `Failed to fetch appointments for tenant ${setting.tenant_id}:`,
-          apptError,
-        );
-        errors++;
-        continue;
+    // Group by appointment (AD-5): more than one offset due for the same
+    // appointment in one run becomes a single send, not one per offset.
+    const groups = new Map<string, DueReminderRow[]>();
+    for (const row of (dueRows ?? []) as DueReminderRow[]) {
+      const group = groups.get(row.appointment_id);
+      if (group) {
+        group.push(row);
+      } else {
+        groups.set(row.appointment_id, [row]);
       }
+    }
 
-      // Fetch tenant info for SMS sender name
-      const { data: tenant } = await supabase
-        .from("tenants")
-        .select("name, sms_sender_name, currency")
-        .eq("id", setting.tenant_id)
-        .maybeSingle();
+    for (const [appointmentId, rows] of groups) {
+      try {
+        const first = rows[0];
+        const offsetMinutesList = rows.map((r) => r.offset_minutes);
+        const maxAttemptCount = Math.max(...rows.map((r) => r.attempt_count));
 
-      for (const appt of appointments ?? []) {
-        const customer = appt.customers as {
-          full_name: string | null;
-          email: string | null;
-          phone: string | null;
-        } | null;
+        // Claim: every offset row in the group is upserted with an
+        // incremented attempt and a fresh last_attempt_at *before* sending,
+        // so a slow send that overlaps the next cron tick cannot be picked
+        // up twice (AD-7).
+        const claimRows = rows.map((r) => ({
+          appointment_id: r.appointment_id,
+          tenant_id: r.tenant_id,
+          offset_minutes: r.offset_minutes,
+          attempt_count: r.attempt_count + 1,
+          last_attempt_at: now.toISOString(),
+        }));
 
-        // Email reminder
-        if (setting.email_appointment_reminders && customer?.email) {
+        const { error: claimError } = await supabase
+          .from("appointment_reminder_sends")
+          .upsert(claimRows, { onConflict: "appointment_id,offset_minutes" });
+
+        if (claimError) {
+          console.error(`Failed to claim reminder group for appointment ${appointmentId}:`, claimError);
+          errors++;
+          continue;
+        }
+
+        // In-memory re-check: the appointment's start may have passed
+        // between the RPC read and this send on a slow run.
+        if (new Date(first.scheduled_start).getTime() <= Date.now()) {
+          continue;
+        }
+
+        const emailEnabled = rows.some((r) => r.email_enabled);
+        const smsEnabled = rows.some((r) => r.sms_enabled);
+        let emailOk = false;
+        let smsOk = false;
+
+        // Email reminder — the callee (send-appointment-notification)
+        // writes both the success and failure message_logs row itself
+        // (AD-10 of the email-delivery-audit design); this caller only
+        // needs to check response.ok.
+        if (emailEnabled) {
           try {
-            await fetch(
+            const response = await fetch(
               `${supabaseUrl}/functions/v1/send-appointment-notification`,
               {
                 method: "POST",
@@ -118,72 +151,98 @@ serve(async (req) => {
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  appointmentId: appt.id,
+                  appointmentId,
                   action: "reminder",
                 }),
               },
             );
-            emailsSent++;
+            if (response.ok) {
+              emailOk = true;
+              emailsSent++;
+            } else {
+              errors++;
+            }
           } catch (err) {
-            console.error(
-              `Email reminder failed for appointment ${appt.id}:`,
-              err,
-            );
+            console.error(`Email reminder failed for appointment ${appointmentId}:`, err);
             errors++;
           }
         }
 
         // SMS reminder
-        if (setting.sms_appointment_reminders && customer?.phone) {
+        if (smsEnabled) {
           try {
-            const senderName = resolveArkeselSenderId(customer.phone, tenant?.sms_sender_name, "promotional");
+            const senderName = resolveArkeselSenderId(
+              first.customer_phone!,
+              first.tenant_sms_sender_name ?? undefined,
+              "promotional",
+            );
 
-            const apptDate = appt.scheduled_start
-              ? new Date(appt.scheduled_start).toLocaleString("en-US", {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                  hour12: true,
-                })
-              : "your upcoming appointment";
+            const apptDate = new Date(first.scheduled_start).toLocaleString("en-US", {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            });
 
             const message =
-              `Hi ${customer.full_name?.split(" ")[0] || "there"}, ` +
-              `this is a reminder about your appointment at ${tenant?.name || "our salon"} ` +
+              `Hi ${first.customer_name?.split(" ")[0] || "there"}, ` +
+              `this is a reminder about your appointment at ${first.tenant_name || "our salon"} ` +
               `on ${apptDate}. See you soon!`;
 
-            await sendArkeselSMS({
-              to: customer.phone,
-              from: senderName,
-              message,
-              useCase: "promotional",
-            });
+            const creditsRequired = getReminderSmsCredits(message);
+            const { data: creditsReserved, error: reservationError } = await supabase.rpc(
+              "reserve_communication_credits",
+              { p_tenant_id: first.tenant_id, p_amount: creditsRequired },
+            );
+
+            if (reservationError) {
+              throw new Error(`Unable to reserve SMS credits: ${reservationError.message}`);
+            }
+            if (!creditsReserved) {
+              throw new Error(`Insufficient SMS credits (need ${creditsRequired})`);
+            }
+
+            try {
+              await sendArkeselSMS({
+                to: first.customer_phone!,
+                from: senderName,
+                message,
+                useCase: "promotional",
+              });
+            } catch (providerError) {
+              // Do not charge a salon when Arkesel rejected the message.
+              await supabase.rpc("restore_communication_credits", {
+                p_tenant_id: first.tenant_id,
+                p_amount: creditsRequired,
+              });
+              throw providerError;
+            }
+
+            smsOk = true;
             smsSent++;
             await supabase.from("message_logs").insert({
-              tenant_id: setting.tenant_id,
-              customer_id: appt.customer_id,
+              tenant_id: first.tenant_id,
+              customer_id: first.customer_id,
               channel: "sms",
-              recipient: customer.phone,
+              recipient: first.customer_phone,
               template_type: "appointment_reminder",
               status: "sent",
               sent_at: new Date().toISOString(),
               provider: "arkesel_sms",
               initiated_by: "system",
-              credits_used: 0,
+              content: message,
+              credits_used: creditsRequired,
             });
           } catch (err) {
-            console.error(
-              `SMS reminder failed for appointment ${appt.id}:`,
-              err,
-            );
+            console.error(`SMS reminder failed for appointment ${appointmentId}:`, err);
             errors++;
             await supabase.from("message_logs").insert({
-              tenant_id: setting.tenant_id,
-              customer_id: appt.customer_id,
+              tenant_id: first.tenant_id,
+              customer_id: first.customer_id,
               channel: "sms",
-              recipient: customer.phone || null,
+              recipient: first.customer_phone || null,
               template_type: "appointment_reminder",
               status: "failed",
               sent_at: new Date().toISOString(),
@@ -195,21 +254,58 @@ serve(async (req) => {
           }
         }
 
-        // Mark reminder as sent regardless of which channels succeeded,
-        // so we don't retry endlessly on a bad phone/email.
-        await supabase
-          .from("appointments")
-          .update({ last_reminder_sent_at: now.toISOString() })
-          .eq("id", appt.id);
+        // Settle: nextReminderState decides the sent_at/failed_at outcome
+        // once for the group (AD-5) — the design's Data Flow step 6 calls
+        // for exactly these two fields to be applied identically to every
+        // offset row. attempt_count is deliberately excluded from this
+        // write: it was already correctly incremented per-row by the claim
+        // step above, and each offset's own attempt history (not the
+        // group's) is what AD-3 requires to stay independent — writing the
+        // group-derived value here would silently jump a less-attempted
+        // offset (e.g. the 30-minute one) past its own true attempt count.
+        const nextState = nextReminderState(
+          {
+            prev: { attemptCount: maxAttemptCount },
+            emailOk,
+            smsOk,
+            anyChannelEnabled: emailEnabled || smsEnabled,
+          },
+          now,
+        );
+
+        if (nextState.failedAt) {
+          exhausted++;
+        }
+
+        const { error: settleError } = await supabase
+          .from("appointment_reminder_sends")
+          .update({
+            sent_at: nextState.sentAt,
+            failed_at: nextState.failedAt,
+          })
+          .eq("appointment_id", appointmentId)
+          .in("offset_minutes", offsetMinutesList);
+
+        if (settleError) {
+          // The claim already counted the attempt, so the worst case is
+          // one duplicate send on a later tick rather than an unbounded
+          // loop — strictly better than a failed settle re-sending
+          // forever.
+          console.error(`Failed to settle reminder group for appointment ${appointmentId}:`, settleError);
+          errors++;
+        }
+      } catch (err) {
+        console.error(`Reminder group failed for appointment ${appointmentId}:`, err);
+        errors++;
       }
     }
 
     console.log(
-      `Reminder run complete: ${emailsSent} emails, ${smsSent} SMS, ${errors} errors`,
+      `Reminder run complete: ${emailsSent} emails, ${smsSent} SMS, ${errors} errors, ${exhausted} exhausted`,
     );
 
     return new Response(
-      JSON.stringify({ ok: true, emailsSent, smsSent, errors }),
+      JSON.stringify({ ok: true, emailsSent, smsSent, errors, exhausted }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: unknown) {

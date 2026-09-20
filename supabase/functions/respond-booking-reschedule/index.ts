@@ -91,6 +91,25 @@ serve(async (req) => {
         });
       }
 
+      const proposedStart = new Date(appointment.proposed_start);
+      const proposedEnd = new Date(appointment.proposed_end);
+      if (
+        Number.isNaN(proposedStart.getTime()) ||
+        Number.isNaN(proposedEnd.getTime()) ||
+        proposedStart <= new Date()
+      ) {
+        return new Response(JSON.stringify({ error: "This reschedule is no longer in the future" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (proposedEnd <= proposedStart) {
+        return new Response(JSON.stringify({ error: "The proposed end time must be after the start time" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       const { error: updateError } = await admin
         .from("appointments")
         .update({

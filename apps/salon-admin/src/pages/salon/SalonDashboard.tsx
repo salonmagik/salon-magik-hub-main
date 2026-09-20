@@ -25,6 +25,7 @@ import { useDashboardStats } from "@/hooks/useDashboardStats";
 import type { LapsedClient, UpcomingAppointment } from "@/hooks/useDashboardStats";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { Skeleton } from "@ui/skeleton";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -122,7 +123,7 @@ export default function SalonDashboard() {
   const canViewReports = hasPermission("reports");
   const isOwnerOrManager = currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor";
 
-  const currency = currentTenant?.currency || "GHS";
+  const { currency } = useActiveBranchCurrency("GHS");
   const firstName = profile?.full_name?.split(" ")[0] || null;
 
   // Sort checklist: incomplete first

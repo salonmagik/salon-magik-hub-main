@@ -78,6 +78,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { usePlanBySlug } from "@/hooks/usePlans";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
@@ -175,7 +176,7 @@ export default function ServicesPage() {
   const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem, refetch: refetchBinItems } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
-  const currency = currentTenant?.currency || "USD";
+  const { currency } = useActiveBranchCurrency("USD");
   const isLoading = servicesLoading || packagesLoading || productsLoading || vouchersLoading;
 
   // Permission checks

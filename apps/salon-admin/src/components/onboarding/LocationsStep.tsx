@@ -162,7 +162,7 @@ export function LocationsStep({
           Your branches
         </h2>
         <p className="mt-1.5 text-[14px] text-black/45">
-          Add all your salon branches. You can add more later.
+          Add all your salon branches. The first location is your HQ, and you can add more later.
         </p>
       </div>
 
@@ -212,7 +212,7 @@ export function LocationsStep({
                   </p>
                   {location.isDefault && (
                     <span className="flex items-center gap-1.5 rounded-full bg-black/[0.06] px-3 py-1 text-[12px] font-medium text-gray-600">
-                      <Star className="h-3 w-3 fill-gray-600" /> Default
+                      <Star className="h-3 w-3 fill-gray-600" /> HQ
                     </span>
                   )}
                 </div>
@@ -223,7 +223,7 @@ export function LocationsStep({
                       onClick={() => setDefaultLocation(location.id)}
                       className="rounded-full px-3 py-1.5 text-[12px] font-medium text-black/45 transition-colors hover:bg-black/[0.04] hover:text-black/70"
                     >
-                      Set as default
+                      Set as HQ
                     </button>
                   )}
                   {config.locations.length > 1 && (

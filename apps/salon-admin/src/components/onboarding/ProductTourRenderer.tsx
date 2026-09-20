@@ -25,8 +25,8 @@ function ProductTourTooltip({
       aria-modal="true"
       style={{
         position: "relative",
-        width: 340,
-        maxWidth: "calc(100vw - 32px)",
+        width: 360,
+        maxWidth: "calc(100vw - 24px)",
         background: "#2E1F4E",
         borderRadius: 20,
         padding: "22px 22px 18px",
@@ -90,8 +90,8 @@ function ProductTourTooltip({
         {step.content}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ display: "flex", gap: 5 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 5 }} aria-label={`Step ${index + 1} of ${size}`}>
           {Array.from({ length: size }).map((_, dotIndex) => (
             <span
               key={dotIndex}
@@ -105,7 +105,7 @@ function ProductTourTooltip({
           ))}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 16, whiteSpace: "nowrap" }}>
           {index > 0 && (
             <button
               {...backProps}
@@ -117,6 +117,7 @@ function ProductTourTooltip({
                 fontWeight: 500,
                 cursor: "pointer",
                 padding: 0,
+                whiteSpace: "nowrap",
               }}
             >
               Back
@@ -133,6 +134,7 @@ function ProductTourTooltip({
                 fontWeight: 500,
                 cursor: "pointer",
                 padding: 0,
+                whiteSpace: "nowrap",
               }}
             >
               Skip tour
@@ -149,6 +151,7 @@ function ProductTourTooltip({
               borderRadius: 999,
               border: "none",
               cursor: "pointer",
+              whiteSpace: "nowrap",
             }}
           >
             {isLastStep ? "Done" : "Next"}

@@ -17,7 +17,7 @@ interface WalletAvailabilityRow {
   next_settlement_at: string | null;
 }
 
-export function useSalonWalletAvailability(tenantId?: string) {
+export function useSalonWalletAvailability(tenantId?: string, locationId?: string | null) {
   const [availability, setAvailability] = useState<SalonWalletAvailability | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -34,6 +34,7 @@ export function useSalonWalletAvailability(tenantId?: string) {
     try {
       const { data, error: fetchError } = await supabase.rpc("get_salon_wallet_availability" as never, {
         p_tenant_id: tenantId,
+        p_location_id: locationId ?? null,
       } as never);
 
       if (fetchError) throw fetchError;
@@ -56,13 +57,13 @@ export function useSalonWalletAvailability(tenantId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, locationId]);
 
   useEffect(() => {
     if (tenantId) {
       fetchAvailability();
     }
-  }, [tenantId, fetchAvailability]);
+  }, [tenantId, locationId, fetchAvailability]);
 
   return {
     availability,

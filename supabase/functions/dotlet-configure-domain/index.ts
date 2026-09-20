@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { customDomainsEnabled, customDomainsPausedResponse } from "../_shared/custom-domain.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +11,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  if (!customDomainsEnabled()) return customDomainsPausedResponse(corsHeaders);
 
   try {
     const { orderId } = await req.json();

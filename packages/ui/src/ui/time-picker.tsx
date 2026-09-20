@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { format } from "date-fns";
 import { Clock } from "lucide-react";
 
 import { cn } from "@shared/utils";
@@ -15,6 +16,8 @@ export interface TimePickerProps {
   onChange: (time: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Earliest selectable slot in HH:mm format. Earlier slots remain visible but disabled. */
+  minTime?: string;
   step?: number; // Minutes between options (default 15)
   className?: string;
 }
@@ -43,6 +46,7 @@ export function TimePicker({
   onChange,
   placeholder = "Select time",
   disabled = false,
+  minTime,
   step = 15,
   className,
 }: TimePickerProps): JSX.Element {
@@ -60,11 +64,34 @@ export function TimePicker({
       </SelectTrigger>
       <SelectContent className="max-h-[200px]">
         {timeSlots.map((time) => (
-          <SelectItem key={time} value={time}>
+          <SelectItem key={time} value={time} disabled={Boolean(minTime && time < minTime)}>
             {formatTimeDisplay(time)}
           </SelectItem>
         ))}
       </SelectContent>
     </Select>
   );
+}
+
+/**
+ * Returns the next available time slot when `date` is today. Future dates do
+ * not need a time floor, so they return undefined.
+ */
+export function getEarliestSelectableTime(date: Date | undefined, step = 15): string | undefined {
+  if (!date) return undefined;
+
+  const now = new Date();
+  if (
+    date.getFullYear() !== now.getFullYear() ||
+    date.getMonth() !== now.getMonth() ||
+    date.getDate() !== now.getDate()
+  ) {
+    return undefined;
+  }
+
+  const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes() + (now.getSeconds() > 0 ? 1 : 0);
+  const roundedMinutes = Math.ceil(minutesSinceMidnight / step) * step;
+  if (roundedMinutes >= 24 * 60) return "24:00";
+
+  return format(new Date(2000, 0, 1, Math.floor(roundedMinutes / 60), roundedMinutes % 60), "HH:mm");
 }

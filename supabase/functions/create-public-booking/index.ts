@@ -12,7 +12,14 @@ import {
   validateCurrencyMatch,
   determineEffectiveCurrency,
 } from "../_shared/paystack-helpers.ts";
-import { computeBookingCharge, getPaymentFeeSettings, SUBACCOUNT_SPLIT_ENABLED } from "../_shared/payment-fee-calculator.ts";
+import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
+
+function currencyForCountry(country: string | null | undefined, fallback: string): string {
+  const normalized = (country || "").trim().toUpperCase();
+  if (normalized === "GH" || normalized === "GHANA") return "GHS";
+  if (normalized === "NG" || normalized === "NIGERIA") return "NGN";
+  return fallback;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -270,7 +277,37 @@ serve(async (req) => {
     // a paused branch must be rejected explicitly, not just relied on to be
     // absent from what the storefront shows.
     const requestedLocationIds = Array.from(new Set(items.map((item) => item.locationId).filter(Boolean)));
+    const tenantCurrency = (tenant.currency || "USD").toUpperCase();
+    let settlementCurrency = tenantCurrency;
     if (requestedLocationIds.length > 0) {
+      const { data: requestedLocations, error: requestedLocationsError } = await supabase
+        .from("locations")
+        .select("id, country")
+        .eq("tenant_id", tenantId)
+        .in("id", requestedLocationIds);
+      if (requestedLocationsError || (requestedLocations || []).length !== requestedLocationIds.length) {
+        return new Response(
+          JSON.stringify({ error: "One or more selected branches are no longer available." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const locationCurrencies = new Set(
+        (requestedLocations || []).map((location) => currencyForCountry(location.country, tenantCurrency)),
+      );
+      if (locationCurrencies.size > 1) {
+        return new Response(
+          JSON.stringify({ error: "Please check out items from one country at a time." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      settlementCurrency = [...locationCurrencies][0] || settlementCurrency;
+      if (settlementCurrency !== tenantCurrency && (purseAmount > 0 || Number(splitPurseAmount || 0) > 0 || processPursePayment)) {
+        return new Response(
+          JSON.stringify({ error: "Salon balance can only be used in the salon's account currency. Please pay this branch by card." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       const { data: pausedLocations, error: pausedLocationsError } = await supabase
         .from("locations")
         .select("id")
@@ -595,7 +632,7 @@ serve(async (req) => {
     }
     const promotionalDiscount = voucherBalanceAmount === 0 ? voucherDiscount : 0;
     const chargeableTotal = Math.max(0, totalAmount - promotionalDiscount);
-    const reference = `BK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
+    const reference = `BK${Date.now().toString(36).toUpperCase()}${crypto.randomUUID().replaceAll("-", "").slice(0, 6).toUpperCase()}`;
     const createdAppointmentIds: string[] = [];
     const approvalRequired = tenant.auto_confirm_bookings === false;
     let allocatedPromotionDiscount = 0;
@@ -934,7 +971,7 @@ serve(async (req) => {
 
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    const bookingSummaryHtml = renderBookingSummary(items, tenant.currency || "USD");
+    const bookingSummaryHtml = renderBookingSummary(items, settlementCurrency);
     const paymentLine = approvalRequired
       ? paragraph("This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.")
       : paragraph("Payment status: pending checkout completion.");
@@ -975,7 +1012,7 @@ serve(async (req) => {
     });
 
     if (customer.email) {
-      await sendResendEmail({
+      const result = await sendResendEmail({
         resendApiKey,
         fromEmail: resendFromEmail,
         to: [customer.email],
@@ -989,10 +1026,19 @@ serve(async (req) => {
           paymentLine +
           `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
           (promotionalDiscount > 0
-            ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
+            ? paragraph(`<strong>Voucher discount:</strong> -${settlementCurrency} ${promotionalDiscount.toFixed(2)}`)
             : "") +
-          paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
+          paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`),
+        log: {
+          supabase,
+          tenantId,
+          templateType: "booking_confirmation_customer",
+          customerId,
+        },
       });
+      if (!result.sent) {
+        console.warn("Failed to send booking confirmation to customer:", result.error);
+      }
     }
 
     // Tell each gift recipient about their gift — their customer record
@@ -1006,14 +1052,14 @@ serve(async (req) => {
         "https://app.salonmagik.com"
       ).replace(/\/+$/, "");
 
-      for (const { recipient, itemNames } of giftRecipientsToNotify.values()) {
+      for (const { recipient, customerId: giftRecipientCustomerId, itemNames } of giftRecipientsToNotify.values()) {
         const recipientEmail = normalizeEmail(recipient.email);
         const itemsListHtml = itemNames.map((name) => `<li>${name}</li>`).join("");
         const senderLine = recipient.hideSender
           ? paragraph("Someone has sent you a gift!")
           : paragraph(`<strong>${customerFullName}</strong> has sent you a gift!`);
 
-        await sendResendEmail({
+        const giftResult = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: [recipientEmail],
@@ -1028,7 +1074,16 @@ serve(async (req) => {
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             paragraph(`Log into the client portal with this email address (<strong>${recipientEmail}</strong>) to view your gift and manage your visit.`) +
             createButton("Log in to view your gift", `${clientPortalBase}/login`),
+          log: {
+            supabase,
+            tenantId,
+            templateType: "booking_gift_recipient",
+            customerId: giftRecipientCustomerId,
+          },
         });
+        if (!giftResult.sent) {
+          console.warn("Failed to send gift notification to recipient:", giftResult.error);
+        }
       }
     }
 
@@ -1036,7 +1091,7 @@ serve(async (req) => {
     if (notificationSettings.email_new_bookings) {
       const recipients = await getSalonRecipients(supabase, tenantId, ["owner", "manager"]);
       if (recipients.length > 0) {
-        await sendResendEmail({
+        const salonResult = await sendResendEmail({
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
@@ -1047,12 +1102,21 @@ serve(async (req) => {
             paragraph(`<strong>Customer:</strong> ${customerFullName}`) +
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             (promotionalDiscount > 0
-              ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
+              ? paragraph(`<strong>Voucher discount:</strong> -${settlementCurrency} ${promotionalDiscount.toFixed(2)}`)
               : "") +
-            paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`) +
+            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`) +
             `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
             reviewActionsHtml,
+          log: {
+            supabase,
+            tenantId,
+            templateType: "booking_notification_salon",
+            customerId,
+          },
         });
+        if (!salonResult.sent) {
+          console.warn("Failed to notify salon of new booking:", salonResult.error);
+        }
       }
     }
 
@@ -1071,7 +1135,7 @@ serve(async (req) => {
         console.log("Creating payment session...");
 
         // Determine effective currency with fallback
-        const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, tenant.currency);
+        const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, settlementCurrency);
 
         if (!effectiveCurrency) {
           return new Response(
@@ -1081,7 +1145,7 @@ serve(async (req) => {
         }
 
         // Validate currency consistency
-        const currencyValidation = validateCurrencyMatch(tenant.currency, effectiveCurrency);
+        const currencyValidation = validateCurrencyMatch(settlementCurrency, effectiveCurrency);
         if (!currencyValidation.isValid) {
           return new Response(
             JSON.stringify({ error: currencyValidation.error }),
@@ -1107,36 +1171,6 @@ serve(async (req) => {
           effectiveCurrency
         });
 
-        let storeSubaccountCode: string | null = null;
-
-        {
-          const { data: payoutDest, error: payoutDestError } = await supabase
-            .from("salon_payout_destinations")
-            .select("paystack_subaccount_code")
-            .eq("tenant_id", tenantId)
-            .eq("is_default", true)
-            .maybeSingle();
-
-          if (payoutDestError) {
-            console.error("Error looking up default payout destination:", payoutDestError);
-          }
-
-          if (payoutDest?.paystack_subaccount_code) {
-            storeSubaccountCode = payoutDest.paystack_subaccount_code;
-          } else {
-            // No default destination, or it has no subaccount yet — the
-            // charge will still go through, but undivided into Salon
-            // Magik's own Paystack account instead of splitting to the
-            // salon. That used to happen silently; log it loudly so it
-            // shows up in function logs instead of only in a bank
-            // statement weeks later.
-            console.error("No usable payout subaccount for tenant — booking payment will NOT split to the salon.", {
-              tenantId,
-              hasDestinationRow: !!payoutDest,
-            });
-          }
-        }
-
         const primaryAppointmentId = createdAppointmentIds[0];
         const sessionReference = `sm_${primaryAppointmentId.substring(0, 8)}_${Date.now()}`;
 
@@ -1146,7 +1180,6 @@ serve(async (req) => {
           platformServiceChargePercent: Number(tenant.platform_percentage_charge ?? feeSettings.defaultPlatformServiceChargePercent),
           customerFacingFeePercent: feeSettings.customerFacingFeePercent,
           serviceChargeBorneByCustomer: Boolean(tenant.platform_service_charge_borne_by_customer),
-          hasSubaccount: Boolean(storeSubaccountCode),
         });
 
         // Store payment intent
@@ -1170,6 +1203,7 @@ serve(async (req) => {
               platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
               customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
               amount_charged_to_paystack: bookingCharge.amountToChargePaystack,
+              salon_net_amount: bookingCharge.salonNetAmount,
             },
           })
           .select("id")
@@ -1217,26 +1251,9 @@ serve(async (req) => {
               service_amount: paymentAmount,
               platform_service_charge_amount: bookingCharge.platformServiceChargeAmount,
               customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
-              store_subaccount_code: storeSubaccountCode || "",
+              salon_net_amount: bookingCharge.salonNetAmount,
             },
           };
-
-          // Unplugged 2026-09-06, pending a test verdict — not deleted, just
-          // not applied. Subaccount splits silently don't apply while a
-          // subaccount is unverified (the root cause of a real payment once
-          // landing in Salon Magik's own account instead of the salon's),
-          // and /transfer-based withdrawals never depended on subaccounts
-          // to begin with. Every charge lands undivided in Salon Magik's
-          // main balance now; credit_salon_purse below is what tracks the
-          // salon's share for withdrawal. Re-enable by restoring the two
-          // lines inside this `if` once testing confirms it's safe to
-          // delete this block instead.
-          if (SUBACCOUNT_SPLIT_ENABLED && storeSubaccountCode) {
-            paystackPayload.subaccount = storeSubaccountCode;
-            if (bookingCharge.transactionChargeMinor > 0) {
-              paystackPayload.transaction_charge = bookingCharge.transactionChargeMinor;
-            }
-          }
 
           console.log('Paystack payment initiation', paystackPayload)
 
@@ -1328,7 +1345,7 @@ serve(async (req) => {
           appointment_id: primaryAppointmentId,
           type: "payment",
           amount: totalBalanceReservation,
-          currency: tenant.currency,
+          currency: settlementCurrency,
           method: "purse",
           provider: "internal",
           provider_reference: idempotencyKey,

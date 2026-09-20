@@ -38,6 +38,7 @@ import {
 import { useReports } from "@/hooks/useReports";
 import { useCustomerSegments } from "@/hooks/useCustomerSegments";
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { toast } from "@ui/ui/use-toast";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import {
@@ -201,7 +202,7 @@ export default function ReportsPage() {
     { label: "This month", getRange: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
   ];
 
-  const currency = currentTenant?.currency || "USD";
+  const { currency } = useActiveBranchCurrency("USD");
   const currencySymbols: Record<string, string> = {
     USD: "$", GHS: "₵", NGN: "₦", EUR: "€", GBP: "£",
   };
@@ -277,7 +278,16 @@ export default function ReportsPage() {
         </div>
 
         {/* Stat Chips */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-tour-id="tour-reports-stats">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7" data-tour-id="tour-reports-stats">
+          <StatChip
+            label="Total earned"
+            value={fmt(stats.totalEarned)}
+            sub="lifetime in Salon Magik"
+            description="Lifetime earnings credited to the selected salon or branch wallet. This includes booking and invoice credits and is separate from the current withdrawal balance."
+            icon={Banknote}
+            color="bg-[#e3f3eb] text-[#2e7d5b]"
+            loading={isLoading}
+          />
           <StatChip
             label="Inflow"
             value={fmt(stats.totalRevenue)}

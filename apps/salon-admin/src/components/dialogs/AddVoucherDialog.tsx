@@ -43,11 +43,9 @@ const parseAmountInput = (value: string) => Number(value.replace(/,/g, ""));
 
 function generateVoucherCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+  const bytes = new Uint32Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => chars[byte % chars.length]).join("");
 }
 
 export function AddVoucherDialog({ open, onOpenChange, onSuccess }: AddVoucherDialogProps) {

@@ -6,6 +6,7 @@ import {
   smallText,
   buildFromAddress,
 } from "../_shared/email-template.ts";
+import { secureRandomFromAlphabet } from "../_shared/secure-random.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,9 +16,7 @@ const corsHeaders = {
 // Generate a secure random password
 function generateSecurePassword(length = 16): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-  const array = new Uint8Array(length);
-  crypto.getRandomValues(array);
-  return Array.from(array, (byte) => chars[byte % chars.length]).join("");
+  return secureRandomFromAlphabet(chars, length);
 }
 
 Deno.serve(async (req) => {
@@ -26,6 +25,19 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // This is a one-time bootstrap operation. A normal Supabase JWT is not
+    // sufficient because any signed-in user could otherwise trigger it before
+    // the seed marker exists. Keep the bootstrap secret in the function vault
+    // and send it only from an operator-controlled deployment script.
+    const provisioningSecret = Deno.env.get("PROVISION_SUPER_ADMIN_SECRET")?.trim();
+    const suppliedSecret = req.headers.get("x-provisioning-secret")?.trim();
+    if (!provisioningSecret || !suppliedSecret || suppliedSecret !== provisioningSecret) {
+      return new Response(JSON.stringify({ error: "Not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -181,7 +193,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }

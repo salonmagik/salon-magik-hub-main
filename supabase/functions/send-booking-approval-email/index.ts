@@ -10,6 +10,7 @@ import {
   createAlertBox,
   smallText,
 } from "../_shared/email-template.ts";
+import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,6 +105,7 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
@@ -118,6 +120,13 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const actorResult = await resolveRequestActor(req, {
+      supabaseUrl,
+      anonKey: supabaseAnonKey,
+      serviceRoleKey,
+      corsHeaders,
+    });
+    if ("response" in actorResult) return actorResult.response;
     const body: RequestBody = await req.json();
 
     if (!body.action || !Array.isArray(body.appointmentIds) || body.appointmentIds.length === 0) {
@@ -157,6 +166,16 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const tenantIds = [...new Set(appointments.map((appointment) => appointment.tenant_id))];
+    if (tenantIds.length !== 1) {
+      return new Response(JSON.stringify({ error: "Appointments must belong to one salon" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const membershipError = await requireTenantMembership(supabase, actorResult.actor, tenantIds, corsHeaders);
+    if (membershipError) return membershipError;
 
     const normalizedAppointments = appointments as unknown as AppointmentRecord[];
     const primary = normalizedAppointments[0];

@@ -11,6 +11,7 @@ import { Loader2, Plus, Trash2, CheckCircle2, XCircle, Building, Smartphone } fr
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
 import { cn } from "@shared/utils";
+import { currencyForCountry } from "@/lib/countryCurrency";
 
 interface PayoutDestinationsManagerProps {
   /** Narrow the list to one country (e.g. from a page-level country switcher). Omit/undefined shows every account. */
@@ -20,7 +21,7 @@ interface PayoutDestinationsManagerProps {
 // Renders flat — no outer Card — intended to be embedded inside a settings section.
 export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsManagerProps = {}) {
   const { currentTenant } = useAuth();
-  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, retrySubaccount } = usePayoutDestinations(currentTenant?.id);
+  const { destinations: allDestinations, isLoading, createDestination, deleteDestination } = usePayoutDestinations(currentTenant?.id);
   const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
 
   const [showForm, setShowForm] = useState(false);
@@ -35,13 +36,19 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
   const [isDefault, setIsDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (countryFilter === "GH" || countryFilter === "NG") {
+      setCountry(countryFilter);
+    }
+  }, [countryFilter]);
+
   const { banks, isLoading: banksLoading } = useBankList(
     country,
     destinationType === "bank" ? "bank" : "mobile_money",
   );
 
   const { verify, reset, isVerifying, result } = useAccountVerification();
-  const currency = currentTenant?.currency || "NGN";
+  const currency = currencyForCountry(country, currentTenant?.currency || "NGN");
 
   useEffect(() => {
     setSelectedBank("");
@@ -120,7 +127,6 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
               key={dest.id}
               destination={dest}
               onDelete={handleDeleteDestination}
-              onRetry={retrySubaccount}
             />
           ))}
         </div>
@@ -251,14 +257,11 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
 interface DestinationRowProps {
   destination: PayoutDestination;
   onDelete: (id: string) => void;
-  onRetry: (id: string) => Promise<boolean>;
 }
 
-function DestinationRow({ destination, onDelete, onRetry }: DestinationRowProps) {
-  const [isRetrying, setIsRetrying] = useState(false);
+function DestinationRow({ destination, onDelete }: DestinationRowProps) {
   const isBank = destination.destination_type === "bank";
-  const hasError = !!destination.paystack_subaccount_error;
-  const isReady = !!destination.paystack_subaccount_code;
+  const isReady = !!destination.paystack_recipient_code;
 
   return (
     <div className="py-4 flex items-start justify-between gap-4">
@@ -275,30 +278,7 @@ function DestinationRow({ destination, onDelete, onRetry }: DestinationRowProps)
           <p className="text-sm text-muted-foreground">{destination.account_name}</p>
           <p className="text-sm font-mono text-muted-foreground">{isBank ? destination.account_number : destination.momo_number}</p>
           <p className="text-xs text-muted-foreground">{destination.country} · {destination.currency}</p>
-          {hasError && (
-            <div className="mt-2 flex items-center justify-between rounded-md bg-destructive/10 p-3">
-              <div className="flex items-start gap-2">
-                <XCircle className="h-4 w-4 text-destructive mt-0.5" />
-                <div className="space-y-1 text-sm">
-                  <p className="font-medium text-destructive">Online Payments Unavailable</p>
-                  <p className="text-destructive/80 text-xs">{destination.paystack_subaccount_error}</p>
-                </div>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="h-8 text-xs border-destructive/20 hover:bg-destructive/20"
-                onClick={async () => {
-                  setIsRetrying(true);
-                  await onRetry(destination.id);
-                  setIsRetrying(false);
-                }}
-                disabled={isRetrying}
-              >
-                {isRetrying ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
-              </Button>
-            </div>
-          )}
+
         </div>
       </div>
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => onDelete(destination.id)}>

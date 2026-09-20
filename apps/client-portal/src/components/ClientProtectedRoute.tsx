@@ -9,8 +9,14 @@ interface ClientProtectedRouteProps {
 type RouteState = {
   from?: {
     pathname?: string;
+    search?: string;
+    hash?: string;
   };
 };
+
+function routePath(from?: RouteState["from"]) {
+  return `${from?.pathname || "/"}${from?.search || ""}${from?.hash || ""}`;
+}
 
 export function ClientProtectedRoute({ children }: ClientProtectedRouteProps) {
   const { isLoading, isAuthenticated, requiresPasswordSetup } = useClientAuth();
@@ -42,8 +48,7 @@ export function ClientPublicOnlyRoute({ children }: { children: React.ReactNode 
 
   if (isAuthenticated) {
     const routeState = location.state as RouteState | null;
-    const from = routeState?.from?.pathname || "/";
-    return <Navigate to={from} replace />;
+    return <Navigate to={routePath(routeState?.from)} replace />;
   }
 
   return <>{children}</>;

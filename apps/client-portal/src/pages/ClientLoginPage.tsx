@@ -21,8 +21,14 @@ type EmailOtpVerificationType = "email" | "magiclink";
 type RouteState = {
   from?: {
     pathname?: string;
+    search?: string;
+    hash?: string;
   };
 };
+
+function routePath(from?: RouteState["from"]) {
+  return `${from?.pathname || "/"}${from?.search || ""}${from?.hash || ""}`;
+}
 
 type Resolution = {
   exists: boolean;
@@ -251,7 +257,7 @@ export default function ClientLoginPage() {
       }
 
       const routeState = location.state as RouteState | null;
-      navigate(routeState?.from?.pathname || "/", { replace: true });
+      navigate(routePath(routeState?.from), { replace: true });
     } catch (caughtError) {
       console.error("Client password login failed", caughtError);
       setError("Failed to sign in.");
@@ -320,7 +326,7 @@ export default function ClientLoginPage() {
         }
 
         const routeState = location.state as RouteState | null;
-        navigate(routeState?.from?.pathname || "/", { replace: true });
+        navigate(routePath(routeState?.from), { replace: true });
       } else {
         const { data, error: verifyError } = await supabase.auth.verifyOtp({
           email: resolution.identifier,
@@ -346,7 +352,7 @@ export default function ClientLoginPage() {
           }
 
           const routeState = location.state as RouteState | null;
-          navigate(routeState?.from?.pathname || "/", { replace: true });
+          navigate(routePath(routeState?.from), { replace: true });
         }
       }
     } catch (err) {

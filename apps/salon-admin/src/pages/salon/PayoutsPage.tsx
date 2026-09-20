@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
@@ -43,7 +43,8 @@ import { format } from "date-fns";
 import { cn } from "@shared/utils";
 import { WithdrawalDialog } from "@/components/billing/WithdrawalDialog";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
-import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
+import { formatCurrency as sharedFormatCurrency, getMinimumWithdrawal } from "@shared/currency";
+import { currencyForCountry } from "@/lib/countryCurrency";
 
 const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
   pending: { bg: "bg-warning-bg", text: "text-warning-foreground" },
@@ -68,11 +69,13 @@ export default function PayoutsPage() {
   const [assignDestId, setAssignDestId] = useState<string>("");
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [selectedWalletScope, setSelectedWalletScope] = useState<string>("__central__");
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { locations, isLoading: locationsLoading } = useSalonsOverview("today");
 
   const isOwnerHub = activeContextType === "owner_hub";
+  const selectedWalletLocationId = selectedWalletScope === "__central__" ? null : selectedWalletScope;
   // Payouts management (accounts, withdrawals, assignments) is restricted to
   // owner/manager/supervisor — stylists and receptionists never see or access it.
   const canManagePayouts = isOwnerHub && (
@@ -82,21 +85,72 @@ export default function PayoutsPage() {
   const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(
     canManagePayouts ? currentTenant?.id : undefined
   );
-  const { wallet, isLoading: walletLoading } = useSalonWallet(
-    canManagePayouts ? currentTenant?.id : undefined
+  const { wallet, isLoading: walletLoading, refetch: refetchWallet } = useSalonWallet(
+    canManagePayouts ? currentTenant?.id : undefined,
+    canManagePayouts ? selectedWalletLocationId : null,
   );
-  const { availability: walletAvailability, isLoading: walletAvailabilityLoading } = useSalonWalletAvailability(
-    canManagePayouts ? currentTenant?.id : undefined
+  const { availability: walletAvailability, isLoading: walletAvailabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(
+    canManagePayouts ? currentTenant?.id : undefined,
+    canManagePayouts ? selectedWalletLocationId : null,
   );
-  const { withdrawals, isLoading: withdrawalsLoading } = useWithdrawals(
-    canManagePayouts ? currentTenant?.id : undefined
+  const { withdrawals, isLoading: withdrawalsLoading, refetch: refetchWithdrawals } = useWithdrawals(
+    canManagePayouts ? currentTenant?.id : undefined,
+    canManagePayouts ? selectedWalletLocationId : null,
   );
 
+  useEffect(() => {
+    if (locations.length <= 1 && selectedWalletScope !== "__central__") {
+      setSelectedWalletScope("__central__");
+      return;
+    }
+    if (selectedWalletScope !== "__central__" && !locations.some((location) => location.id === selectedWalletScope)) {
+      setSelectedWalletScope("__central__");
+    }
+  }, [locations, selectedWalletScope]);
+
   const currency = currentTenant?.currency || "USD";
-  const availableCountries = Array.from(new Set(locations.map((loc) => loc.country))).sort();
+  const availableCountries = Array.from(
+    new Set(locations.map((loc) => loc.country?.trim().toUpperCase()).filter(Boolean)),
+  ).sort();
   const effectiveCountry = availableCountries.includes(selectedCountry)
     ? selectedCountry
-    : (currentTenant?.country && availableCountries.includes(currentTenant.country) ? currentTenant.country : availableCountries[0]) || "";
+    : (currentTenant?.country && availableCountries.includes(currentTenant.country.trim().toUpperCase())
+      ? currentTenant.country.trim().toUpperCase()
+      : availableCountries[0]) || "";
+  const selectedWalletLocation = selectedWalletLocationId
+    ? locations.find((location) => location.id === selectedWalletLocationId)
+    : undefined;
+  const walletCountry = selectedWalletLocation?.country?.trim().toUpperCase()
+    || (locations.length === 1 ? locations[0].country?.trim().toUpperCase() : effectiveCountry);
+  const countryCurrency = currencyForCountry(walletCountry, currency);
+  // A branch wallet is authoritative when it exists. For a newly-created
+  // branch with no wallet row yet, use the branch country's currency instead
+  // of falling back to the tenant-level currency in the availability RPC.
+  // The branch country is authoritative for a branch wallet. Do not let a
+  // legacy wallet row or tenant-level currency relabel a Ghana wallet as NGN
+  // (or vice versa) in the UI.
+  const walletCurrency = selectedWalletLocationId
+    ? countryCurrency
+    : currencyForCountry(walletCountry, currency);
+  const minWithdrawal = getMinimumWithdrawal(walletCurrency);
+  const currentAvailable = Number(walletAvailability?.available ?? wallet?.balance ?? 0);
+  const belowMinimum = !walletLoading && !walletAvailabilityLoading && currentAvailable < minWithdrawal;
+
+  const handleCountryChange = (country: string) => {
+    setSelectedCountry(country);
+    const currentLocation = selectedWalletLocationId ? locations.find((location) => location.id === selectedWalletLocationId) : undefined;
+    if (currentLocation?.country?.trim().toUpperCase() === country) return;
+    const firstLocationInCountry = locations.find((location) => location.country?.trim().toUpperCase() === country);
+    if (firstLocationInCountry) setSelectedWalletScope(firstLocationInCountry.id);
+  };
+
+  const handleWalletScopeChange = (scope: string) => {
+    setSelectedWalletScope(scope);
+    const nextCountry = scope === "__central__"
+      ? currentTenant?.country?.trim().toUpperCase()
+      : locations.find((location) => location.id === scope)?.country?.trim().toUpperCase();
+    if (nextCountry && availableCountries.includes(nextCountry)) setSelectedCountry(nextCountry);
+  };
 
   const tenantDefaultDest = destinations.find((d) => !d.location_id && d.is_default);
   const getDestinationForBranch = (branchId: string) => destinations.find((d) => d.location_id === branchId);
@@ -148,25 +202,37 @@ export default function PayoutsPage() {
               Withdraw your salon balance and manage where your earnings are paid out.
             </p>
           </div>
-          {availableCountries.length > 1 && (
-            <Select value={effectiveCountry} onValueChange={setSelectedCountry}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableCountries.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {locations.length > 1 && (
+              <Select value={selectedWalletScope} onValueChange={handleWalletScopeChange}>
+                <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__central__">Salon-wide / unassigned</SelectItem>
+                  {locations.map((location) => <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            {availableCountries.length > 1 && locations.length > 1 && (
+              <Select value={effectiveCountry} onValueChange={handleCountryChange}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCountries.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </div>
 
         {/* Wallet balance */}
         <Card>
-          <CardContent className="p-5 flex items-center justify-between flex-wrap gap-4">
+          <CardContent className="p-5">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-xl bg-primary/10 shrink-0"><Wallet className="w-6 h-6 text-primary" /></div>
               <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
@@ -183,9 +249,14 @@ export default function PayoutsPage() {
                     </Tooltip>
                   </div>
                   {walletLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
-                    <p className="text-2xl font-semibold mt-0.5">
-                      {sharedFormatCurrency(Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
-                    </p>
+                    <>
+                      <p className="text-2xl font-semibold mt-0.5">
+                        {sharedFormatCurrency(Number(wallet?.balance ?? 0), walletCurrency)}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "Salon-wide / unassigned wallet"}
+                      </p>
+                    </>
                   )}
                 </div>
 
@@ -204,13 +275,13 @@ export default function PayoutsPage() {
                   {walletLoading || walletAvailabilityLoading ? <Skeleton className="h-7 w-32 mt-1" /> : (
                     <>
                       <p className="text-2xl font-semibold mt-0.5">
-                        {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), wallet?.currency ?? currency)}
+                        {sharedFormatCurrency(walletAvailability?.available ?? Number(wallet?.balance ?? 0), walletCurrency)}
                       </p>
                       {Number(walletAvailability?.pending ?? 0) > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <p className="text-xs text-amber-700 mt-1 cursor-default">
-                              + {sharedFormatCurrency(walletAvailability!.pending, wallet?.currency ?? currency)} still settling
+                              + {sharedFormatCurrency(walletAvailability!.pending, walletCurrency)} still settling
                             </p>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="max-w-64 text-xs">
@@ -226,9 +297,40 @@ export default function PayoutsPage() {
                 </div>
               </div>
             </div>
-            <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet || Number(walletAvailability?.available ?? wallet.balance) <= 0}>
-              Request Withdrawal
-            </Button>
+            {belowMinimum ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Button disabled>Request Withdrawal</Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-64 text-xs">
+                  You need {sharedFormatCurrency(minWithdrawal - currentAvailable, walletCurrency)} more to reach the {sharedFormatCurrency(minWithdrawal, walletCurrency)} minimum withdrawal.
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button onClick={() => setWithdrawalOpen(true)} disabled={!wallet}>
+                Request Withdrawal
+              </Button>
+            )}
+          </div>
+          {belowMinimum && (
+            <div className="mt-4">
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-warning"
+                  style={{ width: `${Math.min(100, (currentAvailable / minWithdrawal) * 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between mt-1.5 text-xs text-muted-foreground">
+                <span>
+                  <span className="font-medium text-warning-foreground">{sharedFormatCurrency(currentAvailable, walletCurrency)}</span>
+                  {" "}of {sharedFormatCurrency(minWithdrawal, walletCurrency)} minimum
+                </span>
+                <span>{sharedFormatCurrency(minWithdrawal - currentAvailable, walletCurrency)} to go</span>
+              </div>
+            </div>
+          )}
           </CardContent>
         </Card>
 
@@ -261,6 +363,13 @@ export default function PayoutsPage() {
                         <div key={w.id} className="flex items-center justify-between p-3 rounded-lg bg-surface">
                           <div>
                             <p className="font-medium text-sm">{sharedFormatCurrency(Number(w.amount), w.currency)}</p>
+                            {w.fee_version && <p className="text-xs text-muted-foreground">
+                              Quoted transfer fee {sharedFormatCurrency(Number(w.transfer_fee), w.currency)}
+                              {Number(w.stamp_duty) > 0 ? ` · Stamp duty ${sharedFormatCurrency(Number(w.stamp_duty), w.currency)}` : ""}
+                              {w.fee_outcome ? ` · Wallet deduction ${sharedFormatCurrency(Number(w.wallet_debited), w.currency)}` : ""}
+                            </p>}
+                            {w.fee_reconciliation_required && <p className="text-xs text-amber-700">Transfer reversed; provider fee refund awaiting reconciliation.</p>}
+
                             <p className="text-xs text-muted-foreground mt-0.5">
                               {dest ? `${dest.account_name || dest.momo_provider} · ${dest.account_number || dest.momo_number}` : "Payout account"}
                               {w.requested_at && ` · ${format(new Date(w.requested_at), "MMM d, yyyy")}`}
@@ -369,7 +478,15 @@ export default function PayoutsPage() {
       </div>
 
       {/* Dialogs */}
-      <WithdrawalDialog open={withdrawalOpen} onOpenChange={setWithdrawalOpen} />
+      <WithdrawalDialog
+        open={withdrawalOpen}
+        onOpenChange={setWithdrawalOpen}
+        locationId={selectedWalletLocationId}
+        currencyOverride={walletCurrency}
+        onWithdrawalCreated={async () => {
+          await Promise.all([refetchWallet(), refetchAvailability(), refetchWithdrawals()]);
+        }}
+      />
 
       <Dialog open={!!assigningBranchId} onOpenChange={(o) => { if (!o) { setAssigningBranchId(null); setAssignDestId(""); } }}>
         <DialogContent className="sm:max-w-md">

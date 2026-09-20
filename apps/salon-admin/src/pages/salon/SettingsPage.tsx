@@ -31,6 +31,7 @@ import {
 	AccordionItem,
 	AccordionTrigger,
 } from "@ui/accordion";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import {
 	Dialog,
 	DialogContent,
@@ -78,6 +79,7 @@ import {
 	Sparkles,
 	Minus,
 	Plus,
+	Info,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -115,7 +117,10 @@ import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
+import { PaymentReturnFeedback } from "@/components/PaymentReturnFeedback";
 import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
+import { countryName, currencyForCountry } from "@/lib/countryCurrency";
 
 type SettingsScope = "auto" | "legacy" | "business" | "branch" | "subscription";
 
@@ -225,11 +230,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		refetch: refetchLocations,
 	} = useLocations();
 	const {
-		settings: dbNotificationSettings,
-		isLoading: notificationsLoading,
+		getSettingsForLocation,
 		isSaving: notificationsSaving,
 		saveSettings: saveNotificationSettings,
-	} = useNotificationSettings();
+	} = useNotificationSettings(activeContextType === "location" ? activeLocationId : null);
 	const [subscriptionPromoCode, setSubscriptionPromoCode] = useState("");
 	const [isStartingSubscriptionCheckout, setIsStartingSubscriptionCheckout] =
 		useState(false);
@@ -314,14 +318,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			: scope;
 
 	const settingsTabs = useMemo(() => {
+		let tabs;
 		if (resolvedScope === "branch") {
-			return [
+			tabs = [
 				{ id: "profile", label: "Branch Profile", icon: Building2 },
 				{ id: "hours", label: "Branch Hours", icon: Clock },
+				{ id: "notifications", label: "Notifications", icon: Bell },
 			];
-		}
-		if (resolvedScope === "business") {
-			return [
+		} else if (resolvedScope === "business") {
+			tabs = [
 				{ id: "profile", label: "Business Profile", icon: Building2 },
 				{ id: "branches", label: "Manage Branches", icon: CalendarX2 },
 				{ id: "booking", label: "Booking Settings", icon: User },
@@ -329,11 +334,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
+		} else if (resolvedScope === "subscription") {
+			tabs = [{ id: "subscription", label: "Subscription", icon: Zap }];
+		} else {
+			tabs = [...BASE_SETTINGS_TABS];
 		}
-		if (resolvedScope === "subscription") {
-			return [{ id: "subscription", label: "Subscription", icon: Zap }];
-		}
-		return BASE_SETTINGS_TABS;
+		return CUSTOM_DOMAINS_ENABLED
+			? tabs
+			: tabs.filter((tab) => tab.id !== "custom-domain");
 	}, [resolvedScope]);
 
 	const [activeTab, setActiveTab] = useState(() => {
@@ -342,7 +350,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
 
-	const { wallet } = useSalonWallet(currentTenant?.id);
+	const settingsWalletLocationId = activeContextType === "location" ? activeLocationId : null;
+	const { wallet } = useSalonWallet(currentTenant?.id, settingsWalletLocationId);
 	// Online booking can't be turned on without a payout account — enforced
 	// at the DB level too (trg_enforce_online_booking_requires_payout), this
 	// just disables the toggle with an explanation instead of a raw DB error.
@@ -523,6 +532,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 		setIsApplyingPlanConfig(true);
 		try {
+			const baselineBranches = Number(
+				lastSeededRef.current?.branches ?? entitlements?.allowed_locations ?? 1,
+			);
+			const baselineSeats = Number(
+				lastSeededRef.current?.seats ?? entitlements?.allowed_staff ?? 1,
+			);
+			const requestedIncrease = branches > baselineBranches || seats > baselineSeats;
 			const isIncrease = (planConfigQuote.price_delta || 0) > 0;
 
 			if (isIncrease) {
@@ -568,7 +584,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				await Promise.all([refreshTenants(), refetchEntitlements()]);
 				toast({
 					title: "Billing updated",
-					description: `You're now on the ${planConfigQuote.required_plan_slug} plan. No charge — this was a decrease.`,
+					description: requestedIncrease
+						? "Your plan configuration has been updated with no additional charge."
+						: `You're now on the ${planConfigQuote.required_plan_slug} plan. No charge — this was a decrease.`,
 				});
 			}
 		} catch (error) {
@@ -675,7 +693,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		if (scope === "auto") return;
 
 		const topupStatus = searchParams.get("topup");
-		const subscriptionStatus = searchParams.get("subscription");
 
 		if (topupStatus === "success") {
 			setPaymentSuccessModal({
@@ -700,213 +717,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			setSearchParams(newParams, { replace: true });
 		}
 
-		if (subscriptionStatus === "success") {
-			// currentTenant loads asynchronously after a hard redirect back from
-			// Paystack — wait for it instead of consuming the URL params before
-			// we're able to actually verify the payment.
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			// Paystack appends ?trxref=xxx&reference=xxx to the callback URL
-			const reference =
-				searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("subscription");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-subscription-payment", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Subscription verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description: "Contact support if your plan doesn't activate shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await refreshTenants();
-						setPaymentSuccessModal({
-							title: "Subscription activated!",
-							description: "Your plan is now active.",
-						});
-					});
-			} else {
-				refreshTenants().then(() => {
-					setPaymentSuccessModal({
-						title: "Payment received!",
-						description: "Your subscription status will update shortly.",
-					});
-				});
-			}
-		} else if (subscriptionStatus === "cancelled") {
-			toast({
-				title: "Subscription checkout cancelled",
-				description: "No subscription changes were made.",
-				variant: "destructive",
-			});
-
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("subscription");
-			setSearchParams(newParams, { replace: true });
-		}
-
-		const planConfigStatus = searchParams.get("planconfig");
-		if (planConfigStatus === "success") {
-			// Only the first-time-payer redirect fallback lands here — the stored-card
-			// path applies the change synchronously and never sets this param.
-			// currentTenant loads asynchronously after a hard redirect back from
-			// Paystack — wait for it instead of consuming the URL params (and
-			// silently skipping the verify+apply call) before it's ready.
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			const reference =
-				searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("planconfig");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-plan-configuration-payment", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Plan configuration verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description:
-									"Contact support if the change doesn't apply shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await Promise.all([refreshTenants(), refetchEntitlements()]);
-						setPaymentSuccessModal({
-							title: "Billing updated!",
-							description: "Your branches and team seats have been updated.",
-						});
-					});
-			}
-		} else if (planConfigStatus === "cancelled") {
-			toast({
-				title: "Billing update cancelled",
-				description: "No changes were made.",
-				variant: "destructive",
-			});
-
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("planconfig");
-			setSearchParams(newParams, { replace: true });
-		}
-
-		const billingRetryStatus = searchParams.get("billing");
-		if (billingRetryStatus === "update_payment_method") {
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			const reference = searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("billing");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-recurring-billing-retry-session", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Billing retry verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description: "Contact support if billing doesn't resume shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await refreshTenants();
-						setPaymentSuccessModal({
-							title: "Payment method updated!",
-							description: "Your subscription is active again and billing will continue as normal.",
-						});
-					});
-			}
-		} else if (billingRetryStatus === "update_payment_method_cancelled") {
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("billing");
-			setSearchParams(newParams, { replace: true });
-		}
-
-		const themePurchaseStatus = searchParams.get("themepurchase");
-		if (themePurchaseStatus === "success") {
-			// Only the first-time-payer redirect fallback lands here — the stored-card
-			// path applies the change synchronously and never sets this param.
-			if (!currentTenant?.id) {
-				return;
-			}
-
-			const reference =
-				searchParams.get("reference") || searchParams.get("trxref");
-
-			const cleanParams = new URLSearchParams(searchParams);
-			cleanParams.delete("themepurchase");
-			cleanParams.delete("reference");
-			cleanParams.delete("trxref");
-			setSearchParams(cleanParams, { replace: true });
-
-			if (reference) {
-				supabase.functions
-					.invoke("verify-theme-purchase-payment", {
-						body: { reference, tenantId: currentTenant.id },
-					})
-					.then(async ({ error }) => {
-						if (error) {
-							console.error("Theme purchase verification error:", error);
-							toast({
-								title: "Could not confirm payment",
-								description:
-									"Contact support if the theme doesn't activate shortly.",
-								variant: "destructive",
-							});
-							return;
-						}
-						await refetchEntitlements();
-						setPaymentSuccessModal({
-							title: "Theme activated!",
-							description: "The e-commerce storefront theme is now active for your public booking page.",
-						});
-					});
-			}
-		} else if (themePurchaseStatus === "cancelled") {
-			toast({
-				title: "Theme purchase cancelled",
-				description: "No charges were made.",
-				variant: "destructive",
-			});
-
-			const newParams = new URLSearchParams(searchParams);
-			newParams.delete("themepurchase");
-			setSearchParams(newParams, { replace: true });
-		}
 	}, [searchParams, setSearchParams, currentTenant?.id, scope]);
 
 	const handleTabChange = (tabId: string) => {
@@ -945,6 +755,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		emailAppointmentReminders: true,
 		smsAppointmentReminders: false,
 		reminderHoursBefore: 24,
+		reminderExtraMinutesBefore: null as number | null,
 		emailNewBookings: true,
 		emailCancellations: true,
 		emailTransactionAlerts: true,
@@ -952,6 +763,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		digestFrequency: "off" as "off" | "daily" | "weekly" | "monthly",
 		emailBirthdayMessages: true,
 	});
+	const [notificationTargetId, setNotificationTargetId] = useState("all");
 
 	const [bookingSettings, setBookingSettings] = useState({
 		onlineBookingEnabled: false,
@@ -970,6 +782,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		autoAssignStaff: true,
 		heroHeading: "",
 		heroTagline: "",
+		heroBgColor: "",
 		heroCTAPrimary: "Book Now",
 		heroCTASecondary: "Our Services",
 		aboutText: "",
@@ -1144,6 +957,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		autoAssignStaff: true,
 		heroHeading: "",
 		heroTagline: "",
+		heroBgColor: "",
 		heroCTAPrimary: "Book Now",
 		heroCTASecondary: "Our Services",
 		aboutText: "",
@@ -1165,11 +979,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		if (currentTenant) {
 			const tenantName = currentTenant.name || "";
 			const tenantCurrency = currentTenant.currency || "USD";
+			const branchCountry = activeLocation?.country || currentTenant.country || "";
+			const branchCurrency = currencyForCountry(branchCountry, tenantCurrency);
 			setProfileData((prev) => ({
 				...prev,
 				salonName: resolvedScope === "branch" ? prev.salonName : tenantName,
-				country: currentTenant.country || "",
-				currency: tenantCurrency,
+				country: resolvedScope === "branch" ? branchCountry : currentTenant.country || "",
+				currency: resolvedScope === "branch" ? branchCurrency : tenantCurrency,
 			}));
 			const nextBooking = {
 				onlineBookingEnabled: currentTenant.online_booking_enabled || false,
@@ -1196,6 +1012,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				autoAssignStaff: (currentTenant as any).auto_assign_staff ?? true,
 				heroHeading: (currentTenant as any).hero_heading || "",
 				heroTagline: (currentTenant as any).hero_tagline || "",
+				heroBgColor: (currentTenant as any).hero_bg_color || "",
 				heroCTAPrimary: (currentTenant as any).hero_cta_primary || "Book Now",
 				heroCTASecondary: (currentTenant as any).hero_cta_secondary || "Our Services",
 				aboutText: (currentTenant as any).about_text || "",
@@ -1229,6 +1046,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			setProfileBaseline((prev) => ({ ...prev, ownerName, phone: ownerPhone }));
 		}
 		if (activeLocation) {
+			const branchCurrency = currencyForCountry(activeLocation.country, currentTenant?.currency || "USD");
 			const openingDays = activeLocation.opening_days || [];
 			const openingTime =
 				activeLocation.opening_time?.substring(0, 5) || "09:00";
@@ -1242,6 +1060,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						: prev.salonName,
 				city: activeLocation.city || "",
 				address: activeLocation.address || "",
+				country: resolvedScope === "branch" ? activeLocation.country || "" : prev.country,
+				currency: resolvedScope === "branch" ? branchCurrency : prev.currency,
 			}));
 			setHoursData({
 				openingDays,
@@ -1257,6 +1077,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						: prev.salonName,
 				city: activeLocation.city || "",
 				address: activeLocation.address || "",
+				currency: resolvedScope === "branch" ? branchCurrency : prev.currency,
 			}));
 		}
 	}, [currentTenant, profile, user?.email, activeLocation, resolvedScope]);
@@ -1350,28 +1171,40 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		void fetchBranchWindows();
 	}, [resolvedScope, currentTenant?.id]);
 
-	// Sync notification settings from database
+	const activeNotificationTargetId =
+		resolvedScope === "business" && notificationTargetId !== "all"
+			? notificationTargetId
+			: resolvedScope === "branch"
+				? activeLocationId
+				: null;
+
+	const saveNotificationSettingsForTarget = async (
+		updates: Parameters<typeof saveNotificationSettings>[0],
+	) => saveNotificationSettings(updates, activeNotificationTargetId);
+
+	// Sync notification settings from the effective tenant/branch row. On the
+	// business page, changing the target selector swaps in that branch's
+	// override when present and otherwise shows the apply-to-all defaults.
 	useEffect(() => {
-		if (dbNotificationSettings) {
+		const selected = getSettingsForLocation(activeNotificationTargetId);
+		if (selected) {
 			setNotificationSettings({
-				emailAppointmentReminders:
-					dbNotificationSettings.email_appointment_reminders,
-				smsAppointmentReminders:
-					dbNotificationSettings.sms_appointment_reminders,
-				reminderHoursBefore: dbNotificationSettings.reminder_hours_before ?? 24,
-				emailNewBookings: dbNotificationSettings.email_new_bookings,
-				emailCancellations: dbNotificationSettings.email_cancellations,
-				emailTransactionAlerts: dbNotificationSettings.email_transaction_alerts,
-				inAppTransactionAlerts:
-					dbNotificationSettings.in_app_transaction_alerts,
-				digestFrequency: dbNotificationSettings.digest_frequency,
-				emailBirthdayMessages: dbNotificationSettings.email_birthday_messages ?? true,
+				emailAppointmentReminders: selected.email_appointment_reminders,
+				smsAppointmentReminders: selected.sms_appointment_reminders,
+				reminderHoursBefore: selected.reminder_hours_before ?? 24,
+				reminderExtraMinutesBefore: selected.reminder_extra_minutes_before ?? null,
+				emailNewBookings: selected.email_new_bookings,
+				emailCancellations: selected.email_cancellations,
+				emailTransactionAlerts: selected.email_transaction_alerts,
+				inAppTransactionAlerts: selected.in_app_transaction_alerts,
+				digestFrequency: selected.digest_frequency,
+				emailBirthdayMessages: selected.email_birthday_messages ?? true,
 			});
 		}
-	}, [dbNotificationSettings]);
+	}, [activeNotificationTargetId, getSettingsForLocation]);
 
 	const handleNotificationsSave = async () => {
-		await saveNotificationSettings({
+		await saveNotificationSettingsForTarget({
 			email_appointment_reminders:
 				notificationSettings.emailAppointmentReminders,
 			sms_appointment_reminders: notificationSettings.smsAppointmentReminders,
@@ -1381,7 +1214,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			email_transaction_alerts: notificationSettings.emailTransactionAlerts,
 			in_app_transaction_alerts: notificationSettings.inAppTransactionAlerts,
 			digest_frequency: notificationSettings.digestFrequency,
-		email_birthday_messages: notificationSettings.emailBirthdayMessages,
+			email_birthday_messages: notificationSettings.emailBirthdayMessages,
+			reminder_extra_minutes_before: notificationSettings.reminderExtraMinutesBefore,
 		});
 	};
 
@@ -1614,6 +1448,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				bannerUrls={bannerUrls}
 				bookingPageBio={bookingSettings.bookingPageBio || null}
 				bookingStatusMessage={bookingSettings.bookingStatusMessage}
+				heroBgColor={bookingSettings.heroBgColor || null}
 				contactPhone={
 					profileData.contactPhone || currentTenant?.contact_phone || null
 				}
@@ -1930,6 +1765,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					auto_assign_staff: bookingSettings.autoAssignStaff,
 					hero_heading: bookingSettings.heroHeading || null,
 					hero_tagline: bookingSettings.heroTagline || null,
+					hero_bg_color: bookingSettings.heroBgColor || null,
 					hero_cta_primary: bookingSettings.heroCTAPrimary || "Book Now",
 					hero_cta_secondary: bookingSettings.heroCTASecondary || "Our Services",
 					about_text: bookingSettings.aboutText || null,
@@ -2220,7 +2056,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 				{/* Address */}
 				<div className="space-y-2">
-					<Label>Address</Label>
+					<Label>{resolvedScope === "branch" ? "Address" : "HQ address"}</Label>
 					<div className="relative">
 						<MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
 						<Input
@@ -2234,10 +2070,28 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</div>
 				</div>
 
-				{/* City & Country */}
-				<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				{/* Country and currency belong to each branch. The tenant fields remain
+				    as billing/backward-compatibility values, but are not presented as
+				    the source of truth for a business with locations. */}
+				{resolvedScope === "branch" ? (
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div className="space-y-2">
+							<Label>City</Label>
+							<Input
+								value={profileData.city}
+								onChange={(e) =>
+									setProfileData((prev) => ({ ...prev, city: e.target.value }))
+								}
+							/>
+						</div>
+						<div className="space-y-2">
+							<Label>Country</Label>
+							<Input value={profileData.country} disabled />
+						</div>
+					</div>
+				) : (
 					<div className="space-y-2">
-						<Label>City</Label>
+						<Label>HQ city</Label>
 						<Input
 							value={profileData.city}
 							onChange={(e) =>
@@ -2245,16 +2099,93 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							}
 						/>
 					</div>
-					<div className="space-y-2">
-						<Label>Country</Label>
-						<Input value={profileData.country} disabled />
-					</div>
-				</div>
+				)}
 
-				<div className="space-y-2">
-					<Label>Default currency</Label>
-					<Input value={profileData.currency} disabled />
-				</div>
+				{resolvedScope === "branch" ? (
+					<div className="space-y-2">
+						<Label>Branch currency</Label>
+						<Input value={profileData.currency} disabled />
+					</div>
+				) : (
+					<div
+						className="rounded-xl border bg-muted/20 p-4 space-y-4"
+						data-tour-id="tour-business-locations"
+					>
+						<div className="flex items-start justify-between gap-3">
+							<div>
+								<div className="flex items-center gap-2">
+									<h3 className="text-sm font-semibold">Business locations</h3>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="rounded-full text-muted-foreground hover:text-foreground"
+												aria-label="About branch country and currency"
+											>
+												<Info className="h-4 w-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top" className="max-w-72 text-xs">
+											Each branch has its own country. Currency is derived from that country and controls branch pricing, transactions, reports, and payouts. HQ is the default location created during onboarding.
+										</TooltipContent>
+									</Tooltip>
+								</div>
+								<p className="mt-1 text-xs text-muted-foreground">
+									{locations.length === 1
+										? "Your salon has one location. It is also your HQ."
+										: "Country and currency are managed per branch."}
+								</p>
+							</div>
+							<Badge variant="outline" className="shrink-0">
+								{locations.length} {locations.length === 1 ? "branch" : "branches"}
+							</Badge>
+						</div>
+
+						{locationsLoading ? (
+							<div className="space-y-2">
+								<Skeleton className="h-14 w-full" />
+								<Skeleton className="h-14 w-full" />
+							</div>
+						) : locations.length > 0 ? (
+							<div className="divide-y rounded-lg border bg-background">
+								{locations.map((location) => {
+									const isHq = location.id === (defaultLocation?.id || locations[0]?.id);
+									const normalizedCountry = location.country?.trim().toUpperCase() || "";
+									const branchCurrency = currencyForCountry(
+										normalizedCountry,
+										currentTenant?.currency || "USD",
+									);
+									return (
+										<div key={location.id} className="flex items-center justify-between gap-4 p-3">
+											<div className="flex min-w-0 items-center gap-3">
+												<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+													<MapPin className="h-4 w-4 text-muted-foreground" />
+												</div>
+												<div className="min-w-0">
+													<div className="flex flex-wrap items-center gap-2">
+														<p className="truncate text-sm font-medium">{location.name}</p>
+														{isHq && <Badge className="bg-primary/10 text-primary hover:bg-primary/10">HQ</Badge>}
+													</div>
+													<p className="text-xs text-muted-foreground">
+														{location.city || "City not set"} · {countryName(normalizedCountry)}
+													</p>
+												</div>
+											</div>
+											<div className="shrink-0 text-right">
+												<p className="text-sm font-medium">{branchCurrency}</p>
+												<p className="text-[11px] text-muted-foreground">Branch currency</p>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						) : (
+							<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+								No locations have been added yet.
+							</p>
+						)}
+					</div>
+				)}
 
 				{/* Save Button */}
 				<div className="flex justify-end pt-4 border-t">
@@ -2375,7 +2306,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			emailBirthdayMessages: "email_birthday_messages",
 		};
 
-		const success = await saveNotificationSettings({
+		const success = await saveNotificationSettingsForTarget({
 			[fieldMap[field]]: checked,
 		});
 
@@ -2388,7 +2319,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const handleDigestFrequencyChange = async (frequency: "off" | "daily" | "weekly" | "monthly") => {
 		const previous = notificationSettings.digestFrequency;
 		setNotificationSettings((prev) => ({ ...prev, digestFrequency: frequency }));
-		const success = await saveNotificationSettings({ digest_frequency: frequency });
+		const success = await saveNotificationSettingsForTarget({ digest_frequency: frequency });
 		if (!success) {
 			setNotificationSettings((prev) => ({ ...prev, digestFrequency: previous }));
 		}
@@ -2405,6 +2336,38 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				</CardHeader>
 			)}
 			<CardContent className={cn(isChainScope && "pt-6", "space-y-4")}>
+				{resolvedScope === "business" && (
+					<div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+						<div>
+							<p className="font-medium">Appointment reminder coverage</p>
+							<p className="text-sm text-muted-foreground">
+								Choose whether these settings apply to every branch or one branch only. Branch settings inherit the all-branches defaults until you change them.
+							</p>
+						</div>
+						<Select value={notificationTargetId} onValueChange={setNotificationTargetId}>
+							<SelectTrigger className="w-full sm:w-72">
+								<SelectValue placeholder="Choose branches" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All branches</SelectItem>
+								{locations.map((location) => (
+									<SelectItem key={location.id} value={location.id}>
+										{location.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				)}
+
+				<div className="rounded-xl border p-4 space-y-1">
+					<div>
+						<p className="font-medium">Appointment reminders</p>
+						<p className="text-sm text-muted-foreground">
+							Send automatic reminders at the times below. The 24-hour and 30-minute reminders are included by default; you can add one more reminder.
+						</p>
+					</div>
+					<div className="divide-y">
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
 						<p className="font-medium">Email appointment reminders</p>
@@ -2425,7 +2388,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<div>
 						<p className="font-medium">SMS appointment reminders</p>
 						<p className="text-sm text-muted-foreground">
-							Send customers SMS reminders (uses credits)
+							Send customers SMS reminders (uses credits; country delivery rules apply)
 						</p>
 					</div>
 					<Switch
@@ -2437,42 +2400,83 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					/>
 				</div>
 
-				{(notificationSettings.emailAppointmentReminders ||
-					notificationSettings.smsAppointmentReminders) && (
-					<div className="flex flex-col items-start gap-3 border-l-2 border-primary/20 py-2 pl-4 sm:flex-row sm:items-center sm:justify-between">
-						<div>
-							<p className="font-medium text-sm">Reminder timing</p>
-							<p className="text-sm text-muted-foreground">
-								How far in advance to notify customers
-							</p>
-						</div>
-						<Select
-							value={String(notificationSettings.reminderHoursBefore)}
-							onValueChange={(val) => {
-								const hours = Number(val);
-								setNotificationSettings((prev) => ({
-									...prev,
-									reminderHoursBefore: hours,
-								}));
-								saveNotificationSettings({ reminder_hours_before: hours });
-							}}
-							disabled={notificationsSaving}
-						>
-							<SelectTrigger className="w-36">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="1">1 hour before</SelectItem>
-								<SelectItem value="2">2 hours before</SelectItem>
-								<SelectItem value="4">4 hours before</SelectItem>
-								<SelectItem value="12">12 hours before</SelectItem>
-								<SelectItem value="24">24 hours before</SelectItem>
-								<SelectItem value="48">2 days before</SelectItem>
-								<SelectItem value="72">3 days before</SelectItem>
-							</SelectContent>
-						</Select>
+				{((notificationTargetId !== "all" && locations.find((location) => location.id === notificationTargetId)?.country === "NG") ||
+					(notificationTargetId === "all" && locations.some((location) => location.country === "NG")) ||
+					(resolvedScope !== "business" && activeLocation?.country === "NG")) && (
+					<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+						<Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+						<p>
+							Nigerian telecom operators enforce an 8:00 a.m.–8:00 p.m. Nigeria-time SMS window. This legal and telco requirement cannot be bypassed; sends outside the window are disabled.
+						</p>
 					</div>
 				)}
+
+				{(notificationSettings.emailAppointmentReminders || notificationSettings.smsAppointmentReminders) && (
+					<div className="mt-3 space-y-3 border-t pt-3">
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium text-sm">First reminder</p>
+								<p className="text-sm text-muted-foreground">The earlier reminder before the appointment</p>
+							</div>
+							<Select
+								value={String(notificationSettings.reminderHoursBefore)}
+								onValueChange={(val) => {
+									const hours = Number(val);
+									setNotificationSettings((prev) => ({ ...prev, reminderHoursBefore: hours }));
+									saveNotificationSettingsForTarget({ reminder_hours_before: hours });
+								}}
+								disabled={notificationsSaving}
+							>
+								<SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+								<SelectContent>
+									<SelectItem value="1">1 hour before</SelectItem>
+									<SelectItem value="2">2 hours before</SelectItem>
+									<SelectItem value="4">4 hours before</SelectItem>
+									<SelectItem value="12">12 hours before</SelectItem>
+									<SelectItem value="24">24 hours before</SelectItem>
+									<SelectItem value="48">2 days before</SelectItem>
+									<SelectItem value="72">3 days before</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium text-sm">Final reminder</p>
+								<p className="text-sm text-muted-foreground">Always sent 30 minutes before the appointment</p>
+							</div>
+							<Badge variant="secondary">30 minutes before</Badge>
+						</div>
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium text-sm">Additional reminder <span className="font-normal text-muted-foreground">(optional)</span></p>
+								<p className="text-sm text-muted-foreground">Add one more reminder for this branch</p>
+							</div>
+							<Select
+								value={notificationSettings.reminderExtraMinutesBefore ? String(notificationSettings.reminderExtraMinutesBefore) : "none"}
+								onValueChange={(val) => {
+									const minutes = val === "none" ? null : Number(val);
+									setNotificationSettings((prev) => ({ ...prev, reminderExtraMinutesBefore: minutes }));
+									saveNotificationSettingsForTarget({ reminder_extra_minutes_before: minutes });
+								}}
+								disabled={notificationsSaving}
+							>
+								<SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+								<SelectContent>
+									<SelectItem value="none">No additional reminder</SelectItem>
+									<SelectItem value="60">1 hour before</SelectItem>
+									<SelectItem value="120">2 hours before</SelectItem>
+									<SelectItem value="240">4 hours before</SelectItem>
+									<SelectItem value="720">12 hours before</SelectItem>
+									<SelectItem value="2880">2 days before</SelectItem>
+									<SelectItem value="4320">3 days before</SelectItem>
+									<SelectItem value="10080">1 week before</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
+				)}
+				</div>
+				</div>
 
 				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
 					<div>
@@ -3219,14 +3223,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						<p className="text-sm font-medium">Themes &amp; Style</p>
 						<p className="text-xs text-muted-foreground mt-0.5">
 							Manage themes, banners, brand color, and hero copy on the{" "}
-							<strong>Themes Settings</strong> page.
+							<strong>Website Themes</strong> page.
 						</p>
 					</div>
 					<a
 						href="/salon/themes-settings"
 						className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted no-underline"
 					>
-						Open Themes Settings
+						Open theme customisation
 					</a>
 				</div>
 			</CardContent>
@@ -3397,29 +3401,48 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 		const branchesValue = Number(branchesInput);
 		const seatsValue = Number(seatsInput);
+		const baselineBranches = Number(
+			lastSeededRef.current?.branches ??
+			entitlements?.allowed_locations ??
+			planConfigQuote?.current_allowed_locations ??
+			1,
+		);
+		const baselineSeats = Number(
+			lastSeededRef.current?.seats ??
+			entitlements?.allowed_staff ??
+			planConfigQuote?.current_allowed_staff ??
+			1,
+		);
 		const isPlanConfigUnchanged =
 			planConfigQuote &&
-			branchesValue === planConfigQuote.current_allowed_locations &&
-			seatsValue === planConfigQuote.current_allowed_staff;
-		// price_delta alone isn't reliable: it comes back null whenever the
-		// quote requires custom pricing (e.g. a branch count that needs a
-		// manually-configured chain tier), which would otherwise make a real
-		// upgrade look like a "downgrade". Plan tier rank is the source of
-		// truth for direction; price_delta only decides the sign when the
-		// plan itself hasn't changed (e.g. adding seats within the same plan).
+			branchesValue === baselineBranches &&
+			seatsValue === baselineSeats;
+		// The requested counts are the clearest signal for the CTA direction.
+		// A chain quote can have no price delta when a branch is still inside
+		// the current tier, but increasing the requested branches is still an
+		// upgrade action from the owner's perspective.
 		const currentTierRank = planConfigQuote
 			? PLAN_TIER_RANK[planConfigQuote.current_plan_slug as PlanId]
 			: undefined;
 		const requiredTierRank = planConfigQuote
 			? PLAN_TIER_RANK[planConfigQuote.required_plan_slug as PlanId]
 			: undefined;
+		const requestedMoreCapacity = Boolean(
+			planConfigQuote &&
+			(branchesValue > baselineBranches || seatsValue > baselineSeats),
+		);
+		const requestedLessCapacity = Boolean(
+			planConfigQuote &&
+			(branchesValue < baselineBranches || seatsValue < baselineSeats),
+		);
 		const isPlanConfigIncrease = Boolean(
 			planConfigQuote &&
-				currentTierRank !== undefined &&
-				requiredTierRank !== undefined &&
-				(requiredTierRank !== currentTierRank
-					? requiredTierRank > currentTierRank
-					: (planConfigQuote.price_delta || 0) > 0),
+			!isPlanConfigUnchanged &&
+			(requestedMoreCapacity ||
+				(!requestedLessCapacity &&
+					currentTierRank !== undefined &&
+					requiredTierRank !== undefined &&
+					requiredTierRank > currentTierRank)),
 		);
 
 		return (
@@ -3974,13 +3997,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										{isApplyingPlanConfig && (
 											<Loader2 className="mr-2 h-4 w-4 animate-spin" />
 										)}
-										{isPlanConfigUnchanged
-											? "No changes to apply"
-											: planConfigQuote?.requires_custom_locations
-												? "Contact support to continue"
-												: isPlanConfigIncrease
-													? `Upgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`
-													: `Downgrade to ${planConfigQuote?.required_plan_slug ?? "new plan"}`}
+						{isQuotingPlanConfig || !planConfigQuote || isPlanConfigUnchanged
+							? "Update"
+							: planConfigQuote?.requires_custom_locations
+								? "Contact support to continue"
+								: isPlanConfigIncrease
+									? "Upgrade plan"
+									: "Downgrade plan"}
 									</Button>
 								</>
 							)}
@@ -4516,7 +4539,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		profile:
 			resolvedScope === "branch"
 				? { title: "Branch Profile", subtitle: "Manage this branch's name, contact, and location." }
-				: { title: "Business Profile", subtitle: "Manage your business name, contact, and owner details." },
+				: { title: "Business Profile", subtitle: "Manage your business details and see each branch's HQ, country, and currency." },
 		hours: { title: "Branch Hours", subtitle: "Set the operating hours for this branch." },
 		branches: { title: "Manage Branches", subtitle: "Pause or configure bookings per branch location." },
 		booking: { title: "Booking Settings", subtitle: "Manage booking behaviour, payment rules, and scheduling capacity." },
@@ -4539,7 +4562,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "notifications" && renderNotificationsTab()}
 			{activeTab === "roles" && renderRolesTab()}
 			{activeTab === "subscription" && renderSubscriptionTab()}
-			{activeTab === "custom-domain" && (
+			{CUSTOM_DOMAINS_ENABLED && activeTab === "custom-domain" && (
 				<div data-tour-id="tour-custom-domain">
 					<CustomDomainManager />
 				</div>
@@ -4563,6 +4586,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					)}
 					{settingsContent}
 				</div>
+				{scope !== "auto" && <PaymentReturnFeedback tenantId={currentTenant?.id} refresh={async () => { await Promise.all([refreshTenants(), refetchEntitlements()]); }} />}
 				<PaymentSuccessModal
 					open={!!paymentSuccessModal}
 					onClose={() => setPaymentSuccessModal(null)}
@@ -4650,6 +4674,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<div className="flex-1">{settingsContent}</div>
 				</div>
 			</div>
+			{scope !== "auto" && <PaymentReturnFeedback tenantId={currentTenant?.id} refresh={async () => { await Promise.all([refreshTenants(), refetchEntitlements()]); }} />}
 			<PaymentSuccessModal
 				open={!!paymentSuccessModal}
 				onClose={() => setPaymentSuccessModal(null)}

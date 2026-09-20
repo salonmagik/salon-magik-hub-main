@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as OTPAuth from "npm:otpauth@9.2.2";
 import { wrapEmailTemplate, heading, paragraph, smallText, createButton, createCredentialBox, buildFromAddress } from "../_shared/email-template.ts";
 import { getSalonAppUrl } from "../_shared/salon-app-url.ts";
+import { secureRandomFromAlphabet } from "../_shared/secure-random.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -15,10 +16,7 @@ const corsHeaders = {
 function generateSecurePassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const specials = "!@#$%&*";
-  let password = "";
-  for (let i = 0; i < 8; i++) password += chars.charAt(Math.floor(Math.random() * chars.length));
-  for (let i = 0; i < 2; i++) password += specials.charAt(Math.floor(Math.random() * specials.length));
-  return password;
+  return secureRandomFromAlphabet(chars, 8) + secureRandomFromAlphabet(specials, 2);
 }
 
 function buildNewOwnerEmail(firstName: string, tenantName: string, loginEmail: string, tempPassword: string, loginLink: string) {

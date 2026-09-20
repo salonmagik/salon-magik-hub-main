@@ -482,10 +482,21 @@ export default function BackofficeSettingsPage() {
         description: maintDescription,
         guidance: maintGuidance,
       };
+      // Upsert instead of update-only: an older environment may not have run
+      // the seed migration yet. Supabase can return a successful update with
+      // zero affected rows in that case, which made the UI report success
+      // while the salon and client apps had nothing to read.
       const { error } = await supabase
         .from("platform_settings")
-        .update({ value: newValue as unknown as Json, updated_by_id: backofficeUser?.user_id })
-        .eq("key", "maintenance_banner");
+        .upsert(
+          {
+            key: "maintenance_banner",
+            value: newValue as unknown as Json,
+            description: "Configurable maintenance banner shown on salon-admin and/or client-portal",
+            updated_by_id: backofficeUser?.user_id,
+          },
+          { onConflict: "key" },
+        );
       if (error) throw error;
       await writeAuditLog(
         maintEnabled ? "maintenance_banner_enabled" : "maintenance_banner_updated",

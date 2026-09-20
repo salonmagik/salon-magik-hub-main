@@ -11,7 +11,7 @@ import {
   Image as ImageIcon,
   X,
   Save,
-  Settings as SettingsIcon,
+  Paintbrush,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
@@ -39,6 +39,7 @@ import {
 } from "@ui/dialog";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { PaymentSuccessModal } from "@/components/PaymentSuccessModal";
+import { useProductTour } from "@/components/onboarding/ProductTourProvider";
 
 type ThemeKey = "default" | "ecommerce";
 
@@ -50,6 +51,7 @@ const BOOKING_URL_BASE =
 export default function ThemesSettingsPage() {
   useWalkthroughAutoTrigger("hub-theme");
   const { currentTenant, refreshTenants } = useAuth();
+  const { startTour, hasSeenWalkthrough } = useProductTour();
   const { locations } = useLocations();
   const { data: entitlements, refetch: refetchEntitlements } = useTenantEntitlements(currentTenant?.id);
   const { toast } = useToast();
@@ -57,12 +59,13 @@ export default function ThemesSettingsPage() {
 
   // ── state ────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("storefront");
+  const [mobileCustomiseView, setMobileCustomiseView] = useState<"edit" | "preview">("edit");
 
   const [settings, setSettings] = useState({
     bookingPageBio: currentTenant?.booking_page_bio || "",
     brandColor: currentTenant?.brand_color || "#2563EB",
     storefrontMode: (currentTenant?.storefront_mode as "services" | "products" | "both") || "both",
-    heroHeading: (currentTenant as any)?.hero_heading || "",
+    heroHeading: (currentTenant as any)?.hero_heading || currentTenant?.name || "",
     heroTagline: (currentTenant as any)?.hero_tagline || "",
     heroBgColor: (currentTenant as any)?.hero_bg_color || "",
     heroCTAPrimary: (currentTenant as any)?.hero_cta_primary || "Book Now",
@@ -82,7 +85,6 @@ export default function ThemesSettingsPage() {
   const [themePreviewOpen, setThemePreviewOpen] = useState(false);
   const [themePreviewKey, setThemePreviewKey] = useState<ThemeKey>("default");
   const [purchaseSuccessOpen, setPurchaseSuccessOpen] = useState(false);
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   // Re-seed when tenant loads / changes
   useEffect(() => {
@@ -91,7 +93,7 @@ export default function ThemesSettingsPage() {
       bookingPageBio: currentTenant.booking_page_bio || "",
       brandColor: currentTenant.brand_color || "#2563EB",
       storefrontMode: (currentTenant.storefront_mode as "services" | "products" | "both") || "both",
-      heroHeading: (currentTenant as any)?.hero_heading || "",
+      heroHeading: (currentTenant as any)?.hero_heading || currentTenant.name || "",
       heroTagline: (currentTenant as any)?.hero_tagline || "",
       heroBgColor: (currentTenant as any)?.hero_bg_color || "",
       heroCTAPrimary: (currentTenant as any)?.hero_cta_primary || "Book Now",
@@ -228,8 +230,29 @@ export default function ThemesSettingsPage() {
         description:
           key === "ecommerce"
             ? "Your public booking page now uses the e-commerce layout."
-            : "Your public booking page now uses the default layout.",
+          : "Your public booking page now uses the default layout.",
       });
+
+      // The first time a newly purchased storefront goes live, point the
+      // owner straight to the controls that make it feel like their business.
+      // Product-tour progress is persisted per account, so returning to a
+      // theme later will not keep reopening this nudge.
+      if (key === "ecommerce" && !hasSeenWalkthrough("hub.theme-customise")) {
+        setActiveTab("general");
+        window.setTimeout(() => {
+          startTour({
+            steps: [{
+              id: "hub.theme-customise",
+              path: "/salon/themes-settings",
+              target: '[data-tour-id="tour-theme-customise"]',
+              title: "Customise your storefront",
+              content: "Your theme is live. Use these controls to add your brand colour, banners, copy, and the storefront focus that suits your business.",
+              placement: "top",
+            }],
+            walkthroughIds: ["hub.theme-customise"],
+          });
+        }, 350);
+      }
     } catch (err) {
       toast({
         title: "Error",
@@ -331,16 +354,16 @@ export default function ThemesSettingsPage() {
     <SalonSidebar>
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Themes Settings</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Themes &amp; Customise</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Choose and configure your public booking page appearance.
+          Choose a storefront theme, then shape the content and branding your customers see.
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full max-w-sm">
           <TabsTrigger value="storefront" className="flex-1">Storefront Themes</TabsTrigger>
-          <TabsTrigger value="general" className="flex-1">General Setup</TabsTrigger>
+          <TabsTrigger value="general" className="flex-1">Customise</TabsTrigger>
         </TabsList>
 
         {/* ─────────────────── STOREFRONT THEMES ─────────────────── */}
@@ -378,6 +401,7 @@ export default function ThemesSettingsPage() {
                     brandColor={settings.brandColor}
                     bannerUrls={bannerUrls}
                     bookingPageBio={settings.bookingPageBio || null}
+                    bookingStatusMessage={(currentTenant as any)?.booking_status_message || null}
                     storefrontMode={settings.storefrontMode}
                     locations={previewLocations}
                   />
@@ -406,6 +430,15 @@ export default function ThemesSettingsPage() {
                     Apply
                   </Button>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setActiveTab("general")}
+                >
+                  <Paintbrush className="mr-1 h-3 w-3" />
+                  Customise
+                </Button>
               </div>
             </div>
 
@@ -436,10 +469,12 @@ export default function ThemesSettingsPage() {
                     brandColor={settings.brandColor}
                     bannerUrls={bannerUrls}
                     bookingPageBio={settings.bookingPageBio || null}
+                    bookingStatusMessage={(currentTenant as any)?.booking_status_message || null}
                     storefrontMode={settings.storefrontMode}
                     locations={previewLocations}
                     heroHeading={settings.heroHeading || null}
                     heroTagline={settings.heroTagline || null}
+                    heroBgColor={settings.heroBgColor || null}
                     heroCTAPrimary={settings.heroCTAPrimary || null}
                     heroCTASecondary={settings.heroCTASecondary || null}
                   />
@@ -484,10 +519,10 @@ export default function ThemesSettingsPage() {
                     variant="ghost"
                     size="sm"
                     className="h-7 text-xs px-2"
-                    onClick={() => { setActiveTab("general"); setSettingsDialogOpen(false); }}
+                    onClick={() => setActiveTab("general")}
                   >
-                    <SettingsIcon className="mr-1 h-3 w-3" />
-                    Settings
+                    <Paintbrush className="mr-1 h-3 w-3" />
+                    Customise
                   </Button>
                 )}
               </div>
@@ -518,19 +553,63 @@ export default function ThemesSettingsPage() {
           </div>
         </TabsContent>
 
-        {/* ─────��───────────── GENERAL SETUP ─────��───────────── */}
-        <TabsContent value="general" className="mt-6">
+        {/* ─────────────────── CUSTOMISE ─────────────────── */}
+        <TabsContent value="general" className="mt-6 space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-primary/15 bg-primary/[0.035] p-4" data-tour-id="tour-theme-customise">
+            <div className="mt-0.5 rounded-lg bg-primary/10 p-2 text-primary"><Paintbrush className="h-4 w-4" /></div>
+            <div>
+              <p className="text-sm font-medium">Make your storefront yours</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">Start with your brand colour and storefront content. The preview updates as you work, so you can see what customers will experience before saving.</p>
+            </div>
+          </div>
           <Card>
             <CardHeader>
-              <CardTitle>General Setup</CardTitle>
+              <CardTitle>Customise your storefront</CardTitle>
               <CardDescription>
-                Configure your booking page bio, brand color, banners, and storefront focus.
+                Configure your booking page bio, brand colour, banners, and storefront focus.
                 E-commerce hero settings apply when the e-commerce theme is active.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-6 xl:grid-cols-[1.2fr_1.8fr]">
-                <div className="space-y-5">
+              <div className="mb-5 grid grid-cols-2 rounded-xl border bg-muted/25 p-1 xl:hidden" role="tablist" aria-label="Customise workspace">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileCustomiseView === "edit"}
+                  onClick={() => setMobileCustomiseView("edit")}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    mobileCustomiseView === "edit" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  <Paintbrush className="mr-2 inline-block h-4 w-4" />
+                  Edit content
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileCustomiseView === "preview"}
+                  onClick={() => setMobileCustomiseView("preview")}
+                  className={cn(
+                    "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    mobileCustomiseView === "preview" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
+                  )}
+                >
+                  <Eye className="mr-2 inline-block h-4 w-4" />
+                  Preview
+                </button>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,1.35fr)]">
+                <div className={cn(
+                  "rounded-2xl border bg-background p-4 sm:p-5",
+                  mobileCustomiseView === "preview" && "hidden xl:block",
+                )}>
+                  <div className="mb-5 border-b pb-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">Content management</p>
+                    <h3 className="mt-1 text-base font-semibold">Brand &amp; booking content</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">Set the visual identity and information customers see before they book.</p>
+                  </div>
                   {/* Banners */}
                   <div className="space-y-2">
                     <Label>Booking Page Banners</Label>
@@ -645,11 +724,13 @@ export default function ThemesSettingsPage() {
                     </p>
                   </div>
 
+                  <div className="h-px bg-border" />
+
                   {/* E-commerce hero settings */}
                   <div className="space-y-3 rounded-xl border border-dashed p-4">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-medium">E-commerce Hero</p>
+                      <p className="text-sm font-medium">E-commerce content</p>
                       {!hasPurchasedEcommerce && (
                         <Badge variant="outline" className="text-[10px]">Paid theme</Badge>
                       )}
@@ -777,17 +858,23 @@ export default function ThemesSettingsPage() {
                       ) : (
                         <Save className="mr-2 h-4 w-4" />
                       )}
-                      Save settings
+                      Save changes
                     </Button>
                   </div>
                 </div>
 
                 {/* Live preview */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Live Preview</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Reflecting your current active theme: <span className="font-medium">{activeThemeKey === "ecommerce" ? "E-commerce" : "Default"}</span>
-                  </p>
+                <div className={cn(
+                  "rounded-2xl border bg-muted/20 p-4 sm:p-5 xl:sticky xl:top-6 xl:self-start",
+                  mobileCustomiseView === "edit" && "hidden xl:block",
+                )}>
+                  <div className="mb-4 border-b pb-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-primary">Customer view</p>
+                    <Label className="mt-1 block text-base font-semibold">Live preview</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Reflecting your current active theme: <span className="font-medium">{activeThemeKey === "ecommerce" ? "E-commerce" : "Default"}</span>
+                    </p>
+                  </div>
                   <BookingThemePreview
                     themeKey={activeThemeKey}
                     mode="dialog"
@@ -799,6 +886,7 @@ export default function ThemesSettingsPage() {
                     locations={previewLocations}
                     heroHeading={settings.heroHeading || null}
                     heroTagline={settings.heroTagline || null}
+                    heroBgColor={settings.heroBgColor || null}
                     heroCTAPrimary={settings.heroCTAPrimary || null}
                     heroCTASecondary={settings.heroCTASecondary || null}
                   />
@@ -827,10 +915,12 @@ export default function ThemesSettingsPage() {
             brandColor={settings.brandColor}
             bannerUrls={bannerUrls}
             bookingPageBio={settings.bookingPageBio || null}
+            bookingStatusMessage={(currentTenant as any)?.booking_status_message || null}
             storefrontMode={settings.storefrontMode}
             locations={previewLocations}
             heroHeading={settings.heroHeading || null}
             heroTagline={settings.heroTagline || null}
+            heroBgColor={settings.heroBgColor || null}
             heroCTAPrimary={settings.heroCTAPrimary || null}
             heroCTASecondary={settings.heroCTASecondary || null}
           />

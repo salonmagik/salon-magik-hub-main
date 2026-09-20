@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { verifyPaystackSignature } from "../_shared/payment-webhook-processor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,6 +27,24 @@ Deno.serve(async (req) => {
 
   try {
     const rawBody = await req.text();
+    const paystackSecretKey = Deno.env.get("PAYSTACK_SECRET_KEY_NG");
+    const paystackSignature = req.headers.get("x-paystack-signature");
+    const forwardedFor = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "";
+    const paystackIps = new Set(["52.31.139.75", "52.49.173.169", "52.214.14.220"]);
+    const sourceIpAllowed = forwardedFor.split(",").map((value) => value.trim()).some((value) => paystackIps.has(value));
+    const signatureValid = Boolean(
+      paystackSecretKey &&
+      paystackSignature &&
+      (await verifyPaystackSignature(rawBody, paystackSignature, paystackSecretKey)),
+    );
+    if ((paystackSignature && !signatureValid) || (!signatureValid && !sourceIpAllowed)) {
+      console.error("ERROR: Untrusted Paystack transfer approval request.");
+      return new Response(
+        JSON.stringify({ status: "rejected", reason: "Untrusted approval request" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     let body: any;
 
     try {
@@ -69,21 +88,6 @@ Deno.serve(async (req) => {
         JSON.stringify({ status: "rejected", reason: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    // Verify event origin by checking IP (Paystack IPs: 52.31.139.75, 52.49.173.169, 52.214.14.220)
-    const paystackIPs = ["52.31.139.75", "52.49.173.169", "52.214.14.220"];
-    const forwardedFor = req.headers.get("x-forwarded-for");
-    
-    if (forwardedFor) {
-      const isPaystackIP = paystackIPs.some(ip => forwardedFor.includes(ip));
-      if (isPaystackIP) {
-        console.log("IP verification: PASSED ✓ (Found Paystack IP)");
-      } else {
-        console.warn(`WARNING: Request did not match known Paystack IPs. forwarded-for: ${forwardedFor}`);
-      }
-    } else {
-      console.warn("WARNING: No x-forwarded-for header found to verify IP.");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -142,9 +146,13 @@ Deno.serve(async (req) => {
     }
 
     // Verify recipient
-    const expectedRecipient = Array.isArray(withdrawal.salon_payout_destinations) 
-      ? withdrawal.salon_payout_destinations[0]?.paystack_recipient_code 
-      : withdrawal.salon_payout_destinations?.paystack_recipient_code;
+    const destinations = withdrawal.salon_payout_destinations as unknown as
+      | { paystack_recipient_code?: string }[]
+      | { paystack_recipient_code?: string }
+      | null;
+    const expectedRecipient = Array.isArray(destinations)
+      ? destinations[0]?.paystack_recipient_code
+      : destinations?.paystack_recipient_code;
       
     if (expectedRecipient !== recipient) {
       console.error(`ERROR: Recipient mismatch. DB: ${expectedRecipient}, Payload: ${recipient}`);
@@ -178,10 +186,11 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
+    const caughtError = error instanceof Error ? error : new Error("Unknown error");
     console.error("\n--- UNEXPECTED ERROR ---");
-    console.error("Error Type:", error?.constructor?.name || "Unknown");
-    console.error("Error Message:", error?.message || "No message");
-    console.error("Error Stack:", error?.stack || "No stack trace");
+    console.error("Error Type:", caughtError.constructor.name);
+    console.error("Error Message:", caughtError.message);
+    console.error("Error Stack:", caughtError.stack || "No stack trace");
     console.log("=".repeat(80));
 
     return new Response(

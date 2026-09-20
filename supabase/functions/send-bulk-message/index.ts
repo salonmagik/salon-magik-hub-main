@@ -22,6 +22,7 @@ interface SendBulkMessageRequest {
   templateVariables?: Record<string, string>;
   senderContext?: {
     senderDisplayName?: string;
+    locationId?: string | null;
   };
 }
 
@@ -30,6 +31,7 @@ type BulkCustomerRow = {
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  country: string | null;
   tenant_id: string | null;
 };
 
@@ -53,6 +55,19 @@ const CREDIT_COST: Record<string, number> = {
 
 function getSmsSegments(message: string) {
   return Math.max(1, Math.ceil(Math.max(message.trim().length, 1) / 160));
+}
+
+function getCustomerSmsCountry(customer: Pick<BulkCustomerRow, "country" | "phone">) {
+  // The E.164 prefix is the most reliable signal because it is the number the
+  // telecom operator will route. Profile country covers local-format numbers.
+  const phone = String(customer.phone || "").replace(/[^\d+]/g, "");
+  if (phone.startsWith("+233") || phone.startsWith("233")) return "GH";
+  if (phone.startsWith("+234") || phone.startsWith("234")) return "NG";
+
+  const country = String(customer.country || "").trim().toUpperCase();
+  if (country === "GHANA") return "GH";
+  if (country === "NIGERIA") return "NG";
+  return country || null;
 }
 
 function replaceMessageVars(
@@ -140,7 +155,7 @@ const handler = async (req: Request): Promise<Response> => {
     // cannot be masked as "not found" because of relation or schema drift.
     const { data: customers, error: customersError } = await supabase
       .from("customers")
-      .select("id, full_name, email, phone, tenant_id")
+      .select("id, full_name, email, phone, country, tenant_id")
       .in("id", normalizedCustomerIds);
 
     if (customersError || !customers || customers.length === 0) {
@@ -211,6 +226,67 @@ const handler = async (req: Request): Promise<Response> => {
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Nigerian telecom operators enforce an 08:00–20:00 Nigeria-time SMS
+    // window. Enforce the same rule server-side so a caller cannot bypass the
+    // salon-admin button or send directly to this function.
+    if (channel === "sms") {
+      let smsCountry = String(tenant.country || "").trim().toUpperCase();
+      const locationId = senderContext?.locationId || null;
+      if (!locationId && String(tenant.plan || "").toLowerCase() === "chain") {
+        return new Response(
+          JSON.stringify({ error: "Select a branch before sending SMS." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (locationId) {
+        const { data: location, error: locationError } = await supabase
+          .from("locations")
+          .select("country")
+          .eq("id", locationId)
+          .eq("tenant_id", tenantId)
+          .maybeSingle();
+        if (locationError || !location) {
+          return new Response(
+            JSON.stringify({ error: "The selected branch could not be verified." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        smsCountry = String(location.country || smsCountry).trim().toUpperCase();
+      }
+      if (smsCountry === "NG") {
+        const nigeriaHour = Number(new Intl.DateTimeFormat("en-NG", {
+          timeZone: "Africa/Lagos",
+          hour: "2-digit",
+          hour12: false,
+        }).format(new Date()));
+        if (nigeriaHour < 8 || nigeriaHour >= 20) {
+          return new Response(
+            JSON.stringify({
+              error: "Nigerian telecom operators allow SMS delivery from 8:00 a.m. to 8:00 p.m. Nigeria time. This legal and telco requirement cannot be bypassed; try again during the permitted window.",
+              code: "NIGERIA_SMS_OUTSIDE_WINDOW",
+            }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      }
+
+      const countryMismatches = typedCustomers.filter((customer) => {
+        const customerCountry = getCustomerSmsCountry(customer);
+        return customerCountry && customerCountry !== smsCountry;
+      });
+      if (countryMismatches.length > 0 && (smsCountry === "GH" || smsCountry === "NG")) {
+        const marketLabel = smsCountry === "GH" ? "Ghana" : "Nigeria";
+        return new Response(
+          JSON.stringify({
+            error: `${countryMismatches.length} SMS recipient${countryMismatches.length === 1 ? "" : "s"} do not use a ${marketLabel} phone number. Local telecom operators may reject cross-border delivery; remove those recipients and try again.`,
+            code: "SMS_RECIPIENT_COUNTRY_MISMATCH",
+            customerIds: countryMismatches.map((customer) => customer.id),
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
     }
 
     const senderDisplayName = senderContext?.senderDisplayName?.trim() || tenant.name;

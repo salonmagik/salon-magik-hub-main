@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CancelSubscriptionDialog } from "./CancelSubscriptionDialog";
 import { supabase } from "@/lib/supabase";
@@ -75,26 +75,24 @@ describe("CancelSubscriptionDialog", () => {
 		);
 
 		fireEvent.click(screen.getByRole("combobox"));
-		fireEvent.click(await screen.findByText("Too expensive"));
+		fireEvent.click(screen.getByRole("option", { name: "Too expensive" }));
 
 		const confirmButton = screen.getByRole("button", { name: /confirm cancellation/i });
 		expect(confirmButton).not.toBeDisabled();
 
 		fireEvent.change(screen.getByLabelText(/anything else/i), { target: { value: "  will miss you  " } });
 		fireEvent.click(confirmButton);
-
-		await waitFor(() => {
-			expect(supabase.functions.invoke).toHaveBeenCalledWith("manage-subscription-cancellation", {
-				body: {
-					tenantId: "tenant-1",
-					action: "cancel",
-					reason: "too_expensive",
-					note: "will miss you",
-				},
-			});
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(supabase.functions.invoke).toHaveBeenCalledWith("manage-subscription-cancellation", {
+			body: {
+				tenantId: "tenant-1",
+				action: "cancel",
+				reason: "too_expensive",
+				note: "will miss you",
+			},
 		});
-
-		await waitFor(() => expect(refreshTenants).toHaveBeenCalled());
-		await waitFor(() => expect(onCancelled).toHaveBeenCalled());
+		expect(refreshTenants).toHaveBeenCalled();
+		expect(onCancelled).toHaveBeenCalled();
 	});
 });

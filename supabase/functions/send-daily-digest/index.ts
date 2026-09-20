@@ -2,6 +2,12 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { getSalonRecipients, sendResendEmail } from "../_shared/salon-notifications.ts";
 import { fetchPlatformTemplate, renderPlatformTemplate } from "../_shared/platform-templates.ts";
 import { createButton } from "../_shared/email-template.ts";
+import {
+  formatDateRange,
+  periodRange,
+  shouldSendToday,
+  type DigestFrequency,
+} from "./digest-schedule.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,45 +17,6 @@ const corsHeaders = {
 
 interface DigestRequest {
   tenantId?: string;
-}
-
-function startOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0));
-}
-
-function endOfUtcDay(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
-}
-
-type DigestFrequency = "daily" | "weekly" | "monthly";
-
-// The cron fires once a day — frequency is decided in here, not by having
-// separate cron schedules. A weekly/monthly digest would be nearly all
-// zeros if it only ever looked at "today", so both the send-or-skip
-// decision and the aggregation window depend on which day it actually is.
-function shouldSendToday(frequency: DigestFrequency, now: Date): boolean {
-  if (frequency === "daily") return true;
-  if (frequency === "weekly") return now.getUTCDay() === 1; // Monday
-  return now.getUTCDate() === 1; // Monthly: 1st of the month
-}
-
-function periodRange(frequency: DigestFrequency, now: Date): { start: Date; end: Date; label: string } {
-  const end = endOfUtcDay(now);
-  if (frequency === "daily") {
-    return { start: startOfUtcDay(now), end, label: "today" };
-  }
-  if (frequency === "weekly") {
-    const start = startOfUtcDay(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
-    return { start, end, label: "this week" };
-  }
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0));
-  return { start, end, label: "this month" };
-}
-
-function formatDateRange(frequency: DigestFrequency, start: Date, end: Date): string {
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  if (frequency === "daily") return fmt(end);
-  return `${fmt(start)} – ${fmt(end)}`;
 }
 
 Deno.serve(async (req) => {
@@ -134,11 +101,19 @@ Deno.serve(async (req) => {
     const now = new Date();
 
     let processed = 0;
+    let emailsSent = 0;
+    let emailsFailed = 0;
+    const failures: Array<{ tenantId: string; recipient: string; error: string }> = [];
+    const MAX_FAILURES_REPORTED = 50;
 
     for (const row of settingsRows || []) {
-      const tenant = Array.isArray((row as { tenants?: unknown }).tenants)
-        ? (row as { tenants: Array<{ id: string; name: string | null; logo_url: string | null; currency: string | null }> }).tenants[0]
-        : (row as { tenants?: { id: string; name: string | null; logo_url: string | null; currency: string | null } | null }).tenants;
+      const tenantsValue = (row as unknown as {
+        tenants?:
+          | { id: string; name: string | null; logo_url: string | null; currency: string | null }
+          | Array<{ id: string; name: string | null; logo_url: string | null; currency: string | null }>
+          | null;
+      }).tenants;
+      const tenant = Array.isArray(tenantsValue) ? tenantsValue[0] : tenantsValue;
 
       if (!tenant?.id) continue;
 
@@ -149,6 +124,7 @@ Deno.serve(async (req) => {
       // real day it'd normally fire.
       if (!scopedTenantId && !shouldSendToday(frequency, now)) continue;
 
+      try {
       const { start: periodStart, end: periodEnd, label: periodLabel } = periodRange(frequency, now);
 
       const recipients = await getSalonRecipients(admin, tenant.id, ["owner", "manager"]);
@@ -255,61 +231,93 @@ Deno.serve(async (req) => {
       `;
 
       for (const recipient of recipients) {
-        const values = {
-          first_name: recipient.firstName || "there",
-          salon_name: tenant.name || "Salon Magik",
-          digest_date: formatDateRange(frequency, periodStart, periodEnd),
-          frequency_label: frequencyLabel,
-          frequency_lowercase: frequency,
-          period_label: periodLabel,
-          other_frequencies: otherFrequencies[frequency],
-          settings_link: settingsUrl,
-          upcoming_appointments_count: String(upcomingAppointmentsCount),
-          new_customers_count: String(newCustomersCount),
-          payments_received: `${tenant.currency || "USD"} ${paymentsReceived.toFixed(2)}`,
-          outstanding_balances: `${tenant.currency || "USD"} ${outstandingBalances.toFixed(2)}`,
-          cta_link: `${dashboardBaseUrl}/salon`,
-          cta_link_button: createButton("Open Dashboard", `${dashboardBaseUrl}/salon`),
-        };
+        try {
+          const values = {
+            first_name: recipient.firstName || "there",
+            salon_name: tenant.name || "Salon Magik",
+            digest_date: formatDateRange(frequency, periodStart, periodEnd),
+            frequency_label: frequencyLabel,
+            frequency_lowercase: frequency,
+            period_label: periodLabel,
+            other_frequencies: otherFrequencies[frequency],
+            settings_link: settingsUrl,
+            upcoming_appointments_count: String(upcomingAppointmentsCount),
+            new_customers_count: String(newCustomersCount),
+            payments_received: `${tenant.currency || "USD"} ${paymentsReceived.toFixed(2)}`,
+            outstanding_balances: `${tenant.currency || "USD"} ${outstandingBalances.toFixed(2)}`,
+            cta_link: `${dashboardBaseUrl}/salon`,
+            cta_link_button: createButton("Open Dashboard", `${dashboardBaseUrl}/salon`),
+          };
 
-        const activePlatformSubject =
-          platformTemplateResult?.is_active === false ? null : platformTemplateResult?.subject;
-        const activePlatformBody =
-          platformTemplateResult?.is_active === false ? null : platformTemplateResult?.body;
+          const activePlatformSubject =
+            platformTemplateResult?.is_active === false ? null : platformTemplateResult?.subject;
+          const activePlatformBody =
+            platformTemplateResult?.is_active === false ? null : platformTemplateResult?.body;
 
-        const subject = renderPlatformTemplate(
-          activePlatformSubject ||
-            (templateResult.data?.is_active === false
-              ? defaultSubject
-              : templateResult.data?.subject || defaultSubject),
-          values,
-        );
-        const htmlContent = renderPlatformTemplate(
-          activePlatformBody ||
-            (templateResult.data?.is_active === false
-              ? defaultBody
-              : templateResult.data?.body_html || defaultBody),
-          values,
-        );
+          const subject = renderPlatformTemplate(
+            activePlatformSubject ||
+              (templateResult.data?.is_active === false
+                ? defaultSubject
+                : templateResult.data?.subject || defaultSubject),
+            values,
+          );
+          const htmlContent = renderPlatformTemplate(
+            activePlatformBody ||
+              (templateResult.data?.is_active === false
+                ? defaultBody
+                : templateResult.data?.body_html || defaultBody),
+            values,
+          );
 
-        await sendResendEmail({
-          resendApiKey,
-          fromEmail,
-          to: [recipient.email],
-          subject,
-          salonName: tenant.name || undefined,
-          salonLogoUrl: tenant.logo_url || undefined,
-          htmlContent,
-        });
+          const result = await sendResendEmail({
+            resendApiKey,
+            fromEmail,
+            to: [recipient.email],
+            subject,
+            salonName: tenant.name || undefined,
+            salonLogoUrl: tenant.logo_url || undefined,
+            htmlContent,
+            log: {
+              supabase: admin,
+              tenantId: tenant.id,
+              templateType: "daily_digest",
+            },
+          });
+
+          if (result.sent) {
+            emailsSent += 1;
+          } else {
+            emailsFailed += 1;
+            if (failures.length < MAX_FAILURES_REPORTED) {
+              failures.push({ tenantId: tenant.id, recipient: recipient.email, error: result.error || "unknown error" });
+            }
+          }
+        } catch (recipientError) {
+          emailsFailed += 1;
+          console.error(`Digest send failed for recipient ${recipient.email} (tenant ${tenant.id}):`, recipientError);
+          if (failures.length < MAX_FAILURES_REPORTED) {
+            failures.push({
+              tenantId: tenant.id,
+              recipient: recipient.email,
+              error: recipientError instanceof Error ? recipientError.message : "unknown error",
+            });
+          }
+        }
       }
 
       processed += 1;
+      } catch (tenantError) {
+        console.error(`Digest run failed for tenant ${tenant.id}:`, tenantError);
+      }
     }
 
-    return new Response(JSON.stringify({ success: true, processed }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ success: emailsFailed === 0, processed, emailsSent, emailsFailed, failures }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   } catch (error) {
     console.error("Error sending daily digest:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), {

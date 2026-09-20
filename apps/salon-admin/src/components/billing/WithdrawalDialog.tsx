@@ -4,7 +4,8 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
-import { formatCurrency } from "@shared/currency";
+import { quoteWithdrawal } from "@shared/withdrawal-fees";
+import { formatCurrency, getMinimumWithdrawal } from "@shared/currency";
 import {
   Dialog,
   DialogContent,
@@ -32,17 +33,22 @@ import { cn } from "@shared/utils";
 interface WithdrawalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  locationId?: string | null;
+  currencyOverride?: string;
+  onWithdrawalCreated?: () => void | Promise<void>;
 }
 
-export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) {
+export function WithdrawalDialog({ open, onOpenChange, locationId = null, currencyOverride, onWithdrawalCreated }: WithdrawalDialogProps) {
   const { currentTenant } = useAuth();
   const tenantId = currentTenant?.id;
-  const currency = currentTenant?.currency || "NGN";
 
-  const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId);
-  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId);
+  const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId, locationId);
+  const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId, locationId);
   const { destinations, isLoading: destinationsLoading } = usePayoutDestinations(tenantId);
-  const { createWithdrawal } = useWithdrawals(tenantId);
+  const { createWithdrawal } = useWithdrawals(tenantId, locationId);
+  const currency = currencyOverride ?? wallet?.currency ?? availability?.currency ?? currentTenant?.currency ?? "NGN";
+
+  const scopedDestinations = destinations.filter((item) => !item.location_id || item.location_id === locationId);
 
   const [selectedDestinationId, setSelectedDestinationId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -50,15 +56,22 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   const [error, setError] = useState<string>("");
 
   // Get minimum withdrawal amount based on currency
-  const minWithdrawal = currency === "NGN" ? 1000 : 50;
+  const minWithdrawal = getMinimumWithdrawal(currency);
   const walletBalance = Number(wallet?.balance || 0);
-  // Fall back to the raw wallet balance while availability is still loading
-  // so the dialog doesn't briefly claim $0 is withdrawable.
-  const availableBalance = availability ? availability.available : walletBalance;
+  // Do not allow a withdrawal until cleared availability is known.
+  const availableBalance = availability?.available ?? 0;
   const pendingBalance = availability?.pending ?? 0;
   const nextSettlementAt = availability?.nextSettlementAt
     ? new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })
     : null;
+
+  const destination = scopedDestinations.find((item) => item.id === selectedDestinationId);
+  let quote: ReturnType<typeof quoteWithdrawal> | null = null;
+  let quoteError = "";
+  if (amount && destination) {
+    try { quote = quoteWithdrawal(Number(amount), currency, destination.destination_type); }
+    catch (error) { quoteError = error instanceof Error ? error.message : "Invalid withdrawal"; }
+  }
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -82,10 +95,16 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       return `Minimum withdrawal is ${formatCurrency(minWithdrawal, currency)}`;
     }
 
-    if (numValue > availableBalance) {
+    if (!Number.isFinite(numValue)) return "Please enter a valid amount";
+    let totalDebit = numValue;
+    if (destination) {
+      try { totalDebit = quoteWithdrawal(numValue, currency, destination.destination_type).totalDebit; }
+      catch (error) { return error instanceof Error ? error.message : "Invalid withdrawal"; }
+    }
+    if (totalDebit > availableBalance) {
       return pendingBalance > 0
         ? `Only ${formatCurrency(availableBalance, currency)} has cleared and is available to withdraw right now. The rest is still settling.`
-        : `Insufficient balance. Available: ${formatCurrency(availableBalance, currency)}`;
+        : `Insufficient balance to cover the amount and fees. Available: ${formatCurrency(availableBalance, currency)}`;
     }
 
     return null;
@@ -114,6 +133,10 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       return;
     }
 
+    if (!quote || !availability || availabilityLoading) {
+      setError("Wait for your balance and fee quote before withdrawing");
+      return;
+    }
     setIsSubmitting(true);
     setError("");
 
@@ -121,7 +144,10 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
       const result = await createWithdrawal({
         tenantId,
         payoutDestinationId: selectedDestinationId,
+        locationId,
         amount: Number(amount),
+        acceptedTotalDebit: quote.totalDebit,
+        feeVersion: quote.feeVersion,
       });
 
       if (result) {
@@ -129,6 +155,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
         onOpenChange(false);
         setSelectedDestinationId("");
         setAmount("");
+        await onWithdrawalCreated?.();
       }
     } catch (err) {
       console.error("Error processing withdrawal:", err);
@@ -144,7 +171,8 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
   };
 
   const isLoading = walletLoading || destinationsLoading;
-  const canSubmit = !isSubmitting && !error && amount && selectedDestinationId && !isLoading;
+  const currentError = quoteError || (amount ? validateAmount(amount) : "");
+  const canSubmit = !isSubmitting && !currentError && !!quote && !!availability && !availabilityLoading && !isLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,10 +236,16 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               </p>
             </div>
 
+            {!availabilityLoading && availableBalance < minWithdrawal && (
+              <p className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                Withdrawals start at {formatCurrency(minWithdrawal, currency)} plus transfer charges.
+                Your cleared balance is {formatCurrency(availableBalance, currency)}.
+              </p>
+            )}
             {/* Payout Destination Selection */}
             <div className="space-y-2">
               <Label htmlFor="destination">Payout Destination</Label>
-              {destinations.length === 0 ? (
+              {scopedDestinations.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
@@ -221,13 +255,13 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               ) : (
                 <Select
                   value={selectedDestinationId}
-                  onValueChange={setSelectedDestinationId}
+                  onValueChange={(value) => { setSelectedDestinationId(value); setError(""); }}
                 >
                   <SelectTrigger id="destination">
                     <SelectValue placeholder="Select destination" />
                   </SelectTrigger>
                   <SelectContent>
-                    {destinations.map((dest) => (
+                    {scopedDestinations.map((dest) => (
                       <SelectItem key={dest.id} value={dest.id}>
                         {dest.destination_type === "bank"
                           ? `${dest.bank_name} - ${dest.account_number}`
@@ -242,7 +276,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
 
             {/* Amount Input */}
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount ({currency})</Label>
+              <Label htmlFor="amount">Withdrawal amount ({currency})</Label>
               <Input
                 id="amount"
                 type="number"
@@ -255,11 +289,22 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
               />
             </div>
 
+            {quote && (
+              <div className="rounded-lg border p-3 space-y-2 text-sm" aria-live="polite">
+                <div className="flex justify-between"><span>Amount sent to payout account</span><span>{formatCurrency(quote.amount, currency)}</span></div>
+                <div className="flex justify-between"><span>Paystack transfer fee (salon pays)</span><span>{formatCurrency(quote.transferFee, currency)}</span></div>
+                {quote.stampDuty > 0 && <div className="flex justify-between"><span>Stamp duty</span><span>{formatCurrency(quote.stampDuty, currency)}</span></div>}
+                <div className="flex justify-between border-t pt-2 font-semibold"><span>Total wallet deduction</span><span>{formatCurrency(quote.totalDebit, currency)}</span></div>
+                <p className="text-xs text-muted-foreground">Your salon pays these charges. No Salon Magik markup. Funds and fees are reserved while the transfer is pending.</p>
+                {quote.stampDuty > 0 && <p className="text-xs text-muted-foreground">Once applied by Paystack, stamp duty is non-refundable, including if the transfer is reversed.</p>}
+              </div>
+            )}
+
             {/* Error Message */}
-            {error && (
+            {(currentError || error) && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{currentError || error}</AlertDescription>
               </Alert>
             )}
           </div>
@@ -275,7 +320,7 @@ export function WithdrawalDialog({ open, onOpenChange }: WithdrawalDialogProps) 
           </Button>
           <Button
             onClick={handleWithdraw}
-            disabled={!canSubmit || destinations.length === 0}
+            disabled={!canSubmit || scopedDestinations.length === 0}
           >
             {isSubmitting ? (
               <>

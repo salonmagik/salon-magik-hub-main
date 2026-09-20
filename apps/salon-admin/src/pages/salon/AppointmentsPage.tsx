@@ -37,7 +37,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
 import { DateRangePicker, type DateRangePreset as PickerDateRangePreset } from "@ui/date-range-picker";
-import { TimePicker } from "@ui/time-picker";
+import { getEarliestSelectableTime, TimePicker } from "@ui/time-picker";
 import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { Input } from "@ui/input";
@@ -88,6 +88,7 @@ import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useCalendarAppointments, type CalendarView, type CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { formatCurrency } from "@shared/currency";
 import type { Enums, Tables } from "@supabase-client";
 
@@ -363,8 +364,7 @@ export default function AppointmentsPage() {
     date: calendarDate,
   });
 
-  // Get currency from tenant
-  const currency = currentTenant?.currency || "GHS";
+  const { currency } = useActiveBranchCurrency("GHS");
 
   // Get user's role for the current tenant
   const userRole = useMemo(() => {
@@ -668,6 +668,18 @@ export default function AppointmentsPage() {
         }
         const proposedStart = `${proposedStartDate}T${proposedStartTime}:00`;
         const proposedEnd = `${proposedEndDate}T${proposedEndTime}:00`;
+        const proposedStartDateTime = new Date(proposedStart);
+        const proposedEndDateTime = new Date(proposedEnd);
+        if (
+          Number.isNaN(proposedStartDateTime.getTime()) ||
+          Number.isNaN(proposedEndDateTime.getTime()) ||
+          proposedStartDateTime <= new Date()
+        ) {
+          throw new Error("Choose a future start time. Past times cannot be proposed.");
+        }
+        if (proposedEndDateTime <= proposedStartDateTime) {
+          throw new Error("The proposed end time must be after the start time.");
+        }
         const { error } = await supabase
           .from("appointments")
           .update({
@@ -1946,6 +1958,7 @@ export default function AppointmentsPage() {
                         value={proposedStartTime}
                         onChange={setProposedStartTime}
                         placeholder="Pick time"
+                        minTime={getEarliestSelectableTime(stringToDate(proposedStartDate))}
                       />
                     </div>
                   </div>
@@ -1962,6 +1975,7 @@ export default function AppointmentsPage() {
                         value={proposedEndTime}
                         onChange={setProposedEndTime}
                         placeholder="Pick time"
+                        minTime={getEarliestSelectableTime(stringToDate(proposedEndDate))}
                       />
                     </div>
                   </div>

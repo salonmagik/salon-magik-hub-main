@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, ChevronLeft, ChevronRight, AlertTriangle, Clock, CreditCard, Wrench, Info, CheckCircle } from "lucide-react";
 import { Button } from "@ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useProductTour } from "@/components/onboarding/ProductTourProvider";
 import { toast } from "@ui/ui/use-toast";
 import { useBanners, BannerVariant } from "./BannerContext";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 /**
  * Full-screen overlay rendered when the active banner has blocking: true.
@@ -102,8 +104,8 @@ const variantStyles: Record<BannerVariant, { bg: string; text: string; icon: Rea
     icon: CheckCircle,
   },
   maintenance: {
-    bg: "bg-[#F5F7FA]",
-    text: "text-[#2563EB]",
+    bg: "bg-[#FEF3C7]",
+    text: "text-[#78350F]",
     icon: Wrench,
   },
 };
@@ -114,6 +116,7 @@ interface GlobalBannerProps {
 
 export function GlobalBanner({ className }: GlobalBannerProps) {
   const navigate = useNavigate();
+  const [smsDetailsOpen, setSmsDetailsOpen] = useState(false);
   const {
     activeBanner,
     currentIndex,
@@ -124,12 +127,23 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
     goToBanner,
   } = useBanners();
 
+  useEffect(() => {
+    if (!activeBanner?.id.startsWith("nigeria-sms-window-")) setSmsDetailsOpen(false);
+  }, [activeBanner?.id]);
+
   if (!activeBanner) return null;
 
   const style = variantStyles[activeBanner.variant];
   const Icon = style.icon;
+  const isNigeriaSmsBanner = activeBanner.id.startsWith("nigeria-sms-window-");
+  const controlText = isNigeriaSmsBanner ? "text-white/80" : style.text;
 
   const handleCta = () => {
+    if (isNigeriaSmsBanner) {
+      setSmsDetailsOpen(true);
+      return;
+    }
+
     if (activeBanner.cta?.action) {
       activeBanner.cta.action();
     } else if (activeBanner.cta?.path) {
@@ -137,33 +151,48 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
     }
   };
 
+  const handleBannerClick = () => {
+    if (isNigeriaSmsBanner) setSmsDetailsOpen(true);
+  };
+
   return (
     <div
       className={cn(
-        "mx-4 mb-4 p-3 rounded-lg border flex items-start gap-3",
-        style.bg,
-        "border-transparent",
+        "relative flex min-h-11 w-full items-center justify-center gap-3 border-b px-10 py-2.5 text-sm",
+        isNigeriaSmsBanner
+          ? "border-[#4b3a70] bg-[#211834] text-white"
+          : cn(
+              style.bg,
+              activeBanner.variant === "maintenance"
+                ? "border-[#F59E0B]/35"
+                : "border-transparent",
+            ),
+        isNigeriaSmsBanner && "cursor-pointer",
         className
       )}
+      onClick={handleBannerClick}
     >
-      <Icon className={cn("w-5 h-5 flex-shrink-0 mt-0.5", style.text)} />
+      <Icon className={cn("h-4 w-4 flex-shrink-0", isNigeriaSmsBanner ? "text-[#F4C84E]" : style.text)} />
       
-      <div className="flex-1 min-w-0">
-        <p className={cn("text-sm font-semibold", style.text)}>
+      <div className="min-w-0 flex-1 text-center">
+        <span className={cn("font-semibold", isNigeriaSmsBanner ? "text-white" : style.text)}>
           {activeBanner.title}
-        </p>
-        <p className={cn("text-sm mt-0.5", style.text, "opacity-90")}>
+        </span>
+        <span className={cn("ml-2 hidden sm:inline", isNigeriaSmsBanner ? "text-white/75" : cn(style.text, "opacity-90"))}>
           {activeBanner.message}
-        </p>
+        </span>
         
         {activeBanner.cta && (
           <Button
             variant="link"
             size="sm"
-            className={cn("h-auto p-0 mt-1", style.text)}
-            onClick={handleCta}
+            className={cn("ml-2 h-auto p-0 align-baseline font-semibold underline-offset-4 hover:underline", isNigeriaSmsBanner ? "text-[#F4C84E]" : style.text)}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleCta();
+            }}
           >
-            {activeBanner.cta.label} →
+            {isNigeriaSmsBanner ? "Learn more →" : `${activeBanner.cta.label} →`}
           </Button>
         )}
       </div>
@@ -172,8 +201,11 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
       {totalBanners > 1 && (
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
-            onClick={prevBanner}
-            className={cn("p-1 rounded hover:bg-black/10", style.text)}
+            onClick={(event) => {
+              event.stopPropagation();
+              prevBanner();
+            }}
+            className={cn("p-1 rounded hover:bg-black/10", controlText)}
             aria-label="Previous notice"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -183,10 +215,13 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
             {Array.from({ length: totalBanners }).map((_, i) => (
               <button
                 key={i}
-                onClick={() => goToBanner(i)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  goToBanner(i);
+                }}
                 className={cn(
                   "w-1.5 h-1.5 rounded-full transition-all",
-                  i === currentIndex ? style.text : "bg-black/20"
+                  i === currentIndex ? controlText : "bg-black/20"
                 )}
                 style={i === currentIndex ? { backgroundColor: "currentColor" } : {}}
                 aria-label={`Go to notice ${i + 1}`}
@@ -195,8 +230,11 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
           </div>
           
           <button
-            onClick={nextBanner}
-            className={cn("p-1 rounded hover:bg-black/10", style.text)}
+            onClick={(event) => {
+              event.stopPropagation();
+              nextBanner();
+            }}
+            className={cn("p-1 rounded hover:bg-black/10", controlText)}
             aria-label="Next notice"
           >
             <ChevronRight className="w-4 h-4" />
@@ -207,13 +245,47 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
       {/* Dismiss button */}
       {activeBanner.dismissible && (
         <button
-          onClick={() => dismissBanner(activeBanner.id)}
-          className={cn("p-1 hover:bg-black/10 rounded flex-shrink-0", style.text)}
+          onClick={(event) => {
+            event.stopPropagation();
+            dismissBanner(activeBanner.id);
+          }}
+          className={cn("p-1 hover:bg-black/10 rounded flex-shrink-0", controlText)}
           aria-label="Dismiss"
         >
           <X className="w-4 h-4" />
         </button>
       )}
+
+      <Dialog open={smsDetailsOpen} onOpenChange={setSmsDetailsOpen}>
+        <DialogContent className="max-w-md" onClick={(event) => event.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-[#F4C84E]" />
+              Nigeria SMS delivery window
+            </DialogTitle>
+            <DialogDescription>
+              Nigerian telecom operators enforce a daily delivery window for SMS messages.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4 text-sm leading-6 text-muted-foreground")}>
+            <p>
+              SMS delivery to Nigerian numbers is available from <strong className="text-foreground">8:00 a.m. to 8:00 p.m. Nigeria time</strong>.
+              This is a telecom and legal requirement, so Salon Magik cannot bypass it.
+            </p>
+            <p>
+              Sending is disabled outside that window. Email and in-app notifications continue to work, and scheduled messaging will be added later.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSmsDetailsOpen(false)}>Close</Button>
+            <Button onClick={() => { setSmsDetailsOpen(false); navigate("/salon/messaging"); }}>
+              Open Messaging
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

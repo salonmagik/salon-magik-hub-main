@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
+import { buildFromAddress, createButton, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
+import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -59,6 +60,7 @@ const defaultTemplates: Record<AppointmentAction, { subject: string; body: strin
         ${row("Total", "{{total_amount}}")}
         ${row("Location", "{{location}}")}
       `)}
+      {{payment_cta}}
       ${para("We look forward to seeing you!")}
     `,
   },
@@ -152,9 +154,18 @@ const handler = async (req: Request): Promise<Response> => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const actorResult = await resolveRequestActor(req, {
+      supabaseUrl,
+      anonKey: supabaseAnonKey,
+      serviceRoleKey: supabaseServiceKey,
+      corsHeaders,
+    });
+    if ("response" in actorResult) return actorResult.response;
 
     const { appointmentId, action, reason, newDate, newTime }: NotificationRequest = await req.json();
 
@@ -182,6 +193,14 @@ const handler = async (req: Request): Promise<Response> => {
       console.error("Failed to fetch appointment:", JSON.stringify(aptError));
       throw new Error(`Appointment not found: ${aptError?.message || "unknown"}`);
     }
+
+    const membershipError = await requireTenantMembership(
+      supabase,
+      actorResult.actor,
+      [appointment.tenant_id],
+      corsHeaders,
+    );
+    if (membershipError) return membershipError;
 
     const customerEmail = appointment.customer?.email;
     if (!customerEmail) {
@@ -213,6 +232,28 @@ const handler = async (req: Request): Promise<Response> => {
 
     const servicesList = appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A";
     const totalAmount = `${tenant?.currency || "GHS"} ${Number(appointment.total_amount).toFixed(2)}`;
+    const outstandingAmount = Math.max(
+      Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0),
+      0,
+    );
+    const canPayOnline = action === "scheduled" &&
+      outstandingAmount > 0 &&
+      appointment.status !== "cancelled" &&
+      !["fully_paid", "refunded_full"].includes(String(appointment.payment_status));
+    const clientPortalBase = (
+      Deno.env.get("CLIENT_PORTAL_URL") ||
+      Deno.env.get("MANAGE_BOOKINGS_URL") ||
+      Deno.env.get("BASE_URL") ||
+      "https://bookings.salonmagik.com"
+    ).replace(/\/+$/, "");
+    const bookingPortalUrl = `${clientPortalBase}/bookings/${appointment.id}`;
+    const paymentPortalUrl = `${bookingPortalUrl}?pay=1`;
+    const paymentCtaHtml = canPayOnline
+      ? `${para(`Your outstanding balance is <strong>${tenant?.currency || "GHS"} ${outstandingAmount.toFixed(2)}</strong>.`)}${createButton(
+        "Pay outstanding balance",
+        paymentPortalUrl,
+      )}`
+      : "";
     const locationText = appointment.location
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
       : "N/A";
@@ -245,14 +286,27 @@ const handler = async (req: Request): Promise<Response> => {
       "{{services}}": servicesList,
       "{{total_amount}}": totalAmount,
       "{{location}}": locationText,
+      "{{payment_cta}}": paymentCtaHtml,
+      "{{cta_link}}": canPayOnline ? paymentPortalUrl : bookingPortalUrl,
+      "{{service_name}}": servicesList,
+      "{{location_name}}": locationText,
       "{{reason}}": reason || "Not specified",
       "{{new_date}}": newDate || appointmentDate,
       "{{new_time}}": newTime || appointmentTime,
     };
 
+    const hasPaymentCtaPlaceholder =
+      emailBody.includes("{{payment_cta}}") || emailBody.includes("{{cta_link}}");
     for (const [key, value] of Object.entries(replacements)) {
       emailSubject = emailSubject.replace(new RegExp(key, "g"), value);
       emailBody = emailBody.replace(new RegExp(key, "g"), value);
+    }
+
+    // Salon-owned templates may predate the payment CTA variable. Append the
+    // CTA in that case so an outstanding balance can never be hidden simply
+    // because a custom confirmation template was saved earlier.
+    if (canPayOnline && !hasPaymentCtaPlaceholder) {
+      emailBody += paymentCtaHtml;
     }
 
     emailBody = emailBody.replace(/\{\{#if reason\}\}([\s\S]*?)\{\{\/if\}\}/g, reason ? "$1" : "");
@@ -298,6 +352,25 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (!emailResponse.ok) {
       console.error("Resend API error:", emailData);
+      const errorKind = emailResponse.status === 401 || emailResponse.status === 403
+        ? "auth"
+        : emailResponse.status === 422
+          ? "recipient"
+          : "provider";
+      const errorMessage = `${errorKind}: ${emailData.message || "Failed to send email"}`;
+      await supabase.from("message_logs").insert({
+        tenant_id: appointment.tenant_id,
+        customer_id: appointment.customer?.id,
+        channel: "email",
+        template_type: templateType,
+        recipient: customerEmail,
+        subject: emailSubject,
+        status: "failed",
+        provider: "resend",
+        initiated_by: "system",
+        credits_used: 0,
+        error_message: errorMessage.slice(0, 1000),
+      });
       throw new Error(emailData.message || "Failed to send email");
     }
 
@@ -316,13 +389,6 @@ const handler = async (req: Request): Promise<Response> => {
       initiated_by: "system",
       credits_used: 0,
     });
-
-    if (action === "reminder") {
-      await supabase
-        .from("appointments")
-        .update({ last_reminder_sent_at: new Date().toISOString() })
-        .eq("id", appointmentId);
-    }
 
     return new Response(
       JSON.stringify({ success: true, emailId: emailData.id }),

@@ -30,6 +30,13 @@ jobs:
         run: pnpm build
 
       - name: Test
+        # Keep browser tests hermetic. The Supabase client is imported by
+        # shared modules before Vitest setup files can stub import.meta.env.
+        # These are non-secret placeholders and are never used to contact a
+        # real project.
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
         run: pnpm test
 
       - name: Create release manifest

@@ -54,6 +54,7 @@ serve(async (req) => {
       .select("role")
       .eq("user_id", user.id)
       .eq("tenant_id", tenantId)
+      .eq("is_active", true)
       .single();
 
     if (userRole?.role !== "owner") {
@@ -73,14 +74,6 @@ serve(async (req) => {
     if (!tenant) {
       return new Response(JSON.stringify({ error: "Tenant not found" }), {
         status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Already active — idempotent success
-    if (tenant.subscription_status === "active") {
-      return new Response(JSON.stringify({ activated: true, alreadyActive: true }), {
-        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -132,6 +125,16 @@ serve(async (req) => {
     if (meta.tenant_id !== tenantId) {
       return new Response(JSON.stringify({ error: "Payment tenant mismatch" }), {
         status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Idempotent only after proving this reference is a successful
+    // subscription payment for this salon. Otherwise an arbitrary reference
+    // could produce a false success dialog for any already-active tenant.
+    if (tenant.subscription_status === "active") {
+      return new Response(JSON.stringify({ activated: true, alreadyActive: true }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

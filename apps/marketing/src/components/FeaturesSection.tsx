@@ -5,6 +5,7 @@ import {
   Bell, Banknote, ShoppingBag, Newspaper, FileText, Layers, Mail,
   type LucideIcon,
 } from "lucide-react";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 
 interface FeatureCard {
   icon: LucideIcon;
@@ -62,7 +63,10 @@ function Card({ icon: Icon, title, tagline, index }: FeatureCard & { index: numb
 }
 
 export function FeaturesSection() {
-  const doubled = [...FEATURES, ...FEATURES];
+  const visibleFeatures = CUSTOM_DOMAINS_ENABLED
+    ? FEATURES
+    : FEATURES.filter((feature) => feature.title !== "Custom domain");
+  const doubled = [...visibleFeatures, ...visibleFeatures];
 
   return (
     <section className="overflow-hidden bg-brand-cream py-[90px]">
@@ -86,7 +90,7 @@ export function FeaturesSection() {
         <div className="py-4">
           <div className="feature-marquee flex gap-4 [width:max-content]">
             {doubled.map((f, i) => (
-              <Card key={i} index={i % FEATURES.length} {...f} />
+              <Card key={i} index={i % visibleFeatures.length} {...f} />
             ))}
           </div>
         </div>

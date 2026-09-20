@@ -5,7 +5,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { useCashLedger } from "@/hooks/useCashLedger";
-import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Input } from "@ui/input";
@@ -13,9 +12,10 @@ import { Skeleton } from "@ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
 import { Badge } from "@ui/badge";
 import { formatCurrency } from "@shared/currency";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 
 export default function JournalPage() {
-  const { currentTenant } = useAuth();
+  const { currency } = useActiveBranchCurrency("USD");
   const { entries, isLoading, error, refetch } = useCashLedger();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -51,7 +51,7 @@ export default function JournalPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Card><CardContent className="p-5">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Cash recorded today</p>
-            <p className="mt-2 text-2xl font-semibold">{formatCurrency(todayTotal, currentTenant?.currency)}</p>
+            <p className="mt-2 text-2xl font-semibold">{formatCurrency(todayTotal, currency)}</p>
           </CardContent></Card>
           <Card><CardContent className="p-5">
             <div className="flex items-center gap-1">
@@ -65,7 +65,7 @@ export default function JournalPage() {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="mt-2 text-2xl font-semibold">{formatCurrency(total, currentTenant?.currency)}</p>
+            <p className="mt-2 text-2xl font-semibold">{formatCurrency(total, currency)}</p>
           </CardContent></Card>
         </div>
 

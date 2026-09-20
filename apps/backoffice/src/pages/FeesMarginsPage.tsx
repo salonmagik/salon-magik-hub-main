@@ -184,7 +184,7 @@ export default function FeesMarginsPage() {
                     {settings?.default_platform_service_charge_percentage ?? "—"}%
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Used when a new salon's payout subaccount is created. Normally deducted from the salon's share; a
+                    Used for checkout when the salon has no custom platform rate. Normally deducted from the salon's share; a
                     salon can flip a Business Settings toggle to push it onto the customer instead.
                   </p>
                 </div>
@@ -220,8 +220,7 @@ export default function FeesMarginsPage() {
             <DialogHeader>
               <DialogTitle>Update Fee Settings</DialogTitle>
               <DialogDescription>
-                This changes platform-wide defaults. Existing salon subaccounts already created keep their own stored
-                percentage unless separately edited.
+                This changes platform-wide defaults. Salons with a custom platform percentage retain their override.
               </DialogDescription>
             </DialogHeader>
             <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>

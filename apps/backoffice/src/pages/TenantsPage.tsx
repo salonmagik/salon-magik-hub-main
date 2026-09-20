@@ -67,7 +67,7 @@ export default function TenantsPage() {
    const [statusFilter, setStatusFilter] = useState("all");
    const [approveDialogOpen, setApproveDialogOpen] = useState(false);
    const [selectedRequest, setSelectedRequest] = useState<ChainUnlockRequestRow | null>(null);
-   const [allowedLocations, setAllowedLocations] = useState(11);
+   const [allowedLocations, setAllowedLocations] = useState(1);
    const [amount, setAmount] = useState("0");
    const [currency, setCurrency] = useState("USD");
    const [reason, setReason] = useState("");
@@ -93,7 +93,7 @@ export default function TenantsPage() {
        if (!selectedRequest) return;
        const { error } = await (supabase.rpc as any)("approve_chain_custom_unlock", {
          p_tenant_id: selectedRequest.tenant_id,
-         p_allowed_locations: Math.max(11, Number(allowedLocations || 11)),
+         p_allowed_locations: Math.max(1, Number(allowedLocations || 1)),
          p_amount: Number(amount || 0),
          p_currency: currency,
          p_reason: reason || "Custom unlock approved in backoffice.",
@@ -379,7 +379,9 @@ export default function TenantsPage() {
              <Card className="overflow-hidden rounded-2xl border bg-white shadow-sm">
                <CardHeader>
                  <CardTitle>Pending Chain Unlock Requests</CardTitle>
-                 <CardDescription>Approve custom unlock for tenants requesting more than 10 stores.</CardDescription>
+                 <CardDescription>
+                   Approve custom pricing for Chain tenants whose requested locations are not covered by configured market tiers.
+                 </CardDescription>
                </CardHeader>
                <CardContent>
                  {loadingUnlockRequests ? (
@@ -413,7 +415,7 @@ export default function TenantsPage() {
                                  disabled={backofficeUser?.role !== "super_admin"}
                                  onClick={() => {
                                    setSelectedRequest(request);
-                                   setAllowedLocations(Math.max(request.requested_locations, 11));
+                                   setAllowedLocations(Math.max(request.requested_locations, 1));
                                    setAmount("0");
                                    setCurrency("USD");
                                    setReason("Approving chain unlock request from Backoffice.");
@@ -448,9 +450,9 @@ export default function TenantsPage() {
                <Label>Allowed locations</Label>
                <Input
                  type="number"
-                 min={11}
+                 min={1}
                  value={allowedLocations}
-                 onChange={(event) => setAllowedLocations(Number(event.target.value || 11))}
+                 onChange={(event) => setAllowedLocations(Number(event.target.value || 1))}
                />
              </div>
              <div className="grid grid-cols-2 gap-3">
