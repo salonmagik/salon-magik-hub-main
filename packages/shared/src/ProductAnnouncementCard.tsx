@@ -146,6 +146,7 @@ function AnnouncementCard({
 export function ProductAnnouncementCard({ client, platform, onNavigate }: ProductAnnouncementCardProps) {
   const [announcements, setAnnouncements] = useState<ProductAnnouncement[]>([]);
   const [expanded, setExpanded] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const loadedRef = useRef(false);
@@ -201,6 +202,11 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
   }, [client, platform]);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const updateViewport = () => setIsDesktop(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+
     void loadAnnouncement();
     const handleFocus = () => { void loadAnnouncement(); };
     window.addEventListener("focus", handleFocus);
@@ -214,6 +220,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
       ?.subscribe();
 
     return () => {
+      mediaQuery.removeEventListener("change", updateViewport);
       window.removeEventListener("focus", handleFocus);
       channel?.unsubscribe?.();
     };
@@ -247,10 +254,12 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
   if (loading || !announcements.length) return null;
 
   const collapsedAnnouncements = announcements.slice(0, 3);
-  const displayedAnnouncements = expanded ? announcements : collapsedAnnouncements;
+  const isCollapsedStack = isDesktop && !expanded;
+  const displayedAnnouncements = isCollapsedStack ? collapsedAnnouncements : announcements;
   const collapsedHeight = 288 + Math.max(0, collapsedAnnouncements.length - 1) * 12;
 
   const toggleStack = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDesktop) return;
     if ((event.target as HTMLElement).closest("button, a")) return;
     setExpanded((current) => !current);
   };
@@ -258,7 +267,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
   const overlay = (
     <div
       aria-label="Product announcements"
-      className="pointer-events-none fixed left-4 right-4 top-[calc(4rem+env(safe-area-inset-top))] z-[100000] flex max-h-[calc(100dvh-5.5rem)] w-auto flex-col gap-3 overflow-y-auto sm:left-auto sm:right-6 sm:top-24 sm:max-h-[calc(100dvh-7rem)]"
+      className="pointer-events-none fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-4 right-auto z-[100000] flex max-h-[calc(100dvh-7rem)] w-auto flex-col gap-3 overflow-y-auto lg:bottom-6 lg:left-6 lg:max-h-[calc(100dvh-3rem)]"
       style={{
         isolation: "isolate",
         opacity: 1,
@@ -267,18 +276,19 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
     >
       <div
         className="pointer-events-auto relative w-full cursor-pointer rounded-[20px] outline-none focus-visible:ring-2 focus-visible:ring-[#F4C84E] focus-visible:ring-offset-2"
-        style={{ height: expanded ? "auto" : `${collapsedHeight}px` }}
-        tabIndex={0}
+        style={{ height: isCollapsedStack ? `${collapsedHeight}px` : "auto" }}
+        tabIndex={isDesktop ? 0 : -1}
         role="group"
         aria-label={`${announcements.length} product announcement${announcements.length === 1 ? "" : "s"}`}
-        onMouseEnter={() => setExpanded(true)}
-        onMouseLeave={() => setExpanded(false)}
-        onFocusCapture={() => setExpanded(true)}
+        onMouseEnter={() => { if (isDesktop) setExpanded(true); }}
+        onMouseLeave={() => { if (isDesktop) setExpanded(false); }}
+        onFocusCapture={() => { if (isDesktop) setExpanded(true); }}
         onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setExpanded(false);
+          if (isDesktop && !event.currentTarget.contains(event.relatedTarget as Node | null)) setExpanded(false);
         }}
         onClick={toggleStack}
         onKeyDown={(event) => {
+          if (!isDesktop) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             setExpanded((current) => !current);
@@ -286,7 +296,7 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
         }}
       >
         {displayedAnnouncements.map((announcement, index) => {
-          const isCollapsedCard = !expanded;
+          const isCollapsedCard = isCollapsedStack;
           return (
             <div
               key={announcement.id}
@@ -301,14 +311,14 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
             >
               <AnnouncementCard
                 announcement={announcement}
-                interactive={expanded || index === 0}
+                interactive={!isCollapsedStack || index === 0}
                 onDismiss={() => dismiss(announcement)}
                 onActivate={() => activateCta(announcement)}
               />
             </div>
           );
         })}
-        {!expanded && announcements.length > 3 && (
+        {isCollapsedStack && announcements.length > 3 && (
           <p className="pointer-events-none absolute -bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-[#EEE5F8] px-3 py-1 text-center text-xs text-[#6E6381] shadow-lg">
             +{announcements.length - 3} more announcement{announcements.length - 3 === 1 ? "" : "s"}
           </p>
