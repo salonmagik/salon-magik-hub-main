@@ -12,7 +12,7 @@ import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
-import { TimePicker } from "@ui/time-picker";
+import { getEarliestSelectableTime, TimePicker } from "@ui/time-picker";
 import { AlertTriangle, Calendar, Pause, X } from "lucide-react";
 import type { AppointmentWithDetails } from "@/hooks/useAppointments";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
@@ -44,9 +44,16 @@ export function AppointmentActionsDialog({
 
     try {
       if (actionType === "reschedule") {
+        if (!newDate || !newTime) {
+          throw new Error("Choose a new date and time first.");
+        }
         const newStart = `${newDate}T${newTime}:00`;
+        const newStartDate = new Date(newStart);
+        if (Number.isNaN(newStartDate.getTime()) || newStartDate <= new Date()) {
+          throw new Error("Choose a future time. Past times cannot be used for rescheduling.");
+        }
         const durationMs = parseInt(duration) * 60 * 1000;
-        const newEnd = new Date(new Date(newStart).getTime() + durationMs).toISOString();
+        const newEnd = new Date(newStartDate.getTime() + durationMs).toISOString();
         await onConfirm({ newStart, newEnd });
       } else {
         await onConfirm({ reason });
@@ -180,6 +187,7 @@ export function AppointmentActionsDialog({
                     onChange={setNewTime}
                     placeholder="Select time"
                     disabled={isSubmitting}
+                    minTime={getEarliestSelectableTime(stringToDate(newDate))}
                   />
                 </div>
               </div>
