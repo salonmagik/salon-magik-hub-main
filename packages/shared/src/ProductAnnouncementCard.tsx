@@ -50,12 +50,92 @@ async function recordEvent(client: AnnouncementClient, announcementId: string, u
   });
 }
 
+function playAnnouncementTone() {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioContextConstructor = window.AudioContext
+      || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    const context = new AudioContextConstructor();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const now = context.currentTime;
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, now);
+    oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.18);
+    oscillator.addEventListener("ended", () => { void context.close(); }, { once: true });
+  } catch {
+    // Browsers can reject audio before the user has interacted with the page.
+  }
+}
+
+function AnnouncementCard({
+  announcement,
+  onDismiss,
+  onActivate,
+}: {
+  announcement: ProductAnnouncement;
+  onDismiss: () => void;
+  onActivate: () => void;
+}) {
+  return (
+    <aside
+      role="status"
+      aria-label={`Product announcement: ${announcement.title}`}
+      className="relative flex h-[18rem] min-h-[18rem] flex-col overflow-hidden rounded-[20px] border border-[#E8DDF7] bg-[#FFFCF8] text-[#2E1F4E] shadow-[0_20px_44px_rgba(46,31,78,0.2)]"
+    >
+      <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-[#F4C84E]/25" />
+      <span aria-hidden="true" className="pointer-events-none absolute -bottom-12 -left-8 h-28 w-28 rounded-full bg-[#E9DDF7]/70" />
+      <div className="relative flex min-h-0 flex-1 flex-col px-[22px] pb-[18px] pt-[22px]">
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label={`Dismiss ${announcement.title}`}
+          className="absolute right-3.5 top-3.5 rounded-md p-1 text-[#6E6381] transition hover:bg-[#2E1F4E]/[0.06] hover:text-[#2E1F4E]"
+        >
+          <span aria-hidden="true" className="text-xl leading-none">×</span>
+        </button>
+        <div className="mb-2 flex items-center gap-2 pr-7">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#F4C84E] text-base text-[#2E1F4E]" aria-hidden="true">
+            {announcement.icon === "sparkles" ? "✦" : "!"}
+          </span>
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#765B12]">What's new</p>
+        </div>
+        <h2 className="mb-2 pr-7 text-[17px] font-semibold leading-[1.3]">{announcement.title}</h2>
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-[13.5px] leading-[1.55] text-[#6E6381]">
+          <p className="font-medium text-[#463A5C]">{announcement.summary}</p>
+          {announcement.body && <p className="mt-2 whitespace-pre-wrap">{announcement.body}</p>}
+        </div>
+        {announcement.cta_url && announcement.cta_label && isSafeCtaUrl(announcement.cta_url) && (
+          <button
+            type="button"
+            onClick={onActivate}
+            className="mt-3 inline-flex w-fit items-center rounded-full bg-[#2E1F4E] px-5 py-[9px] text-[13.5px] font-semibold text-white transition hover:bg-[#402966]"
+          >
+            {announcement.cta_label} <span className="ml-1.5" aria-hidden="true">→</span>
+          </button>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 export function ProductAnnouncementCard({ client, platform, onNavigate }: ProductAnnouncementCardProps) {
-  const [announcement, setAnnouncement] = useState<ProductAnnouncement | null>(null);
+  const [announcements, setAnnouncements] = useState<ProductAnnouncement[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const viewedRef = useRef<string | null>(null);
+  const loadedRef = useRef(false);
+  const knownAnnouncementIdsRef = useRef<Set<string>>(new Set());
+  const viewedRef = useRef<Set<string>>(new Set());
 
   const loadAnnouncement = useCallback(async () => {
     if (typeof client.auth?.getUser !== "function") {
@@ -66,19 +146,20 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
     const currentUserId = authData.user?.id ?? null;
     setUserId(currentUserId);
     if (!currentUserId) {
-      setAnnouncement(null);
+      setAnnouncements([]);
       setLoading(false);
       return;
     }
 
     const now = new Date().toISOString();
-    const [{ data: announcements }, { data: events }] = await Promise.all([
+    const [{ data: announcementRows, error: announcementsError }, { data: events, error: eventsError }] = await Promise.all([
       client
         .from("product_announcements")
         .select("id,title,summary,body,icon,cta_label,cta_url,platforms,status,publish_at,expires_at")
         .in("status", ["published", "scheduled"])
         .contains("platforms", [platform])
-        .lte("publish_at", now)
+        // Published-now announcements may intentionally have a null publish_at.
+        .or(`publish_at.is.null,publish_at.lte.${now}`)
         .or(`expires_at.is.null,expires_at.gt.${now}`)
         .order("publish_at", { ascending: false })
         .limit(10),
@@ -89,10 +170,17 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
         .eq("event_type", "dismissed"),
     ]);
 
+    if (announcementsError) console.error("Could not load product announcements", announcementsError);
+    if (eventsError) console.error("Could not load product announcement events", eventsError);
+
     const dismissedIds = new Set((events ?? []).map((event: { announcement_id: string }) => event.announcement_id));
-    const next = ((announcements ?? []) as ProductAnnouncement[]).find((item) => !dismissedIds.has(item.id)) ?? null;
-    setAnnouncement(next);
-    setDismissed(false);
+    const nextAnnouncements = ((announcementRows ?? []) as ProductAnnouncement[]).filter((item) => !dismissedIds.has(item.id));
+    const hasNewAnnouncement = loadedRef.current
+      && nextAnnouncements.some((item) => !knownAnnouncementIdsRef.current.has(item.id));
+    if (hasNewAnnouncement) playAnnouncementTone();
+    knownAnnouncementIdsRef.current = new Set(nextAnnouncements.map((item) => item.id));
+    loadedRef.current = true;
+    setAnnouncements(nextAnnouncements);
     setLoading(false);
   }, [client, platform]);
 
@@ -116,19 +204,22 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
   }, [client, loadAnnouncement, platform]);
 
   useEffect(() => {
-    if (!announcement || !userId || viewedRef.current === announcement.id) return;
-    viewedRef.current = announcement.id;
-    void recordEvent(client, announcement.id, userId, "viewed");
-  }, [announcement, client, userId]);
+    if (!userId) return;
+    for (const announcement of announcements) {
+      if (viewedRef.current.has(announcement.id)) continue;
+      viewedRef.current.add(announcement.id);
+      void recordEvent(client, announcement.id, userId, "viewed");
+    }
+  }, [announcements, client, userId]);
 
-  const dismiss = () => {
-    if (!announcement || !userId) return;
-    setDismissed(true);
+  const dismiss = (announcement: ProductAnnouncement) => {
+    if (!userId) return;
+    setAnnouncements((current) => current.filter((item) => item.id !== announcement.id));
     void recordEvent(client, announcement.id, userId, "dismissed");
   };
 
-  const activateCta = () => {
-    if (!announcement || !userId || !announcement.cta_url || !isSafeCtaUrl(announcement.cta_url)) return;
+  const activateCta = (announcement: ProductAnnouncement) => {
+    if (!userId || !announcement.cta_url || !isSafeCtaUrl(announcement.cta_url)) return;
     void recordEvent(client, announcement.id, userId, "clicked");
     if (announcement.cta_url.startsWith("/") && !announcement.cta_url.startsWith("//")) {
       onNavigate(announcement.cta_url);
@@ -137,44 +228,26 @@ export function ProductAnnouncementCard({ client, platform, onNavigate }: Produc
     }
   };
 
-  if (loading || dismissed || !announcement) return null;
+  if (loading || !announcements.length) return null;
 
   return (
-    <aside
-      role="status"
-      aria-label="Product announcement"
-      className="fixed bottom-5 right-5 z-[70] w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-[#eadff9] bg-white shadow-[0_18px_55px_rgba(46,31,78,0.22)]"
+    <div
+      aria-label="Product announcements"
+      className="fixed bottom-4 right-4 z-[70] flex max-h-[calc(100dvh-2rem)] w-[min(22.5rem,calc(100vw-2rem))] flex-col gap-3 overflow-y-auto sm:bottom-6 sm:right-6"
     >
-      <div className="flex items-start gap-3 bg-[#2e1f4e] px-4 py-3 text-white">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f4c84e] text-lg" aria-hidden="true">
-          {announcement.icon === "sparkles" ? "✦" : "!"}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f4c84e]">What's new</p>
-          <h2 className="mt-0.5 text-base font-semibold leading-tight">{announcement.title}</h2>
-        </div>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label="Dismiss announcement"
-          className="rounded-md px-2 py-1 text-xl leading-none text-white/70 hover:bg-white/10 hover:text-white"
-        >
-          ×
-        </button>
-      </div>
-      <div className="space-y-3 px-4 py-4">
-        <p className="text-sm font-medium text-[#2e1f4e]">{announcement.summary}</p>
-        {announcement.body && <p className="whitespace-pre-wrap text-sm leading-5 text-muted-foreground">{announcement.body}</p>}
-        {announcement.cta_url && announcement.cta_label && isSafeCtaUrl(announcement.cta_url) && (
-          <button
-            type="button"
-            onClick={activateCta}
-            className="inline-flex items-center rounded-lg bg-[#f4c84e] px-3.5 py-2 text-sm font-semibold text-[#2e1f4e] transition hover:brightness-95"
-          >
-            {announcement.cta_label} <span className="ml-1.5" aria-hidden="true">→</span>
-          </button>
-        )}
-      </div>
-    </aside>
+      {announcements.slice(0, 3).map((announcement) => (
+        <AnnouncementCard
+          key={announcement.id}
+          announcement={announcement}
+          onDismiss={() => dismiss(announcement)}
+          onActivate={() => activateCta(announcement)}
+        />
+      ))}
+      {announcements.length > 3 && (
+        <p className="rounded-full bg-[#FFFCF8]/95 px-3 py-1 text-center text-xs text-[#6E6381] shadow-lg">
+          +{announcements.length - 3} more announcement{announcements.length - 3 === 1 ? "" : "s"}
+        </p>
+      )}
+    </div>
   );
 }
