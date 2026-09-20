@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ExternalLink, Pencil, Plus, Save } from "lucide-react";
+import { Archive, ExternalLink, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { useBackofficeAuth } from "@/hooks/useBackofficeAuth";
 import { supabase } from "@/lib/supabase";
@@ -12,6 +12,16 @@ import { Textarea } from "@ui/textarea";
 import { Badge } from "@ui/badge";
 import { Checkbox } from "@ui/checkbox";
 import { Alert, AlertDescription } from "@ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@ui/alert-dialog";
 import { toast } from "sonner";
 
 type Platform = "salon_admin" | "client_portal" | "backoffice";
@@ -88,6 +98,7 @@ export default function ProductAnnouncementsPage() {
   const isSuperAdmin = backofficeUser?.role === "super_admin";
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [showEditor, setShowEditor] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Announcement | null>(null);
 
   const announcementsQuery = useQuery({
     queryKey: ["product-announcements"],
@@ -181,6 +192,23 @@ export default function ProductAnnouncementsPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (announcement: Announcement) => {
+      const { error } = await (supabase as any)
+        .from("product_announcements")
+        .delete()
+        .eq("id", announcement.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Announcement deleted.");
+      setDeleteTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["product-announcements"] });
+      void queryClient.invalidateQueries({ queryKey: ["product-announcement-events"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const edit = (announcement: Announcement) => {
     setDraft({
       id: announcement.id,
@@ -221,7 +249,7 @@ export default function ProductAnnouncementsPage() {
         </div>
 
         {!isSuperAdmin && (
-          <Alert><AlertDescription>Only Super Admins can create, publish, or archive product announcements.</AlertDescription></Alert>
+          <Alert><AlertDescription>Only Super Admins can create, publish, archive, or delete product announcements.</AlertDescription></Alert>
         )}
 
         {showEditor && (
@@ -248,10 +276,33 @@ export default function ProductAnnouncementsPage() {
         <Card>
           <CardHeader><CardTitle>Announcement history</CardTitle><CardDescription>Published cards are automatically hidden after their expiry date.</CardDescription></CardHeader>
           <CardContent>
-            {announcementsQuery.isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading announcements…</p> : announcementsQuery.error ? <p className="py-8 text-center text-sm text-destructive">Could not load announcements.</p> : (announcementsQuery.data ?? []).length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No announcements yet.</p> : <div className="space-y-3">{(announcementsQuery.data ?? []).map((announcement) => { const counts = eventCounts[announcement.id] ?? {}; return <div key={announcement.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{announcement.title}</h3><Badge variant={announcement.status === "published" ? "default" : "secondary"}>{announcement.status}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{announcement.summary}</p><div className="mt-2 flex flex-wrap gap-1">{announcement.platforms.map((platform) => <Badge key={platform} variant="outline">{platform.replace("_", " ")}</Badge>)}<span className="text-xs text-muted-foreground">{counts.viewed ?? 0} views · {counts.clicked ?? 0} clicks · {counts.dismissed ?? 0} dismissed</span></div></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => edit(announcement)} disabled={!isSuperAdmin}><Pencil className="mr-1.5 h-3.5 w-3.5" />Edit</Button>{announcement.status !== "archived" && <Button variant="outline" size="sm" onClick={() => archiveMutation.mutate(announcement.id)} disabled={!isSuperAdmin || archiveMutation.isPending}><Archive className="mr-1.5 h-3.5 w-3.5" />Archive</Button>}{announcement.cta_url && <Button variant="ghost" size="icon" asChild><a href={announcement.cta_url} target="_blank" rel="noreferrer" aria-label="Open CTA"><ExternalLink className="h-4 w-4" /></a></Button>}</div></div><p className="mt-3 text-xs text-muted-foreground">Created {new Date(announcement.created_at).toLocaleString()}{announcement.publish_at ? ` · Publish ${new Date(announcement.publish_at).toLocaleString()}` : ""}</p></div>; })}</div>}
+            {announcementsQuery.isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading announcements…</p> : announcementsQuery.error ? <p className="py-8 text-center text-sm text-destructive">Could not load announcements.</p> : (announcementsQuery.data ?? []).length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No announcements yet.</p> : <div className="space-y-3">{(announcementsQuery.data ?? []).map((announcement) => { const counts = eventCounts[announcement.id] ?? {}; return <div key={announcement.id} className="rounded-xl border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold">{announcement.title}</h3><Badge variant={announcement.status === "published" ? "default" : "secondary"}>{announcement.status}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{announcement.summary}</p><div className="mt-2 flex flex-wrap gap-1">{announcement.platforms.map((platform) => <Badge key={platform} variant="outline">{platform.replace("_", " ")}</Badge>)}<span className="text-xs text-muted-foreground">{counts.viewed ?? 0} views · {counts.clicked ?? 0} clicks · {counts.dismissed ?? 0} dismissed</span></div></div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => edit(announcement)} disabled={!isSuperAdmin}><Pencil className="mr-1.5 h-3.5 w-3.5" />Edit</Button>{announcement.status !== "archived" && <Button variant="outline" size="sm" onClick={() => archiveMutation.mutate(announcement.id)} disabled={!isSuperAdmin || archiveMutation.isPending}><Archive className="mr-1.5 h-3.5 w-3.5" />Archive</Button>}{announcement.cta_url && <Button variant="ghost" size="icon" asChild><a href={announcement.cta_url} target="_blank" rel="noreferrer" aria-label="Open CTA"><ExternalLink className="h-4 w-4" /></a></Button>}<Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(announcement)} disabled={!isSuperAdmin || deleteMutation.isPending} aria-label={`Delete ${announcement.title}`} title="Delete announcement"><Trash2 className="h-4 w-4" /></Button></div></div><p className="mt-3 text-xs text-muted-foreground">Created {new Date(announcement.created_at).toLocaleString()}{announcement.publish_at ? ` · Publish ${new Date(announcement.publish_at).toLocaleString()}` : ""}</p></div>; })}</div>}
           </CardContent>
         </Card>
       </div>
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete announcement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes “{deleteTarget?.title}” and its analytics events. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!deleteTarget || deleteMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                if (deleteTarget) deleteMutation.mutate(deleteTarget);
+              }}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete announcement"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </BackofficeLayout>
   );
 }
