@@ -8,6 +8,7 @@ import { MarketingLayout } from "@/components/MarketingLayout";
 import { PlanCard } from "@/components/PlanCard";
 import { useWaitlist } from "@/components/WaitlistProvider";
 import { cn } from "@shared/utils";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 
 const SUPPORTED_CURRENCIES = [
   { code: "USD", label: "USD ($)" },
@@ -527,8 +528,10 @@ export default function PricingPage() {
 							},
 							{
 								name: "Custom booking domain",
-								desc: "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com).",
-								available: true,
+								desc: CUSTOM_DOMAINS_ENABLED
+									? "Use your own domain for your client-facing booking page (e.g., book.yoursalon.com)."
+									: "Custom domains are temporarily paused while we finalize the provider setup.",
+								available: CUSTOM_DOMAINS_ENABLED,
 							},
 						].map((addon) => (
 							<div

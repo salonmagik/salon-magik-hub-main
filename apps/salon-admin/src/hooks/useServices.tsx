@@ -11,8 +11,11 @@ export interface ServiceWithCategory extends Service {
   category: ServiceCategory | null;
 }
 
-export function useServices() {
+export function useServices(locationIdOverride?: string) {
   const { currentTenant, activeLocationId } = useAuth();
+  // Dialogs can let an owner choose a branch without changing the global
+  // context. In that case, the selected branch must drive the catalog scope.
+  const serviceLocationId = locationIdOverride === undefined ? activeLocationId : locationIdOverride;
   const [services, setServices] = useState<ServiceWithCategory[]>([]);
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,12 +33,20 @@ export function useServices() {
     setError(null);
 
     try {
+      // A dialog may not have resolved its branch yet. Keep the list empty
+      // until it has one instead of briefly exposing the tenant-wide catalog.
+      if (locationIdOverride !== undefined && !serviceLocationId) {
+        setServices([]);
+        setCategories([]);
+        return;
+      }
+
       let scopedServiceIds: string[] | null = null;
-      if (activeLocationId) {
+      if (serviceLocationId) {
         const { data: mappings, error: mappingError } = await (supabase.from as any)("service_locations")
           .select("service_id")
           .eq("tenant_id", currentTenant.id)
-          .eq("location_id", activeLocationId)
+          .eq("location_id", serviceLocationId)
           .eq("is_enabled", true);
         if (mappingError) throw mappingError;
         scopedServiceIds = Array.from(
@@ -95,7 +106,7 @@ export function useServices() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeLocationId, currentTenant?.id]);
+  }, [serviceLocationId, currentTenant?.id]);
 
   useEffect(() => {
     fetchServices();

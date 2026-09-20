@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
+import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
+import { supabase } from "@/lib/supabase";
 import { ConfirmDetailsModal } from "@/components/ConfirmDetailsModal";
 import {
   AlertDialog,
@@ -270,6 +272,12 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
             <div className="client-content w-full min-w-0 [&>*]:min-w-0">{children}</div>
           </div>
         </main>
+
+        <ProductAnnouncementCard
+          client={supabase as any}
+          platform="client_portal"
+          onNavigate={(path) => navigate(path)}
+        />
 
         {/* Logout Confirmation Dialog */}
         <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>

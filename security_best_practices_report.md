@@ -60,7 +60,7 @@ Many functions return `Access-Control-Allow-Origin: *`. This is not an authoriza
 
 ### SEC-009 — Account/customer enumeration surfaces (Low/Medium) — open
 
-`auth-resolve-identifier` and `public-booking-email-lookup` are intentionally unauthenticated lookup flows. They should continue to return non-distinguishing responses where possible, use strict rate limits, and avoid exposing more tenant/customer data than the next login or booking step requires.
+`auth-resolve-identifier` is an intentionally unauthenticated lookup flow. It should continue to return non-distinguishing responses where possible, use strict rate limits, and avoid exposing more tenant/customer data than the next login step requires.
 
 These open items are context-sensitive rather than proof of an exploitable defect in every deployment: public invoice links, lookup flows, wildcard CORS, and internal chart CSS can all be valid product choices when their capability tokens, rate limits, RLS policies, and inputs are controlled. They remain recorded because those assumptions should be made explicit and tested in the production configuration.
 

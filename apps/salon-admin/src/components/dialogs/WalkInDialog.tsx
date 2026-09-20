@@ -26,6 +26,7 @@ import { useCustomers } from "@/hooks/useCustomers";
 import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
 import { useLocations } from "@/hooks/useLocations";
+import { currencyForCountry } from "@/lib/countryCurrency";
 import { useAppointmentActions } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
@@ -54,7 +55,6 @@ interface SelectedService {
 
 export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProps) {
   const { currentTenant, activeLocationId, currentRole, assignedLocationIds } = useAuth();
-  const currency = currentTenant?.currency || "NGN";
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [noteAttachments, setNoteAttachments] = useState<Array<{
@@ -74,9 +74,11 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
   const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers();
-  const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
+  const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices(formData.locationId);
   const { staff, isLoading: staffLoading } = useStaff();
   const { locations, defaultLocation } = useLocations();
+  const selectedLocation = locations.find((location) => location.id === formData.locationId) || defaultLocation;
+  const currency = currencyForCountry(selectedLocation?.country, currentTenant?.currency || "NGN");
   const { createAppointment, isSubmitting } = useAppointmentActions();
   const accessibleLocations = currentRole === "owner"
     ? locations
@@ -224,7 +226,10 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
                 </Label>
                 <Select
                   value={formData.locationId}
-                  onValueChange={(v) => setFormData((prev) => ({ ...prev, locationId: v }))}
+                  onValueChange={(v) => {
+                    setFormData((prev) => ({ ...prev, locationId: v }));
+                    setSelectedServices([]);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select branch" />

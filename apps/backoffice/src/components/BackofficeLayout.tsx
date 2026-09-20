@@ -46,8 +46,11 @@ import {
   Percent,
   BadgeCheck,
   Banknote,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
+import { supabase } from "@/lib/supabase";
 
 interface BackofficeLayoutProps {
   children: ReactNode;
@@ -87,6 +90,7 @@ const navItems: NavItem[] = [
   { href: "/withdrawals", label: "Withdrawals", icon: Banknote, pageKey: "withdrawals" },
   { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
   { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
+  { href: "/product-announcements", label: "Product announcements", icon: Sparkles, pageKey: "settings" },
   {
     href: "/sales/campaigns",
     label: "Sales Ops",
@@ -311,6 +315,11 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
 								<SidebarTrigger className="h-9 w-9" />
 							</div>
 							<BackofficeOnboardingGate />
+							<ProductAnnouncementCard
+								client={supabase as any}
+								platform="backoffice"
+								onNavigate={(path) => navigate(path)}
+							/>
 							<main className="flex-1 overflow-auto">{children}</main>
 						</SidebarInset>
 					</div>

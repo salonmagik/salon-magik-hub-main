@@ -88,6 +88,7 @@ import { useAppointmentStats } from "@/hooks/useAppointmentStats";
 import { useCalendarAppointments, type CalendarView, type CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { useInvoices } from "@/hooks/useInvoices";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { formatCurrency } from "@shared/currency";
 import type { Enums, Tables } from "@supabase-client";
 
@@ -363,8 +364,7 @@ export default function AppointmentsPage() {
     date: calendarDate,
   });
 
-  // Get currency from tenant
-  const currency = currentTenant?.currency || "GHS";
+  const { currency } = useActiveBranchCurrency("GHS");
 
   // Get user's role for the current tenant
   const userRole = useMemo(() => {

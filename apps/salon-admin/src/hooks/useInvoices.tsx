@@ -146,18 +146,23 @@ export function useInvoices() {
         if (itemsError) throw itemsError;
       }
 
-      toast({ 
-        title: "Invoice created", 
-        description: `Invoice ${invoiceNumber} created successfully` 
+      toast({
+        title: "Invoice created",
+        description: `Invoice ${invoiceNumber} created successfully`,
       });
 
       fetchInvoices();
       return invoice;
     } catch (err) {
       console.error("Error creating invoice:", err);
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "Please try again.";
       toast({
         title: "Error",
-        description: "Failed to create invoice",
+        description: `Failed to create invoice: ${message}`,
         variant: "destructive",
       });
       return null;
@@ -174,8 +179,8 @@ export function useInvoices() {
         .from("appointments")
         .select(`
           *,
-          customers (id, full_name),
-          appointment_services (id, service_name, price, duration_minutes),
+          customer:customers!appointments_customer_id_fkey(id, full_name),
+          appointment_services (id, service_id, service_name, price, duration_minutes),
           appointment_products (id, product_name, unit_price, quantity, total_price)
         `)
         .eq("id", appointmentId)
@@ -187,20 +192,22 @@ export function useInvoices() {
       const items: CreateInvoiceData["items"] = [];
 
       // Add services
-      (appointment.appointment_services || []).forEach((svc: { service_name: string; price: number }) => {
+      (appointment.appointment_services || []).forEach((svc: { service_id?: string | null; service_name: string; price: number }) => {
         items.push({
           description: svc.service_name,
           quantity: 1,
           unitPrice: Number(svc.price),
+          serviceId: svc.service_id || undefined,
         });
       });
 
       // Add products
-      (appointment.appointment_products || []).forEach((prod: { product_name: string; unit_price: number; quantity: number }) => {
+      (appointment.appointment_products || []).forEach((prod: { product_id?: string | null; product_name: string; unit_price: number; quantity: number }) => {
         items.push({
           description: prod.product_name,
           quantity: prod.quantity,
           unitPrice: Number(prod.unit_price),
+          productId: prod.product_id || undefined,
         });
       });
 
@@ -211,9 +218,14 @@ export function useInvoices() {
       });
     } catch (err) {
       console.error("Error creating invoice from appointment:", err);
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : "Please try again.";
       toast({
         title: "Error",
-        description: "Failed to create invoice from appointment",
+        description: `Failed to create invoice from appointment: ${message}`,
         variant: "destructive",
       });
       return null;

@@ -187,7 +187,11 @@ export function ReviewStep({
               <Field label="Configured branches" value={chainSummary.configuredLocations} />
               <Field
                 label="Estimated monthly"
-                value={`${chainSummary.currency} ${chainSummary.estimatedMonthlyTotal.toLocaleString()}`}
+                value={
+                  chainSummary.requiresCustom
+                    ? "Custom pricing"
+                    : `${chainSummary.currency} ${chainSummary.estimatedMonthlyTotal.toLocaleString()}`
+                }
               />
               {chainSummary.expectedBillingDate && (
                 <Field label="Billing starts" value={chainSummary.expectedBillingDate} />
@@ -195,7 +199,7 @@ export function ReviewStep({
             </div>
             {chainSummary.requiresCustom && (
               <p className="mt-3 text-[12.5px] text-amber-600">
-                Branches above 10 are pending custom pricing approval.
+                Additional-location pricing is not configured for this market yet. Activation will remain pending until Backoffice approves a quote.
               </p>
             )}
           </ReviewCard>
@@ -209,8 +213,8 @@ export function ReviewStep({
         >
           <div className="grid grid-cols-2 gap-x-6 gap-y-4">
             <Field label="Business name" value={business.name} />
-            <Field label="Country" value={COUNTRY_NAMES[business.country] || business.country} />
-            <Field label="Currency" value={business.currency} />
+            <Field label="HQ country" value={COUNTRY_NAMES[business.country] || business.country} />
+            <Field label="HQ currency" value={business.currency} />
             <Field label="City" value={business.city} />
             {plan !== "chain" && (
               <Field
@@ -257,7 +261,7 @@ export function ReviewStep({
                   <span className="text-black/40">— {loc.city}</span>
                   {loc.isDefault && (
                     <span className="rounded-full bg-[#2E1F4E]/8 px-2 py-0.5 text-[11px] text-[#2E1F4E]">
-                      Default
+                      HQ
                     </span>
                   )}
                 </div>

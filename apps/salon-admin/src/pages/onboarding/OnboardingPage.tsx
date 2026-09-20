@@ -416,7 +416,7 @@ export default function OnboardingPage() {
               requested_locations: configuredLocations,
               allowed_locations: activatedLocations,
               status: "pending",
-              reason: "Requested during onboarding for chain 11+ locations.",
+              reason: "Requested during onboarding for locations requiring custom pricing.",
               requested_by: user.id,
             },
             { onConflict: "tenant_id" },
@@ -907,7 +907,7 @@ export default function OnboardingPage() {
                       <div className="rounded-[18px] bg-[#EDE9E4] px-5 py-5">
                         {chainQuote.requires_custom ? (
                           <p className="text-[13.5px] text-amber-700">
-                            This tier requires custom pricing. You can continue — activation beyond 10 branches will be pending approval.
+                            This location count requires custom pricing. You can continue — activation will remain pending until Backoffice approves a quote.
                           </p>
                         ) : (
                           <>

@@ -17,7 +17,7 @@ export function MaintenanceBannerModal() {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-blue-500" />
+            <Wrench className="h-5 w-5 text-[#B45309]" />
             {title}
           </DialogTitle>
         </DialogHeader>

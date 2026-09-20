@@ -187,7 +187,7 @@ export function CreateInvoiceDialog({
         return;
       }
 
-      await createInvoice({
+      const invoice = await createInvoice({
         customerId,
         items: validItems.map((item) => ({
           description: item.description,
@@ -199,6 +199,14 @@ export function CreateInvoiceDialog({
         notes: notes.trim() || undefined,
         dueDate: dueDate ? dueDate.toISOString() : undefined,
       });
+
+      // The hook reports database/API errors and returns null. Keep the form
+      // open so the salon can correct the data instead of silently discarding
+      // the failed invoice attempt.
+      if (!invoice) {
+        setErrorMessage("We couldn't create the invoice. Please review the details and try again.");
+        return;
+      }
 
       // Reset form
       setLineItems([{ id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 }]);

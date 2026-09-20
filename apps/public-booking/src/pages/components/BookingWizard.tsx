@@ -41,6 +41,8 @@ interface BookingWizardProps {
   services?: PublicService[];
   packages?: PublicPackage[];
   products?: PublicProduct[];
+  /** Currency selected from the active storefront country/branch. */
+  currency: string;
   /** Re-pulls the catalog from the server. Called on entering Review so prices are re-verified right before payment. */
   refetchCatalog?: () => Promise<unknown>;
 }
@@ -162,6 +164,7 @@ export function BookingWizard({
   services = [],
   packages = [],
   products = [],
+  currency,
   refetchCatalog,
 }: BookingWizardProps) {
   const {
@@ -781,11 +784,11 @@ export function BookingWizard({
         const paymentAmountToUse = customPaymentAmount ?? amountDueNow;
         requestBody.createPaymentSession = true;
         requestBody.paymentAmount = paymentAmountToUse;
-        requestBody.paymentCurrency = salon.currency;
+        requestBody.paymentCurrency = currency;
         requestBody.paymentDescription = paymentOption === "pay_deposit"
           ? "Booking Deposit"
           : paymentMode === "split"
-            ? `Booking Payment (${formatCurrency(splitPurseAmount, salon.currency)} from purse)`
+            ? `Booking Payment (${formatCurrency(splitPurseAmount, currency)} from purse)`
             : "Booking Payment";
         requestBody.paymentIsDeposit = paymentOption === "pay_deposit";
         requestBody.paymentSuccessUrl = window.location.href;
@@ -1044,7 +1047,7 @@ export function BookingWizard({
           <div className="px-6 py-4">
             {step === "cart" && (
               <CartStep
-                currency={salon.currency}
+                currency={currency}
                 onBrowse={handleClose}
               />
             )}
@@ -1116,7 +1119,7 @@ export function BookingWizard({
                 giftRecipients={giftRecipients}
                 salon={{
                   id: salon.id,
-                  currency: salon.currency,
+                  currency,
                   auto_confirm_bookings: salon.auto_confirm_bookings,
                   deposits_enabled: salon.deposits_enabled,
                   default_deposit_percentage: salon.default_deposit_percentage,
@@ -1126,6 +1129,7 @@ export function BookingWizard({
                 appliedVoucher={appliedVoucher}
                 onVoucherApplied={setAppliedVoucher}
                 purseAmount={purseAmount}
+                purseAvailable={currency === salon.currency}
                 onPurseApplied={setPurseAmount}
                 selectedCountryCode={selectedCountryCode}
                 subtotal={subtotal}
@@ -1142,13 +1146,13 @@ export function BookingWizard({
               <PaymentStep
                 amountDue={amountDueNow}
                 totalBeforePurse={afterVoucher}
-                currency={salon.currency}
+                currency={currency}
                 country={selectedCountryCode || salon.country || "US"}
                 onGatewaySelect={setSelectedGateway}
                 onSubmit={handlePaymentSubmit}
                 isSubmitting={isSubmitting}
                 brandColor={brandColor}
-                purseBalance={purseBalance}
+                purseBalance={currency === salon.currency ? purseBalance : 0}
                 customerId={customerId || undefined}
                 customerEmail={bookerInfo.email}
                 tenantId={salon.id}
@@ -1254,7 +1258,7 @@ export function BookingWizard({
                     </p>
                   </div>
                   <div className="font-serif font-semibold whitespace-nowrap">
-                    {formatCurrency(item.price * item.quantity, salon.currency)}
+                    {formatCurrency(item.price * item.quantity, currency)}
                   </div>
                 </div>
               ))}
@@ -1262,29 +1266,29 @@ export function BookingWizard({
             <div className="mt-auto pt-4 space-y-1.5 border-t border-border">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>Subtotal</span>
-                <span>{formatCurrency(subtotal, salon.currency)}</span>
+                <span>{formatCurrency(subtotal, currency)}</span>
               </div>
               {onReviewOrPayment && voucherDiscount > 0 && (
                 <div className="flex justify-between text-sm text-success">
                   <span>Voucher discount</span>
-                  <span>&minus;{formatCurrency(voucherDiscount, salon.currency)}</span>
+                  <span>&minus;{formatCurrency(voucherDiscount, currency)}</span>
                 </div>
               )}
               {onReviewOrPayment && purseAmount > 0 && (
                 <div className="flex justify-between text-sm text-success">
                   <span>Salon balance</span>
-                  <span>&minus;{formatCurrency(purseAmount, salon.currency)}</span>
+                  <span>&minus;{formatCurrency(purseAmount, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between items-baseline pt-2.5 mt-1 border-t border-border">
                 <span className="font-medium text-sm">{onReviewOrPayment ? (requiresApproval ? "Due After Approval" : "Due Now") : "Total"}</span>
                 <span className="font-serif text-xl font-semibold">
-                  {formatCurrency(onReviewOrPayment ? (requiresApproval ? afterPurse : amountDueNow) : afterVoucher, salon.currency)}
+                  {formatCurrency(onReviewOrPayment ? (requiresApproval ? afterPurse : amountDueNow) : afterVoucher, currency)}
                 </span>
               </div>
               {onReviewOrPayment && !requiresApproval && amountDueAtSalon > 0 && (
                 <p className="text-xs text-muted-foreground text-right">
-                  + {formatCurrency(amountDueAtSalon, salon.currency)} due at the salon
+                  + {formatCurrency(amountDueAtSalon, currency)} due at the salon
                 </p>
               )}
             </div>

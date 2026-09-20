@@ -32,6 +32,8 @@ import { toast } from "@ui/ui/use-toast";
 import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import type { Enums, Tables } from "@supabase-client";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
+import { useLocations } from "@/hooks/useLocations";
+import { currencyForCountry } from "@/lib/countryCurrency";
 
 type AppointmentStatus = Enums<"appointment_status">;
 
@@ -90,13 +92,17 @@ export function AppointmentDetailsDialog({
 }: AppointmentDetailsDialogProps) {
   const navigate = useNavigate();
   const { currentTenant, roles } = useAuth();
+  const { locations } = useLocations();
   const [isGifted, setIsGifted] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [giftRecipientCustomer, setGiftRecipientCustomer] = useState<Tables<"customers"> | null>(null);
   const [giftRecipientDialogOpen, setGiftRecipientDialogOpen] = useState(false);
   const { products, isLoading: productsLoading } = useAppointmentProducts(appointment?.id);
 
-  const currency = currentTenant?.currency || "USD";
+  const appointmentLocation = appointment?.location_id
+    ? locations.find((location) => location.id === appointment.location_id)
+    : undefined;
+  const currency = currencyForCountry(appointmentLocation?.country, currentTenant?.currency || "USD");
   const isStaffRole = roles.some((r) => r.role === "staff" && r.tenant_id === currentTenant?.id);
 
   const formatCurrency = (amount: number) => {

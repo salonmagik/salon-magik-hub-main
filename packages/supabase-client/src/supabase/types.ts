@@ -3375,7 +3375,9 @@ export type Database = {
           email_transaction_alerts: boolean
           id: string
           in_app_transaction_alerts: boolean
+          location_id: string | null
           reminder_hours_before: number
+          reminder_extra_minutes_before: number | null
           sms_appointment_reminders: boolean
           tenant_id: string
           updated_at: string
@@ -3390,7 +3392,9 @@ export type Database = {
           email_transaction_alerts?: boolean
           id?: string
           in_app_transaction_alerts?: boolean
+          location_id?: string | null
           reminder_hours_before?: number
+          reminder_extra_minutes_before?: number | null
           sms_appointment_reminders?: boolean
           tenant_id: string
           updated_at?: string
@@ -3405,7 +3409,9 @@ export type Database = {
           email_transaction_alerts?: boolean
           id?: string
           in_app_transaction_alerts?: boolean
+          location_id?: string | null
           reminder_hours_before?: number
+          reminder_extra_minutes_before?: number | null
           sms_appointment_reminders?: boolean
           tenant_id?: string
           updated_at?: string
@@ -3414,15 +3420,22 @@ export type Database = {
           {
             foreignKeyName: "notification_settings_tenant_id_fkey"
             columns: ["tenant_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "public_booking_tenants"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "notification_settings_tenant_id_fkey"
             columns: ["tenant_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]

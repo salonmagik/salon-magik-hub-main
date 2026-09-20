@@ -363,7 +363,6 @@ All functions live in `supabase/functions/`.
 | Function | Purpose |
 |---|---|
 | `create-public-booking` | Validates and creates a booking; enforces approval gates, deposit rules, slot capacity |
-| `public-booking-email-lookup` | Pre-fills booker info for returning customers |
 | `public-booking-prefill` | Returns saved booker details |
 | `respond-booking-reschedule` | Handles client accept/decline of a reschedule proposal |
 | `send-booking-approval-email` | Notifies client when booking is approved or declined |
@@ -574,6 +573,7 @@ pnpm test     # run all test suites
 |---|---|
 | `VITE_PUBLIC_BOOKING_BASE_DOMAIN` | Base domain for public booking subdomains |
 | `VITE_MANAGE_BOOKINGS_URL` | Client portal base URL |
+| `VITE_CUSTOM_DOMAINS_ENABLED` | Optional feature gate; set to `true` to enable custom-domain UI and routing in a deployed build (paused by default) |
 
 ### Marketing
 | Variable | Description |
@@ -588,6 +588,7 @@ pnpm test     # run all test suites
 | `RESEND_FROM_EMAIL` | Sender address for transactional emails |
 | `PAYSTACK_SECRET_KEY_NG` | Paystack secret key — Nigeria account |
 | `PAYSTACK_SECRET_KEY_GH` | Paystack secret key — Ghana account |
+| `CUSTOM_DOMAINS_ENABLED` | Edge-function gate for domain availability, purchase, configuration, and sync (`true` only when the provider is ready) |
 | `PAYSTACK_WEBHOOK_SECRET_NG` | Webhook signature secret — Nigeria |
 | `PAYSTACK_WEBHOOK_SECRET_GH` | Webhook signature secret — Ghana |
 | `ARKESEL_API_KEY_GH` | Arkesel SMS key — Ghana |

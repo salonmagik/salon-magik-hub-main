@@ -511,6 +511,7 @@ function BookingPageWithCart({
         packages={packages}
         products={products}
         refetchCatalog={refetchCatalog}
+        currency={storefrontCurrency}
       />
 
       <PaymentStatusDialog

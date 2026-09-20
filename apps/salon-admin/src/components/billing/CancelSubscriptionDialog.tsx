@@ -22,6 +22,7 @@ import {
 } from "@ui/select";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface CancelSubscriptionDialogProps {
 	open: boolean;
@@ -110,7 +111,7 @@ export function CancelSubscriptionDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="space-y-4 py-2">
+				<div className={`${DIALOG_BODY_PADDING} space-y-4`}>
 					<div className="space-y-2">
 						<Label htmlFor="cancellation-reason">Why are you cancelling?</Label>
 						<Select value={reason} onValueChange={setReason}>

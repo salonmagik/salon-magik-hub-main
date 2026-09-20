@@ -11,6 +11,7 @@ import { DomainPurchaseModal } from "./DomainPurchaseModal";
 import { useDomainOrders } from "@/hooks/useDomainOrders";
 import { Badge } from "@ui/badge";
 import { useQueryClient } from "@tanstack/react-query";
+import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 
 export function CustomDomainManager() {
   const { currentTenant, refreshTenants } = useAuth();
@@ -22,6 +23,19 @@ export function CustomDomainManager() {
   const queryClient = useQueryClient();
   const [configuringId, setConfiguringId] = useState<string | null>(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  if (!CUSTOM_DOMAINS_ENABLED) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom domains are temporarily paused</CardTitle>
+          <CardDescription>
+            We are finalising the domain provider setup. Your Salon Magik booking URL remains available while this is paused.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   const checkAvailability = async () => {
     if (!searchDomain) return;

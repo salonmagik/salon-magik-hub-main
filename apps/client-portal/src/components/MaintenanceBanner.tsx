@@ -13,9 +13,10 @@ interface MaintenanceBannerSetting {
   title: string;
   description: string;
   guidance: string;
+  updated_at: string | null;
 }
 
-function parseValue(value: Record<string, unknown> | null): MaintenanceBannerSetting | null {
+function parseValue(value: Record<string, unknown> | null, updatedAt: string | null): MaintenanceBannerSetting | null {
   if (!value) return null;
   return {
     enabled: value.enabled === true,
@@ -25,6 +26,7 @@ function parseValue(value: Record<string, unknown> | null): MaintenanceBannerSet
     title: typeof value.title === "string" ? value.title : "Scheduled Maintenance",
     description: typeof value.description === "string" ? value.description : "",
     guidance: typeof value.guidance === "string" ? value.guidance : "",
+    updated_at: updatedAt,
   };
 }
 
@@ -35,12 +37,16 @@ export function MaintenanceBanner() {
 
   useEffect(() => {
     const fetch = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("platform_settings")
-        .select("value")
+        .select("value, updated_at")
         .eq("key", "maintenance_banner")
         .maybeSingle();
-      setSetting(parseValue(data?.value as Record<string, unknown> | null));
+      if (error) {
+        console.error("Failed to load maintenance banner settings:", error);
+        return;
+      }
+      setSetting(parseValue(data?.value as Record<string, unknown> | null, data?.updated_at ?? null));
     };
 
     fetch();
@@ -58,7 +64,19 @@ export function MaintenanceBanner() {
     return () => { channel.unsubscribe(); };
   }, []);
 
-  const handleDismiss = useCallback(() => setDismissed(true), []);
+  useEffect(() => {
+    if (!setting) return;
+    const key = `clientMaintenanceBannerDismissed:${setting.updated_at || "current"}`;
+    setDismissed(sessionStorage.getItem(key) === "true");
+  }, [setting]);
+
+  const handleDismiss = useCallback(() => {
+    setDismissed(true);
+    sessionStorage.setItem(
+      `clientMaintenanceBannerDismissed:${setting?.updated_at || "current"}`,
+      "true",
+    );
+  }, [setting?.updated_at]);
 
   const isVisible =
     setting?.enabled &&
@@ -74,11 +92,11 @@ export function MaintenanceBanner() {
   const bannerTitle = isScheduled && isUpcoming ? "Upcoming Maintenance" : setting!.title;
   const bannerMessage = isScheduled && isUpcoming
     ? `Maintenance scheduled for ${scheduledAt!.toLocaleString()}`
-    : setting!.title;
+    : setting!.description || "Some Salon Magik features may be temporarily unavailable.";
 
   return (
     <>
-      <div className="mx-4 mb-4 flex items-start gap-3 rounded-lg border border-transparent bg-[#F5F7FA] p-3 text-sm text-[#2563EB]">
+      <div className="mx-4 mb-4 flex items-start gap-3 rounded-lg border border-[#F59E0B]/35 bg-[#FEF3C7] p-3 text-sm text-[#78350F]">
         <Wrench className="mt-0.5 h-4 w-4 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="font-semibold">{bannerTitle}</p>
@@ -105,7 +123,7 @@ export function MaintenanceBanner() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Wrench className="h-5 w-5 text-blue-500" />
+              <Wrench className="h-5 w-5 text-[#B45309]" />
               {setting!.title}
             </DialogTitle>
           </DialogHeader>

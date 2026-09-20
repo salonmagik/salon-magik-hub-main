@@ -27,6 +27,7 @@ interface ReviewStepProps {
   appliedVoucher: AppliedVoucher | null;
   onVoucherApplied: (voucher: AppliedVoucher | null) => void;
   purseAmount: number;
+  purseAvailable?: boolean;
   onPurseApplied: (amount: number) => void;
   selectedCountryCode?: string | null;
   subtotal: number;
@@ -48,6 +49,7 @@ export function ReviewStep({
   appliedVoucher,
   onVoucherApplied,
   purseAmount,
+  purseAvailable = true,
   onPurseApplied,
   selectedCountryCode,
   subtotal,
@@ -159,7 +161,7 @@ export function ReviewStep({
         appliedVoucher={appliedVoucher}
       />
 
-      {bookerInfo.email && (
+      {bookerInfo.email && purseAvailable && (
         <CustomerPurseToggle
           tenantId={salon.id}
           customerEmail={bookerInfo.email}

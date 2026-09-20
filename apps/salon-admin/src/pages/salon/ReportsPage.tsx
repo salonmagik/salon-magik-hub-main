@@ -38,6 +38,7 @@ import {
 import { useReports } from "@/hooks/useReports";
 import { useCustomerSegments } from "@/hooks/useCustomerSegments";
 import { useAuth } from "@/hooks/useAuth";
+import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { toast } from "@ui/ui/use-toast";
 import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import {
@@ -201,7 +202,7 @@ export default function ReportsPage() {
     { label: "This month", getRange: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
   ];
 
-  const currency = currentTenant?.currency || "USD";
+  const { currency } = useActiveBranchCurrency("USD");
   const currencySymbols: Record<string, string> = {
     USD: "$", GHS: "₵", NGN: "₦", EUR: "€", GBP: "£",
   };

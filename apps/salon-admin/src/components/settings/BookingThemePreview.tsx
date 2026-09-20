@@ -27,6 +27,7 @@ interface BookingThemePreviewProps {
   storefrontMode?: "services" | "products" | "both";
   heroHeading?: string | null;
   heroTagline?: string | null;
+  heroBgColor?: string | null;
   heroCTAPrimary?: string | null;
   heroCTASecondary?: string | null;
 }
@@ -81,6 +82,7 @@ export function BookingThemePreview({
   storefrontMode = "both",
   heroHeading,
   heroTagline,
+  heroBgColor,
   heroCTAPrimary,
   heroCTASecondary,
 }: BookingThemePreviewProps) {
@@ -137,13 +139,16 @@ export function BookingThemePreview({
           </div>
 
           {/* Hero: split */}
-          <div className="grid min-h-[280px] grid-cols-2">
+          <div className="grid min-h-[280px] grid-cols-1 sm:grid-cols-2">
             {/* Left copy */}
-            <div className="flex flex-col justify-center px-6 py-10">
+            <div
+              className="flex flex-col justify-center px-4 py-8 sm:px-6 sm:py-10"
+              style={heroBgColor ? { backgroundColor: heroBgColor } : undefined}
+            >
               <span className="mb-3 self-start rounded-full px-3 py-1 text-[9px] font-bold uppercase tracking-[0.2em] text-white" style={{ backgroundColor: brand }}>
-                Bookings Open
+                {bookingStatusMessage ? "Notice" : "Bookings Open"}
               </span>
-              <h2 className="text-2xl font-black leading-tight tracking-tight text-gray-900">
+              <h2 className="text-xl font-black leading-tight tracking-tight text-gray-900 sm:text-2xl">
                 {displayHeading}
                 {displayTagline && (
                   <><br /><span style={{ color: brand }}>{displayTagline}</span></>
@@ -168,21 +173,19 @@ export function BookingThemePreview({
             </div>
 
             {/* Right image */}
-            <div className="relative bg-gray-100">
+            <div className="relative min-h-[220px] bg-gray-100 sm:min-h-0">
               {bannerUrls.length > 0 ? (
                 <img src={bannerUrls[0]} alt="" className="absolute inset-0 h-full w-full object-cover" />
               ) : (
                 <div
                   className="absolute inset-0 flex items-center justify-center"
-                  style={{ background: `linear-gradient(135deg, ${brand}22 0%, ${brand}08 100%)` }}
+                  style={{ background: `linear-gradient(135deg, ${brand}18 0%, ${brand}06 60%, #f9f9f9 100%)` }}
                 >
                   <span className="text-5xl font-black opacity-10" style={{ color: brand }}>
                     {salonName.charAt(0)}
                   </span>
                 </div>
               )}
-              {/* Edge fade */}
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-white to-transparent" />
             </div>
           </div>
 
@@ -203,7 +206,7 @@ export function BookingThemePreview({
               </div>
             </div>
 
-            <div className="grid grid-cols-[140px_1fr] gap-8">
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-[140px_1fr]">
               {/* Sidebar */}
               <div className="space-y-5">
                 <div>

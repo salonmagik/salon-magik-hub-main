@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocations } from "@/hooks/useLocations";
 import { supabase } from "@/lib/supabase";
 import { useStaffInvitations } from "@/hooks/useStaffInvitations";
 import { useLocation } from "react-router-dom";
@@ -30,6 +31,7 @@ export interface MaintenanceBannerSetting {
   title: string;
   description: string;
   guidance: string;
+  updated_at: string | null;
 }
 
 interface BannerContextType {
@@ -63,7 +65,8 @@ interface BannerProviderProps {
 }
 
 export function BannerProvider({ children, platform }: BannerProviderProps) {
-  const { currentTenant, isActiveContextPaused, currentRole } = useAuth();
+  const { currentTenant, isActiveContextPaused, currentRole, activeLocationId, activeContextType } = useAuth();
+  const { locations, defaultLocation } = useLocations();
   const { pendingInvitations } = useStaffInvitations();
   const routerLocation = useLocation();
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
@@ -72,6 +75,11 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
   const [killSwitch, setKillSwitch] = useState<{ enabled: boolean; reason?: string | null } | null>(null);
   const [maintenanceBannerSetting, setMaintenanceBannerSetting] = useState<MaintenanceBannerSetting | null>(null);
   const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
+  const activeLocation = useMemo(
+    () => locations.find((location) => location.id === activeLocationId) || defaultLocation,
+    [activeLocationId, defaultLocation, locations],
+  );
+  const activeBranchCountry = activeContextType === "location" ? activeLocation?.country?.toUpperCase() : null;
 
   // Fetch active maintenance events
   useEffect(() => {
@@ -135,6 +143,11 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
 
   // Fetch maintenance_banner setting and subscribe to changes
   useEffect(() => {
+    // BannerProvider can mount before tenant/session hydration finishes. Do
+    // not make an anonymous RLS request and then permanently lose the banner;
+    // retry when the authenticated salon context is ready.
+    if (platform === "salon" && !currentTenant?.id) return;
+
     const parseValue = (value: Record<string, unknown> | null): MaintenanceBannerSetting | null => {
       if (!value) return null;
       return {
@@ -145,16 +158,22 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
         title: typeof value.title === "string" ? value.title : "Scheduled Maintenance",
         description: typeof value.description === "string" ? value.description : "",
         guidance: typeof value.guidance === "string" ? value.guidance : "",
+        updated_at: null,
       };
     };
 
     const fetchMaintBanner = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("platform_settings")
-        .select("value")
+        .select("value, updated_at")
         .eq("key", "maintenance_banner")
         .maybeSingle();
-      setMaintenanceBannerSetting(parseValue(data?.value as Record<string, unknown> | null));
+      if (error) {
+        console.error("Failed to load maintenance banner settings:", error);
+        return;
+      }
+      const parsed = parseValue(data?.value as Record<string, unknown> | null);
+      setMaintenanceBannerSetting(parsed ? { ...parsed, updated_at: data?.updated_at ?? null } : null);
     };
 
     fetchMaintBanner();
@@ -170,7 +189,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       .subscribe();
 
     return () => { channel.unsubscribe(); };
-  }, []);
+  }, [currentTenant?.id, platform]);
 
   // Build banners based on platform and tenant status
   const banners = useMemo(() => {
@@ -252,6 +271,19 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
           blocking: false,
         });
       }
+
+      if (activeBranchCountry === "NG") {
+        result.push({
+          id: `nigeria-sms-window-${activeLocation?.id || "active"}`,
+          priority: 7,
+          variant: "warning",
+          title: "Nigeria SMS delivery window",
+          message: "SMS delivery is available from 8:00 a.m. to 8:00 p.m. Nigeria time.",
+          cta: { label: "Learn more", path: "/salon/messaging" },
+          dismissible: true,
+          blocking: false,
+        });
+      }
     }
 
     // Priority 5 & 9: Maintenance events (all platforms)
@@ -285,7 +317,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       }
 
       result.push({
-        id: "platform-maintenance-banner",
+        id: `platform-maintenance-banner-${maintenanceBannerSetting.updated_at || "current"}`,
         priority: 6,
         variant: "maintenance",
         title: isScheduled && isUpcoming ? "Upcoming Maintenance" : maintenanceBannerSetting.title,
@@ -301,7 +333,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
 
     // Filter out dismissed banners
     return result.filter((b) => !dismissedIds.includes(b.id));
-  }, [currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen, currentRole]);
+  }, [activeBranchCountry, activeLocation?.id, currentTenant, platform, maintenanceEvents, pendingInvitations, dismissedIds, killSwitch, isActiveContextPaused, routerLocation.pathname, maintenanceBannerSetting, setMaintenanceModalOpen, currentRole]);
 
   const dismissBanner = useCallback((id: string) => {
     setDismissedIds((prev) => [...prev, id]);

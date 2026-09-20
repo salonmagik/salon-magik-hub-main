@@ -34,18 +34,19 @@ interface WithdrawalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   locationId?: string | null;
+  currencyOverride?: string;
   onWithdrawalCreated?: () => void | Promise<void>;
 }
 
-export function WithdrawalDialog({ open, onOpenChange, locationId = null, onWithdrawalCreated }: WithdrawalDialogProps) {
+export function WithdrawalDialog({ open, onOpenChange, locationId = null, currencyOverride, onWithdrawalCreated }: WithdrawalDialogProps) {
   const { currentTenant } = useAuth();
   const tenantId = currentTenant?.id;
-  const currency = currentTenant?.currency || "NGN";
 
   const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId, locationId);
   const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId, locationId);
   const { destinations, isLoading: destinationsLoading } = usePayoutDestinations(tenantId);
   const { createWithdrawal } = useWithdrawals(tenantId, locationId);
+  const currency = currencyOverride ?? wallet?.currency ?? availability?.currency ?? currentTenant?.currency ?? "NGN";
 
   const scopedDestinations = destinations.filter((item) => !item.location_id || item.location_id === locationId);
 

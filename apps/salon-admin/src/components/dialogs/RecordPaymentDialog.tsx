@@ -14,6 +14,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useLocationScope } from "@/hooks/useLocationScope";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { cn } from "@shared/utils";
+import { useLocations } from "@/hooks/useLocations";
+import { currencyForCountry } from "@/lib/countryCurrency";
 
 interface RecordPaymentDialogProps {
   open: boolean;
@@ -24,6 +26,7 @@ interface RecordPaymentDialogProps {
 
 interface PayableAppointment {
   id: string;
+  location_id: string | null;
   scheduled_start: string;
   total_amount: number;
   amount_paid: number;
@@ -39,6 +42,7 @@ export function RecordPaymentDialog({
   appointmentId,
 }: RecordPaymentDialogProps) {
   const { currentTenant } = useAuth();
+  const { locations } = useLocations();
   const { scopedLocationIds, hasScope } = useLocationScope();
   const [appointments, setAppointments] = useState<PayableAppointment[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(appointmentId || "");
@@ -56,7 +60,7 @@ export function RecordPaymentDialog({
       setIsLoading(true);
       let query = supabase
         .from("appointments")
-        .select("id, scheduled_start, total_amount, amount_paid, booking_reference, customer:customers!appointments_customer_id_fkey(full_name), services:appointment_services(service_name)")
+        .select("id, location_id, scheduled_start, total_amount, amount_paid, booking_reference, customer:customers!appointments_customer_id_fkey(full_name), services:appointment_services(service_name)")
         .eq("tenant_id", currentTenant.id)
         .eq("is_unscheduled", false)
         .not("scheduled_start", "is", null)
@@ -95,6 +99,10 @@ export function RecordPaymentDialog({
   const balance = selectedAppointment
     ? Math.max(Number(selectedAppointment.total_amount) - Number(selectedAppointment.amount_paid), 0)
     : 0;
+  const selectedAppointmentLocation = selectedAppointment?.location_id
+    ? locations.find((location) => location.id === selectedAppointment.location_id)
+    : undefined;
+  const currency = currencyForCountry(selectedAppointmentLocation?.country, currentTenant?.currency || "USD");
 
   useEffect(() => {
     if (selectedAppointment) setAmount(balance.toFixed(2));
@@ -115,7 +123,7 @@ export function RecordPaymentDialog({
         title: "Check the payment",
         description: !selectedAppointmentId
           ? "Select the booked appointment this cash payment belongs to."
-          : `Enter an amount between 0.01 and ${formatCurrency(balance, currentTenant?.currency)}.`,
+          : `Enter an amount between 0.01 and ${formatCurrency(balance, currency)}.`,
         variant: "destructive",
       });
       return;
@@ -187,7 +195,7 @@ export function RecordPaymentDialog({
             <div className="rounded-xl border bg-muted/30 p-3 text-sm">
               <p className="font-medium">{selectedAppointment.services[0]?.service_name || "Appointment"}</p>
               <p className="mt-1 text-muted-foreground">
-                Paid {formatCurrency(Number(selectedAppointment.amount_paid), currentTenant?.currency)} · Balance {formatCurrency(balance, currentTenant?.currency)}
+                Paid {formatCurrency(Number(selectedAppointment.amount_paid), currency)} · Balance {formatCurrency(balance, currency)}
               </p>
             </div>
           )}

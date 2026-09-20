@@ -11,6 +11,7 @@ import { Loader2, Plus, Trash2, CheckCircle2, XCircle, Building, Smartphone } fr
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
 import { cn } from "@shared/utils";
+import { currencyForCountry } from "@/lib/countryCurrency";
 
 interface PayoutDestinationsManagerProps {
   /** Narrow the list to one country (e.g. from a page-level country switcher). Omit/undefined shows every account. */
@@ -35,13 +36,19 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
   const [isDefault, setIsDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (countryFilter === "GH" || countryFilter === "NG") {
+      setCountry(countryFilter);
+    }
+  }, [countryFilter]);
+
   const { banks, isLoading: banksLoading } = useBankList(
     country,
     destinationType === "bank" ? "bank" : "mobile_money",
   );
 
   const { verify, reset, isVerifying, result } = useAccountVerification();
-  const currency = currentTenant?.currency || "NGN";
+  const currency = currencyForCountry(country, currentTenant?.currency || "NGN");
 
   useEffect(() => {
     setSelectedBank("");

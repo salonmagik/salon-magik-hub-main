@@ -9,6 +9,7 @@
 -- Required vault secrets (one-time setup per environment):
 --   birthday_messages_function_url  — full URL to the send-birthday-messages edge function
 --   birthday_messages_secret        — shared secret sent as x-birthday-secret header
+-- The same secret must also be set on the Edge Function as BIRTHDAY_SECRET.
 --
 -- Register with:
 --   supabase db query "select vault.create_secret('<url>', 'birthday_messages_function_url');" --linked

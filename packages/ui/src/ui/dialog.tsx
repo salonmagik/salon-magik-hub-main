@@ -60,8 +60,8 @@ const DialogContent = React.forwardRef<React.ElementRef<typeof DialogPrimitive.C
           // screen used to end up mostly empty space between its content and
           // the close button/footer. overflow-y-auto still kicks in once
           // content actually exceeds the cap.
-          "fixed left-3 right-3 top-1/2 z-[70] flex flex-col w-auto max-h-[calc(100vh-1.5rem)] -translate-y-1/2 overflow-y-auto scrollbar-hide rounded-[24px] border-0 bg-background p-0 shadow-2xl duration-200",
-          "sm:left-[50%] sm:right-auto sm:top-[50%] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[90vh]",
+          "fixed left-1/2 top-1/2 z-[70] flex w-[calc(100%_-_1.5rem)] max-h-[calc(100vh-1.5rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto scrollbar-hide rounded-[24px] border-0 bg-background p-0 shadow-2xl duration-200",
+          "sm:w-full sm:max-w-lg sm:max-h-[90vh]",
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
@@ -96,7 +96,7 @@ const DialogHeader = ({ className, style, ...props }: React.HTMLAttributes<HTMLD
   <div
     className={cn(
       "dark sticky top-0 z-10 flex-shrink-0 rounded-t-[24px] bg-background px-5 pb-4 pt-5 text-foreground sm:px-8 sm:pb-5 sm:pt-7",
-      "flex flex-col space-y-1.5 text-center sm:text-left",
+      "flex flex-col space-y-1.5 text-left",
       className,
     )}
     style={{ ...BRAND_DIALOG_STYLE, ...style }}
@@ -117,7 +117,7 @@ DialogHeader.displayName = "DialogHeader";
 const DialogFooter = ({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "sticky bottom-0 z-10 flex-shrink-0 rounded-b-[24px] border-t-[3px] border-t-[#9E88C4] bg-background px-5 pb-5 pt-4 sm:px-8 sm:pb-7 sm:pt-5",
+      "sticky bottom-0 z-10 flex-shrink-0 rounded-b-[24px] border-t border-t-[#9E88C4]/70 bg-background px-5 pb-5 pt-4 sm:px-8 sm:pb-7 sm:pt-5",
       "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
       className,
     )}

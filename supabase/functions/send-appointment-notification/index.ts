@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { buildFromAddress, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
+import { buildFromAddress, createButton, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
 import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -60,6 +60,7 @@ const defaultTemplates: Record<AppointmentAction, { subject: string; body: strin
         ${row("Total", "{{total_amount}}")}
         ${row("Location", "{{location}}")}
       `)}
+      {{payment_cta}}
       ${para("We look forward to seeing you!")}
     `,
   },
@@ -231,6 +232,28 @@ const handler = async (req: Request): Promise<Response> => {
 
     const servicesList = appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A";
     const totalAmount = `${tenant?.currency || "GHS"} ${Number(appointment.total_amount).toFixed(2)}`;
+    const outstandingAmount = Math.max(
+      Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0),
+      0,
+    );
+    const canPayOnline = action === "scheduled" &&
+      outstandingAmount > 0 &&
+      appointment.status !== "cancelled" &&
+      !["fully_paid", "refunded_full"].includes(String(appointment.payment_status));
+    const clientPortalBase = (
+      Deno.env.get("CLIENT_PORTAL_URL") ||
+      Deno.env.get("MANAGE_BOOKINGS_URL") ||
+      Deno.env.get("BASE_URL") ||
+      "https://bookings.salonmagik.com"
+    ).replace(/\/+$/, "");
+    const bookingPortalUrl = `${clientPortalBase}/bookings/${appointment.id}`;
+    const paymentPortalUrl = `${bookingPortalUrl}?pay=1`;
+    const paymentCtaHtml = canPayOnline
+      ? `${para(`Your outstanding balance is <strong>${tenant?.currency || "GHS"} ${outstandingAmount.toFixed(2)}</strong>.`)}${createButton(
+        "Pay outstanding balance",
+        paymentPortalUrl,
+      )}`
+      : "";
     const locationText = appointment.location
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
       : "N/A";
@@ -263,14 +286,27 @@ const handler = async (req: Request): Promise<Response> => {
       "{{services}}": servicesList,
       "{{total_amount}}": totalAmount,
       "{{location}}": locationText,
+      "{{payment_cta}}": paymentCtaHtml,
+      "{{cta_link}}": canPayOnline ? paymentPortalUrl : bookingPortalUrl,
+      "{{service_name}}": servicesList,
+      "{{location_name}}": locationText,
       "{{reason}}": reason || "Not specified",
       "{{new_date}}": newDate || appointmentDate,
       "{{new_time}}": newTime || appointmentTime,
     };
 
+    const hasPaymentCtaPlaceholder =
+      emailBody.includes("{{payment_cta}}") || emailBody.includes("{{cta_link}}");
     for (const [key, value] of Object.entries(replacements)) {
       emailSubject = emailSubject.replace(new RegExp(key, "g"), value);
       emailBody = emailBody.replace(new RegExp(key, "g"), value);
+    }
+
+    // Salon-owned templates may predate the payment CTA variable. Append the
+    // CTA in that case so an outstanding balance can never be hidden simply
+    // because a custom confirmation template was saved earlier.
+    if (canPayOnline && !hasPaymentCtaPlaceholder) {
+      emailBody += paymentCtaHtml;
     }
 
     emailBody = emailBody.replace(/\{\{#if reason\}\}([\s\S]*?)\{\{\/if\}\}/g, reason ? "$1" : "");

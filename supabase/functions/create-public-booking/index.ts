@@ -14,6 +14,13 @@ import {
 } from "../_shared/paystack-helpers.ts";
 import { computeBookingCharge, getPaymentFeeSettings } from "../_shared/payment-fee-calculator.ts";
 
+function currencyForCountry(country: string | null | undefined, fallback: string): string {
+  const normalized = (country || "").trim().toUpperCase();
+  if (normalized === "GH" || normalized === "GHANA") return "GHS";
+  if (normalized === "NG" || normalized === "NIGERIA") return "NGN";
+  return fallback;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -270,7 +277,37 @@ serve(async (req) => {
     // a paused branch must be rejected explicitly, not just relied on to be
     // absent from what the storefront shows.
     const requestedLocationIds = Array.from(new Set(items.map((item) => item.locationId).filter(Boolean)));
+    const tenantCurrency = (tenant.currency || "USD").toUpperCase();
+    let settlementCurrency = tenantCurrency;
     if (requestedLocationIds.length > 0) {
+      const { data: requestedLocations, error: requestedLocationsError } = await supabase
+        .from("locations")
+        .select("id, country")
+        .eq("tenant_id", tenantId)
+        .in("id", requestedLocationIds);
+      if (requestedLocationsError || (requestedLocations || []).length !== requestedLocationIds.length) {
+        return new Response(
+          JSON.stringify({ error: "One or more selected branches are no longer available." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const locationCurrencies = new Set(
+        (requestedLocations || []).map((location) => currencyForCountry(location.country, tenantCurrency)),
+      );
+      if (locationCurrencies.size > 1) {
+        return new Response(
+          JSON.stringify({ error: "Please check out items from one country at a time." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      settlementCurrency = [...locationCurrencies][0] || settlementCurrency;
+      if (settlementCurrency !== tenantCurrency && (purseAmount > 0 || Number(splitPurseAmount || 0) > 0 || processPursePayment)) {
+        return new Response(
+          JSON.stringify({ error: "Salon balance can only be used in the salon's account currency. Please pay this branch by card." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
       const { data: pausedLocations, error: pausedLocationsError } = await supabase
         .from("locations")
         .select("id")
@@ -934,7 +971,7 @@ serve(async (req) => {
 
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    const bookingSummaryHtml = renderBookingSummary(items, tenant.currency || "USD");
+    const bookingSummaryHtml = renderBookingSummary(items, settlementCurrency);
     const paymentLine = approvalRequired
       ? paragraph("This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.")
       : paragraph("Payment status: pending checkout completion.");
@@ -989,9 +1026,9 @@ serve(async (req) => {
           paymentLine +
           `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
           (promotionalDiscount > 0
-            ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
+            ? paragraph(`<strong>Voucher discount:</strong> -${settlementCurrency} ${promotionalDiscount.toFixed(2)}`)
             : "") +
-          paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`),
+          paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`),
         log: {
           supabase,
           tenantId,
@@ -1065,9 +1102,9 @@ serve(async (req) => {
             paragraph(`<strong>Customer:</strong> ${customerFullName}`) +
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             (promotionalDiscount > 0
-              ? paragraph(`<strong>Voucher discount:</strong> -${tenant.currency || "USD"} ${promotionalDiscount.toFixed(2)}`)
+              ? paragraph(`<strong>Voucher discount:</strong> -${settlementCurrency} ${promotionalDiscount.toFixed(2)}`)
               : "") +
-            paragraph(`<strong>Total:</strong> ${tenant.currency || "USD"} ${chargeableTotal.toFixed(2)}`) +
+            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`) +
             `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
             reviewActionsHtml,
           log: {
@@ -1098,7 +1135,7 @@ serve(async (req) => {
         console.log("Creating payment session...");
 
         // Determine effective currency with fallback
-        const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, tenant.currency);
+        const effectiveCurrency = determineEffectiveCurrency(paymentCurrency, settlementCurrency);
 
         if (!effectiveCurrency) {
           return new Response(
@@ -1108,7 +1145,7 @@ serve(async (req) => {
         }
 
         // Validate currency consistency
-        const currencyValidation = validateCurrencyMatch(tenant.currency, effectiveCurrency);
+        const currencyValidation = validateCurrencyMatch(settlementCurrency, effectiveCurrency);
         if (!currencyValidation.isValid) {
           return new Response(
             JSON.stringify({ error: currencyValidation.error }),
@@ -1308,7 +1345,7 @@ serve(async (req) => {
           appointment_id: primaryAppointmentId,
           type: "payment",
           amount: totalBalanceReservation,
-          currency: tenant.currency,
+          currency: settlementCurrency,
           method: "purse",
           provider: "internal",
           provider_reference: idempotencyKey,

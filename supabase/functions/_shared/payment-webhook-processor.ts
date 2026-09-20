@@ -8,6 +8,13 @@ import {
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
 import { mapPaystackChannelToPaymentMethod, getNextBillingAt } from "./paystack-helpers.ts";
 
+function currencyForCountry(country: string | null | undefined, fallback: string): string {
+  const normalized = (country || "").trim().toUpperCase();
+  if (normalized === "GH" || normalized === "GHANA") return "GHS";
+  if (normalized === "NG" || normalized === "NIGERIA") return "NGN";
+  return fallback;
+}
+
 export interface WebhookEvent {
   type: string;
   gateway: "paystack";
@@ -177,14 +184,17 @@ async function validateTenant(
 async function validateWalletCurrency(
   supabase: SupabaseClient,
   tenantId: string,
-  expectedCurrency: string
+  expectedCurrency: string,
+  locationId: string | null = null,
 ): Promise<void> {
-  const { data: walletCheck, error: walletError } = await supabase
+  let walletQuery = supabase
     .from("salon_wallets")
     .select("currency")
-    .eq("tenant_id", tenantId)
-    .is("location_id", null)
-    .single();
+    .eq("tenant_id", tenantId);
+  walletQuery = locationId
+    ? walletQuery.eq("location_id", locationId)
+    : walletQuery.is("location_id", null);
+  const { data: walletCheck, error: walletError } = await walletQuery.maybeSingle();
 
   if (walletError) {
     console.error("Error fetching salon wallet for validation:", walletError);
@@ -373,10 +383,10 @@ export async function processWebhook(
           }
 
           if (actualServiceAmount) {
-            const { data: appointments, error: appointmentsError } = await supabase
-              .from("appointments")
-              .select("id, tenant_id, customer_id, total_amount, booking_reference, purse_amount_used")
-              .in("id", targetAppointmentIds);
+              const { data: appointments, error: appointmentsError } = await supabase
+                .from("appointments")
+                .select("id, tenant_id, customer_id, location_id, total_amount, booking_reference, purse_amount_used")
+                .in("id", targetAppointmentIds);
 
             if (appointmentsError) {
               console.error("Error loading appointments from payment webhook:", appointmentsError);
@@ -430,6 +440,16 @@ export async function processWebhook(
               }
 
               const primaryAppointment = appointments[0];
+              const appointmentLocationIds = [...new Set(appointments.map((entry) => entry.location_id).filter(Boolean))];
+              const { data: appointmentLocations } = appointmentLocationIds.length > 0
+                ? await supabase.from("locations").select("id, country").in("id", appointmentLocationIds)
+                : { data: [] as Array<{ id: string; country: string | null }> };
+              const locationCurrencies = new Set(
+                appointments.map((entry) => {
+                  const location = appointmentLocations?.find((candidate) => candidate.id === entry.location_id);
+                  return currencyForCountry(location?.country, "USD");
+                }),
+              );
               const { data: customer } = await supabase
                 .from("customers")
                 .select("full_name, email")
@@ -437,6 +457,13 @@ export async function processWebhook(
                 .single();
 
               const tenant = await validateTenant(supabase, primaryAppointment.tenant_id, "appointment payment");
+              const settlementCurrency = currencyForCountry(
+                appointmentLocations?.find((location) => location.id === primaryAppointment.location_id)?.country,
+                tenant.currency,
+              );
+              if (locationCurrencies.size > 1) {
+                throw new Error("A payment cannot cover appointments in multiple settlement currencies");
+              }
 
               console.log("Split payment metadata check:", {
                 splitPurseAmount,
@@ -459,7 +486,7 @@ export async function processWebhook(
                     appointment_id: primaryAppointment.id,
                     type: "payment",
                     amount: splitPurseAmount,
-                    currency: tenant?.currency || "USD",
+                    currency: settlementCurrency,
                     method: "purse",
                     provider: "internal",
                     provider_reference: `split_purse_${reference}`,
@@ -484,7 +511,7 @@ export async function processWebhook(
                 appointment_id: primaryAppointment.id,
                 type: isDeposit ? "deposit" : "payment",
                 amount: actualServiceAmount,
-                currency: tenant?.currency || "USD",
+                currency: settlementCurrency,
                 method: paymentMethod,
                 provider: event.gateway,
                 provider_reference: reference,
@@ -498,13 +525,13 @@ export async function processWebhook(
                 ? actualServiceAmount + splitPurseAmount
                 : actualServiceAmount;
               const paymentDescription = splitPurseAmount && splitPurseAmount > 0
-                ? `${tenant?.currency || ""} ${actualServiceAmount} (${paymentMethod}) + ${tenant?.currency || ""} ${splitPurseAmount} (purse)`
-                : `${tenant?.currency || ""} ${actualServiceAmount}`;
+                ? `${settlementCurrency} ${actualServiceAmount} (${paymentMethod}) + ${settlementCurrency} ${splitPurseAmount} (purse)`
+                : `${settlementCurrency} ${actualServiceAmount}`;
 
               await sendTransactionAlerts({
                 tenantId: primaryAppointment.tenant_id,
                 tenantName: tenant?.name,
-                currency: tenant?.currency,
+                currency: settlementCurrency,
                 customerName: customer?.full_name,
                 customerId: primaryAppointment.customer_id,
                 amount: totalPaymentAmount,
@@ -515,14 +542,14 @@ export async function processWebhook(
                 htmlContent: `
                   <h2 style="color: #2563EB; margin-bottom: 16px;">${isDeposit ? "Deposit received" : "Payment received"}</h2>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</p>
-                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total Amount:</strong> ${tenant?.currency || "USD"} ${totalPaymentAmount}</p>
+                  <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Total Amount:</strong> ${settlementCurrency} ${totalPaymentAmount}</p>
                   ${splitPurseAmount && splitPurseAmount > 0 ? `
                     <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Payment Breakdown:</strong></p>
                     <ul style="color: #4b5563; font-size: 16px; line-height: 1.6;">
-                      <li>${paymentMethod} payment: ${tenant?.currency || "USD"} ${actualServiceAmount}</li>
-                      <li>Store credit: ${tenant?.currency || "USD"} ${splitPurseAmount}</li>
+                      <li>${paymentMethod} payment: ${settlementCurrency} ${actualServiceAmount}</li>
+                      <li>Store credit: ${settlementCurrency} ${splitPurseAmount}</li>
                     </ul>
-                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${tenant?.currency || "USD"} ${actualServiceAmount}</p>`}
+                  ` : `<p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Amount:</strong> ${settlementCurrency} ${actualServiceAmount}</p>`}
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Gateway:</strong> ${event.gateway}</p>
                   <p style="color: #4b5563; font-size: 16px; line-height: 1.6;"><strong>Appointments covered:</strong> ${appointments.length}</p>
                 `,
@@ -582,7 +609,7 @@ export async function processWebhook(
                             <p>A customer has just completed ${isDeposit ? "a deposit" : "payment"} for a booking.</p>
                             <ul>
                               <li><strong>Customer:</strong> ${customer?.full_name || "Unknown"}</li>
-                              <li><strong>Amount Paid:</strong> ${tenant.currency} ${actualServiceAmount}</li>
+                              <li><strong>Amount Paid:</strong> ${settlementCurrency} ${actualServiceAmount}</li>
                               <li><strong>Gateway:</strong> ${event.gateway}</li>
                               <li><strong>Appointments:</strong> ${appointments.length}</li>
                             </ul>
@@ -620,7 +647,7 @@ export async function processWebhook(
                     customer_id: primaryAppointment.customer_id,
                     appointment_id: primaryAppointment.id,
                     invoice_number: invoiceNumber,
-                    currency: tenant.currency,
+                    currency: settlementCurrency,
                     subtotal: totalPaymentAmount,
                     total: totalPaymentAmount,
                     status: isDeposit ? "sent" : "paid",
@@ -649,7 +676,7 @@ export async function processWebhook(
                 // bank) — every booking payment credits the internal wallet
                 // unconditionally, paid out via withdrawal request instead.
                 // Validate salon wallet currency matches tenant currency
-                await validateWalletCurrency(supabase, primaryAppointment.tenant_id, tenant.currency);
+                await validateWalletCurrency(supabase, primaryAppointment.tenant_id, settlementCurrency, primaryAppointment.location_id);
 
                 // Only gateway funds become immediately withdrawable. Paid
                 // customer-balance grants settle when the appointment completes;
@@ -669,7 +696,8 @@ export async function processWebhook(
                   p_reference_type: "appointment",
                   p_reference_id: primaryAppointment.id,
                   p_amount: finalCreditAmount,
-                  p_currency: tenant.currency,
+                  p_currency: settlementCurrency,
+                  p_location_id: primaryAppointment.location_id,
                   p_idempotency_key: `booking_${reference}`,
                   p_gateway_reference: reference,
                 });
@@ -677,7 +705,7 @@ export async function processWebhook(
                 if (creditError) {
                   throw creditError;
                 } else {
-                  console.log(`Salon purse credited: ${totalAmountForSalon} ${tenant.currency} for appointment ${primaryAppointment.id}`);
+                  console.log(`Salon purse credited: ${totalAmountForSalon} ${settlementCurrency} for appointment ${primaryAppointment.id}`);
                 }
               } catch (purseError) {
                 throw purseError;

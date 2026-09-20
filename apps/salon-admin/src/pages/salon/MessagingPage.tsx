@@ -129,6 +129,7 @@ type StarterMessage = {
 type SenderLocation = {
   id: string;
   name: string;
+  country: string | null;
 };
 
 type SaveReusableState = {
@@ -312,6 +313,19 @@ function getMarketLabel(country?: string | null) {
   if (normalized === "GH") return "Ghana";
   if (normalized === "NG") return "Nigeria";
   return normalized || "Unknown market";
+}
+
+function getCustomerSmsCountry(customer: CustomerListItem) {
+  // Prefer an explicit E.164 country prefix because it reflects the number
+  // that the telco will actually route. Fall back to the customer's profile
+  // country for local-format numbers.
+  const phone = String(customer.phone || "").replace(/[^\d+]/g, "");
+  if (phone.startsWith("+233") || phone.startsWith("233")) return "GH";
+  if (phone.startsWith("+234") || phone.startsWith("234")) return "NG";
+  const country = normalizeCountry(customer.country);
+  if (country === "GHANA") return "GH";
+  if (country === "NIGERIA") return "NG";
+  return country || null;
 }
 
 export default function MessagingPage() {
@@ -638,7 +652,7 @@ export default function MessagingPage() {
     let cancelled = false;
     supabase
       .from("locations")
-      .select("id, name")
+      .select("id, name, country")
       .eq("tenant_id", currentTenant.id)
       .eq("id", activeLocationId)
       .maybeSingle()
@@ -662,9 +676,29 @@ export default function MessagingPage() {
   const estimatedCost = selectedRecipientCount * CREDIT_COST[effectiveChannel] * (effectiveChannel === "sms" ? smsSegments : 1);
   const balanceAfterSend = (credits?.balance || 0) - estimatedCost;
   const tenantCountry = normalizeCountry(currentTenant?.country);
-  const isGhanaTenant = tenantCountry === "GH";
-  const isNigeriaTenant = tenantCountry === "NG";
+  const messagingCountry = normalizeCountry(activeLocation?.country || tenantCountry);
+  const isGhanaTenant = messagingCountry === "GH";
+  const isNigeriaTenant = messagingCountry === "NG";
   const smsMarketSupported = isGhanaTenant || isNigeriaTenant;
+  const smsCountryMismatchRecipients = useMemo(() => {
+    if (effectiveChannel !== "sms" || !smsMarketSupported) return [];
+    return eligibleRecipients.filter((customer) => {
+      const customerCountry = getCustomerSmsCountry(customer);
+      return customerCountry && customerCountry !== messagingCountry;
+    });
+  }, [effectiveChannel, eligibleRecipients, messagingCountry, smsMarketSupported]);
+  const smsUnknownCountryRecipients = useMemo(() => {
+    if (effectiveChannel !== "sms" || !smsMarketSupported) return [];
+    return eligibleRecipients.filter((customer) => !getCustomerSmsCountry(customer));
+  }, [effectiveChannel, eligibleRecipients, smsMarketSupported]);
+  const nigeriaSmsOutsideWindow = effectiveChannel === "sms" && isNigeriaTenant && (() => {
+    const hour = Number(new Intl.DateTimeFormat("en-NG", {
+      timeZone: "Africa/Lagos",
+      hour: "2-digit",
+      hour12: false,
+    }).format(new Date()));
+    return hour < 8 || hour >= 20;
+  })();
   const hasCreditWallet = Boolean(credits);
   const hasEnoughSmsCredits = effectiveChannel !== "sms" || (hasCreditWallet && balanceAfterSend >= 0);
   const hasEligibleRecipients = selectedRecipientCount > 0;
@@ -735,9 +769,37 @@ export default function MessagingPage() {
               ? "Ghana SMS will use Arkesel."
               : isNigeriaTenant
                 ? "Nigeria SMS will use Arkesel."
-                : `SMS is not configured for ${getMarketLabel(currentTenant?.country)} yet.`,
+              : `SMS is not configured for ${getMarketLabel(messagingCountry)} yet.`,
       },
     ];
+
+    if (isNigeriaTenant) {
+      items.push({
+        id: "nigeria-sms-window",
+        label: "Nigeria SMS delivery window",
+        status: effectiveChannel === "sms" && nigeriaSmsOutsideWindow ? "blocked" : "warning",
+        detail: "Nigerian telecom operators enforce an 8:00 a.m.–8:00 p.m. Nigeria-time SMS window. This legal and telco requirement cannot be bypassed. Sending outside the window is disabled; scheduling is coming later.",
+      });
+    }
+
+    if (effectiveChannel === "sms" && smsCountryMismatchRecipients.length > 0) {
+      const market = getMarketLabel(messagingCountry);
+      items.push({
+        id: "sms-country-mismatch",
+        label: "Recipient country mismatch",
+        status: "blocked",
+        detail: `${smsCountryMismatchRecipients.length} selected recipient${smsCountryMismatchRecipients.length === 1 ? " has" : "s have"} a phone country different from this ${market} branch. Remove them from the audience before sending; cross-border SMS delivery may be rejected by local telecom operators.`,
+      });
+    }
+
+    if (effectiveChannel === "sms" && smsUnknownCountryRecipients.length > 0) {
+      items.push({
+        id: "sms-country-unknown",
+        label: "Recipient country not confirmed",
+        status: "warning",
+        detail: `${smsUnknownCountryRecipients.length} selected recipient${smsUnknownCountryRecipients.length === 1 ? " has" : "s have"} no country on their profile or phone number. Confirm the number country before sending to improve delivery reliability.`,
+      });
+    }
 
     if (contactExcludedCount > 0) {
       items.push({
@@ -772,9 +834,13 @@ export default function MessagingPage() {
     hasRequiredSubject,
     isGhanaTenant,
     isNigeriaTenant,
+    messagingCountry,
+    nigeriaSmsOutsideWindow,
     providerReady,
     selectedChannel,
     selectedRecipientCount,
+    smsCountryMismatchRecipients.length,
+    smsUnknownCountryRecipients.length,
     smsMarketSupported,
   ]);
 
@@ -797,6 +863,15 @@ export default function MessagingPage() {
   const toggleCustomerOverride = (customerId: string) => {
     setSelectedCustomerOverrides((current) =>
       current.includes(customerId) ? current.filter((id) => id !== customerId) : [...current, customerId],
+    );
+  };
+
+  const removeSmsCountryMismatches = () => {
+    const mismatchIds = new Set(smsCountryMismatchRecipients.map((customer) => customer.id));
+    setSelectedCustomerOverrides(
+      effectiveAudienceCustomers
+        .filter((customer) => !mismatchIds.has(customer.id))
+        .map((customer) => customer.id),
     );
   };
 
@@ -895,6 +970,22 @@ export default function MessagingPage() {
   };
 
   const handleSendBroadcast = async () => {
+    if (nigeriaSmsOutsideWindow) {
+      toast({
+        title: "Nigeria SMS sending is outside the permitted window",
+        description: "Nigerian telecom operators allow SMS delivery from 8:00 a.m. to 8:00 p.m. Nigeria time. Try again during the permitted window.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (effectiveChannel === "sms" && smsCountryMismatchRecipients.length > 0) {
+      toast({
+        title: "Review recipient countries before sending",
+        description: `Remove the ${smsCountryMismatchRecipients.length} recipient${smsCountryMismatchRecipients.length === 1 ? "" : "s"} whose phone country does not match this branch. Cross-border SMS may not be delivered by local telecom operators.`,
+        variant: "destructive",
+      });
+      return;
+    }
     if (selectedRecipientCount === 0) {
       toast({
         title: "No recipients available",
@@ -950,6 +1041,7 @@ export default function MessagingPage() {
           subject: effectiveChannel === "email" ? emailSubject : undefined,
           senderContext: {
             senderDisplayName,
+            locationId: activeLocationId,
           },
         },
       });
@@ -1126,6 +1218,15 @@ export default function MessagingPage() {
             </Button>
           </div>
         </div>
+
+        {isNigeriaTenant ? (
+          <Alert className="border-warning/40 bg-warning/10">
+            <Info className="h-4 w-4 text-warning" />
+            <AlertDescription>
+              Nigerian telecom operators enforce an 8:00 a.m.–8:00 p.m. Nigeria-time SMS delivery window. This legal and telco requirement cannot be bypassed. SMS sending is disabled outside the window; scheduling will be added later.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[220px] sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
           <Card className={compactTintedMetricCardClass.primary}>
@@ -1624,14 +1725,46 @@ export default function MessagingPage() {
                         </div>
 
                         {selectedChannel ? (
-                          <div className="rounded-2xl border bg-background p-3.5 text-sm">
-                            <div className="font-medium">{selectedRecipientLabel}</div>
-                            <div className="mt-1 text-muted-foreground">
-                              {contactExcludedCount > 0
-                                ? `${contactExcludedCount} customer${contactExcludedCount === 1 ? "" : "s"} cannot receive ${effectiveChannel.toUpperCase()} and will be skipped.`
-                                : `Everyone selected can receive ${effectiveChannel.toUpperCase()}.`}
+                          <>
+                            <div className="rounded-2xl border bg-background p-3.5 text-sm">
+                              <div className="font-medium">{selectedRecipientLabel}</div>
+                              <div className="mt-1 text-muted-foreground">
+                                {contactExcludedCount > 0
+                                  ? `${contactExcludedCount} customer${contactExcludedCount === 1 ? "" : "s"} cannot receive ${effectiveChannel.toUpperCase()} and will be skipped.`
+                                  : `Everyone selected can receive ${effectiveChannel.toUpperCase()}.`}
+                              </div>
                             </div>
-                          </div>
+                            {effectiveChannel === "sms" && smsCountryMismatchRecipients.length > 0 ? (
+                              <Alert variant="destructive">
+                                <AlertCircle className="h-4 w-4" />
+                                <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <span>
+                                    <span className="font-medium">Some recipients are outside this branch&apos;s SMS country.</span>{" "}
+                                    {smsCountryMismatchRecipients.length} number{smsCountryMismatchRecipients.length === 1 ? "" : "s"} do not match {getMarketLabel(messagingCountry)}. Local telecom operators may reject cross-border delivery, so remove them from the audience before sending.
+                                  </span>
+                                  {audienceMode === "group" ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="shrink-0 border-destructive/30 bg-background"
+                                      onClick={removeSmsCountryMismatches}
+                                    >
+                                      Remove mismatches
+                                    </Button>
+                                  ) : null}
+                                </AlertDescription>
+                              </Alert>
+                            ) : null}
+                            {effectiveChannel === "sms" && smsUnknownCountryRecipients.length > 0 ? (
+                              <Alert className="border-warning/40 bg-warning/10">
+                                <Info className="h-4 w-4 text-warning" />
+                                <AlertDescription>
+                                  {smsUnknownCountryRecipients.length} selected number{smsUnknownCountryRecipients.length === 1 ? " has" : "s have"} no confirmed country. Add a country to the customer profile or use an international-format number before sending.
+                                </AlertDescription>
+                              </Alert>
+                            ) : null}
+                          </>
                         ) : null}
                       </CardContent>
                     </Card>
