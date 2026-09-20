@@ -105,6 +105,11 @@ jobs:
           supabase functions deploy --project-ref ${{ secrets.SUPABASE_PROJECT_REF_PROD }}
 
       - name: Post-deploy smoke checks
+        # Keep the smoke suite hermetic; it only needs valid client config to
+        # construct the Supabase client and does not contact the project.
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: test-anon-key
         run: pnpm test
 
       - name: Generate deploy bot token
