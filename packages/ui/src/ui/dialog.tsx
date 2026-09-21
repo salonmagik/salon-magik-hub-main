@@ -118,7 +118,7 @@ const DialogFooter = ({ className, style, ...props }: React.HTMLAttributes<HTMLD
   <div
     className={cn(
       "sticky bottom-0 z-10 flex-shrink-0 rounded-b-[24px] border-t border-t-[#9E88C4]/70 bg-background px-5 pb-5 pt-4 sm:px-8 sm:pb-7 sm:pt-5",
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
+      "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2",
       className,
     )}
     style={{ ...FOOTER_ACCENT_STYLE, ...style }}

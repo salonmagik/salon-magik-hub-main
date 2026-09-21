@@ -177,7 +177,7 @@ export default function CashflowPage() {
     };
   };
 
-  const filteredTransactions = transactions.filter((txn) => {
+  const filteredTransactions = useMemo(() => transactions.filter((txn) => {
     const dateRange = getDateRange();
     if (dateRange) {
       const txnDate = new Date(txn.created_at);
@@ -206,7 +206,8 @@ export default function CashflowPage() {
     if (activeTab === "refunds") return matchesSearch && txn.type === "refund";
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
     return matchesSearch;
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, hubTypeFilter, activeTab]);
 
   // "Today's Inflow" and pending-refund totals are money — they must respect
   // the country filter and never sum two currencies together, same as
@@ -313,7 +314,7 @@ export default function CashflowPage() {
         },
       ],
     }),
-    [filteredTransactions],
+    [filteredTransactions.length],
   );
 
   const handleDownloadReceipt = async (appointmentId: string, txnId: string, reference?: string) => {
