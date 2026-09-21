@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@ui/sonner";
 import { TooltipProvider } from "@ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Component, Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
@@ -111,6 +111,56 @@ function RouteLoading() {
   );
 }
 
+// Without this, an uncaught render error (most commonly a lazy route chunk
+// that fails to fetch over a flaky mobile connection) unmounts the entire
+// tree, leaving a silent white screen with no way for a user to tell us
+// what happened. A stale/missing chunk after a deploy is auto-recovered
+// with a single reload (guarded via sessionStorage against a reload loop
+// if the chunk is genuinely broken); anything else surfaces a visible
+// fallback with the actual error instead of blank white.
+const CHUNK_ERROR_PATTERN = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    console.error("Route render error:", error, info.componentStack);
+    if (CHUNK_ERROR_PATTERN.test(error.message)) {
+      const reloadedKey = "salon-admin-chunk-reload";
+      if (!sessionStorage.getItem(reloadedKey)) {
+        sessionStorage.setItem(reloadedKey, "1");
+        window.location.reload();
+      }
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      if (CHUNK_ERROR_PATTERN.test(this.state.error.message)) {
+        return null;
+      }
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-surface px-6 text-center">
+          <p className="text-lg font-medium text-foreground">Something went wrong loading this page</p>
+          <p className="max-w-md text-sm text-muted-foreground">{this.state.error.message}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground"
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Smart root route component - redirects based on auth state
 function RootRoute() {
   const { isAuthenticated, isLoading, hasCompletedOnboarding, isAssignmentPending, getFirstAllowedRoute, user } = useAuth();
@@ -156,7 +206,14 @@ function RootRoute() {
   return <Navigate to={targetRoute} replace />;
 }
 
-const App = () => (
+const App = () => {
+  // A route rendered without throwing — clear the chunk-reload guard so a
+  // later transient chunk-load failure still gets its one auto-retry.
+  useEffect(() => {
+    sessionStorage.removeItem("salon-admin-chunk-reload");
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
@@ -164,6 +221,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <ProductTourProvider>
+            <RouteErrorBoundary>
             <Suspense fallback={<RouteLoading />}>
               <Routes>
               {/* Root - smart redirect based on auth */}
@@ -452,12 +510,14 @@ const App = () => (
               {/* 404 */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </Suspense>
+            </Suspense>
+            </RouteErrorBoundary>
           </ProductTourProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
