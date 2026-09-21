@@ -1349,52 +1349,23 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										if (path === "__quick__") {
 											return (
 												<div key={path} className="flex min-w-0 flex-1 justify-center">
-													<DropdownMenu
-														open={mobileQuickAction?.kind === "menu" && quickActionMenuOpen}
-														onOpenChange={(open) => {
-															if (mobileQuickAction?.kind === "menu") {
-																setQuickActionMenuOpen(open);
-																return;
+													<button
+														type="button"
+														aria-label={mobileQuickAction?.ariaLabel ?? "Quick create"}
+														data-tour-id="tour-quick-create-mobile"
+														onClick={() => {
+															if (!mobileQuickAction) {
+																setQuickCreateOpen(true);
+															} else if (mobileQuickAction.kind === "single") {
+																mobileQuickAction.onSelect();
+															} else {
+																setQuickActionMenuOpen(true);
 															}
-															// No menu to show for a single-action page or one with no
-															// registered action — Radix still fires this on trigger
-															// click, so run the right thing directly instead of opening.
-															if (!open) return;
-															if (mobileQuickAction) mobileQuickAction.onSelect();
-															else setQuickCreateOpen(true);
 														}}
+														className="-mt-7 flex h-14 w-14 items-center justify-center rounded-full border-[5px] border-[#211a32] bg-white/[0.14] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.22),0_8px_18px_-6px_rgba(0,0,0,0.35)] backdrop-blur-md transition-transform active:scale-95"
 													>
-														<DropdownMenuTrigger asChild>
-															<button
-																type="button"
-																aria-label={mobileQuickAction?.ariaLabel ?? "Quick create"}
-																data-tour-id="tour-quick-create-mobile"
-																className="-mt-7 flex h-14 w-14 items-center justify-center rounded-full border-[5px] border-[#211a32] bg-[#F4C84E] text-[#2E1F4E] shadow-[0_10px_20px_-6px_rgba(244,200,78,0.55)] transition-transform active:scale-95"
-															>
-																<Plus className="h-6 w-6" />
-															</button>
-														</DropdownMenuTrigger>
-														{mobileQuickAction?.kind === "menu" ? (
-															<DropdownMenuContent align="center" side="top" className="w-56 mb-3">
-																{mobileQuickAction.options.map((option) => (
-																	<div key={option.key}>
-																		{option.separatorBefore ? <DropdownMenuSeparator /> : null}
-																		<DropdownMenuItem
-																			disabled={option.disabled}
-																			onClick={option.onSelect}
-																			className={option.destructive ? "text-destructive" : undefined}
-																		>
-																			<option.icon className="mr-2 h-4 w-4" />
-																			{option.label}
-																			{option.badge ? (
-																				<span className="ml-auto text-xs text-muted-foreground">{option.badge}</span>
-																			) : null}
-																		</DropdownMenuItem>
-																	</div>
-																))}
-															</DropdownMenuContent>
-														) : null}
-													</DropdownMenu>
+														<Plus className="h-6 w-6" />
+													</button>
 												</div>
 											);
 										}
@@ -1405,17 +1376,12 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												type="button"
 												data-tour-id={path === "__more__" ? "tour-mobile-more" : undefined}
 												onClick={() => (path === "__more__" ? setMoreSheetOpen(true) : navigate(path))}
-														className={cn(
-															"group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[22px] border border-transparent px-1.5 py-1.5 transition-all duration-200 hover:bg-white/10 motion-reduce:transition-none",
-															active && "border-[#F4C84E]/30 bg-white/[0.08]",
-														)}
+														className="group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[22px] border border-transparent px-1.5 py-1.5 transition-all duration-200 hover:bg-white/10 motion-reduce:transition-none"
 												>
 														<span
 															className={cn(
-																"flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 motion-reduce:transition-none",
-																active
-																	? "bg-[#F4C84E] text-[#2E1F4E] shadow-[0_0_0_4px_rgba(244,200,78,0.14)]"
-																	: "text-white/60 group-hover:text-white/90",
+																"flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200 motion-reduce:transition-none",
+																active ? "text-[#F4C84E]" : "text-white/60 group-hover:text-white/90",
 															)}
 														>
 															<Icon strokeWidth={active ? 2.2 : 1.8} className="h-[18px] w-[18px]" />
@@ -1433,6 +1399,61 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									})}
 								</div>
 							</nav>
+
+							{/* Quick-action bottom sheet — the drawer a page's registered "menu"
+								action opens from the "+" notch, styled like the "More" sheet next
+								to it. A single-action page skips this and runs its action directly
+								on tap; a page with no action at all falls back to the global
+								QuickCreateDialog, which is itself a bottom sheet below lg (see that
+								component). Options defer their onSelect by a tick after this sheet
+								closes — opening another dialog synchronously from inside a Radix
+								primitive's own close callback is what caused the "opens multiple
+								modals" bug this replaces. */}
+							<Sheet open={quickActionMenuOpen} onOpenChange={setQuickActionMenuOpen}>
+								<SheetContent
+									side="bottom"
+									className="flex max-h-[60vh] flex-col gap-0 rounded-t-3xl border-t-0 p-0 pb-[env(safe-area-inset-bottom)]"
+								>
+									<SheetTitle className="sr-only">{mobileQuickAction?.kind === "menu" ? mobileQuickAction.ariaLabel : "Quick actions"}</SheetTitle>
+									<div className="mx-auto mt-3 h-1 w-9 shrink-0 rounded-full bg-border" />
+									<div className="flex-1 overflow-y-auto px-4 pb-3 pt-3">
+										<p className="mb-1 px-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+											{mobileQuickAction?.kind === "menu" ? mobileQuickAction.ariaLabel : "Quick actions"}
+										</p>
+										{mobileQuickAction?.kind === "menu"
+											? mobileQuickAction.options.map((option) => (
+													<div key={option.key}>
+														{option.separatorBefore ? <div className="my-2 border-t border-border" /> : null}
+														<button
+															type="button"
+															disabled={option.disabled}
+															onClick={() => {
+																setQuickActionMenuOpen(false);
+																window.setTimeout(() => option.onSelect(), 120);
+															}}
+															className={cn(
+																"flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition-colors",
+																option.disabled
+																	? "cursor-not-allowed text-muted-foreground/50"
+																	: option.destructive
+																		? "text-destructive hover:bg-destructive/10"
+																		: "text-foreground hover:bg-surface",
+															)}
+														>
+															<span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface">
+																<option.icon className="h-4 w-4" />
+															</span>
+															<span className="flex-1 truncate">{option.label}</span>
+															{option.badge ? (
+																<span className="shrink-0 text-xs text-muted-foreground">{option.badge}</span>
+															) : null}
+														</button>
+													</div>
+												))
+											: null}
+									</div>
+								</SheetContent>
+							</Sheet>
 
 							{/* "More" bottom sheet — mobile only. Same context switcher and the
 								same BOTTOM_NAV_PATHS-filtered overflow items as the side drawer,

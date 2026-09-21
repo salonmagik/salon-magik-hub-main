@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@ui/dialog";
+import { Sheet, SheetContent, SheetTitle } from "@ui/sheet";
 import {
   Calendar,
   Users,
@@ -78,9 +79,26 @@ const ACTION_GROUPS: ActionGroup[] = [
   },
 ];
 
+// Bottom-nav viewports (<lg, matching SalonSidebar's own breakpoint for the
+// mobile bottom nav / quick-action FAB) get this as a bottom sheet instead
+// of the centered dialog desktop uses — the FAB's whole point is to behave
+// like the "More" sheet next to it, not pop a desktop-style modal.
+function useIsBelowLg() {
+  const [isBelowLg, setIsBelowLg] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 1023px)");
+    const onChange = () => setIsBelowLg(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return isBelowLg;
+}
+
 export function QuickCreateDialog({ open, onOpenChange }: QuickCreateDialogProps) {
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isBelowLg = useIsBelowLg();
 
   useEffect(() => () => {
     if (transitionTimer.current) clearTimeout(transitionTimer.current);
@@ -99,78 +117,101 @@ export function QuickCreateDialog({ open, onOpenChange }: QuickCreateDialogProps
     setActiveModal(null);
   };
 
+  const actionGroups = (
+    <div className="space-y-4">
+      {ACTION_GROUPS.map((group) => (
+        <div key={group.label}>
+          <p className="text-[10.5px] font-semibold tracking-[0.09em] text-muted-foreground/60 uppercase mb-2.5">
+            {group.label}
+          </p>
+          <div className={cn("grid grid-cols-1 gap-2.5", !isBelowLg && "sm:grid-cols-2")}>
+            {group.items.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.label}
+                  onClick={() => handleActionClick(action.modal)}
+                  className={cn(
+                    "group flex items-center gap-3.5 p-3.5 rounded-[14px] border border-border bg-white text-left",
+                    "hover:border-primary hover:bg-primary/[0.04] transition-all duration-150"
+                  )}
+                >
+                  <div className={cn(
+                    "w-11 h-11 rounded-[10px] flex items-center justify-center flex-shrink-0 transition-colors duration-150",
+                    "bg-primary/[0.08] group-hover:bg-primary"
+                  )}>
+                    <Icon className="w-[18px] h-[18px] text-primary group-hover:text-accent transition-colors duration-150" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[14.5px] font-semibold text-foreground leading-snug">
+                      {action.label}
+                    </p>
+                    <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">
+                      {action.description}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          className="max-h-[90vh] overflow-y-auto p-5 sm:max-w-[580px] sm:p-7"
-          closeButtonClassName="text-muted-foreground/70 hover:bg-muted hover:text-foreground"
-        >
-          {/* Header */}
-          <div className="mb-5">
-            <DialogTitle className="text-[28px] font-bold tracking-tight text-foreground leading-tight">
-              Quick Create
-            </DialogTitle>
-            <p className="text-[14.5px] text-muted-foreground mt-1.5">
-              Choose what you would like to create next.
-            </p>
-          </div>
+      {isBelowLg ? (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+          <SheetContent
+            side="bottom"
+            className="flex max-h-[75vh] flex-col gap-0 rounded-t-3xl border-t-0 p-0 pb-[env(safe-area-inset-bottom)]"
+          >
+            <div className="mx-auto mt-3 h-1 w-9 shrink-0 rounded-full bg-border" />
+            <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3">
+              <SheetTitle className="text-xl font-bold tracking-tight text-foreground leading-tight">
+                Quick Create
+              </SheetTitle>
+              <p className="text-[13.5px] text-muted-foreground mt-1 mb-4">
+                Choose what you would like to create next.
+              </p>
+              {actionGroups}
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent
+            className="max-h-[90vh] overflow-y-auto p-5 sm:max-w-[580px] sm:p-7"
+            closeButtonClassName="text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+          >
+            {/* Header */}
+            <div className="mb-5">
+              <DialogTitle className="text-[28px] font-bold tracking-tight text-foreground leading-tight">
+                Quick Create
+              </DialogTitle>
+              <p className="text-[14.5px] text-muted-foreground mt-1.5">
+                Choose what you would like to create next.
+              </p>
+            </div>
 
-          {/* Action groups */}
-          <div className="space-y-4">
-            {ACTION_GROUPS.map((group) => (
-              <div key={group.label}>
-                <p className="text-[10.5px] font-semibold tracking-[0.09em] text-muted-foreground/60 uppercase mb-2.5">
-                  {group.label}
-                </p>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {group.items.map((action) => {
-                    const Icon = action.icon;
-                    return (
-                      <button
-                        key={action.label}
-                        onClick={() => handleActionClick(action.modal)}
-                        className={cn(
-                          "group flex items-center gap-3.5 p-3.5 rounded-[14px] border border-border bg-white text-left",
-                          "hover:border-primary hover:bg-primary/[0.04] transition-all duration-150"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-11 h-11 rounded-[10px] flex items-center justify-center flex-shrink-0 transition-colors duration-150",
-                          "bg-primary/[0.08] group-hover:bg-primary"
-                        )}>
-                          <Icon className="w-[18px] h-[18px] text-primary group-hover:text-accent transition-colors duration-150" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[14.5px] font-semibold text-foreground leading-snug">
-                            {action.label}
-                          </p>
-                          <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">
-                            {action.description}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+            {actionGroups}
 
-          {/* Keyboard tip */}
-          <div className="mt-5 pt-4 border-t flex items-center justify-center gap-1 text-[12.5px] text-muted-foreground/70 flex-wrap">
-            <span>Tip: press</span>
-            <kbd className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted border border-border text-[11px] font-mono font-medium mx-0.5">
-              Ctrl
-            </kbd>
-            <span>+</span>
-            <kbd className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted border border-border text-[11px] font-mono font-medium mx-0.5">
-              /
-            </kbd>
-            <span>from anywhere to reopen this menu.</span>
-          </div>
-        </DialogContent>
-      </Dialog>
+            {/* Keyboard tip */}
+            <div className="mt-5 pt-4 border-t flex items-center justify-center gap-1 text-[12.5px] text-muted-foreground/70 flex-wrap">
+              <span>Tip: press</span>
+              <kbd className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted border border-border text-[11px] font-mono font-medium mx-0.5">
+                Ctrl
+              </kbd>
+              <span>+</span>
+              <kbd className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted border border-border text-[11px] font-mono font-medium mx-0.5">
+                /
+              </kbd>
+              <span>from anywhere to reopen this menu.</span>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <ScheduleAppointmentDialog
         open={activeModal === "appointment"}
