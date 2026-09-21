@@ -18,7 +18,6 @@ import { Button } from "@ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { DatePicker } from "@ui/date-picker";
 import { Input } from "@ui/input";
-import { ScrollArea } from "@ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Skeleton } from "@ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
@@ -298,10 +297,21 @@ export default function AuditLogPage() {
               </div>
             ) : (
               <>
-                <ScrollArea
-                  className="h-[520px]"
-                  viewportRef={tableViewportRef}
-                  onViewportScroll={handleTableViewportScroll}
+                {/*
+                  Plain scroll divs instead of the Radix ScrollArea: Radix's
+                  viewport hard-sets `overflow-x: hidden` inline whenever no
+                  horizontal ScrollAreaScrollbar is mounted (its own source
+                  computes overflowX from scrollbarXEnabled, defaulting to
+                  "hidden"), which clips wide content instead of letting it
+                  scroll — no CSS override can beat that inline style. A
+                  native overflow-y-auto outer / overflow-x-auto inner pair
+                  gives real horizontal scrolling on narrow viewports while
+                  scrollbar-hide keeps both bars invisible.
+                */}
+                <div
+                  ref={tableViewportRef}
+                  onScroll={handleTableViewportScroll}
+                  className="h-[520px] overflow-y-auto scrollbar-hide"
                 >
                   <div className="overflow-x-auto scrollbar-hide">
                     <Table className="min-w-[640px]">
@@ -342,7 +352,7 @@ export default function AuditLogPage() {
                       </TableBody>
                     </Table>
                   </div>
-                </ScrollArea>
+                </div>
 
                 {hasMore && scrolledToBottom ? (
                   <div className="flex justify-center pt-4">
