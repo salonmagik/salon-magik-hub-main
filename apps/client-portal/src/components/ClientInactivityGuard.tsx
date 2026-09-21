@@ -161,19 +161,17 @@ export function ClientInactivityGuard({ children }: ClientInactivityGuardProps) 
               <AlertDialogTitle className="text-center">
                 Logging Out
               </AlertDialogTitle>
-              <AlertDialogDescription className="text-center space-y-4">
-                <p>
-                  For your security, you're being logged out due to inactivity.
-                </p>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="text-4xl font-bold text-foreground tabular-nums">
-                    {countdown}
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    seconds remaining
-                  </span>
-                </div>
+              <AlertDialogDescription className="text-center">
+                For your security, you're being logged out due to inactivity.
               </AlertDialogDescription>
+              <div className="flex flex-col items-center gap-2 pt-2">
+                <div className="text-4xl font-bold text-foreground tabular-nums">
+                  {countdown}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  seconds remaining
+                </span>
+              </div>
             </AlertDialogHeader>
             <AlertDialogFooter className="sm:justify-center">
               <AlertDialogAction onClick={handleCancelLogout}>

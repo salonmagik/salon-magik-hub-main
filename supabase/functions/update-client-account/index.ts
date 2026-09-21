@@ -34,7 +34,7 @@ serve(async (req) => {
       });
     }
 
-    const { fullName, phone, preferences, gender, dobMonth, dobDay, detailsConfirmed } = await req.json();
+    const { fullName, phone, preferences, gender, dobMonth, dobDay, detailsConfirmed, detailsSkipped } = await req.json();
     const updates: Record<string, unknown> = {};
     const customerOnlyUpdates: Record<string, unknown> = {};
 
@@ -79,7 +79,12 @@ serve(async (req) => {
     }
 
     if (detailsConfirmed === true) {
+      // A real confirmation always wins over a prior skip — the nudge to
+      // revisit only exists while nothing has ever been actually confirmed.
       updates.details_confirmed_at = new Date().toISOString();
+      updates.details_confirmation_skipped_at = null;
+    } else if (detailsSkipped === true) {
+      updates.details_confirmation_skipped_at = new Date().toISOString();
     }
 
     if (Object.keys(updates).length > 0) {

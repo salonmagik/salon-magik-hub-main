@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ClientSidebar } from "@/components/ClientSidebar";
-import { useClientAuth } from "@/hooks";
+import { useClientAuth, useConfirmDetailsPrompt } from "@/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Button } from "@ui/button";
@@ -21,6 +21,7 @@ import { getFunctionErrorMessage } from "@shared/function-errors";
 
 export default function ClientProfilePage() {
   const { user, customers, profile, preferences, signOut, refreshAccount } = useClientAuth();
+  const { requestOpen: requestConfirmDetails } = useConfirmDetailsPrompt();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPreferences, setIsSavingPreferences] = useState(false);
@@ -283,6 +284,20 @@ export default function ClientProfilePage() {
           <h1 className="text-3xl font-semibold text-foreground">Profile & Security</h1>
           <p className="mt-1 text-muted-foreground">Manage your customer account across every salon you visit.</p>
         </div>
+
+        {profile?.details_confirmation_skipped_at && !profile?.details_confirmed_at && (
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Info className="h-5 w-5 shrink-0 text-primary" />
+              <p className="text-sm text-foreground">
+                You skipped confirming your name, birthday and gender earlier — want to do that now?
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="shrink-0" onClick={requestConfirmDetails}>
+              Confirm now
+            </Button>
+          </div>
+        )}
 
         <Tabs defaultValue="profile" className="space-y-4">
           <TabsList>

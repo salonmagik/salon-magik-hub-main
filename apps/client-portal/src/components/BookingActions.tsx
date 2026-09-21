@@ -11,6 +11,12 @@ import {
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { cn } from "@shared/utils";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,10 +27,11 @@ import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { 
-  Navigation, 
-  Clock, 
-  CalendarClock, 
+import {
+  MoreVertical,
+  Navigation,
+  Clock,
+  CalendarClock,
   XCircle,
   Loader2,
   AlertTriangle
@@ -38,6 +45,12 @@ interface BookingActionsProps {
 }
 
 type ActionDialogType = "running-late" | "reschedule" | "cancel" | null;
+
+// "On My Way" notifies the salon, but nothing on the salon side surfaces that
+// notification type distinctly yet (no icon/title mapping, no click-through) —
+// hidden until that's wired up, rather than shipping a button that appears to
+// do nothing useful for the salon.
+const ON_MY_WAY_ENABLED = false;
 
 export function BookingActions({ booking, onActionComplete }: BookingActionsProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -177,63 +190,57 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
     }
   };
 
-  if (!canMarkOnMyWay && !canMarkRunningLate && !canReschedule && !canCancel) {
+  const showOnMyWay = ON_MY_WAY_ENABLED && canMarkOnMyWay;
+
+  if (!showOnMyWay && !canMarkRunningLate && !canReschedule && !canCancel) {
     return null;
   }
 
   return (
     <>
-      <div className="flex flex-wrap gap-2 justify-end">
-        {canMarkOnMyWay && (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleOnMyWay}
-            disabled={isSubmitting}
-          >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon" className="rounded-full" disabled={isSubmitting}>
             {isSubmitting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Navigation className="h-4 w-4 mr-2" />
+              <MoreVertical className="h-4 w-4" />
             )}
-            On My Way
           </Button>
-        )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {showOnMyWay && (
+            <DropdownMenuItem onClick={handleOnMyWay} disabled={isSubmitting}>
+              <Navigation className="h-4 w-4 mr-2" />
+              On My Way
+            </DropdownMenuItem>
+          )}
 
-        {canMarkRunningLate && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setActiveDialog("running-late")}
-          >
-            <Clock className="h-4 w-4 mr-2" />
-            Running Late
-          </Button>
-        )}
+          {canMarkRunningLate && (
+            <DropdownMenuItem onClick={() => setActiveDialog("running-late")}>
+              <Clock className="h-4 w-4 mr-2" />
+              Running Late
+            </DropdownMenuItem>
+          )}
 
-        {canReschedule && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setActiveDialog("reschedule")}
-          >
-            <CalendarClock className="h-4 w-4 mr-2" />
-            Reschedule
-          </Button>
-        )}
+          {canReschedule && (
+            <DropdownMenuItem onClick={() => setActiveDialog("reschedule")}>
+              <CalendarClock className="h-4 w-4 mr-2" />
+              Reschedule
+            </DropdownMenuItem>
+          )}
 
-        {canCancel && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={() => setActiveDialog("cancel")}
-          >
-            <XCircle className="h-4 w-4 mr-2" />
-            Cancel
-          </Button>
-        )}
-      </div>
+          {canCancel && (
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => setActiveDialog("cancel")}
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Cancel
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Running Late Dialog */}
       <Dialog open={activeDialog === "running-late"} onOpenChange={(open) => !open && setActiveDialog(null)}>

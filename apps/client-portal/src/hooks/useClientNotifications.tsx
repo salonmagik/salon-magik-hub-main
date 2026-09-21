@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useClientAuth } from "./useClientAuth";
 import { toast } from "@ui/ui/use-toast";
@@ -22,6 +22,12 @@ export function useClientNotifications() {
   const [notifications, setNotifications] = useState<ClientNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  // The sidebar's unread badge and the full notifications page both mount
+  // this hook at once, each needing its own realtime subscription. A shared,
+  // hardcoded channel name meant the second subscriber tried to add a
+  // callback to a channel the first had already called subscribe() on —
+  // Supabase-js throws rather than allowing that. One channel per instance.
+  const channelNameRef = useRef(`client-notifications-${crypto.randomUUID()}`);
 
   const fetchNotifications = useCallback(async () => {
     if (!isAuthenticated || !user?.id) {
@@ -62,7 +68,7 @@ export function useClientNotifications() {
     if (!isAuthenticated || !user?.id) return;
 
     const channel = supabase
-      .channel("client-notifications")
+      .channel(channelNameRef.current)
       .on(
         "postgres_changes",
         {

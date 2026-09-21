@@ -12,3 +12,4 @@ export { useClientRefunds } from "./useClientRefunds";
 export type { ClientRefundWithDetails } from "./useClientRefunds";
 export { useClientTransactions } from "./useClientTransactions";
 export type { ClientTransactionWithTenant } from "./useClientTransactions";
+export { ConfirmDetailsPromptProvider, useConfirmDetailsPrompt } from "./useConfirmDetailsPrompt";
