@@ -93,7 +93,7 @@ export default function AuditLogPage() {
     [actorUserId, filters]
   );
 
-  const { logs, branches, isLoading, error, hasMore, loadMore, refetch } = useAuditLogs(
+  const { logs, branches, isLoading, error, hasMore, loadMore, totalCount, refetch } = useAuditLogs(
     hookFilters,
     50
   );
@@ -267,9 +267,18 @@ export default function AuditLogPage() {
         </Card>
 
         <Card data-tour-id="tour-audit-log-table">
-          <CardHeader>
-            <CardTitle>Activity History</CardTitle>
-            <CardDescription>Recent activity with business-friendly action labels.</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle>Activity History</CardTitle>
+              <CardDescription>Recent activity with business-friendly action labels.</CardDescription>
+            </div>
+            {!isLoading && !error && totalCount > 0 ? (
+              <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+                {searchQuery.trim()
+                  ? `${filteredLogs.length} matching · ${logs.length} of ${totalCount} loaded`
+                  : `${logs.length} of ${totalCount}`}
+              </span>
+            ) : null}
           </CardHeader>
           <CardContent>
             {isLoading ? (

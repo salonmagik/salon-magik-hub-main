@@ -150,7 +150,10 @@ export default function AuditLogsPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [data?.logs]);
 
-  const totalPages = Math.max(1, Math.ceil((data?.count || 0) / PAGE_SIZE));
+  const totalCount = data?.count || 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
 
   return (
     <BackofficeLayout>
@@ -327,8 +330,8 @@ export default function AuditLogsPage() {
         </Card>
 
         <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
+          <div className="text-sm text-muted-foreground tabular-nums">
+            {totalCount > 0 ? `${rangeStart}–${rangeEnd} of ${totalCount}` : "0 of 0"} · Page {page} of {totalPages}
           </div>
           <div className="flex gap-2">
             <Button
