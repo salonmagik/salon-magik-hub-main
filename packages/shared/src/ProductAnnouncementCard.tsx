@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export type ProductAnnouncementPlatform = "salon_admin" | "client_portal" | "backoffice";
@@ -319,7 +319,7 @@ function AnnouncementModal({
   );
 }
 
-export function ProductAnnouncementCard({ client, platform, onNavigate }: ProductAnnouncementCardProps) {
+export function ProductAnnouncementCard({ client, platform, onNavigate }: ProductAnnouncementCardProps): ReactNode {
   const [announcements, setAnnouncements] = useState<ProductAnnouncement[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
