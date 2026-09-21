@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 vi.mock("@/components/layout/SalonSidebar", () => ({
   SalonSidebar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  MobileQuickActionEffect: () => null,
 }));
 
 vi.mock("@/components/dialogs/InviteStaffDialog", () => ({
