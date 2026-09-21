@@ -460,17 +460,25 @@ export default function PayoutsPage() {
                 <CardTitle className="text-base">How you get paid</CardTitle>
                 <p className="text-sm text-muted-foreground">This applies to every payout account on the Accounts tab.</p>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface">
-                  <div className="p-2 rounded-lg bg-primary/10"><Settings2 className="w-4 h-4 text-primary" /></div>
+              <CardContent className="space-y-3">
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-surface">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">1</div>
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Settlement</p>
-                    <p className="text-sm font-medium mt-0.5">Request anytime · paid out next business day</p>
+                    <p className="text-sm font-medium">Payments settle the next day</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Payments received today for services, products, and packages sold are settled into your available balance the next day by Paystack, our payment processor. This is standard for all Paystack merchants, not something specific to your account.
+                    </p>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Cleared money sits in your balance until you request a withdrawal — see the Accounts tab for where it's sent, and the History tab to track a request.
-                </p>
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-surface">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">2</div>
+                  <div>
+                    <p className="text-sm font-medium">Withdraw whenever you're ready</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Once money is in your available balance, request a withdrawal anytime — it's paid out on the next business day. See the Accounts tab for where it's sent, and the History tab to track a request.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
